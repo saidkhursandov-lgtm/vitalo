@@ -10,6 +10,7 @@ import { DeliveryModule } from './delivery/delivery.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SettingsModule } from './settings/settings.service';
+import { StorageModule } from './storage/file-storage';
 import { StaffModule } from './staff/staff.module';
 
 // forRoot() loads .env into process.env synchronously, so JOBS_ENABLED from .env is visible below.
@@ -23,6 +24,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     ...jobs,
     PrismaModule,
     SettingsModule,
+    StorageModule,
     AuthModule,
     CatalogModule,
     DeliveryModule,

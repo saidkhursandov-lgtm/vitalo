@@ -7,4 +7,5 @@ export const TEST_ENV = {
   STAFF_SESSION_TTL_HOURS: '12',
   INIT_DATA_MAX_AGE_SECONDS: '3600',
   JOBS_ENABLED: 'false', // tests call ReservationExpiryService.runOnce() directly
+  UPLOAD_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
 };

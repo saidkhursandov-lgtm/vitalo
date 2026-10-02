@@ -6,6 +6,12 @@ apps/miniapp  React + Vite (Mini App)       — Этап 3
 apps/admin    React + Vite (Admin Panel)    — Этап 7
 apps/bot      grammY bot                    — Этап 2
 
+## Быстрый запуск на Windows
+start.bat — Docker Desktop (запустит и дождётся, при зависании один раз перезапустит) -> postgres+redis ->
+окна API (3000), Mini App (5173) и Admin (5174, если есть apps/admin) -> браузер на http://localhost:5173.
+stop.bat — закрывает эти окна, освобождает порты 3000/5173/5174, останавливает postgres и redis (данные сохраняются).
+Запускать двойным щелчком; из командной строки — `.\start.bat` (просто `start.bat` cmd путает со встроенной командой start).
+
 ## Запуск локально
 docker compose up -d postgres redis   # образ minio/minio больше не публикуется на Docker Hub
 cd apps/api && cp ../../.env.example .env && npm i && npx prisma migrate dev

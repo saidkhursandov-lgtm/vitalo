@@ -81,6 +81,40 @@ export class StockService {
     return this.settle(tx, orderId, 'deduct', staffId);
   }
 
+  /**
+   * A paid order is cancelled by staff: units already written off go back to stock
+   * (return_to_stock movements). Call under the order row lock; repeated calls return nothing more.
+   */
+  async returnDeducted(tx: Prisma.TransactionClient, orderId: string, staffId: string): Promise<void> {
+    const rows = await tx.$queryRaw<{ warehouse_id: string; product_id: string; qty: bigint }[]>`
+      SELECT warehouse_id, product_id,
+             SUM(CASE WHEN movement_type = 'deduct' THEN qty ELSE -qty END) AS qty
+      FROM inventory_movements
+      WHERE reference_type = 'order' AND reference_id = ${orderId}::uuid
+        AND movement_type IN ('deduct', 'return_to_stock')
+      GROUP BY warehouse_id, product_id
+      ORDER BY product_id, warehouse_id`;
+    for (const r of rows) {
+      const qty = Number(r.qty);
+      if (qty <= 0) continue;
+      await tx.$executeRaw`
+        UPDATE inventory SET actual_qty = actual_qty + ${qty}, updated_at = now()
+        WHERE product_id = ${r.product_id}::uuid AND warehouse_id = ${r.warehouse_id}::uuid`;
+      await tx.inventory_movements.create({
+        data: {
+          warehouse_id: r.warehouse_id,
+          product_id: r.product_id,
+          movement_type: 'return_to_stock',
+          qty,
+          reference_type: 'order',
+          reference_id: orderId,
+          reason: 'Paid order cancelled',
+          created_by: staffId,
+        },
+      });
+    }
+  }
+
   private async reserveLine(tx: Prisma.TransactionClient, { product_id, qty }: StockLine): Promise<string | null> {
     // A row can stop qualifying while we wait for its lock; one retry re-reads fresh data.
     for (let attempt = 0; attempt < 2; attempt++) {

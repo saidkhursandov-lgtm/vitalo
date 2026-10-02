@@ -9,11 +9,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
-import { StaffRole, staff_users } from '@prisma/client';
+import { staff_users } from '@prisma/client';
 import type { Request } from 'express';
 import { InitDataVerifier } from '../auth/init-data.verifier';
 import { generateSessionToken, hashSessionToken } from '../auth/session-token';
 import { PrismaService } from '../prisma/prisma.service';
+import { can, type Permission } from './permissions';
 
 export interface StaffContext {
   sessionId: string;
@@ -47,6 +48,19 @@ export class StaffAuthService {
     return { token, expires_at: expiresAt.toISOString(), staff: { id: staff.id, name: staff.name, role: staff.role } };
   }
 
+  async logout(sessionId: string): Promise<void> {
+    await this.prisma.staff_sessions.update({ where: { id: sessionId }, data: { revoked_at: new Date() } });
+  }
+
+  /** Admin action: sign an employee out everywhere (also done automatically on block). */
+  async revokeAll(staffId: string): Promise<number> {
+    const res = await this.prisma.staff_sessions.updateMany({
+      where: { staff_user_id: staffId, revoked_at: null },
+      data: { revoked_at: new Date() },
+    });
+    return res.count;
+  }
+
   async findActiveSession(token: string): Promise<StaffContext | null> {
     const session = await this.prisma.staff_sessions.findUnique({
       where: { token_hash: hashSessionToken(token) },
@@ -58,9 +72,9 @@ export class StaffAuthService {
   }
 }
 
-const ROLES_KEY = 'staffRoles';
-/** Allowed roles for a staff endpoint; admin always passes. */
-export const StaffRoles = (...roles: StaffRole[]) => SetMetadata(ROLES_KEY, roles);
+const PERMISSIONS_KEY = 'staffPermissions';
+/** The endpoint needs ANY of these permissions (see permissions.ts). Without it: any active employee. */
+export const RequirePermission = (...permissions: Permission[]) => SetMetadata(PERMISSIONS_KEY, permissions);
 
 @Injectable()
 export class StaffGuard implements CanActivate {
@@ -77,9 +91,9 @@ export class StaffGuard implements CanActivate {
     const auth = await this.auth.findActiveSession(token);
     if (!auth) throw new UnauthorizedException();
 
-    const roles = this.reflector.getAllAndOverride<StaffRole[] | undefined>(ROLES_KEY, [ctx.getHandler(), ctx.getClass()]);
-    if (roles && auth.staff.role !== 'admin' && !roles.includes(auth.staff.role)) {
-      throw new ForbiddenException('Insufficient role');
+    const needed = this.reflector.getAllAndOverride<Permission[] | undefined>(PERMISSIONS_KEY, [ctx.getHandler(), ctx.getClass()]);
+    if (needed && !needed.some((p) => can(auth.staff.role, p))) {
+      throw new ForbiddenException({ code: 'FORBIDDEN_FOR_ROLE', message: `Role ${auth.staff.role} cannot do this` });
     }
     req.staffAuth = auth;
     return true;

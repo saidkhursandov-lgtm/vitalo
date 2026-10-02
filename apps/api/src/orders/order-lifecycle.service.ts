@@ -122,6 +122,28 @@ export class OrderLifecycleService {
     return 'paid';
   }
 
+  /**
+   * Staff cancels a paid order before handover: written-off units return to stock, the order becomes
+   * Cancelled and a refund task is created (refunds are manual, Master TZ §10). Payment status stays
+   * payment_success: the money was received and is returned outside the system.
+   */
+  async cancelPaid(tx: Tx, order: LockedOrder, staffId: string, reason: string): Promise<void> {
+    assertTransition(order.status, 'cancelled');
+    await this.stock.returnDeducted(tx, order.id, staffId);
+    const full = await tx.orders.update({
+      where: { id: order.id },
+      data: { status: 'cancelled', cancelled_at: new Date(), reserved_until: null },
+    });
+    await tx.manager_tasks.create({
+      data: {
+        type: 'refund',
+        order_id: order.id,
+        note: `Вернуть клиенту ${Number(full.total_uzs)} сум: оплаченный заказ ${order.order_number} отменён. Причина: ${reason}`,
+      },
+    });
+    await this.addHistory(tx, order.id, order.status, 'cancelled', { type: 'staff', id: staffId }, reason);
+  }
+
   async addHistory(tx: Tx, orderId: string, from: OrderStatus | null, to: OrderStatus, actor: Actor, reason?: string, at = new Date()) {
     await tx.order_status_history.create({
       data: {

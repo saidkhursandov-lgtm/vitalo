@@ -1,0 +1,85 @@
+import { Controller, Get, Injectable, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { OrderStatus } from '@prisma/client';
+import { Type } from 'class-transformer';
+import { IsIn, IsOptional } from 'class-validator';
+import { PrismaService } from '../prisma/prisma.service';
+import { RequirePermission, StaffGuard } from './staff-auth';
+
+/** Orders that have been paid (revenue counts them by paid_at). */
+export const PAID_STATUSES: OrderStatus[] = ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'];
+
+export class DashboardQuery {
+  @ApiPropertyOptional({ enum: [1, 7, 30, 90], default: 30 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn([1, 7, 30, 90])
+  days: number = 30;
+}
+
+@Injectable()
+export class DashboardService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async get(days: number) {
+    const from = new Date(Date.now() - days * 86_400_000);
+    const paidInPeriod = { status: { in: PAID_STATUSES }, paid_at: { gte: from } };
+
+    const [revenue, created, byStatus, top, lowStock] = await Promise.all([
+      this.prisma.orders.aggregate({ where: paidInPeriod, _sum: { total_uzs: true }, _count: { _all: true } }),
+      this.prisma.orders.count({ where: { created_at: { gte: from } } }),
+      this.prisma.orders.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.order_items.groupBy({
+        by: ['product_id'],
+        where: { order: paidInPeriod },
+        _sum: { qty: true, line_total_uzs: true },
+        orderBy: { _sum: { qty: 'desc' } },
+        take: 5,
+      }),
+      // available = actual - reserved, summed over warehouses; "low" = at or below the product's min_stock
+      this.prisma.$queryRaw<{ id: string; sku: string; name_ru: string; min_stock: number; available: bigint }[]>`
+        SELECT p.id, p.sku, p.name_ru, p.min_stock, COALESCE(SUM(i.actual_qty - i.reserved_qty), 0) AS available
+        FROM products p LEFT JOIN inventory i ON i.product_id = p.id
+        WHERE p.status = 'active'
+        GROUP BY p.id
+        HAVING COALESCE(SUM(i.actual_qty - i.reserved_qty), 0) <= p.min_stock
+        ORDER BY available, p.name_ru
+        LIMIT 20`,
+    ]);
+
+    const names = await this.prisma.products.findMany({
+      where: { id: { in: top.map((t) => t.product_id) } },
+      select: { id: true, sku: true, name_ru: true },
+    });
+    const revenueUzs = Number(revenue._sum.total_uzs ?? 0n);
+    const paidCount = revenue._count._all;
+
+    return {
+      days,
+      revenue_uzs: revenueUzs,
+      paid_orders: paidCount,
+      orders_created: created,
+      average_check_uzs: paidCount ? Math.round(revenueUzs / paidCount) : 0,
+      statuses: Object.fromEntries(byStatus.map((s) => [s.status, s._count._all])),
+      top_products: top.map((t) => {
+        const p = names.find((n) => n.id === t.product_id);
+        return { product_id: t.product_id, sku: p?.sku, name_ru: p?.name_ru, qty: t._sum.qty ?? 0, revenue_uzs: Number(t._sum.line_total_uzs ?? 0n) };
+      }),
+      low_stock: lowStock.map((r) => ({ ...r, available: Number(r.available) })),
+    };
+  }
+}
+
+@ApiTags('staff: dashboard')
+@ApiBearerAuth()
+@UseGuards(StaffGuard)
+@Controller('staff/dashboard')
+export class DashboardController {
+  constructor(private readonly dashboard: DashboardService) {}
+
+  @Get()
+  @RequirePermission('dashboard.view')
+  get(@Query() q: DashboardQuery) {
+    return this.dashboard.get(q.days);
+  }
+}

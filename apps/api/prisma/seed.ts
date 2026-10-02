@@ -130,8 +130,13 @@ const BANK_TRANSFER_DETAILS = {
   purpose_template: 'Оплата заказа {order_number}',
 };
 
-// Dev staff account (fake Telegram id, also used by e2e tests). Log in with: npm run dev:login -- --staff
-const DEV_MANAGER_TELEGRAM_ID = 222_222_222;
+// Dev staff, one per role (fake Telegram ids, also used by e2e tests). The admin panel dev login offers them.
+const DEV_STAFF = [
+  { telegram_user_id: 222_222_221, name: 'Админ (тест)', role: 'admin' as const },
+  { telegram_user_id: 222_222_222, name: 'Менеджер (тест)', role: 'manager' as const },
+  { telegram_user_id: 222_222_223, name: 'Склад (тест)', role: 'warehouse' as const },
+  { telegram_user_id: 222_222_224, name: 'Маркетолог (тест)', role: 'marketer' as const },
+];
 
 async function seedCheckoutSettings() {
   for (const m of PAYMENT_METHODS) {
@@ -153,11 +158,13 @@ async function seedCheckoutSettings() {
     };
     await prisma.delivery_tariffs.upsert({ where: { id }, create: { id, ...data }, update: data });
   }
-  await prisma.staff_users.upsert({
-    where: { telegram_user_id: BigInt(DEV_MANAGER_TELEGRAM_ID) },
-    create: { telegram_user_id: BigInt(DEV_MANAGER_TELEGRAM_ID), name: 'Менеджер (тест)', role: 'manager' },
-    update: {},
-  });
+  for (const s of DEV_STAFF) {
+    await prisma.staff_users.upsert({
+      where: { telegram_user_id: BigInt(s.telegram_user_id) },
+      create: { ...s, telegram_user_id: BigInt(s.telegram_user_id) },
+      update: {},
+    });
+  }
 }
 
 async function seedRegions() {
@@ -209,7 +216,7 @@ async function seedProducts(categoryIds: Map<string, string>) {
     const data = {
       name_ru: p.ru, name_uz: p.uz, brand: p.brand, manufacturer: p.manufacturer, country: p.country, form: p.form,
       price_uzs: BigInt(p.price), old_price_uzs: p.old ? BigInt(p.old) : null,
-      status: 'active' as const, popularity_30d: p.popularity, search_keywords: p.keywords,
+      status: 'active' as const, popularity_30d: p.popularity, search_keywords: p.keywords, min_stock: 10,
       short_description_ru: p.description, directions_ru: p.directions,
       warnings_ru: 'Не является лекарственным средством. Перед применением проконсультируйтесь с врачом.',
       created_at: new Date(BASE_DATE + i * 86_400_000),
@@ -267,7 +274,7 @@ async function main() {
   await seedCheckoutSettings();
   console.log(
     `Seed done: ${REGIONS.length} regions, ${categoryIds.size} categories, ${PRODUCTS.length} products, ` +
-      `${TARIFFS.length} tariffs, ${PAYMENT_METHODS.length} payment methods, 1 dev manager.`,
+      `${TARIFFS.length} tariffs, ${PAYMENT_METHODS.length} payment methods, ${DEV_STAFF.length} dev staff.`,
   );
 }
 
