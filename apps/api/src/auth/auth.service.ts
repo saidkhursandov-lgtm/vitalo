@@ -1,15 +1,11 @@
-import {
-  ForbiddenException,
-  Injectable,
-  InternalServerErrorException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, users } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthContext, toUserProfile, UserProfile } from './auth.types';
+import { InitDataVerifier } from './init-data.verifier';
 import { generateSessionToken, hashSessionToken } from './session-token';
-import { InitDataError, validateInitData, ValidatedInitData } from './telegram-init-data';
+import { ValidatedInitData } from './telegram-init-data';
 
 export interface LoginResult {
   token: string;
@@ -23,10 +19,11 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly initData: InitDataVerifier,
   ) {}
 
   async loginWithTelegram(initData: string, deviceInfo?: string): Promise<LoginResult> {
-    const data = this.verifyInitData(initData);
+    const data = this.initData.verify(initData);
     const { user, isNew } = await this.upsertUser(data);
     if (user.status !== 'active') throw new ForbiddenException('Account is not active');
 
@@ -58,18 +55,6 @@ export class AuthService {
 
   async logout(sessionId: string): Promise<void> {
     await this.prisma.user_sessions.update({ where: { id: sessionId }, data: { revoked_at: new Date() } });
-  }
-
-  private verifyInitData(initData: string): ValidatedInitData {
-    const botToken = this.config.get<string>('TELEGRAM_BOT_TOKEN');
-    if (!botToken) throw new InternalServerErrorException('TELEGRAM_BOT_TOKEN is not configured');
-    const maxAge = Number(this.config.get('INIT_DATA_MAX_AGE_SECONDS') ?? 3600);
-    try {
-      return validateInitData(initData, botToken, maxAge);
-    } catch (e) {
-      if (e instanceof InitDataError) throw new UnauthorizedException(`Invalid initData: ${e.message}`);
-      throw e;
-    }
   }
 
   private async upsertUser({ user: tg }: ValidatedInitData): Promise<{ user: users; isNew: boolean }> {

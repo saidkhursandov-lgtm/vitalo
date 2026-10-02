@@ -31,9 +31,12 @@ export interface ProductListItem {
   in_stock: boolean;
 }
 
-/** available = actual - reserved, summed over warehouses (never stored, see constraints). */
+/**
+ * available = actual - reserved (never stored, see constraints), taken from the best warehouse:
+ * an order line is reserved in a single warehouse (StockService.reserve).
+ */
 export function availableQty(inventory: { actual_qty: number; reserved_qty: number }[]): number {
-  return inventory.reduce((sum, i) => sum + Math.max(0, i.actual_qty - i.reserved_qty), 0);
+  return inventory.reduce((best, i) => Math.max(best, i.actual_qty - i.reserved_qty), 0);
 }
 
 // Prices are BigInt in DB; UZS amounts stay far below 2^53, so plain JSON numbers are safe.

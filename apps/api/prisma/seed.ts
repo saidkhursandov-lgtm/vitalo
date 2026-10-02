@@ -104,6 +104,62 @@ const RELATIONS: [string, string, 'similar' | 'also_bought'][] = [
 const WAREHOUSE_ID = uid('warehouse:main');
 const BASE_DATE = Date.UTC(2026, 8, 1); // 2026-09-01
 
+// Delivery tariffs (UZS): region default + one city override. Threshold = free shipping from this amount.
+const TARIFFS: { region: string; city?: string; tariff: number; threshold: number }[] = [
+  { region: 'tashkent-city', tariff: 20_000, threshold: 300_000 },
+  { region: 'samarkand', tariff: 35_000, threshold: 500_000 },
+  { region: 'samarkand', city: 'Каттакурган', tariff: 45_000, threshold: 500_000 },
+  { region: 'fergana', tariff: 35_000, threshold: 500_000 },
+];
+
+// Online providers stay disabled until the payments stage; timeouts per Master TZ §10.
+const PAYMENT_METHODS = [
+  { code: 'bank_transfer', name_ru: 'Банковский перевод', name_uz: 'Bank o‘tkazmasi', status: 'enabled' as const, timeout_minutes: 12 * 60 },
+  { code: 'payme', name_ru: 'Payme', name_uz: 'Payme', status: 'disabled' as const, timeout_minutes: 30 },
+  { code: 'click', name_ru: 'Click', name_uz: 'Click', status: 'disabled' as const, timeout_minutes: 30 },
+  { code: 'uzum', name_ru: 'Uzum', name_uz: 'Uzum', status: 'disabled' as const, timeout_minutes: 30 },
+];
+
+// Clearly fake requisites for dev/test; real ones are entered by the admin.
+const BANK_TRANSFER_DETAILS = {
+  recipient: 'ООО «VITALO» (ТЕСТОВЫЕ РЕКВИЗИТЫ)',
+  bank_name: 'Тестовый банк',
+  account: '20208000000000000001',
+  mfo: '00000',
+  inn: '000000000',
+  purpose_template: 'Оплата заказа {order_number}',
+};
+
+// Dev staff account (fake Telegram id, also used by e2e tests). Log in with: npm run dev:login -- --staff
+const DEV_MANAGER_TELEGRAM_ID = 222_222_222;
+
+async function seedCheckoutSettings() {
+  for (const m of PAYMENT_METHODS) {
+    await prisma.payment_methods.upsert({ where: { code: m.code }, create: m, update: { name_ru: m.name_ru, name_uz: m.name_uz } });
+  }
+  await prisma.settings.upsert({
+    where: { key: 'bank_transfer_details' },
+    create: { key: 'bank_transfer_details', value: BANK_TRANSFER_DETAILS },
+    update: {},
+  });
+  for (const t of TARIFFS) {
+    const id = uid(`tariff:${t.region}:${t.city ?? '*'}`);
+    const data = {
+      region_id: uid(`region:${t.region}`),
+      city_id: t.city ? uid(`city:${t.region}:${t.city}`) : null,
+      tariff_uzs: BigInt(t.tariff),
+      free_shipping_threshold_uzs: BigInt(t.threshold),
+      status: 'active' as const,
+    };
+    await prisma.delivery_tariffs.upsert({ where: { id }, create: { id, ...data }, update: data });
+  }
+  await prisma.staff_users.upsert({
+    where: { telegram_user_id: BigInt(DEV_MANAGER_TELEGRAM_ID) },
+    create: { telegram_user_id: BigInt(DEV_MANAGER_TELEGRAM_ID), name: 'Менеджер (тест)', role: 'manager' },
+    update: {},
+  });
+}
+
 async function seedRegions() {
   for (const r of REGIONS) {
     const regionId = uid(`region:${r.key}`);
@@ -208,7 +264,11 @@ async function main() {
   await seedRegions();
   const categoryIds = await seedCategories();
   await seedProducts(categoryIds);
-  console.log(`Seed done: ${REGIONS.length} regions, ${categoryIds.size} categories, ${PRODUCTS.length} products.`);
+  await seedCheckoutSettings();
+  console.log(
+    `Seed done: ${REGIONS.length} regions, ${categoryIds.size} categories, ${PRODUCTS.length} products, ` +
+      `${TARIFFS.length} tariffs, ${PAYMENT_METHODS.length} payment methods, 1 dev manager.`,
+  );
 }
 
 main()

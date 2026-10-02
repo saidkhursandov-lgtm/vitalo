@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsArray, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export enum ProductSort {
   popular = 'popular',
@@ -51,6 +51,12 @@ export class ListProductsQuery extends PageQuery {
   @IsInt()
   @Min(0)
   price_max?: number;
+
+  @ApiPropertyOptional({ description: 'true — только товары в наличии' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  in_stock?: boolean;
 
   @ApiPropertyOptional({ enum: ProductSort, default: ProductSort.popular })
   @IsOptional()

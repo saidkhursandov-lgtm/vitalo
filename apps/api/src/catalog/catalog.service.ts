@@ -68,17 +68,34 @@ export class CatalogService {
       };
     }
 
-    const [total, rows] = await this.prisma.$transaction([
-      this.prisma.products.count({ where }),
-      this.prisma.products.findMany({
-        where,
-        orderBy: ORDER_BY[q.sort],
-        skip: (q.page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
-        include: listInclude,
-      }),
+    // Out-of-stock products always go after in-stock ones (any sort): the list is two segments glued together.
+    const inStock: Prisma.productsWhereInput = {
+      inventory: { some: { actual_qty: { gt: this.prisma.inventory.fields.reserved_qty } } },
+    };
+    const whereIn: Prisma.productsWhereInput = { AND: [where, inStock] };
+    const whereOut: Prisma.productsWhereInput = q.in_stock ? { id: { in: [] } } : { AND: [where, { NOT: inStock }] };
+
+    const [totalIn, totalOut] = await this.prisma.$transaction([
+      this.prisma.products.count({ where: whereIn }),
+      this.prisma.products.count({ where: whereOut }),
     ]);
-    return toPage(rows.map(toProductListItem), total, q.page);
+    const skip = (q.page - 1) * PAGE_SIZE;
+    const rows = [];
+    if (skip < totalIn) {
+      rows.push(...(await this.prisma.products.findMany({ where: whereIn, orderBy: ORDER_BY[q.sort], skip, take: PAGE_SIZE, include: listInclude })));
+    }
+    if (rows.length < PAGE_SIZE && totalOut > 0) {
+      rows.push(
+        ...(await this.prisma.products.findMany({
+          where: whereOut,
+          orderBy: ORDER_BY[q.sort],
+          skip: Math.max(0, skip - totalIn),
+          take: PAGE_SIZE - rows.length,
+          include: listInclude,
+        })),
+      );
+    }
+    return toPage(rows.map(toProductListItem), totalIn + totalOut, q.page);
   }
 
   async getProduct(id: string) {

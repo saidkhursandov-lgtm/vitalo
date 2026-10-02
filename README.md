@@ -11,7 +11,8 @@ docker compose up -d postgres redis   # образ minio/minio больше не
 cd apps/api && cp ../../.env.example .env && npm i && npx prisma migrate dev
 npm run seed          # 3 региона x 2 города, 2 дерева категорий, 10 БАДов с остатками
 npm run start:dev     # API: http://localhost:3000/api, Swagger: http://localhost:3000/api/docs
-npm run dev:login     # имитация входа из Telegram (нужен любой TELEGRAM_BOT_TOKEN в .env)
+npm run dev:login     # имитация входа из Telegram (нужен любой TELEGRAM_BOT_TOKEN в .env); -- --staff = менеджер
+npm run dev:order-demo  # весь путь: корзина -> заказ -> реквизиты -> «Я оплатил» -> менеджер подтверждает
 # constraints.sql уже включён в миграцию prisma/migrations/*_init
 
 ## Тесты
@@ -23,9 +24,20 @@ POST /api/auth/telegram {initData} -> {token, expires_at, is_new_user, user}; в
 GET  /api/auth/me, POST /api/auth/logout   (Authorization: Bearer <token>)
 GET  /api/catalog/categories              -> {need: [...], product_type: [...]}
 GET  /api/catalog/brands
-GET  /api/catalog/products?category=&brand=A,B&price_min=&price_max=&sort=popular|price_asc|price_desc|new&page=
+GET  /api/catalog/products?category=&brand=A,B&price_min=&price_max=&in_stock=&sort=popular|price_asc|price_desc|new&page=
+     (товары без остатка всегда в конце списка)
 GET  /api/catalog/products/:id
 GET  /api/catalog/search?q=&page=          (pg_trgm + vitalo_norm(): транслитерация ru/uz/en, "kolagen" -> Коллаген)
+
+GET  /api/delivery/regions, GET /api/delivery/quote?region_id&city_id&goods_total_uzs
+GET  /api/cart[?region_id&city_id]          — при каждом открытии сверяет цену/остаток, warnings[]
+POST /api/cart/items {product_id, qty}, PATCH /api/cart/items/:productId {qty}, DELETE /api/cart/items/:productId
+POST /api/orders/preview                    — расчёт для экрана подтверждения, без резерва
+POST /api/orders  (header Idempotency-Key)  — source=cart|buy_now; резерв атомарный; VTL-YYYYMMDD-NNNN
+GET  /api/orders, GET /api/orders/:id, GET /api/orders/checkout-defaults, POST /api/orders/:id/cancel
+GET  /api/orders/:id/payment/bank-transfer, POST /api/orders/:id/payment/bank-transfer/paid («Я оплатил»)
+POST /api/staff/auth/telegram; GET /api/staff/orders[?awaiting_confirmation=true]; POST /api/staff/orders/:id/confirm-payment
+Фоновая задача (каждую минуту): отмена неоплаченных заказов с истёкшим резервом (JOBS_ENABLED=false — выключить)
 
 ## Решения по ТЗ (нужно подтвердить)
 1. Убрал orders.delivery_status — дублирует orders.status. Добавил shipments для объединения заказов в одну доставку.
@@ -36,3 +48,7 @@ GET  /api/catalog/search?q=&page=          (pg_trgm + vitalo_norm(): транс�
 5. Оплата 100% бонусами при платной доставке: заказ НЕ Paid, пока не оплачена доставка (как в Flow §16);
    в Master ТЗ §10 сказано иначе — приоритет Master ТЗ, нужно уточнить.
 6. Staff-вход: Telegram initData того же бота, затем проверка telegram_user_id в staff_users.
+7. Оформление из корзины берёт только доступные позиции; недоступные остаются в корзине (ТЗ §6).
+8. Если клиент нажал «Я оплатил», автоотмена по истечении резерва НЕ срабатывает — решает менеджер
+   (деньги могут быть уже в пути). «Я оплатил» после истечения срока не принимается.
+9. Позиция заказа резервируется в одном складе (сейчас склад один). Доставка V1 — 'courier' для всех городов.

@@ -10,6 +10,7 @@
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
     "seed": "prisma db seed",
     "dev:login": "ts-node scripts/dev-login.ts",
+    "dev:order-demo": "ts-node scripts/dev-order-demo.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
@@ -21,6 +22,7 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.6",
     "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/schedule": "^6.1.3",
     "@nestjs/swagger": "^11.2.0",
     "@prisma/client": "^6.19.0",
     "class-transformer": "^0.5.1",

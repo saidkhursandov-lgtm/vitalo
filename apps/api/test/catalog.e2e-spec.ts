@@ -76,18 +76,37 @@ describe('Catalog (e2e)', () => {
       await get('/products?category=no-such-thing').expect(404);
     });
 
-    it('sorts by price both ways', async () => {
+    it('sorts by price both ways, out-of-stock products last', async () => {
       const asc: Item[] = (await get('/products?sort=price_asc').expect(200)).body.items;
       const desc: Item[] = (await get('/products?sort=price_desc').expect(200)).body.items;
-      const prices = asc.map((i) => i.price_uzs);
-      expect(prices).toEqual([...prices].sort((a, b) => a - b));
-      expect(desc.map((i) => i.price_uzs)).toEqual([...prices].reverse());
+      const inStockPrices = asc.filter((i) => i.in_stock).map((i) => i.price_uzs);
+
+      expect(inStockPrices).toEqual([...inStockPrices].sort((a, b) => a - b));
+      expect(desc.filter((i) => i.in_stock).map((i) => i.price_uzs)).toEqual([...inStockPrices].reverse());
+      // Zinc is the cheapest product, but it is out of stock -> last even in price_asc
+      expect(asc.at(-1)!.sku).toBe('VTL-ZINC-25');
+      expect(desc.at(-1)!.sku).toBe('VTL-ZINC-25');
     });
 
-    it('sorts by newest first', async () => {
-      const { body } = await get('/products?sort=new').expect(200);
-      const expected = await prisma.products.findMany({ where: { status: 'active' }, orderBy: { created_at: 'desc' } });
-      expect(skus(body.items)).toEqual(expected.map((p) => p.sku));
+    it('sorts by newest first, out-of-stock products last', async () => {
+      const items: Item[] = (await get('/products?sort=new').expect(200)).body.items;
+      const newest = await prisma.products.findMany({ where: { status: 'active' }, orderBy: { created_at: 'desc' } });
+      const inStock = new Set(items.filter((i) => i.in_stock).map((i) => i.sku));
+      const expected = [...newest.filter((p) => inStock.has(p.sku)), ...newest.filter((p) => !inStock.has(p.sku))];
+      expect(skus(items)).toEqual(expected.map((p) => p.sku));
+    });
+
+    it('out-of-stock products go last in the default sort too', async () => {
+      const items: Item[] = (await get('/products').expect(200)).body.items;
+      const firstOut = items.findIndex((i) => !i.in_stock);
+      expect(firstOut).toBeGreaterThan(-1);
+      expect(items.slice(firstOut).every((i) => !i.in_stock)).toBe(true);
+    });
+
+    it('in_stock=true hides out-of-stock products', async () => {
+      const { body } = await get('/products?in_stock=true').expect(200);
+      expect(body.total).toBe(9);
+      expect(skus(body.items)).not.toContain('VTL-ZINC-25');
     });
 
     it('rejects invalid query params -> 400', async () => {
