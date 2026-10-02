@@ -1,0 +1,395 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
+import { api } from '../lib/api';
+import { useSession } from '../lib/auth';
+import { dateTime, money, ORDER_STATUS, prettyPhone } from '../lib/format';
+
+interface Named {
+  id: string;
+  name_ru: string;
+}
+
+export interface AdminOrder {
+  id: string;
+  order_number: string;
+  status: string;
+  payment_status: string;
+  created_at: string;
+  reserved_until: string | null;
+  paid_at: string | null;
+  recipient: { name: string; phone: string };
+  delivery: { region: Named; city: Named; address_text: string; cost_uzs: number; method: string };
+  customer_comment: string | null;
+  items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
+  totals: { goods_total_uzs: number; discount_total_uzs: number; delivery_cost_uzs: number; total_uzs: number };
+  payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null; verified_at: string | null } | null;
+  history: { from_status: string | null; to_status: string; reason: string | null; changed_by_type: string; created_at: string }[];
+  customer: { id: string; name: string; username: string | null; telegram_user_id: number; status: string };
+  edits: { reason: string; before: Record<string, unknown>; after: Record<string, unknown>; staff_name: string; created_at: string }[];
+  tasks: { type: string; status: string; note: string | null; created_at: string }[];
+  actions: { confirm_payment: boolean; next_status: string | null; cancel: boolean; edit: boolean; locked: boolean };
+}
+
+interface Region extends Named {
+  cities: Named[];
+}
+
+const ACTOR: Record<string, string> = { customer: 'клиент', staff: 'сотрудник', system: 'система' };
+const FIELD: Record<string, string> = {
+  recipient_name: 'Получатель',
+  recipient_phone: 'Телефон',
+  address_text: 'Адрес',
+  customer_comment: 'Комментарий',
+  region_id: 'Регион',
+  city_id: 'Город',
+  delivery_cost_uzs: 'Доставка',
+  total_uzs: 'Итого',
+};
+
+export function OrderDetail() {
+  const { id = '' } = useParams();
+  const { can } = useSession();
+  const client = useQueryClient();
+  const q = useQuery({ queryKey: ['order', id], queryFn: () => api<AdminOrder>(`/staff/orders/${id}`) });
+  const [modal, setModal] = useState<'confirm' | 'cancel' | 'edit' | null>(null);
+
+  const done = (o: AdminOrder) => {
+    client.setQueryData(['order', id], o);
+    void client.invalidateQueries({ queryKey: ['orders'] });
+    setModal(null);
+  };
+  const nextStatus = useMutation({
+    mutationFn: (status: string) => api<AdminOrder>(`/staff/orders/${id}/status`, { method: 'POST', body: { status } }),
+    onSuccess: done,
+  });
+
+  if (q.isPending) return <Loading />;
+  if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
+  const o = q.data;
+  const a = o.actions;
+
+  return (
+    <>
+      <PageHead
+        title={
+          <>
+            Заказ {o.order_number} <OrderStatus status={o.status} /> <PaymentStatus status={o.payment_status} />
+          </>
+        }
+      >
+        {a.confirm_payment && (
+          <button className="btn" onClick={() => setModal('confirm')}>
+            Подтвердить оплату
+          </button>
+        )}
+        {a.next_status && (
+          <button className="btn" disabled={nextStatus.isPending} onClick={() => nextStatus.mutate(a.next_status!)}>
+            Перевести: {ORDER_STATUS[a.next_status]}
+          </button>
+        )}
+        {a.edit && (
+          <button className="btn btn-ghost" onClick={() => setModal('edit')}>
+            Изменить
+          </button>
+        )}
+        {a.cancel && (
+          <button className="btn btn-danger" onClick={() => setModal('cancel')}>
+            Отменить заказ
+          </button>
+        )}
+      </PageHead>
+
+      <ErrorBox error={nextStatus.error} />
+      {a.locked && (
+        <div className="alert alert-info">
+          Заказ передан в доставку: редактирование и отмена здесь заблокированы. Отмена — только через запрос клиента.
+        </div>
+      )}
+      {o.payment?.customer_reported_paid_at && o.payment_status === 'payment_pending' && (
+        <div className="alert alert-warn">
+          Клиент нажал «Я оплатил» {dateTime(o.payment.customer_reported_paid_at)}. Проверьте поступление на счёт и подтвердите оплату.
+        </div>
+      )}
+
+      <div className="grid-2">
+        <section className="card">
+          <h2>Состав заказа</h2>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th className="num">Цена</th>
+                <th className="num">Кол-во</th>
+                <th className="num">Сумма</th>
+              </tr>
+            </thead>
+            <tbody>
+              {o.items.map((i) => (
+                <tr key={i.product_id}>
+                  <td>
+                    <Link to={`/products/${i.product_id}`}>{i.name_ru}</Link>
+                    <div className="muted small">{i.sku}</div>
+                  </td>
+                  <td className="num">{money(i.unit_price_uzs)}</td>
+                  <td className="num">{i.qty}</td>
+                  <td className="num">{money(i.line_total_uzs)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3}>Товары</td>
+                <td className="num">{money(o.totals.goods_total_uzs)}</td>
+              </tr>
+              <tr>
+                <td colSpan={3}>Доставка</td>
+                <td className="num">{o.totals.delivery_cost_uzs ? money(o.totals.delivery_cost_uzs) : 'бесплатно'}</td>
+              </tr>
+              <tr className="strong">
+                <td colSpan={3}>Итого к оплате</td>
+                <td className="num">{money(o.totals.total_uzs)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+
+        <section className="card">
+          <h2>Доставка и клиент</h2>
+          <dl className="props">
+            <dt>Получатель</dt>
+            <dd>
+              {o.recipient.name}, {prettyPhone(o.recipient.phone)}
+            </dd>
+            <dt>Адрес</dt>
+            <dd>
+              {o.delivery.region.name_ru}, {o.delivery.city.name_ru}
+              <br />
+              {o.delivery.address_text}
+            </dd>
+            {o.customer_comment && (
+              <>
+                <dt>Комментарий</dt>
+                <dd>{o.customer_comment}</dd>
+              </>
+            )}
+            <dt>Клиент</dt>
+            <dd>
+              {can('customers.view') ? <Link to={`/customers/${o.customer.id}`}>{o.customer.name}</Link> : o.customer.name}
+              {o.customer.username && <span className="muted"> @{o.customer.username}</span>}
+              {o.customer.status !== 'active' && <span className="text-bad"> (заблокирован)</span>}
+            </dd>
+            <dt>Оплата</dt>
+            <dd>
+              Банковский перевод · {money(o.payment?.amount_uzs)}
+              {o.payment?.verified_at && <div className="muted small">подтверждено {dateTime(o.payment.verified_at)}</div>}
+            </dd>
+            <dt>Создан</dt>
+            <dd>{dateTime(o.created_at)}</dd>
+            {o.reserved_until && (
+              <>
+                <dt>Резерв до</dt>
+                <dd>{dateTime(o.reserved_until)}</dd>
+              </>
+            )}
+          </dl>
+        </section>
+      </div>
+
+      <div className="grid-2">
+        <section className="card">
+          <h2>История статусов</h2>
+          <ol className="timeline">
+            {o.history.map((h, i) => (
+              <li key={i}>
+                <strong>{ORDER_STATUS[h.to_status] ?? h.to_status}</strong> <span className="muted small">{dateTime(h.created_at)} · {ACTOR[h.changed_by_type]}</span>
+                {h.reason && <div className="small">{h.reason}</div>}
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="card">
+          <h2>Изменения заказа</h2>
+          {o.edits.length === 0 ? (
+            <p className="muted">Заказ не редактировался</p>
+          ) : (
+            o.edits.map((e, i) => (
+              <div key={i} className="edit-entry">
+                <div className="small">
+                  <strong>{e.staff_name}</strong> · {dateTime(e.created_at)} · «{e.reason}»
+                </div>
+                <ul className="small">
+                  {Object.keys(e.after).map((k) => (
+                    <li key={k}>
+                      {FIELD[k] ?? k}: <s className="muted">{String(e.before[k] ?? '—')}</s> → {String(e.after[k] ?? '—')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+          {o.tasks.length > 0 && (
+            <>
+              <h3>Задачи менеджера</h3>
+              {o.tasks.map((t, i) => (
+                <div key={i} className="small">
+                  {t.status === 'done' ? '✓' : '•'} {t.note ?? t.type} <span className="muted">({dateTime(t.created_at)})</span>
+                </div>
+              ))}
+            </>
+          )}
+        </section>
+      </div>
+
+      {modal === 'confirm' && <ConfirmPayment order={o} onDone={done} onClose={() => setModal(null)} />}
+      {modal === 'cancel' && <CancelOrder order={o} onDone={done} onClose={() => setModal(null)} />}
+      {modal === 'edit' && <EditOrder order={o} onDone={done} onClose={() => setModal(null)} />}
+    </>
+  );
+}
+
+type ModalProps = { order: AdminOrder; onDone: (o: AdminOrder) => void; onClose: () => void };
+
+function ConfirmPayment({ order, onDone, onClose }: ModalProps) {
+  const [comment, setComment] = useState('');
+  const m = useMutation({
+    mutationFn: () => api<AdminOrder>(`/staff/orders/${order.id}/confirm-payment`, { method: 'POST', body: { comment: comment || undefined } }),
+    onSuccess: onDone,
+  });
+  return (
+    <Modal title="Подтвердить банковский перевод" onClose={onClose}>
+      <p>
+        Деньги поступили на счёт: <strong>{money(order.payment?.amount_uzs)}</strong>, назначение «Оплата заказа {order.order_number}»?
+        Резерв товара превратится в списание, заказ станет «Оплачен».
+      </p>
+      <Field label="Комментарий (необязательно)">
+        <input value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} />
+      </Field>
+      <ErrorBox error={m.error} />
+      <div className="modal-actions">
+        <button className="btn btn-ghost" onClick={onClose}>
+          Отмена
+        </button>
+        <button className="btn" disabled={m.isPending} onClick={() => m.mutate()}>
+          Подтвердить оплату
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function CancelOrder({ order, onDone, onClose }: ModalProps) {
+  const [reason, setReason] = useState('');
+  const paid = order.payment_status === 'payment_success';
+  const m = useMutation({
+    mutationFn: () => api<AdminOrder>(`/staff/orders/${order.id}/cancel`, { method: 'POST', body: { reason } }),
+    onSuccess: onDone,
+  });
+  return (
+    <Modal title={`Отменить заказ ${order.order_number}`} onClose={onClose}>
+      <p>
+        {paid
+          ? 'Заказ оплачен: товар вернётся на склад, будет создана задача «вернуть деньги клиенту» (возврат делается вручную).'
+          : 'Резерв товара будет снят, товар снова станет доступен.'}
+      </p>
+      <Field label="Причина (обязательно, видна в истории)">
+        <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} />
+      </Field>
+      <ErrorBox error={m.error} />
+      <div className="modal-actions">
+        <button className="btn btn-ghost" onClick={onClose}>
+          Не отменять
+        </button>
+        <button className="btn btn-danger" disabled={!reason.trim() || m.isPending} onClick={() => m.mutate()}>
+          Отменить заказ
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function EditOrder({ order, onDone, onClose }: ModalProps) {
+  const regions = useQuery({ queryKey: ['regions'], queryFn: () => api<Region[]>('/delivery/regions') });
+  const [f, setF] = useState({
+    recipient_name: order.recipient.name,
+    recipient_phone: order.recipient.phone,
+    region_id: order.delivery.region.id,
+    city_id: order.delivery.city.id,
+    address_text: order.delivery.address_text,
+    customer_comment: order.customer_comment ?? '',
+    reason: '',
+  });
+  const unpaid = order.payment_status === 'payment_pending';
+  const m = useMutation({
+    mutationFn: () => {
+      const { reason, ...fields } = f;
+      const body: Record<string, string> = { reason };
+      if (fields.recipient_name !== order.recipient.name) body.recipient_name = fields.recipient_name;
+      if (fields.recipient_phone !== order.recipient.phone) body.recipient_phone = fields.recipient_phone;
+      if (fields.address_text !== order.delivery.address_text) body.address_text = fields.address_text;
+      if (fields.customer_comment !== (order.customer_comment ?? '')) body.customer_comment = fields.customer_comment;
+      if (fields.city_id !== order.delivery.city.id) Object.assign(body, { region_id: fields.region_id, city_id: fields.city_id });
+      return api<AdminOrder>(`/staff/orders/${order.id}`, { method: 'PATCH', body });
+    },
+    onSuccess: onDone,
+  });
+  const region = regions.data?.find((r) => r.id === f.region_id);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    m.mutate();
+  };
+
+  return (
+    <Modal title={`Изменить заказ ${order.order_number}`} onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <div className="form-grid">
+          <Field label="Получатель">
+            <input value={f.recipient_name} onChange={(e) => setF({ ...f, recipient_name: e.target.value })} />
+          </Field>
+          <Field label="Телефон">
+            <input value={f.recipient_phone} onChange={(e) => setF({ ...f, recipient_phone: e.target.value })} />
+          </Field>
+          <Field label="Регион" hint={unpaid ? 'Смена города пересчитает доставку' : 'Заказ оплачен — город менять нельзя'}>
+            <select disabled={!unpaid} value={f.region_id} onChange={(e) => setF({ ...f, region_id: e.target.value, city_id: '' })}>
+              {regions.data?.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name_ru}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Город / район">
+            <select disabled={!unpaid} value={f.city_id} onChange={(e) => setF({ ...f, city_id: e.target.value })}>
+              <option value="">—</option>
+              {region?.cities.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name_ru}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label="Адрес">
+          <input value={f.address_text} onChange={(e) => setF({ ...f, address_text: e.target.value })} />
+        </Field>
+        <Field label="Комментарий клиента">
+          <input value={f.customer_comment} onChange={(e) => setF({ ...f, customer_comment: e.target.value })} />
+        </Field>
+        <Field label="Причина изменения (обязательно, попадёт в журнал)">
+          <input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+        </Field>
+        <ErrorBox error={m.error} />
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Отмена
+          </button>
+          <button type="submit" className="btn" disabled={!f.reason.trim() || !f.city_id || m.isPending}>
+            Сохранить
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

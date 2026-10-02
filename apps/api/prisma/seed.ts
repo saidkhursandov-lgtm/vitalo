@@ -1,6 +1,7 @@
 /**
  * Dev/test seed: 3 regions x 2 cities, two category trees, 1 warehouse, 10 supplements with stock.
- * Idempotent: ids are derived from stable keys, so re-running updates rows instead of duplicating them.
+ * Safe to re-run: it only CREATES what is missing (stable ids) and never overwrites existing rows,
+ * so admin edits, stock and reservations of real orders are left alone.
  * Run: npm run seed
  */
 import { createHash } from 'crypto';
@@ -140,7 +141,7 @@ const DEV_STAFF = [
 
 async function seedCheckoutSettings() {
   for (const m of PAYMENT_METHODS) {
-    await prisma.payment_methods.upsert({ where: { code: m.code }, create: m, update: { name_ru: m.name_ru, name_uz: m.name_uz } });
+    await prisma.payment_methods.upsert({ where: { code: m.code }, create: m, update: {} });
   }
   await prisma.settings.upsert({
     where: { key: 'bank_transfer_details' },
@@ -156,7 +157,7 @@ async function seedCheckoutSettings() {
       free_shipping_threshold_uzs: BigInt(t.threshold),
       status: 'active' as const,
     };
-    await prisma.delivery_tariffs.upsert({ where: { id }, create: { id, ...data }, update: data });
+    await prisma.delivery_tariffs.upsert({ where: { id }, create: { id, ...data }, update: {} });
   }
   for (const s of DEV_STAFF) {
     await prisma.staff_users.upsert({
@@ -173,14 +174,14 @@ async function seedRegions() {
     await prisma.regions.upsert({
       where: { id: regionId },
       create: { id: regionId, name_ru: r.ru, name_uz: r.uz },
-      update: { name_ru: r.ru, name_uz: r.uz, status: 'active' },
+      update: {},
     });
     for (const [ru, uz] of r.cities) {
       const cityId = uid(`city:${r.key}:${ru}`);
       await prisma.cities.upsert({
         where: { id: cityId },
         create: { id: cityId, region_id: regionId, name_ru: ru, name_uz: uz },
-        update: { name_ru: ru, name_uz: uz, status: 'active' },
+        update: {},
       });
     }
   }
@@ -194,7 +195,7 @@ async function seedCategories() {
       const row = await prisma.categories.upsert({
         where: { slug: c.slug },
         create: { id: uid(`category:${c.slug}`), slug: c.slug, ...data },
-        update: data,
+        update: {},
       });
       ids.set(c.slug, row.id);
       if (c.children) await walk(tree, c.children, row.id);
@@ -213,6 +214,13 @@ async function seedProducts(categoryIds: Map<string, string>) {
 
   const productIds = new Map<string, string>();
   for (const [i, p] of PRODUCTS.entries()) {
+    // Never touch an existing product: its price/texts may be edited in the admin panel and its stock
+    // belongs to real orders (re-seeding once reset reservations — see git history).
+    const existing = await prisma.products.findUnique({ where: { sku: p.sku } });
+    if (existing) {
+      productIds.set(p.sku, existing.id);
+      continue;
+    }
     const data = {
       name_ru: p.ru, name_uz: p.uz, brand: p.brand, manufacturer: p.manufacturer, country: p.country, form: p.form,
       price_uzs: BigInt(p.price), old_price_uzs: p.old ? BigInt(p.old) : null,
@@ -221,32 +229,19 @@ async function seedProducts(categoryIds: Map<string, string>) {
       warnings_ru: 'Не является лекарственным средством. Перед применением проконсультируйтесь с врачом.',
       created_at: new Date(BASE_DATE + i * 86_400_000),
     };
-    const product = await prisma.products.upsert({
-      where: { sku: p.sku },
-      create: { id: uid(`product:${p.sku}`), sku: p.sku, ...data },
-      update: data,
-    });
+    const product = await prisma.products.create({ data: { id: uid(`product:${p.sku}`), sku: p.sku, ...data } });
     productIds.set(p.sku, product.id);
 
-    await prisma.product_categories.deleteMany({ where: { product_id: product.id } });
     await prisma.product_categories.createMany({
       data: p.categories.map((slug) => ({ product_id: product.id, category_id: categoryIds.get(slug)! })),
     });
-
-    await prisma.product_media.deleteMany({ where: { product_id: product.id } });
     await prisma.product_media.create({
       data: { product_id: product.id, media_type: 'image', is_main: true, url: `https://placehold.co/600x600/png?text=${encodeURIComponent(p.sku)}` },
     });
-
-    await prisma.inventory.upsert({
-      where: { product_id_warehouse_id: { product_id: product.id, warehouse_id: WAREHOUSE_ID } },
-      create: { product_id: product.id, warehouse_id: WAREHOUSE_ID, actual_qty: p.stock, reserved_qty: p.reserved ?? 0 },
-      update: { actual_qty: p.stock, reserved_qty: p.reserved ?? 0 },
+    await prisma.inventory.create({
+      data: { product_id: product.id, warehouse_id: WAREHOUSE_ID, actual_qty: p.stock, reserved_qty: p.reserved ?? 0 },
     });
-
-    // Receipt history only on first seed, so re-runs don't pile up movements.
-    const hasBatch = await prisma.inventory_batches.findFirst({ where: { product_id: product.id } });
-    if (!hasBatch && p.stock > 0) {
+    if (p.stock > 0) {
       await prisma.inventory_batches.create({
         data: { product_id: product.id, warehouse_id: WAREHOUSE_ID, batch_no: `SEED-${p.sku}`, qty: p.stock, expiry_date: new Date('2028-06-30') },
       });

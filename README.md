@@ -28,6 +28,13 @@ cd apps/miniapp && npm i && npm run dev   # http://localhost:5173 (API долж�
 В Telegram вход идёт через настоящий Telegram.WebApp.initData. Цвета — из темы Telegram (--tg-theme-*).
 npm test (vitest), npm run build (typecheck + сборка в dist/; на хостинге нужен SPA-fallback на index.html)
 
+## Админ-панель (apps/admin, React + Vite, порт 5174)
+cd apps/admin && npm i && npm run dev   # http://localhost:5174 (запускается и через start.bat)
+Режим разработки: кнопки входа тестовыми сотрудниками из seed — Администратор 222222221, Менеджер 222222222,
+Склад 222222223, Маркетолог 222222224. Права (apps/api/src/staff/permissions.ts) проверяет сервер на каждом запросе;
+меню лишь скрывает недоступные разделы. Фото товаров: FileStorage (сейчас папка apps/api/uploads, позже S3).
+Seed только добавляет недостающее и никогда не перезаписывает существующие товары/остатки.
+
 ## Тесты
 npm test              # unit
 npm run test:e2e      # API + реальная БД vitalo_test (создаётся, очищается и заполняется seed автоматически)

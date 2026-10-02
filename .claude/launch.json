@@ -14,6 +14,13 @@
       "runtimeArgs": ["run", "dev", "--prefix", "apps/miniapp"],
       "port": 5173,
       "url": "http://localhost:5173"
+    },
+    {
+      "name": "vitalo-admin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/admin"],
+      "port": 5174,
+      "url": "http://localhost:5174"
     }
   ]
 }
