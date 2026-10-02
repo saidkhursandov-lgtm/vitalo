@@ -1,0 +1,22 @@
+# Secrets: never commit. Use .env.example as the template.
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs / OS / editor
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code local settings (launch.json is shared on purpose)
+.claude/settings.local.json

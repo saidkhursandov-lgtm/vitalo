@@ -1,0 +1,1088 @@
+// VITALO — Prisma schema (Stage 1). Based on Appendix 1 (ER).
+// Money = BigInt UZS. Timestamps = UTC. Field names follow the ER document (snake_case).
+//
+// Deviations from Appendix 1 (to be confirmed, see README "Решения по ТЗ"):
+//  - orders.delivery_status removed: duplicated orders.status (handed/in_transit/delivered).
+//  - added shipments (merging orders into one physical delivery, Master TZ §11).
+//  - added settings, cancel_requests, manager_tasks, notifications, order_number_counters,
+//    marketing_recipients, return_media, bank_transfer_details (needed by TZ, absent in ER).
+//  - inventory.available_qty is NOT stored: available = actual_qty - reserved_qty (DB view/computed).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm, unaccent]
+}
+
+// ───────────── ENUMS ─────────────
+enum UserStatus {
+  active
+  blocked
+  deleting
+  deleted
+}
+
+enum Lang {
+  ru
+  uz
+}
+
+enum EntityStatus {
+  active
+  archived
+}
+
+enum StaffRole {
+  admin
+  manager
+  warehouse
+  marketer
+}
+
+enum StaffStatus {
+  active
+  blocked
+}
+
+enum TreeType {
+  need
+  product_type
+}
+
+enum ProductStatus {
+  active
+  archived
+  hidden
+}
+
+enum MediaType {
+  image
+  document
+}
+
+enum RelationType {
+  similar
+  also_bought
+}
+
+enum MovementType {
+  receipt
+  reserve
+  release
+  deduct
+  writeoff
+  return_to_stock
+  adjustment
+}
+
+enum CartStatus {
+  active
+  converted
+  abandoned
+}
+
+enum OrderStatus {
+  new
+  awaiting_payment
+  paid
+  picking
+  handed_to_delivery
+  in_transit
+  delivered
+  cancelled
+  return
+}
+
+enum PaymentStatus {
+  payment_pending
+  payment_success
+  payment_failed
+  payment_cancelled
+}
+
+enum AttemptStatus {
+  pending
+  success
+  failed
+  cancelled
+}
+
+enum PaymentMethodStatus {
+  enabled
+  disabled
+}
+
+enum PromoType {
+  percent
+  fixed
+}
+
+enum StackingMode {
+  compatible
+  exclusive
+}
+
+enum PromoStatus {
+  draft
+  active
+  disabled
+  expired
+}
+
+enum PromoScope {
+  order
+  product
+  category
+  brand
+}
+
+enum PromoUsageStatus {
+  reserved
+  consumed
+  rolled_back
+}
+
+enum PromoCodeStatus {
+  active
+  disabled
+}
+
+enum BonusOp {
+  purchase
+  referral
+  promo
+  manual_add
+  manual_subtract
+  redemption
+  reversal
+}
+
+enum ReferralStatus {
+  pending
+  qualified
+  rejected
+}
+
+enum TariffStatus {
+  active
+  disabled
+}
+
+enum ReturnStatus {
+  requested
+  approved
+  rejected
+  refunded
+  closed
+}
+
+enum ReturnReason {
+  damaged
+  wrong_item
+  not_as_described
+  unsuitable
+  changed_mind
+  other
+}
+
+enum ReturnCondition {
+  resellable
+  damaged
+  opened
+  other
+}
+
+enum ContentBlockType {
+  hero
+  promotion
+  popular
+  categories
+  special_offers
+  new_arrivals
+}
+
+enum ClickTarget {
+  product
+  category
+  promotion
+  collection
+  external_url
+}
+
+enum ContentStatus {
+  active
+  disabled
+}
+
+enum SegmentType {
+  all
+  new
+  one_time
+  repeat
+  inactive
+  bonus_holders
+  promo_users
+  referral_participants
+}
+
+enum CampaignStatus {
+  draft
+  previewed
+  sending
+  completed
+  cancelled
+}
+
+enum LegalStatus {
+  draft
+  active
+  archived
+}
+
+enum ActorType {
+  system
+  staff
+  customer
+}
+
+enum CancelRequestStatus {
+  requested
+  approved
+  rejected
+}
+
+enum TaskStatus {
+  open
+  in_progress
+  done
+}
+
+enum TaskType {
+  payment_check
+  bank_transfer_check
+  refund
+  other
+}
+
+// ───────────── IDENTITY ─────────────
+model users {
+  id               String     @id @default(uuid()) @db.Uuid
+  telegram_user_id BigInt     @unique
+  status           UserStatus @default(active)
+  first_name       String
+  last_name        String?
+  username         String?
+  phone            String?
+  language         Lang       @default(ru)
+  marketing_opt_in Boolean    @default(true)
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @updatedAt
+  deleted_at       DateTime?
+
+  sessions          user_sessions[]
+  addresses         addresses[]
+  carts             carts[]
+  orders            orders[]
+  favorites         favorites[]
+  bonus_account     bonus_accounts?
+  referrals         referrals[]
+  referral_attr     referral_attributions?
+  returns           returns[]
+  legal_acceptances legal_acceptances[]
+  promotion_usages  promotion_usages[]
+  notifications     notifications[]
+  cancel_requests   cancel_requests[]
+
+  @@index([status])
+}
+
+model user_sessions {
+  id          String    @id @default(uuid()) @db.Uuid
+  user_id     String    @db.Uuid
+  token_hash  String    @unique
+  device_info String?
+  created_at  DateTime  @default(now())
+  expires_at  DateTime
+  revoked_at  DateTime?
+  user        users     @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+}
+
+model regions {
+  id        String             @id @default(uuid()) @db.Uuid
+  name_ru   String
+  name_uz   String
+  status    EntityStatus       @default(active)
+  cities    cities[]
+  addresses addresses[]
+  orders    orders[]
+  tariffs   delivery_tariffs[]
+}
+
+model cities {
+  id        String             @id @default(uuid()) @db.Uuid
+  region_id String             @db.Uuid
+  name_ru   String
+  name_uz   String
+  status    EntityStatus       @default(active)
+  region    regions            @relation(fields: [region_id], references: [id])
+  addresses addresses[]
+  orders    orders[]
+  tariffs   delivery_tariffs[]
+
+  @@index([region_id])
+}
+
+model addresses {
+  id           String    @id @default(uuid()) @db.Uuid
+  user_id      String    @db.Uuid
+  label        String?
+  region_id    String    @db.Uuid
+  city_id      String    @db.Uuid
+  address_text String
+  latitude     Decimal?  @db.Decimal(9, 6)
+  longitude    Decimal?  @db.Decimal(9, 6)
+  is_primary   Boolean   @default(false)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  deleted_at   DateTime?
+  user         users     @relation(fields: [user_id], references: [id])
+  region       regions   @relation(fields: [region_id], references: [id])
+  city         cities    @relation(fields: [city_id], references: [id])
+
+  // one primary per user: partial unique index in raw SQL (constraints.sql)
+  @@index([user_id])
+}
+
+model staff_users {
+  id               String      @id @default(uuid()) @db.Uuid
+  telegram_user_id BigInt      @unique
+  name             String
+  role             StaffRole
+  status           StaffStatus @default(active)
+  created_at       DateTime    @default(now())
+  updated_at       DateTime    @updatedAt
+
+  sessions         staff_sessions[]
+  audit_logs       audit_logs[]
+  order_edits      order_edit_log[]
+  movements        inventory_movements[]
+  campaigns        marketing_campaigns[]
+  ledger           bonus_ledger[]
+  returns_approved returns[]
+  manual_payments  manual_payment_confirmations[]
+  tasks            manager_tasks[]
+  cancel_decisions cancel_requests[]
+}
+
+model staff_sessions {
+  id            String      @id @default(uuid()) @db.Uuid
+  staff_user_id String      @db.Uuid
+  token_hash    String      @unique
+  created_at    DateTime    @default(now())
+  expires_at    DateTime
+  revoked_at    DateTime?
+  staff_user    staff_users @relation(fields: [staff_user_id], references: [id])
+
+  @@index([staff_user_id])
+}
+
+// ───────────── CATALOG ─────────────
+model categories {
+  id            String                @id @default(uuid()) @db.Uuid
+  parent_id     String?               @db.Uuid
+  tree_type     TreeType
+  name_ru       String
+  name_uz       String
+  slug          String                @unique
+  sort_order    Int                   @default(0)
+  status        EntityStatus          @default(active)
+  parent        categories?           @relation("CatTree", fields: [parent_id], references: [id])
+  children      categories[]          @relation("CatTree")
+  products      product_categories[]
+  promo_targets promotion_targets[]
+  block_items   content_block_items[]
+
+  @@index([parent_id, tree_type])
+}
+
+model products {
+  id                   String        @id @default(uuid()) @db.Uuid
+  sku                  String        @unique
+  name_ru              String
+  name_uz              String?
+  brand                String
+  manufacturer         String
+  country              String?
+  form                 String?
+  price_uzs            BigInt
+  old_price_uzs        BigInt?
+  cost_uzs             BigInt?
+  min_stock            Int           @default(0)
+  status               ProductStatus @default(active)
+  short_description_ru String?
+  short_description_uz String?
+  composition_ru       String?
+  composition_uz       String?
+  nutrition_ru         String?
+  nutrition_uz         String?
+  directions_ru        String?
+  directions_uz        String?
+  warnings_ru          String?
+  warnings_uz          String?
+  search_keywords      String?
+  popularity_30d       Int           @default(0) // recalculated daily (30-day sold units)
+  shipping_weight_g    Int?
+  shipping_length_mm   Int?
+  shipping_width_mm    Int?
+  shipping_height_mm   Int?
+  created_at           DateTime      @default(now())
+  updated_at           DateTime      @updatedAt
+
+  categories    product_categories[]
+  media         product_media[]
+  relations     product_relations[]   @relation("RelMain")
+  related_to    product_relations[]   @relation("RelOther")
+  inventory     inventory[]
+  batches       inventory_batches[]
+  movements     inventory_movements[]
+  cart_items    cart_items[]
+  order_items   order_items[]
+  favorites     favorites[]
+  promo_targets promotion_targets[]
+  block_items   content_block_items[]
+
+  // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
+  @@index([status])
+  @@index([brand])
+}
+
+model product_categories {
+  product_id  String     @db.Uuid
+  category_id String     @db.Uuid
+  product     products   @relation(fields: [product_id], references: [id])
+  category    categories @relation(fields: [category_id], references: [id])
+
+  @@id([product_id, category_id])
+}
+
+model product_media {
+  id         String    @id @default(uuid()) @db.Uuid
+  product_id String    @db.Uuid
+  media_type MediaType
+  url        String
+  sort_order Int       @default(0)
+  is_main    Boolean   @default(false)
+  title      String?
+  product    products  @relation(fields: [product_id], references: [id])
+
+  @@index([product_id])
+}
+
+model product_relations {
+  id                 String       @id @default(uuid()) @db.Uuid
+  product_id         String       @db.Uuid
+  related_product_id String       @db.Uuid
+  relation_type      RelationType
+  sort_order         Int          @default(0)
+  product            products     @relation("RelMain", fields: [product_id], references: [id])
+  related            products     @relation("RelOther", fields: [related_product_id], references: [id])
+
+  @@unique([product_id, related_product_id, relation_type])
+}
+
+// ───────────── INVENTORY ─────────────
+model warehouses {
+  id        String                @id @default(uuid()) @db.Uuid
+  name      String
+  address   String?
+  status    EntityStatus          @default(active)
+  inventory inventory[]
+  batches   inventory_batches[]
+  movements inventory_movements[]
+}
+
+model inventory {
+  id           String     @id @default(uuid()) @db.Uuid
+  warehouse_id String     @db.Uuid
+  product_id   String     @db.Uuid
+  actual_qty   Int        @default(0)
+  reserved_qty Int        @default(0)
+  // available_qty = actual_qty - reserved_qty (computed, never stored)
+  updated_at   DateTime   @updatedAt
+  warehouse    warehouses @relation(fields: [warehouse_id], references: [id])
+  product      products   @relation(fields: [product_id], references: [id])
+
+  // CHECK (reserved_qty >= 0 AND actual_qty >= 0 AND reserved_qty <= actual_qty): constraints.sql
+  @@unique([product_id, warehouse_id])
+}
+
+model inventory_batches {
+  id           String     @id @default(uuid()) @db.Uuid
+  warehouse_id String     @db.Uuid
+  product_id   String     @db.Uuid
+  batch_no     String?
+  qty          Int
+  cost_uzs     BigInt?
+  received_at  DateTime   @default(now())
+  expiry_date  DateTime?  @db.Date
+  warehouse    warehouses @relation(fields: [warehouse_id], references: [id])
+  product      products   @relation(fields: [product_id], references: [id])
+
+  @@index([product_id, warehouse_id])
+}
+
+model inventory_movements {
+  id             String       @id @default(uuid()) @db.Uuid
+  warehouse_id   String       @db.Uuid
+  product_id     String       @db.Uuid
+  movement_type  MovementType
+  qty            Int
+  reference_type String?
+  reference_id   String?      @db.Uuid
+  reason         String?
+  created_by     String?      @db.Uuid
+  created_at     DateTime     @default(now())
+  warehouse      warehouses   @relation(fields: [warehouse_id], references: [id])
+  product        products     @relation(fields: [product_id], references: [id])
+  staff          staff_users? @relation(fields: [created_by], references: [id])
+
+  @@index([product_id, created_at])
+  @@index([reference_type, reference_id])
+}
+
+// ───────────── CART / ORDERS ─────────────
+model carts {
+  id         String       @id @default(uuid()) @db.Uuid
+  user_id    String       @db.Uuid
+  status     CartStatus   @default(active)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  user       users        @relation(fields: [user_id], references: [id])
+  items      cart_items[]
+
+  // one active cart per user: partial unique index in constraints.sql
+  @@index([user_id, status])
+}
+
+model cart_items {
+  id                      String   @id @default(uuid()) @db.Uuid
+  cart_id                 String   @db.Uuid
+  product_id              String   @db.Uuid
+  qty                     Int
+  unit_price_snapshot_uzs BigInt
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+  cart                    carts    @relation(fields: [cart_id], references: [id])
+  product                 products @relation(fields: [product_id], references: [id])
+
+  @@unique([cart_id, product_id])
+}
+
+model shipments {
+  id         String   @id @default(uuid()) @db.Uuid
+  note       String?
+  created_at DateTime @default(now())
+  orders     orders[]
+}
+
+model order_number_counters {
+  day  DateTime @id @db.Date
+  last Int      @default(0) // VTL-YYYYMMDD-NNNN, incremented atomically
+}
+
+model orders {
+  id                  String        @id @default(uuid()) @db.Uuid
+  order_number        String        @unique
+  user_id             String        @db.Uuid
+  status              OrderStatus   @default(new)
+  payment_status      PaymentStatus @default(payment_pending)
+  shipment_id         String?       @db.Uuid
+  recipient_name      String
+  recipient_phone     String
+  region_id           String        @db.Uuid
+  city_id             String        @db.Uuid
+  address_text        String
+  latitude            Decimal?      @db.Decimal(9, 6)
+  longitude           Decimal?      @db.Decimal(9, 6)
+  customer_comment    String?
+  delivery_method     String
+  delivery_cost_uzs   BigInt
+  goods_total_uzs     BigInt // before discounts
+  discount_total_uzs  BigInt        @default(0)
+  bonus_used_uzs      BigInt        @default(0)
+  goods_paid_uzs      BigInt // goods after discounts, minus bonuses = real money part of goods
+  total_uzs           BigInt // money to pay = goods_paid + delivery
+  promo_id            String?       @db.Uuid
+  bonus_rate_snapshot Decimal?      @db.Decimal(6, 4)
+  created_at          DateTime      @default(now())
+  paid_at             DateTime?
+  reserved_until      DateTime?
+  delivered_at        DateTime?
+  cancelled_at        DateTime?
+
+  user            users                  @relation(fields: [user_id], references: [id])
+  region          regions                @relation(fields: [region_id], references: [id])
+  city            cities                 @relation(fields: [city_id], references: [id])
+  promo           promotions?            @relation(fields: [promo_id], references: [id])
+  shipment        shipments?             @relation(fields: [shipment_id], references: [id])
+  items           order_items[]
+  history         order_status_history[]
+  edits           order_edit_log[]
+  payments        payments[]
+  returns         returns[]
+  promo_usages    promotion_usages[]
+  ledger          bonus_ledger[]
+  cancel_requests cancel_requests[]
+  tasks           manager_tasks[]
+
+  @@index([user_id, status, created_at])
+  @@index([status, reserved_until]) // reservation-expiry job
+}
+
+model order_items {
+  id                  String         @id @default(uuid()) @db.Uuid
+  order_id            String         @db.Uuid
+  product_id          String         @db.Uuid
+  sku_snapshot        String
+  name_ru_snapshot    String
+  qty                 Int
+  unit_price_uzs      BigInt
+  line_total_uzs      BigInt
+  discount_uzs        BigInt         @default(0)
+  paid_line_total_uzs BigInt // actual paid price of line (basis for returns)
+  order               orders         @relation(fields: [order_id], references: [id])
+  product             products       @relation(fields: [product_id], references: [id])
+  return_items        return_items[]
+
+  @@index([order_id])
+}
+
+model order_status_history {
+  id              String    @id @default(uuid()) @db.Uuid
+  order_id        String    @db.Uuid
+  from_status     String?
+  to_status       String
+  reason          String?
+  changed_by_type ActorType
+  changed_by_id   String?   @db.Uuid
+  created_at      DateTime  @default(now())
+  order           orders    @relation(fields: [order_id], references: [id])
+
+  @@index([order_id, created_at])
+}
+
+model order_edit_log {
+  id            String      @id @default(uuid()) @db.Uuid
+  order_id      String      @db.Uuid
+  staff_user_id String      @db.Uuid
+  before_json   Json
+  after_json    Json
+  reason        String
+  created_at    DateTime    @default(now())
+  order         orders      @relation(fields: [order_id], references: [id])
+  staff         staff_users @relation(fields: [staff_user_id], references: [id])
+}
+
+model cancel_requests {
+  id            String              @id @default(uuid()) @db.Uuid
+  order_id      String              @db.Uuid
+  user_id       String              @db.Uuid
+  status        CancelRequestStatus @default(requested)
+  reason        String?
+  decided_by    String?             @db.Uuid
+  reject_reason String? // mandatory when rejected
+  created_at    DateTime            @default(now())
+  decided_at    DateTime?
+  order         orders              @relation(fields: [order_id], references: [id])
+  user          users               @relation(fields: [user_id], references: [id])
+  staff         staff_users?        @relation(fields: [decided_by], references: [id])
+}
+
+// ───────────── PAYMENTS ─────────────
+model payment_methods {
+  id              String              @id @default(uuid()) @db.Uuid
+  code            String              @unique // payme | click | uzum | bank_transfer
+  name_ru         String
+  name_uz         String?
+  status          PaymentMethodStatus @default(enabled)
+  timeout_minutes Int
+  config_json     Json? // NO plaintext secrets: store refs to env/secret manager
+  payments        payments[]
+}
+
+model payments {
+  id                  String                         @id @default(uuid()) @db.Uuid
+  order_id            String                         @db.Uuid
+  payment_method_id   String                         @db.Uuid
+  amount_uzs          BigInt
+  status              PaymentStatus                  @default(payment_pending)
+  provider_payment_id String?
+  created_at          DateTime                       @default(now())
+  updated_at          DateTime                       @updatedAt
+  paid_at             DateTime?
+  order               orders                         @relation(fields: [order_id], references: [id])
+  method              payment_methods                @relation(fields: [payment_method_id], references: [id])
+  attempts            payment_attempts[]
+  manual              manual_payment_confirmations[]
+
+  @@unique([payment_method_id, provider_payment_id]) // webhook duplicate protection
+  @@index([order_id, status])
+}
+
+model payment_attempts {
+  id                     String        @id @default(uuid()) @db.Uuid
+  payment_id             String        @db.Uuid
+  attempt_no             Int
+  status                 AttemptStatus @default(pending)
+  provider_request_id    String?
+  provider_response_json Json?
+  created_at             DateTime      @default(now())
+  payment                payments      @relation(fields: [payment_id], references: [id])
+
+  @@unique([payment_id, attempt_no])
+}
+
+model manual_payment_confirmations {
+  id                    String       @id @default(uuid()) @db.Uuid
+  payment_id            String       @db.Uuid
+  receipt_url           String?
+  customer_confirmed_at DateTime?
+  verified_by           String?      @db.Uuid
+  verified_at           DateTime?
+  comment               String?
+  payment               payments     @relation(fields: [payment_id], references: [id])
+  staff                 staff_users? @relation(fields: [verified_by], references: [id])
+}
+
+model manager_tasks {
+  id          String       @id @default(uuid()) @db.Uuid
+  type        TaskType
+  order_id    String?      @db.Uuid
+  status      TaskStatus   @default(open)
+  note        String?
+  assigned_to String?      @db.Uuid
+  created_at  DateTime     @default(now())
+  done_at     DateTime?
+  order       orders?      @relation(fields: [order_id], references: [id])
+  staff       staff_users? @relation(fields: [assigned_to], references: [id])
+
+  @@index([status, type])
+}
+
+// ───────────── PROMOTIONS ─────────────
+model promotions {
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String
+  type               PromoType
+  value              Decimal             @db.Decimal(12, 2)
+  start_at           DateTime
+  end_at             DateTime
+  min_order_uzs      BigInt?
+  max_discount_uzs   BigInt?
+  global_limit       Int?
+  per_customer_limit Int?
+  stacking_mode      StackingMode        @default(exclusive)
+  status             PromoStatus         @default(draft)
+  scope_type         PromoScope          @default(order)
+  targets            promotion_targets[]
+  usages             promotion_usages[]
+  codes              promo_codes[]
+  orders             orders[]
+}
+
+model promotion_targets {
+  id           String      @id @default(uuid()) @db.Uuid
+  promotion_id String      @db.Uuid
+  product_id   String?     @db.Uuid
+  category_id  String?     @db.Uuid
+  brand        String?
+  promotion    promotions  @relation(fields: [promotion_id], references: [id])
+  product      products?   @relation(fields: [product_id], references: [id])
+  category     categories? @relation(fields: [category_id], references: [id])
+}
+
+model promotion_usages {
+  id           String           @id @default(uuid()) @db.Uuid
+  promotion_id String           @db.Uuid
+  user_id      String           @db.Uuid
+  order_id     String           @db.Uuid
+  discount_uzs BigInt
+  status       PromoUsageStatus @default(reserved)
+  created_at   DateTime         @default(now())
+  promotion    promotions       @relation(fields: [promotion_id], references: [id])
+  user         users            @relation(fields: [user_id], references: [id])
+  order        orders           @relation(fields: [order_id], references: [id])
+
+  @@index([promotion_id, user_id])
+}
+
+model promo_codes {
+  id           String          @id @default(uuid()) @db.Uuid
+  promotion_id String          @db.Uuid
+  code         String          @unique
+  status       PromoCodeStatus @default(active)
+  promotion    promotions      @relation(fields: [promotion_id], references: [id])
+}
+
+// ───────────── BONUSES / REFERRAL ─────────────
+model bonus_accounts {
+  id          String         @id @default(uuid()) @db.Uuid
+  user_id     String         @unique @db.Uuid
+  balance_uzs BigInt         @default(0)
+  updated_at  DateTime       @updatedAt
+  user        users          @relation(fields: [user_id], references: [id])
+  ledger      bonus_ledger[]
+  // CHECK (balance_uzs >= 0): constraints.sql
+}
+
+// Immutable: UPDATE/DELETE blocked by trigger (constraints.sql)
+model bonus_ledger {
+  id                String         @id @default(uuid()) @db.Uuid
+  bonus_account_id  String         @db.Uuid
+  operation_type    BonusOp
+  amount_uzs        BigInt
+  balance_after_uzs BigInt
+  order_id          String?        @db.Uuid
+  reference_id      String?        @db.Uuid
+  idempotency_ref   String?        @unique // e.g. "purchase:<orderId>" -> no double accrual on webhook replay
+  reason            String?
+  created_by        String?        @db.Uuid
+  created_at        DateTime       @default(now())
+  account           bonus_accounts @relation(fields: [bonus_account_id], references: [id])
+  order             orders?        @relation(fields: [order_id], references: [id])
+  staff             staff_users?   @relation(fields: [created_by], references: [id])
+
+  @@index([bonus_account_id, created_at])
+}
+
+model referrals {
+  id              String                  @id @default(uuid()) @db.Uuid
+  inviter_user_id String                  @db.Uuid
+  referral_code   String                  @unique
+  created_at      DateTime                @default(now())
+  inviter         users                   @relation(fields: [inviter_user_id], references: [id])
+  attributions    referral_attributions[]
+}
+
+model referral_attributions {
+  id              String         @id @default(uuid()) @db.Uuid
+  referral_id     String         @db.Uuid
+  invited_user_id String         @unique @db.Uuid // one reward per new user
+  first_order_id  String?        @db.Uuid
+  status          ReferralStatus @default(pending)
+  expires_at      DateTime // registration + 30 days
+  referral        referrals      @relation(fields: [referral_id], references: [id])
+  invited         users          @relation(fields: [invited_user_id], references: [id])
+}
+
+// ───────────── DELIVERY ─────────────
+model delivery_tariffs {
+  id                          String       @id @default(uuid()) @db.Uuid
+  region_id                   String       @db.Uuid
+  city_id                     String?      @db.Uuid
+  tariff_uzs                  BigInt
+  free_shipping_threshold_uzs BigInt
+  status                      TariffStatus @default(active)
+  region                      regions      @relation(fields: [region_id], references: [id])
+  city                        cities?      @relation(fields: [city_id], references: [id])
+
+  @@index([region_id, city_id])
+}
+
+// ───────────── RETURNS ─────────────
+model returns {
+  id                String         @id @default(uuid()) @db.Uuid
+  order_id          String         @db.Uuid
+  user_id           String         @db.Uuid
+  status            ReturnStatus   @default(requested)
+  reason            ReturnReason
+  comment           String? // required when reason = other (app validation)
+  reject_reason     String? // required when rejected
+  created_at        DateTime       @default(now())
+  approved_by       String?        @db.Uuid
+  approved_at       DateTime?
+  refund_amount_uzs BigInt?
+  refunded_at       DateTime?
+  refund_comment    String?
+  order             orders         @relation(fields: [order_id], references: [id])
+  user              users          @relation(fields: [user_id], references: [id])
+  staff             staff_users?   @relation(fields: [approved_by], references: [id])
+  items             return_items[]
+  media             return_media[]
+}
+
+model return_items {
+  id                String           @id @default(uuid()) @db.Uuid
+  return_id         String           @db.Uuid
+  order_item_id     String           @db.Uuid
+  qty               Int
+  refund_amount_uzs BigInt
+  condition         ReturnCondition?
+  return            returns          @relation(fields: [return_id], references: [id])
+  order_item        order_items      @relation(fields: [order_item_id], references: [id])
+}
+
+model return_media {
+  id        String  @id @default(uuid()) @db.Uuid
+  return_id String  @db.Uuid
+  url       String
+  return    returns @relation(fields: [return_id], references: [id])
+}
+
+// ───────────── CONTENT / MARKETING ─────────────
+model content_blocks {
+  id                String                @id @default(uuid()) @db.Uuid
+  type              ContentBlockType
+  title_ru          String?
+  title_uz          String?
+  image_url         String?
+  sort_order        Int                   @default(0)
+  status            ContentStatus         @default(active)
+  start_at          DateTime?
+  end_at            DateTime?
+  click_target_type ClickTarget?
+  click_target_id   String?
+  external_url      String?
+  items             content_block_items[]
+}
+
+model content_block_items {
+  id               String         @id @default(uuid()) @db.Uuid
+  content_block_id String         @db.Uuid
+  product_id       String?        @db.Uuid
+  category_id      String?        @db.Uuid
+  sort_order       Int            @default(0)
+  block            content_blocks @relation(fields: [content_block_id], references: [id])
+  product          products?      @relation(fields: [product_id], references: [id])
+  category         categories?    @relation(fields: [category_id], references: [id])
+}
+
+model favorites {
+  user_id    String   @db.Uuid
+  product_id String   @db.Uuid
+  created_at DateTime @default(now())
+  user       users    @relation(fields: [user_id], references: [id])
+  product    products @relation(fields: [product_id], references: [id])
+
+  @@id([user_id, product_id])
+}
+
+model marketing_campaigns {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String
+  segment_type    SegmentType
+  text_ru         String
+  text_uz         String?
+  image_url       String?
+  button_text     String         @default("Открыть магазин")
+  status          CampaignStatus @default(draft)
+  recipient_count Int?
+  sent_count      Int?
+  delivered_count Int?
+  error_count     Int?
+  created_by      String         @db.Uuid
+  created_at      DateTime       @default(now())
+  staff           staff_users    @relation(fields: [created_by], references: [id])
+}
+
+model notifications {
+  id         String    @id @default(uuid()) @db.Uuid
+  user_id    String    @db.Uuid
+  kind       String // service | marketing
+  template   String
+  payload    Json?
+  status     String    @default("queued") // queued | sent | failed
+  error      String?
+  created_at DateTime  @default(now())
+  sent_at    DateTime?
+  user       users     @relation(fields: [user_id], references: [id])
+
+  @@index([user_id, created_at])
+}
+
+// ───────────── LEGAL / AUDIT / TECH ─────────────
+model legal_documents {
+  id           String              @id @default(uuid()) @db.Uuid
+  code         String
+  version      String
+  text_ru      String
+  text_uz      String?
+  status       LegalStatus         @default(draft)
+  published_at DateTime?
+  acceptances  legal_acceptances[]
+
+  @@unique([code, version])
+}
+
+model legal_acceptances {
+  id                String          @id @default(uuid()) @db.Uuid
+  user_id           String          @db.Uuid
+  legal_document_id String          @db.Uuid
+  accepted_at       DateTime        @default(now())
+  source            String // bot | mini_app
+  user              users           @relation(fields: [user_id], references: [id])
+  document          legal_documents @relation(fields: [legal_document_id], references: [id])
+
+  @@index([user_id])
+}
+
+model audit_logs {
+  id            String       @id @default(uuid()) @db.Uuid
+  staff_user_id String?      @db.Uuid
+  action        String
+  entity_type   String
+  entity_id     String?      @db.Uuid
+  before_json   Json?
+  after_json    Json?
+  ip            String?
+  created_at    DateTime     @default(now())
+  staff         staff_users? @relation(fields: [staff_user_id], references: [id])
+
+  @@index([entity_type, entity_id, created_at])
+}
+
+model system_errors {
+  id           String    @id @default(uuid()) @db.Uuid
+  level        String
+  service      String
+  message      String
+  stack_trace  String?
+  context_json Json?
+  notified_at  DateTime?
+  created_at   DateTime  @default(now())
+}
+
+model idempotency_keys {
+  id            String   @id @default(uuid()) @db.Uuid
+  key           String   @unique
+  scope         String
+  request_hash  String
+  response_json Json?
+  created_at    DateTime @default(now())
+  expires_at    DateTime
+}
+
+model settings {
+  key        String   @id // bonus_rate, referral_bonus_uzs, min_order_for_bonus_uzs, support_contact, ...
+  value      Json
+  updated_at DateTime @updatedAt
+}
+
+model sales_daily {
+  date                 DateTime @id @db.Date
+  orders_count         Int
+  revenue_uzs          BigInt
+  goods_revenue_uzs    BigInt
+  delivery_revenue_uzs BigInt
+  discount_uzs         BigInt
+  bonus_used_uzs       BigInt
+  cost_uzs             BigInt?
+  updated_at           DateTime @updatedAt
+}

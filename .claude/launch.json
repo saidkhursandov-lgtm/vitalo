@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vitalo-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev", "--prefix", "apps/api"],
+      "port": 3000,
+      "url": "http://localhost:3000"
+    }
+  ]
+}
