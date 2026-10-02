@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { DevLogin } from '../screens/DevLogin';
 import { api, ApiError, hasToken, setToken, setUnauthorizedHandler } from './api';
 import { I18nProvider, translate } from './i18n';
-import { telegram } from './telegram';
+import { isLocalDevHost, startParam, telegram } from './telegram';
 import type { Lang, UserProfile } from './types';
 
 type State =
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (initData: string) => {
-      const res = await api<{ token: string; user: UserProfile }>('/auth/telegram', { method: 'POST', body: { initData } });
+      const res = await api<{ token: string; user: UserProfile }>('/auth/telegram', { method: 'POST', body: { initData, start_param: startParam() } });
       setToken(res.token);
       signedIn(res.user);
     },
@@ -67,7 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(null);
         }
       }
-      setState({ status: import.meta.env.DEV ? 'dev-login' : 'outside' });
+      // The dev login exists only in the dev build and only on this computer (never through a tunnel).
+      setState({ status: import.meta.env.DEV && isLocalDevHost() ? 'dev-login' : 'outside' });
     } catch {
       setState({ status: 'error' });
     }
@@ -95,7 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   let content: ReactNode;
   if (state.status === 'ready') content = <UserContext.Provider value={state.user}>{children}</UserContext.Provider>;
-  else if (state.status === 'dev-login') content = <DevLogin onLogin={login} />;
+  // `import.meta.env.DEV &&` lets the production build drop DevLogin entirely.
+  else if (import.meta.env.DEV && state.status === 'dev-login') content = <DevLogin onLogin={login} />;
   else if (state.status === 'outside') content = <div className="screen-center">{translate(lang, 'auth.outside')}</div>;
   else if (state.status === 'error')
     content = (

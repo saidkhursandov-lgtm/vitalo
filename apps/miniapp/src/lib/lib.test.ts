@@ -73,3 +73,23 @@ describe('idempotency keys', () => {
     expect(keys.keyFor({ ...body, city_id: 'c2' })).not.toBe(first);
   });
 });
+
+describe('telegram helpers', () => {
+  it('start param: signed one from Telegram, else ?startapp=, only valid codes', async () => {
+    const { startParam } = await import('./telegram');
+    window.history.replaceState(null, '', '/?startapp=FRIEND_42');
+    expect(startParam()).toBe('FRIEND_42');
+    window.history.replaceState(null, '', '/?startapp=bad%20code');
+    expect(startParam()).toBeUndefined();
+    window.Telegram = { WebApp: { initData: 'x', initDataUnsafe: { start_param: 'SIGNED' } } as never };
+    expect(startParam()).toBe('SIGNED');
+    delete window.Telegram;
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('dev login only on this computer', async () => {
+    const { isLocalDevHost } = await import('./telegram');
+    expect(isLocalDevHost('localhost')).toBe(true);
+    expect(isLocalDevHost('quiet-river.trycloudflare.com')).toBe(false);
+  });
+});

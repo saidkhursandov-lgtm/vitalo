@@ -11,6 +11,7 @@
     "seed": "prisma db seed",
     "dev:login": "ts-node scripts/dev-login.ts",
     "dev:order-demo": "ts-node scripts/dev-order-demo.ts",
+    "staff:add": "ts-node scripts/add-staff.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

@@ -12,6 +12,7 @@ import { formatUzs, tashkentDateString } from '../common/tashkent';
 import { DeliveryService } from '../delivery/delivery.service';
 import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockLine, StockService } from '../inventory/stock.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BankTransferDetails, SETTING_KEYS, SettingsService } from '../settings/settings.service';
 import { formatOrderNumber } from './order-number';
@@ -56,6 +57,7 @@ export class OrdersService {
     private readonly delivery: DeliveryService,
     private readonly lifecycle: OrderLifecycleService,
     private readonly settings: SettingsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
@@ -214,6 +216,7 @@ export class OrdersService {
           note: `Клиент сообщил об оплате заказа ${order.order_number} на ${formatUzs(Number(payment.amount_uzs))} сум`,
         },
       });
+      await this.notifications.toOrderStaff(tx, 'staff.customer_paid', orderId);
       return view();
     }, TX_OPTIONS);
   }
@@ -289,6 +292,7 @@ export class OrdersService {
     const customer = { type: 'customer' as const, id: userId };
     await this.lifecycle.addHistory(tx, orderId, null, 'new', customer, 'Order created', now);
     await this.lifecycle.addHistory(tx, orderId, 'new', 'awaiting_payment', customer, `Payment method: ${method.code}`, new Date(now.getTime() + 1));
+    await this.notifications.toOrderStaff(tx, 'staff.new_order', orderId);
 
     // "Купить сейчас" never touches the cart; a cart checkout removes only the ordered lines.
     if (cartId) {

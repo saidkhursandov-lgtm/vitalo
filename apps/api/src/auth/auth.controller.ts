@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, HttpCode, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { AuthContext, toUserProfile } from './auth.types';
 import { CurrentAuth, SessionGuard } from './session.guard';
@@ -11,6 +11,11 @@ export class TelegramLoginDto {
   @IsNotEmpty()
   @MaxLength(4096)
   initData!: string;
+
+  @ApiPropertyOptional({ description: "Реферальный код из ссылки бота, если Telegram не передал его в initData", example: "REF123" })
+  @IsOptional()
+  @Matches(/^[A-Za-z0-9_-]{1,64}$/)
+  start_param?: string;
 }
 
 export class UpdateProfileDto {
@@ -26,7 +31,7 @@ export class AuthController {
   @Post('telegram')
   @HttpCode(200)
   login(@Body() dto: TelegramLoginDto, @Headers('user-agent') userAgent?: string) {
-    return this.auth.loginWithTelegram(dto.initData, userAgent);
+    return this.auth.loginWithTelegram(dto.initData, userAgent, dto.start_param);
   }
 
   @Get('me')

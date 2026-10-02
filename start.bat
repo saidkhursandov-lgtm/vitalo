@@ -2,8 +2,8 @@
 setlocal
 rem ============================================================
 rem  VITALO - start the local development environment:
-rem  Docker Desktop -> PostgreSQL + Redis -> API, Mini App
-rem  (and Admin, if apps\admin exists) in separate windows.
+rem  Docker Desktop -> PostgreSQL + Redis -> API, Mini App, Admin, Bot
+rem  and (if cloudflared is installed) the public HTTPS tunnel, each in its own window.
 rem  Stop everything with stop.bat
 rem ============================================================
 title VITALO start
@@ -77,6 +77,18 @@ rem ---------- 3. App windows ----------
 call :start_app "VITALO API" "apps\api" "npm run start:dev" 3000
 call :start_app "VITALO Mini App" "apps\miniapp" "npm run dev" 5173
 if exist "%ROOT%apps\admin\package.json" call :start_app "VITALO Admin" "apps\admin" "npm run dev" 5174
+rem Bot and tunnel have no port: "0" means "check only that the window is not open already".
+call :start_app "VITALO Bot" "apps\bot" "npm run dev" 0
+
+rem ---------- 3b. Public HTTPS tunnel for testing from a phone (optional) ----------
+call :find_cloudflared
+if defined CLOUDFLARED_FOUND (
+  call :start_app "VITALO Tunnel" "apps\bot" "npm run tunnel" 0
+) else (
+  echo [INFO] cloudflared is not installed, so there is no public address for the phone.
+  echo        Install it once: winget install --id Cloudflare.cloudflared
+  echo        then run start.bat again.
+)
 
 rem ---------- 4. Browser ----------
 echo.
@@ -89,6 +101,8 @@ echo === Ready ===
 echo   Mini App : http://localhost:5173
 echo   API docs : http://localhost:3000/api/docs
 if exist "%ROOT%apps\admin\package.json" echo   Admin    : http://localhost:5174
+echo   Bot      : https://t.me/vitalo_store_bot
+if defined CLOUDFLARED_FOUND echo   Phone    : the public https address is shown in the "VITALO Tunnel" window
 echo.
 echo To stop everything, run stop.bat
 echo This window will close in 10 seconds.
@@ -111,17 +125,39 @@ rem :start_app "Window title" "folder" "command" port
 rem Opens a separate classic console window (conhost), so stop.bat can close it
 rem even when Windows Terminal is the default terminal. Installs packages on first run.
 :start_app
-call :port_busy %~4
+call :window_running "%~1"
 if not errorlevel 1 (
-  echo [SKIP] %~1: port %~4 is already in use, it seems to be running already.
+  echo [SKIP] %~1: its window is already open.
   exit /b 0
+)
+if not "%~4"=="0" (
+  call :port_busy %~4
+  if not errorlevel 1 (
+    echo [SKIP] %~1: port %~4 is already in use, it seems to be running already.
+    exit /b 0
+  )
 )
 if not exist "%ROOT%%~2\package.json" (
   echo [SKIP] %~1: folder %~2 was not found.
   exit /b 0
 )
-echo Opening window: %~1 ^(port %~4^)
+echo Opening window: %~1
 start "%~1" /D "%ROOT%%~2" conhost.exe cmd /k "title %~1 & (if not exist node_modules npm install) & %~3"
+exit /b 0
+
+rem :window_running "title"  -> errorlevel 0 if a window started by this script with that title is open
+rem (two bot processes at once would fight over Telegram updates, so this matters for the bot)
+:window_running
+powershell -NoProfile -Command "if (Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'cmd.exe' -and $_.CommandLine -like '*title %~1 &*' }) { exit 0 } else { exit 1 }" >nul 2>&1
+exit /b %errorlevel%
+
+rem :find_cloudflared  -> sets CLOUDFLARED_FOUND when cloudflared is installed
+:find_cloudflared
+set "CLOUDFLARED_FOUND="
+where cloudflared >nul 2>&1 && set "CLOUDFLARED_FOUND=1"
+if exist "%ProgramFiles(x86)%\cloudflared\cloudflared.exe" set "CLOUDFLARED_FOUND=1"
+if exist "%ProgramFiles%\cloudflared\cloudflared.exe" set "CLOUDFLARED_FOUND=1"
+if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\cloudflared.exe" set "CLOUDFLARED_FOUND=1"
 exit /b 0
 
 rem :port_busy port  -> errorlevel 0 if something listens on the port

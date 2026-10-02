@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ActorType, OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { StockService } from '../inventory/stock.service';
+import { EXPIRED_REASON_CODE } from '../notifications/notification-templates';
+import { NotificationsService } from '../notifications/notifications.service';
 import { assertTransition, CUSTOMER_CANCELLABLE } from './order-state';
 
 type Tx = Prisma.TransactionClient;
@@ -26,7 +28,10 @@ interface LockedOrder {
  */
 @Injectable()
 export class OrderLifecycleService {
-  constructor(private readonly stock: StockService) {}
+  constructor(
+    private readonly stock: StockService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async lockOrder(tx: Tx, orderId: string): Promise<LockedOrder> {
     const [order] = await tx.$queryRaw<LockedOrder[]>`
@@ -144,6 +149,11 @@ export class OrderLifecycleService {
     await this.addHistory(tx, order.id, order.status, 'cancelled', { type: 'staff', id: staffId }, reason);
   }
 
+  /**
+   * Every status change goes through here, so this is also where the customer's Telegram message is
+   * queued (same transaction). Shown reason: staff text as written; automatic expiry as a localized
+   * phrase; none when the customer cancelled themselves.
+   */
   async addHistory(tx: Tx, orderId: string, from: OrderStatus | null, to: OrderStatus, actor: Actor, reason?: string, at = new Date()) {
     await tx.order_status_history.create({
       data: {
@@ -156,5 +166,7 @@ export class OrderLifecycleService {
         created_at: at,
       },
     });
+    const shownReason = actor.type === 'staff' ? reason : actor.type === 'system' ? EXPIRED_REASON_CODE : null;
+    await this.notifications.orderStatusChanged(tx, orderId, to, shownReason);
   }
 }

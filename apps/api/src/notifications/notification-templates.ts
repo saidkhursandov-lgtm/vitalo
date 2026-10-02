@@ -1,0 +1,85 @@
+import { formatUzs } from '../common/tashkent';
+
+export type Lang = 'ru' | 'uz';
+
+/** Customer: order status changes that are worth a message (Picking is internal, not sent). */
+export const CUSTOMER_STATUS_TEMPLATES = {
+  paid: 'order.paid',
+  handed_to_delivery: 'order.handed_to_delivery',
+  in_transit: 'order.in_transit',
+  delivered: 'order.delivered',
+  cancelled: 'order.cancelled',
+} as const;
+
+export type TemplateName =
+  | (typeof CUSTOMER_STATUS_TEMPLATES)[keyof typeof CUSTOMER_STATUS_TEMPLATES]
+  | 'staff.new_order'
+  | 'staff.customer_paid';
+
+export interface TemplatePayload {
+  order_number: string;
+  total_uzs?: number;
+  reason?: string | null;
+  customer?: string;
+  phone?: string;
+  lang?: Lang;
+}
+
+/** Stored instead of a text when the system cancelled an unpaid order; rendered in the customer's language. */
+export const EXPIRED_REASON_CODE = '@expired';
+
+function reasonLine(p: TemplatePayload, lang: Lang): string {
+  if (!p.reason) return '';
+  const text =
+    p.reason === EXPIRED_REASON_CODE
+      ? lang === 'uz'
+        ? 'buyurtma belgilangan muddatda to‘lanmadi'
+        : 'заказ не был оплачен вовремя'
+      : p.reason;
+  return lang === 'uz' ? `\nSabab: ${text}` : `\nПричина: ${text}`;
+}
+
+const sum = (n: number | undefined, lang: Lang) => `${formatUzs(n ?? 0)} ${lang === 'uz' ? 'so‘m' : 'сум'}`;
+
+const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> = {
+  'order.paid': {
+    ru: (p) => `✅ Оплата заказа ${p.order_number} подтверждена. Начинаем собирать ваш заказ.`,
+    uz: (p) => `✅ ${p.order_number} buyurtmasi uchun to‘lov tasdiqlandi. Buyurtmangizni yig‘ishni boshladik.`,
+  },
+  'order.handed_to_delivery': {
+    ru: (p) => `📦 Заказ ${p.order_number} передан в доставку.`,
+    uz: (p) => `📦 ${p.order_number} buyurtmasi yetkazib berishga topshirildi.`,
+  },
+  'order.in_transit': {
+    ru: (p) => `🚚 Заказ ${p.order_number} в пути.`,
+    uz: (p) => `🚚 ${p.order_number} buyurtmasi yo‘lda.`,
+  },
+  'order.delivered': {
+    ru: (p) => `🎉 Заказ ${p.order_number} доставлен. Спасибо, что выбрали VITALO!`,
+    uz: (p) => `🎉 ${p.order_number} buyurtmasi yetkazildi. VITALO’ni tanlaganingiz uchun rahmat!`,
+  },
+  'order.cancelled': {
+    ru: (p) => `❌ Заказ ${p.order_number} отменён.${reasonLine(p, 'ru')}`,
+    uz: (p) => `❌ ${p.order_number} buyurtmasi bekor qilindi.${reasonLine(p, 'uz')}`,
+  },
+  // Staff messages: the admin panel is Russian-only, so are these.
+  'staff.new_order': {
+    ru: (p) => `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}`,
+    uz: (p) => `🆕 Yangi buyurtma ${p.order_number}: ${sum(p.total_uzs, 'uz')}\nMijoz: ${p.customer ?? '—'}, ${p.phone ?? '—'}`,
+  },
+  'staff.customer_paid': {
+    ru: (p) => `💳 Клиент сообщил об оплате заказа ${p.order_number} на ${sum(p.total_uzs, 'ru')}.\nПроверьте поступление и подтвердите оплату в админке.`,
+    uz: (p) => `💳 Mijoz ${p.order_number} buyurtmasi uchun ${sum(p.total_uzs, 'uz')} to‘laganini bildirdi.\nTushumni tekshirib, admin panelda tasdiqlang.`,
+  },
+};
+
+export function isTemplate(name: string): name is TemplateName {
+  return name in TEXTS;
+}
+
+/** Final message text in the recipient's language (Russian if unknown). */
+export function renderNotification(template: string, payload: TemplatePayload): string {
+  if (!isTemplate(template)) throw new Error(`Unknown notification template: ${template}`);
+  const lang: Lang = payload.lang === 'uz' ? 'uz' : 'ru';
+  return TEXTS[template][lang](payload);
+}

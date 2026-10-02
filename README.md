@@ -35,6 +35,21 @@ cd apps/admin && npm i && npm run dev   # http://localhost:5174 (запуска�
 меню лишь скрывает недоступные разделы. Фото товаров: FileStorage (сейчас папка apps/api/uploads, позже S3).
 Seed только добавляет недостающее и никогда не перезаписывает существующие товары/остатки.
 
+## Telegram: бот, уведомления, туннель (apps/bot)
+Бот @vitalo_store_bot (grammY, long polling): cd apps/bot && npm run dev. Токен берётся только из apps/api/.env.
+Меню: Магазин, Мои заказы, Акции, Мой профиль, Поддержка, О VITALO; /start <код> передаёт реферальный код
+в Mini App (?startapp= -> start_param при входе); /admin — кнопка админ-панели для сотрудников из staff_users.
+Бот читает данные через /api/internal/bot/* с заголовком X-Bot-Secret = BOT_API_SECRET (из apps/api/.env).
+Уведомления: очередь notifications (outbox, в одной транзакции с изменением заказа), отправка каждые 3 с,
+до 5 попыток (30с, 2м, 10м, 30м), 429 — ждём retry_after, 400/403 — без повторов; все ошибки в system_errors.
+Клиенту: оплачен, передан в доставку, в пути, доставлен, отменён (RU/UZ); админам и менеджерам: новый заказ, «Я оплатил».
+Маркетинговые сообщения уходят только при users.marketing_opt_in (переключатель в профиле Mini App).
+Туннель для телефона: winget install --id Cloudflare.cloudflared, затем npm run tunnel (или start.bat) —
+два адреса https://*.trycloudflare.com (Mini App и админка), кнопка меню бота обновляется автоматически.
+Сотрудник: npm run staff:add -- --telegram-id <id> --name "Имя" --role admin (apps/api).
+DEV-вход: только NODE_ENV=development, только с localhost (через туннель — 404), в рабочей сборке отсутствует (тест).
+CORS: CORS_ORIGINS (через запятую); пусто — localhost-серверы разработки, в production — никто.
+
 ## Тесты
 npm test              # unit
 npm run test:e2e      # API + реальная БД vitalo_test (создаётся, очищается и заполняется seed автоматически)

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
+import { api } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
 import { useOrders } from '../lib/queries';
@@ -12,6 +14,11 @@ export function Profile() {
   const orders = useOrders();
   const recent = orders.data?.pages[0].items.slice(0, 3) ?? [];
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
+  const [marketing, setMarketing] = useState(user.marketing_opt_in);
+  const toggleMarketing = (on: boolean) => {
+    setMarketing(on);
+    api('/auth/me', { method: 'PATCH', body: { marketing_opt_in: on } }).catch(() => setMarketing(!on));
+  };
 
   return (
     <div className="page">
@@ -34,6 +41,15 @@ export function Profile() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="card">
+        <h2>{t('profile.notifications')}</h2>
+        <label className="check-row">
+          <input type="checkbox" checked={marketing} onChange={(e) => toggleMarketing(e.target.checked)} />
+          {t('profile.marketing')}
+        </label>
+        <p className="hint small">{t('profile.serviceAlways')}</p>
       </section>
 
       <section className="card list">

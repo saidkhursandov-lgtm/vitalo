@@ -9,6 +9,8 @@ import { ValidatedInitData } from './telegram-init-data';
 
 export interface LoginResult {
   token: string;
+  /** Referral code: signed one from initData wins over the one passed by the Mini App. */
+  start_param: string | null;
   expires_at: string;
   is_new_user: boolean;
   user: UserProfile;
@@ -22,7 +24,7 @@ export class AuthService {
     private readonly initData: InitDataVerifier,
   ) {}
 
-  async loginWithTelegram(initData: string, deviceInfo?: string): Promise<LoginResult> {
+  async loginWithTelegram(initData: string, deviceInfo?: string, startParam?: string): Promise<LoginResult> {
     const data = this.initData.verify(initData);
     const { user, isNew } = await this.upsertUser(data);
     if (user.status !== 'active') throw new ForbiddenException('Account is not active');
@@ -39,8 +41,9 @@ export class AuthService {
       },
     });
 
-    // start_param (referral code) is validated but not processed yet: referral attribution is a later stage.
-    return { token, expires_at: expiresAt.toISOString(), is_new_user: isNew, user: toUserProfile(user) };
+    // Referral attribution itself is a later stage; for now the code is validated and handed back.
+    const start_param = data.start_param ?? startParam ?? null;
+    return { token, start_param, expires_at: expiresAt.toISOString(), is_new_user: isNew, user: toUserProfile(user) };
   }
 
   async findActiveSession(token: string): Promise<AuthContext | null> {

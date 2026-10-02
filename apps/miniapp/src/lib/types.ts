@@ -15,6 +15,7 @@ export interface UserProfile {
   username: string | null;
   phone: string | null;
   language: Lang;
+  marketing_opt_in: boolean;
 }
 
 export interface CategoryNode extends Named {

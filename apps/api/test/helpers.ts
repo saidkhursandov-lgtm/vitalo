@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
@@ -11,8 +11,10 @@ export const DEV_MANAGER_TG = 222_222_222;
 /** Brand of products created by tests; such products are archived after each suite. */
 export const TEST_BRAND = 'E2E';
 
-export async function createTestApp(): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+/** `customize` can replace providers, e.g. the Telegram sender with a fake. */
+export async function createTestApp(customize?: (b: TestingModuleBuilder) => TestingModuleBuilder): Promise<INestApplication> {
+  const builder = Test.createTestingModule({ imports: [AppModule] });
+  const moduleRef = await (customize ? customize(builder) : builder).compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
   // Listen once on a random port: otherwise supertest binds a new port per request,

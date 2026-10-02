@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AddressesModule } from './addresses/addresses.module';
 import { AuthModule } from './auth/auth.module';
+import { BotInternalModule } from './bot-internal/bot-internal.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { CartModule } from './cart/cart.module';
 import { CatalogModule } from './catalog/catalog.module';
@@ -25,6 +27,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     PrismaModule,
     SettingsModule,
     StorageModule,
+    NotificationsModule,
     AuthModule,
     CatalogModule,
     DeliveryModule,
@@ -33,6 +36,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     StaffModule,
     FavoritesModule,
     AddressesModule,
+    BotInternalModule,
   ],
 })
 export class AppModule {}

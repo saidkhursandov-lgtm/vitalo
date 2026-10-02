@@ -161,6 +161,9 @@ const ru = {
   'profile.recentOrders': 'Последние заказы',
   'profile.favorites': 'Избранное',
   'profile.addresses': 'Мои адреса',
+  'profile.notifications': 'Уведомления в Telegram',
+  'profile.marketing': 'Получать акции и новости',
+  'profile.serviceAlways': 'Сообщения о ваших заказах приходят всегда',
 
   'addresses.title': 'Мои адреса',
   'addresses.empty': 'Адресов пока нет',
@@ -353,6 +356,9 @@ const uz: Record<MessageKey, string> = {
   'profile.recentOrders': 'So‘nggi buyurtmalar',
   'profile.favorites': 'Sevimlilar',
   'profile.addresses': 'Manzillarim',
+  'profile.notifications': 'Telegram xabarnomalari',
+  'profile.marketing': 'Aksiya va yangiliklarni olish',
+  'profile.serviceAlways': 'Buyurtmalaringiz haqidagi xabarlar har doim keladi',
 
   'addresses.title': 'Manzillarim',
   'addresses.empty': 'Hozircha manzillar yo‘q',

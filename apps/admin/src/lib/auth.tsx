@@ -43,6 +43,9 @@ type State = { status: 'loading' } | { status: 'ready'; me: Me } | { status: 'de
 
 const telegramInitData = () => window.Telegram?.WebApp?.initData || '';
 
+/** Dev login only on this computer, never through a public tunnel. */
+export const isLocalDevHost = (hostname = window.location.hostname) => ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
+
 /**
  * Staff sign-in: Telegram initData of the same bot (validated on the server) + the Telegram id must be an
  * active employee in staff_users. In a normal browser in dev mode a test employee can be chosen.
@@ -74,7 +77,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
           if (!(e instanceof ApiError && e.status === 401)) throw e;
         }
       }
-      setState({ status: import.meta.env.DEV ? 'dev-login' : 'outside' });
+      setState({ status: import.meta.env.DEV && isLocalDevHost() ? 'dev-login' : 'outside' });
     } catch (e) {
       setState({ status: 'error', message: errorText(e) });
     }
@@ -94,14 +97,15 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     client.clear();
     ready.current = false;
-    setState({ status: import.meta.env.DEV ? 'dev-login' : 'outside' });
+    setState({ status: import.meta.env.DEV && isLocalDevHost() ? 'dev-login' : 'outside' });
   }, [client]);
 
   if (state.status === 'ready') {
     const value: Session = { ...state.me, can: (p) => state.me.permissions.includes(p), logout };
     return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
   }
-  if (state.status === 'dev-login') return <DevLogin onLogin={signIn} />;
+  // `import.meta.env.DEV &&` lets the production build drop DevLogin entirely.
+  if (import.meta.env.DEV && state.status === 'dev-login') return <DevLogin onLogin={signIn} />;
   if (state.status === 'outside') return <div className="center-screen">Откройте админ-панель через Telegram-бота VITALO.</div>;
   if (state.status === 'error')
     return (
