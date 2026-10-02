@@ -60,6 +60,7 @@ export function toProductCard(p: ProductForCard) {
 
   return {
     ...toProductListItem(p),
+    available_qty: Math.min(availableQty(p.inventory), 99), // upper bound for the qty stepper
     manufacturer: p.manufacturer,
     country: p.country,
     form: p.form,

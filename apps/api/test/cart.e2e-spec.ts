@@ -133,6 +133,24 @@ describe('Cart (e2e)', () => {
     expect(line((await cart.get().expect(200)).body, p.id).status).toBe('unavailable');
   });
 
+  it('GET /cart/count counts orderable units and does not consume warnings', async () => {
+    const token = await loginCustomer(app, 700_000_013);
+    const cart = cartApi(token);
+    const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
+    const gone = await createTestProduct(prisma, { price: 5_000, stock: 5 });
+    await cart.add(p.id, 3).expect(201);
+    await cart.add(gone.id, 2).expect(201);
+    await setStock(prisma, gone.id, 0);
+    await setStock(prisma, p.id, 2);
+    await prisma.products.update({ where: { id: p.id }, data: { price_uzs: 90_000n } });
+
+    const count = await http().get('/api/cart/count').set(bearer(token)).expect(200);
+    expect(count.body).toEqual({ items_count: 2 }); // 3 wanted, 2 available; the out-of-stock line is not counted
+
+    const { body } = await cart.get().expect(200); // warnings are still there for the cart screen
+    expect(body.warnings.map((w: { code: string }) => w.code).sort()).toEqual(['out_of_stock', 'price_changed', 'qty_reduced']);
+  });
+
   it('the cart survives a new session', async () => {
     const tg = 700_000_009;
     const p = await createTestProduct(prisma, { price: 10_000, stock: 5 });

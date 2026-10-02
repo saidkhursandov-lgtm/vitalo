@@ -15,6 +15,13 @@ npm run dev:login     # имитация входа из Telegram (нужен л
 npm run dev:order-demo  # весь путь: корзина -> заказ -> реквизиты -> «Я оплатил» -> менеджер подтверждает
 # constraints.sql уже включён в миграцию prisma/migrations/*_init
 
+## Mini App (apps/miniapp, React + Vite)
+cd apps/miniapp && npm i && npm run dev   # http://localhost:5173 (API должен быть запущен: apps/api npm run start:dev)
+В обычном браузере открывается «Режим разработки»: выбираете тестового покупателя, dev-сервер Vite
+подписывает initData токеном из apps/api/.env (токен не попадает в браузер и в сборку).
+В Telegram вход идёт через настоящий Telegram.WebApp.initData. Цвета — из темы Telegram (--tg-theme-*).
+npm test (vitest), npm run build (typecheck + сборка в dist/; на хостинге нужен SPA-fallback на index.html)
+
 ## Тесты
 npm test              # unit
 npm run test:e2e      # API + реальная БД vitalo_test (создаётся, очищается и заполняется seed автоматически)
@@ -32,6 +39,10 @@ GET  /api/catalog/search?q=&page=          (pg_trgm + vitalo_norm(): транс�
 GET  /api/delivery/regions, GET /api/delivery/quote?region_id&city_id&goods_total_uzs
 GET  /api/cart[?region_id&city_id]          — при каждом открытии сверяет цену/остаток, warnings[]
 POST /api/cart/items {product_id, qty}, PATCH /api/cart/items/:productId {qty}, DELETE /api/cart/items/:productId
+GET  /api/cart/count                        — счётчик для бейджа (не «съедает» предупреждения корзины)
+GET/PUT/DELETE /api/favorites[/:productId], GET /api/favorites/ids
+GET/POST /api/addresses, PATCH/DELETE /api/addresses/:id, POST /api/addresses/:id/primary (один основной)
+PATCH /api/auth/me {language}; GET /api/catalog/forms; фильтр ?form= в /catalog/products
 POST /api/orders/preview                    — расчёт для экрана подтверждения, без резерва
 POST /api/orders  (header Idempotency-Key)  — source=cart|buy_now; резерв атомарный; VTL-YYYYMMDD-NNNN
 GET  /api/orders, GET /api/orders/:id, GET /api/orders/checkout-defaults, POST /api/orders/:id/cancel

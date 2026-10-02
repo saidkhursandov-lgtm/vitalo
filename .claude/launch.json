@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "start:dev", "--prefix", "apps/api"],
       "port": 3000,
       "url": "http://localhost:3000"
+    },
+    {
+      "name": "vitalo-miniapp",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/miniapp"],
+      "port": 5173,
+      "url": "http://localhost:5173"
     }
   ]
 }

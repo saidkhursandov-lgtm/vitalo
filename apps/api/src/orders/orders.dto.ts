@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   IsDefined,
@@ -83,6 +83,9 @@ export class CheckoutDto {
   @IsIn(PAYMENT_METHOD_CODES)
   payment_method!: PaymentMethodCode;
 }
+
+/** The confirmation screen recalculates as soon as the city is chosen, before name/phone are typed. */
+export class OrderPreviewDto extends PickType(CheckoutDto, ['source', 'buy_now', 'region_id', 'city_id', 'payment_method'] as const) {}
 
 export class CreateOrderDto extends CheckoutDto {
   @ApiPropertyOptional({

@@ -38,6 +38,13 @@ export class ListProductsQuery extends PageQuery {
   @IsString({ each: true })
   brand?: string[];
 
+  @ApiPropertyOptional({ type: [String], description: 'Форма выпуска через запятую', example: 'Капсулы' })
+  @IsOptional()
+  @Transform(toStringArray)
+  @IsArray()
+  @IsString({ each: true })
+  form?: string[];
+
   @ApiPropertyOptional({ description: 'Мин. цена, сум' })
   @IsOptional()
   @Type(() => Number)

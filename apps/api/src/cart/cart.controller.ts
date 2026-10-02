@@ -40,6 +40,12 @@ export class CartController {
     return this.cart.getCart(auth.user.id, address);
   }
 
+  /** Badge counter; does not consume the "price changed / qty reduced" warnings. */
+  @Get('count')
+  count(@CurrentAuth() auth: AuthContext) {
+    return this.cart.count(auth.user.id);
+  }
+
   @Post('items')
   add(@CurrentAuth() auth: AuthContext, @Body() dto: AddCartItemDto) {
     return this.cart.addItem(auth.user.id, dto.product_id, dto.qty);

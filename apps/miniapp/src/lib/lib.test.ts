@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { dateTime, discountPercent, money, nameOf, normalizePhone, prettyPhone, textOf } from './format';
+import { dictionaries, errorText, translate } from './i18n';
+import { createIdempotencyKeys } from './idempotency';
+import { qs } from './api';
+
+describe('i18n', () => {
+  const placeholders = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
+
+  it('every Uzbek text is filled in and uses the same {placeholders} as Russian', () => {
+    for (const [key, ru] of Object.entries(dictionaries.ru)) {
+      const uz = dictionaries.uz[key as keyof typeof dictionaries.ru];
+      expect(uz.trim(), key).not.toBe('');
+      expect(placeholders(uz), key).toEqual(placeholders(ru));
+    }
+  });
+
+  it('fills placeholders', () => {
+    expect(translate('ru', 'orders.number', { n: 'VTL-20261002-0001' })).toBe('Заказ VTL-20261002-0001');
+    expect(translate('uz', 'catalog.found', { n: 7 })).toBe('Topilgan mahsulotlar: 7');
+  });
+
+  it('maps API error codes, unknown codes fall back to a generic text', () => {
+    expect(errorText('ru', 'INSUFFICIENT_STOCK')).toMatch(/Недостаточно товара/);
+    expect(errorText('uz', 'SOMETHING_NEW')).toBe(dictionaries.uz['common.error']);
+    expect(errorText('ru', undefined)).toBe(dictionaries.ru['common.error']);
+  });
+});
+
+describe('format', () => {
+  it('money in sum / so‘m with thin grouping', () => {
+    expect(money(89000, 'ru')).toBe('89 000 сум');
+    expect(money(1234567, 'uz')).toBe('1 234 567 so‘m');
+    expect(money(0, 'ru')).toBe('0 сум');
+  });
+
+  it('shows dates in Tashkent time', () => {
+    expect(dateTime('2026-10-02T19:30:00Z', 'ru')).toContain('03.10.2026'); // 00:30 next day in Tashkent
+  });
+
+  it('Uzbek names fall back to Russian', () => {
+    expect(nameOf({ name_ru: 'Цинк', name_uz: 'Rux' }, 'uz')).toBe('Rux');
+    expect(nameOf({ name_ru: 'Цинк', name_uz: null }, 'uz')).toBe('Цинк');
+    expect(textOf({ directions_ru: 'Утром', directions_uz: null }, 'directions', 'uz')).toBe('Утром');
+    expect(textOf({ directions_ru: '  ' }, 'directions', 'ru')).toBeNull();
+  });
+
+  it('discount percent only when the old price is higher', () => {
+    expect(discountPercent(65000, 79000)).toBe(18);
+    expect(discountPercent(65000, null)).toBeNull();
+    expect(discountPercent(65000, 60000)).toBeNull();
+  });
+
+  it('normalizes Uzbek phone numbers', () => {
+    expect(normalizePhone('90 123-45-67')).toBe('+998901234567');
+    expect(normalizePhone('+998 (90) 123 45 67')).toBe('+998901234567');
+    expect(normalizePhone('12345')).toBeNull();
+    expect(prettyPhone('+998901234567')).toBe('+998 90 123 45 67');
+  });
+
+  it('builds query strings without empty values', () => {
+    expect(qs({ category: 'vitamins', brand: ['A', 'B'], form: [], price_min: undefined, in_stock: true })).toBe('?category=vitamins&brand=A%2CB&in_stock=true');
+    expect(qs({ q: '' })).toBe('');
+  });
+});
+
+describe('idempotency keys', () => {
+  it('the same order form keeps its key (retry / double tap), a changed form gets a new one', () => {
+    const keys = createIdempotencyKeys();
+    const body = { source: 'cart', city_id: 'c1' };
+    const first = keys.keyFor(body);
+    expect(keys.keyFor({ ...body })).toBe(first);
+    expect(keys.keyFor({ ...body, city_id: 'c2' })).not.toBe(first);
+  });
+});

@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { Body, Controller, Get, Headers, HttpCode, Patch, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { AuthContext, toUserProfile } from './auth.types';
 import { CurrentAuth, SessionGuard } from './session.guard';
@@ -11,6 +11,11 @@ export class TelegramLoginDto {
   @IsNotEmpty()
   @MaxLength(4096)
   initData!: string;
+}
+
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ enum: ['ru', 'uz'] }) @IsOptional() @IsIn(['ru', 'uz']) language?: 'ru' | 'uz';
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() marketing_opt_in?: boolean;
 }
 
 @ApiTags('auth')
@@ -29,6 +34,13 @@ export class AuthController {
   @UseGuards(SessionGuard)
   me(@CurrentAuth() auth: AuthContext) {
     return toUserProfile(auth.user);
+  }
+
+  @Patch('me')
+  @ApiBearerAuth()
+  @UseGuards(SessionGuard)
+  async updateMe(@CurrentAuth() auth: AuthContext, @Body() dto: UpdateProfileDto) {
+    return toUserProfile(await this.auth.updateProfile(auth.user.id, dto));
   }
 
   @Post('logout')

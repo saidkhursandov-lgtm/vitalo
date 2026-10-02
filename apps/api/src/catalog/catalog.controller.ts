@@ -18,6 +18,11 @@ export class CatalogController {
     return this.catalog.listBrands();
   }
 
+  @Get('forms')
+  forms() {
+    return this.catalog.listForms();
+  }
+
   @Get('products')
   products(@Query() q: ListProductsQuery) {
     return this.catalog.listProducts(q);

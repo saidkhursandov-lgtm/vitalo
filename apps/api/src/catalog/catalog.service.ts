@@ -48,6 +48,16 @@ export class CatalogService {
     return rows.map((r) => ({ brand: r.brand, count: r._count._all }));
   }
 
+  async listForms(): Promise<{ form: string; count: number }[]> {
+    const rows = await this.prisma.products.groupBy({
+      by: ['form'],
+      where: { status: 'active', form: { not: null } },
+      _count: { _all: true },
+      orderBy: { form: 'asc' },
+    });
+    return rows.map((r) => ({ form: r.form!, count: r._count._all }));
+  }
+
   async listProducts(q: ListProductsQuery): Promise<Page<ProductListItem>> {
     const where: Prisma.productsWhereInput = { status: 'active' };
 
@@ -61,6 +71,7 @@ export class CatalogService {
       where.categories = { some: { category_id: { in: collectDescendantIds(cats, root.id) } } };
     }
     if (q.brand?.length) where.brand = { in: q.brand };
+    if (q.form?.length) where.form = { in: q.form };
     if (q.price_min != null || q.price_max != null) {
       where.price_uzs = {
         ...(q.price_min != null && { gte: BigInt(q.price_min) }),

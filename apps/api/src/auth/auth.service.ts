@@ -53,6 +53,10 @@ export class AuthService {
     return { sessionId: session.id, user: session.user };
   }
 
+  updateProfile(userId: string, data: { language?: 'ru' | 'uz'; marketing_opt_in?: boolean }): Promise<users> {
+    return this.prisma.users.update({ where: { id: userId }, data });
+  }
+
   async logout(sessionId: string): Promise<void> {
     await this.prisma.user_sessions.update({ where: { id: sessionId }, data: { revoked_at: new Date() } });
   }

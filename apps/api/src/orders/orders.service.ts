@@ -17,7 +17,7 @@ import { BankTransferDetails, SETTING_KEYS, SettingsService } from '../settings/
 import { formatOrderNumber } from './order-number';
 import { OrderLifecycleService } from './order-lifecycle.service';
 import { orderViewInclude, OrderView, toOrderView } from './order-view';
-import { CheckoutDto, CreateOrderDto } from './orders.dto';
+import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
 
 type Tx = Prisma.TransactionClient;
 
@@ -59,7 +59,7 @@ export class OrdersService {
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
-  async preview(userId: string, dto: CheckoutDto) {
+  async preview(userId: string, dto: OrderPreviewDto) {
     const { lines, skipped } = await this.resolveLines(this.prisma, userId, dto);
     const priced = await this.priceLines(this.prisma, lines);
     const available = await this.stock.availability(lines.map((l) => l.product_id));
@@ -299,7 +299,7 @@ export class OrdersService {
   }
 
   /** Cart checkout takes sellable lines only; out-of-stock / archived lines stay in the cart (TZ §6). */
-  private async resolveLines(db: Tx | PrismaService, userId: string, dto: CheckoutDto) {
+  private async resolveLines(db: Tx | PrismaService, userId: string, dto: OrderPreviewDto) {
     if (dto.source === 'buy_now') {
       return { lines: [{ product_id: dto.buy_now!.product_id, qty: dto.buy_now!.qty }] as StockLine[], skipped: [] as string[], cartId: null };
     }
@@ -332,7 +332,7 @@ export class OrdersService {
   }
 
   /** No promos/bonuses yet: discount = 0, bonus = 0. Free shipping uses goods after discounts (TZ §9). */
-  private async computeTotals(db: Tx | PrismaService, lines: PricedLine[], dto: CheckoutDto): Promise<{ totals: Totals; delivery: DeliveryQuote }> {
+  private async computeTotals(db: Tx | PrismaService, lines: PricedLine[], dto: OrderPreviewDto): Promise<{ totals: Totals; delivery: DeliveryQuote }> {
     const goods = lines.reduce((s, l) => s + l.line_total_uzs, 0);
     const discount = 0;
     const bonus = 0;

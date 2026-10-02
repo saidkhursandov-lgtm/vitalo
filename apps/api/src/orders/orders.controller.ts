@@ -16,7 +16,7 @@ import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthContext } from '../auth/auth.types';
 import { CurrentAuth, SessionGuard } from '../auth/session.guard';
-import { CancelOrderDto, CheckoutDto, CreateOrderDto, ListOrdersQuery, ReportPaymentDto } from './orders.dto';
+import { CancelOrderDto, CreateOrderDto, ListOrdersQuery, OrderPreviewDto, ReportPaymentDto } from './orders.dto';
 import { OrdersService } from './orders.service';
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_.:-]{8,128}$/;
@@ -30,7 +30,7 @@ export class OrdersController {
 
   @Post('preview')
   @HttpCode(200)
-  preview(@CurrentAuth() auth: AuthContext, @Body() dto: CheckoutDto) {
+  preview(@CurrentAuth() auth: AuthContext, @Body() dto: OrderPreviewDto) {
     return this.orders.preview(auth.user.id, dto);
   }
 

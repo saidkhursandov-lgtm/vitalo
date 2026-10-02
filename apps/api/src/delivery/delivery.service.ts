@@ -23,12 +23,17 @@ export class DeliveryService {
     }));
   }
 
-  /** City-specific tariff wins over the region default (city_id = NULL). */
-  async resolveTariff(regionId: string, cityId: string, db: Db = this.prisma): Promise<Tariff> {
+  /** The city must belong to the region and both must be active. */
+  async assertCityInRegion(regionId: string, cityId: string, db: Db = this.prisma): Promise<void> {
     const city = await db.cities.findFirst({
       where: { id: cityId, region_id: regionId, status: 'active', region: { status: 'active' } },
     });
     if (!city) throw new BadRequestException({ code: 'INVALID_ADDRESS', message: 'City does not belong to the region' });
+  }
+
+  /** City-specific tariff wins over the region default (city_id = NULL). */
+  async resolveTariff(regionId: string, cityId: string, db: Db = this.prisma): Promise<Tariff> {
+    await this.assertCityInRegion(regionId, cityId, db);
 
     const tariffs = await db.delivery_tariffs.findMany({
       where: { region_id: regionId, status: 'active', OR: [{ city_id: cityId }, { city_id: null }] },
