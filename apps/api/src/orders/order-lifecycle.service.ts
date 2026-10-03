@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ActorType, OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { StockService } from '../inventory/stock.service';
+import { MANUAL_PAYMENT_METHODS } from '../settings/settings.service';
 import { EXPIRED_REASON_CODE } from '../notifications/notification-templates';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertTransition, CUSTOMER_CANCELLABLE } from './order-state';
@@ -82,7 +83,7 @@ export class OrderLifecycleService {
     assertTransition(order.status, 'paid');
 
     const payment = await tx.payments.findFirst({
-      where: { order_id: order.id, status: 'payment_pending', method: { code: 'bank_transfer' } },
+      where: { order_id: order.id, status: 'payment_pending', method: { code: { in: [...MANUAL_PAYMENT_METHODS] } } },
       include: { manual: true },
     });
     if (!payment) throw new ConflictException({ code: 'NO_BANK_TRANSFER_PAYMENT', message: 'Order has no pending bank transfer' });

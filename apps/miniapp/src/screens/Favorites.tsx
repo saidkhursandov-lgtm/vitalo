@@ -1,4 +1,5 @@
-import { Empty, ErrorState, Loading, ProductGrid } from '../components/ui';
+import { Link } from 'react-router-dom';
+import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { useI18n } from '../lib/i18n';
 import { useFavorites } from '../lib/queries';
 
@@ -14,7 +15,11 @@ export function Favorites() {
       ) : favorites.isError ? (
         <ErrorState error={favorites.error} onRetry={() => void favorites.refetch()} />
       ) : favorites.data.length === 0 ? (
-        <Empty>{t('favorites.empty')}</Empty>
+        <EmptyState
+          title={t('favorites.emptyTitle')}
+          text={t('favorites.empty')}
+          action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>}
+        />
       ) : (
         <ProductGrid products={favorites.data} />
       )}

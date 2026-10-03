@@ -28,6 +28,17 @@ export class CatalogController {
     return this.catalog.listProducts(q);
   }
 
+  /** Must stay before products/:id. */
+  @Get('products/count')
+  count(@Query() q: ListProductsQuery) {
+    return this.catalog.countProducts(q);
+  }
+
+  @Get('texts')
+  texts() {
+    return this.catalog.texts();
+  }
+
   @Get('products/:id')
   product(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.catalog.getProduct(id);

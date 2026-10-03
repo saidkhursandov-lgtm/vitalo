@@ -53,6 +53,8 @@ describe('Search (e2e)', () => {
       ['tsink', 'VTL-ZINC-25'],
       ['rux', 'VTL-ZINC-25'], // Uzbek name
       ['magniy', 'VTL-MG-B6'],
+      ['magnii', 'VTL-MG-B6'],
+      ['omega3', 'VTL-OMEGA3'],
       ['магни', 'VTL-MG-B6'],
       ['melatonin', 'VTL-MELATONIN'],
       ['мелатонинн', 'VTL-MELATONIN'], // typo

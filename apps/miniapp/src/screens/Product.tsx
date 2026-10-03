@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { nameOf, textOf } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
-import { useCartActions, useProduct } from '../lib/queries';
+import { useCartActions, useProduct, useShopTexts } from '../lib/queries';
 import { haptic } from '../lib/telegram';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip, Stepper, useToast } from '../components/ui';
 
@@ -20,6 +20,7 @@ export function Product() {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const product = useProduct(id);
+  const texts = useShopTexts();
   const { add } = useCartActions();
   const toast = useToast();
   const [qty, setQty] = useState(1);
@@ -140,6 +141,8 @@ export function Product() {
       <ProductStrip title={t('product.similar')} products={p.similar} />
       <ProductStrip title={t('product.alsoBought')} products={p.also_bought} />
       {toast.node}
+      {/* Mandatory note, always visible at the bottom; wording is edited in the admin panel (Настройки → Тексты). */}
+      {texts.data && <div className="disclaimer">{lang === 'uz' ? texts.data.product_disclaimer.uz : texts.data.product_disclaimer.ru}</div>}
     </div>
   );
 }

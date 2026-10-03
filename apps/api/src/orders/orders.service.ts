@@ -14,13 +14,16 @@ import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockLine, StockService } from '../inventory/stock.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BankTransferDetails, SETTING_KEYS, SettingsService } from '../settings/settings.service';
+import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
 import { formatOrderNumber } from './order-number';
 import { OrderLifecycleService } from './order-lifecycle.service';
 import { orderViewInclude, OrderView, toOrderView } from './order-view';
 import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
 
 type Tx = Prisma.TransactionClient;
+
+const isManualMethod = (code: string | undefined): code is ManualPaymentMethod =>
+  (MANUAL_PAYMENT_METHODS as readonly string[]).includes(code ?? '');
 
 const PAGE_SIZE = 20;
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000;
@@ -115,7 +118,7 @@ export class OrdersService {
         orderBy: { created_at: 'desc' },
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        include: { _count: { select: { items: true } } },
+        include: { _count: { select: { items: true } }, payments: { include: { manual: true } } },
       }),
     ]);
     return {
@@ -127,6 +130,8 @@ export class OrdersService {
         payment_status: o.payment_status,
         total_uzs: Number(o.total_uzs),
         items_count: o._count.items,
+        // "Я оплатил(а)" pressed and not confirmed yet -> shown as "🔵 Оплата проверяется"
+        payment_reported: o.payment_status === 'payment_pending' && o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at)),
       })),
       page,
       page_size: PAGE_SIZE,
@@ -165,24 +170,34 @@ export class OrdersService {
     }, TX_OPTIONS);
   }
 
+  /**
+   * Payment instruction for a manual transfer: card number + recipient (card_transfer) or bank
+   * requisites (bank_transfer), the amount and the hint; all from admin settings.
+   */
   async bankTransferDetails(userId: string, orderId: string) {
     const order = await this.get(userId, orderId);
-    if (order.payment?.method !== 'bank_transfer') {
-      throw new ConflictException({ code: 'NOT_BANK_TRANSFER', message: 'Order is not paid by bank transfer' });
+    const method = order.payment?.method;
+    if (!isManualMethod(method)) {
+      throw new ConflictException({ code: 'NOT_BANK_TRANSFER', message: 'Order is not paid by a manual transfer' });
     }
     const details = await this.settings.get<BankTransferDetails>(SETTING_KEYS.bankTransferDetails);
-    if (!details) throw new ServiceUnavailableException('Bank transfer details are not configured');
+    if (method === 'bank_transfer' && !details) throw new ServiceUnavailableException('Bank transfer details are not configured');
+    const purpose = (details?.purpose_template ?? 'Оплата заказа {order_number}').replace('{order_number}', order.order_number);
+    const requisites = method === 'bank_transfer' && details ? (({ purpose_template: _, ...r }) => r)(details) : null;
+    const card = method === 'card_transfer' ? await this.settings.getOrDefault('card_transfer_details') : null;
 
-    const { purpose_template, ...requisites } = details;
     return {
+      method,
       order_number: order.order_number,
       status: order.status,
       payment_status: order.payment_status,
       amount_uzs: order.totals.total_uzs,
-      purpose: purpose_template.replace('{order_number}', order.order_number),
+      purpose,
       requisites,
+      card: card && { card_number: card.card_number, recipient: card.recipient },
+      hint: await this.settings.getOrDefault('payment_hint'),
       pay_until: order.reserved_until,
-      customer_reported_paid_at: order.payment.customer_reported_paid_at,
+      customer_reported_paid_at: order.payment!.customer_reported_paid_at,
     };
   }
 
@@ -200,7 +215,7 @@ export class OrdersService {
       }
 
       const payment = await tx.payments.findFirst({
-        where: { order_id: orderId, status: 'payment_pending', method: { code: 'bank_transfer' } },
+        where: { order_id: orderId, status: 'payment_pending', method: { code: { in: [...MANUAL_PAYMENT_METHODS] } } },
         include: { manual: true },
       });
       if (!payment) throw new ConflictException({ code: 'NOT_BANK_TRANSFER', message: 'Order is not paid by bank transfer' });
@@ -357,8 +372,8 @@ export class OrdersService {
 
   private async resolvePaymentMethod(db: Tx | PrismaService, code: string) {
     const method = await db.payment_methods.findUnique({ where: { code } });
-    if (!method || method.status !== 'enabled' || code !== 'bank_transfer') {
-      // Online providers (Payme/Click/Uzum) come in the payments stage.
+    if (!method || method.status !== 'enabled' || !isManualMethod(code)) {
+      // Online providers (Payme/Click/Uzum) and cash on delivery come in the payments stage.
       throw new UnprocessableEntityException({ code: 'PAYMENT_METHOD_UNAVAILABLE', message: `Payment method ${code} is not available` });
     }
     return method;

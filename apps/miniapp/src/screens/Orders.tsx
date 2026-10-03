@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
-import { Empty, ErrorState, Loading } from '../components/ui';
+import { EmptyState, ErrorState, Loading } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, nameOf, prettyPhone } from '../lib/format';
 import { errorText, statusKey, useI18n } from '../lib/i18n';
@@ -9,9 +9,11 @@ import { useOrder, useOrders } from '../lib/queries';
 import { confirmDialog, haptic } from '../lib/telegram';
 import type { Order, OrderListItem } from '../lib/types';
 
-export function StatusChip({ status }: { status: OrderListItem['status'] }) {
+/** Colored status; "Я оплатил(а)" pressed but not confirmed yet = "🔵 Оплата проверяется". */
+export function StatusChip({ status, reported = false, large = false }: { status: OrderListItem['status']; reported?: boolean; large?: boolean }) {
   const { t } = useI18n();
-  return <span className={`status status-${status}`}>{t(statusKey(status))}</span>;
+  const shown = reported && (status === 'awaiting_payment' || status === 'new') ? 'checking' : status;
+  return <span className={`status status-${shown}${large ? ' status-lg' : ''}`}>{t(statusKey(status, reported))}</span>;
 }
 
 export function OrderRow({ order }: { order: OrderListItem }) {
@@ -25,7 +27,7 @@ export function OrderRow({ order }: { order: OrderListItem }) {
         </div>
       </div>
       <div className="order-row-right">
-        <StatusChip status={order.status} />
+        <StatusChip status={order.status} reported={order.payment_reported} />
         <strong>{money(order.total_uzs, lang)}</strong>
       </div>
       <ChevronIcon width={18} height={18} className="hint" />
@@ -46,7 +48,7 @@ export function Orders() {
       ) : orders.isError ? (
         <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />
       ) : items.length === 0 ? (
-        <Empty>{t('orders.empty')}</Empty>
+        <EmptyState title={t('orders.emptyTitle')} text={t('orders.empty')} action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>} />
       ) : (
         <div className="card list">
           {items.map((o) => (
@@ -92,8 +94,8 @@ export function OrderDetail() {
   return (
     <div className="page">
       <h1>{t('orders.number', { n: o.order_number })}</h1>
-      <div className="order-head">
-        <StatusChip status={o.status} />
+      <div className="order-status-hero">
+        <StatusChip status={o.status} reported={reported} large />
         <span className="hint small">{dateTime(o.created_at, lang)}</span>
       </div>
 
@@ -150,7 +152,7 @@ export function OrderDetail() {
       {o.status === 'paid' && <p className="hint small">{t('orders.paidNoCancel')}</p>}
 
       <div className="actions">
-        {unpaid && !reported && o.payment?.method === 'bank_transfer' && (
+        {unpaid && !reported && (o.payment?.method === 'card_transfer' || o.payment?.method === 'bank_transfer') && (
           <Link to={`/orders/${o.id}/pay`} className="btn btn-block">
             {t('orders.pay')}
           </Link>

@@ -41,26 +41,53 @@ function reasonLine(p: TemplatePayload, lang: Lang): string {
 
 const sum = (n: number | undefined, lang: Lang) => `${formatUzs(n ?? 0)} ${lang === 'uz' ? 'so‘m' : 'сум'}`;
 
+/** Status names shared with the Mini App order screen and the bot ("Мои заказы"). */
+export const STATUS_LABELS: Record<Lang, Record<string, string>> = {
+  ru: {
+    awaiting_payment: '🟡 Ожидает оплаты',
+    checking: '🔵 Оплата проверяется',
+    paid: '🟢 Оплачен',
+    picking: '📦 Собирается',
+    handed_to_delivery: '🚚 Передан курьеру',
+    in_transit: '🚚 В пути',
+    delivered: '✅ Доставлен',
+    cancelled: '⚪ Отменён',
+  },
+  uz: {
+    awaiting_payment: '🟡 To‘lov kutilmoqda',
+    checking: '🔵 To‘lov tekshirilmoqda',
+    paid: '🟢 To‘langan',
+    picking: '📦 Yig‘ilmoqda',
+    handed_to_delivery: '🚚 Kuryerga topshirildi',
+    in_transit: '🚚 Yo‘lda',
+    delivered: '✅ Yetkazildi',
+    cancelled: '⚪ Bekor qilindi',
+  },
+};
+
+const head = (p: TemplatePayload, lang: Lang, status: string) =>
+  lang === 'uz' ? `№${p.order_number} buyurtma: ${STATUS_LABELS.uz[status]}` : `Заказ №${p.order_number}: ${STATUS_LABELS.ru[status]}`;
+
 const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> = {
   'order.paid': {
-    ru: (p) => `✅ Оплата заказа ${p.order_number} подтверждена. Начинаем собирать ваш заказ.`,
-    uz: (p) => `✅ ${p.order_number} buyurtmasi uchun to‘lov tasdiqlandi. Buyurtmangizni yig‘ishni boshladik.`,
+    ru: (p) => `${head(p, 'ru', 'paid')}\nНачинаем собирать ваш заказ.`,
+    uz: (p) => `${head(p, 'uz', 'paid')}\nBuyurtmangizni yig‘ishni boshladik.`,
   },
   'order.handed_to_delivery': {
-    ru: (p) => `📦 Заказ ${p.order_number} передан в доставку.`,
-    uz: (p) => `📦 ${p.order_number} buyurtmasi yetkazib berishga topshirildi.`,
+    ru: (p) => head(p, 'ru', 'handed_to_delivery'),
+    uz: (p) => head(p, 'uz', 'handed_to_delivery'),
   },
   'order.in_transit': {
-    ru: (p) => `🚚 Заказ ${p.order_number} в пути.`,
-    uz: (p) => `🚚 ${p.order_number} buyurtmasi yo‘lda.`,
+    ru: (p) => head(p, 'ru', 'in_transit'),
+    uz: (p) => head(p, 'uz', 'in_transit'),
   },
   'order.delivered': {
-    ru: (p) => `🎉 Заказ ${p.order_number} доставлен. Спасибо, что выбрали VITALO!`,
-    uz: (p) => `🎉 ${p.order_number} buyurtmasi yetkazildi. VITALO’ni tanlaganingiz uchun rahmat!`,
+    ru: (p) => `${head(p, 'ru', 'delivered')}\nСпасибо, что выбрали VITALO!`,
+    uz: (p) => `${head(p, 'uz', 'delivered')}\nVITALO’ni tanlaganingiz uchun rahmat!`,
   },
   'order.cancelled': {
-    ru: (p) => `❌ Заказ ${p.order_number} отменён.${reasonLine(p, 'ru')}`,
-    uz: (p) => `❌ ${p.order_number} buyurtmasi bekor qilindi.${reasonLine(p, 'uz')}`,
+    ru: (p) => `${head(p, 'ru', 'cancelled')}${reasonLine(p, 'ru')}`,
+    uz: (p) => `${head(p, 'uz', 'cancelled')}${reasonLine(p, 'uz')}`,
   },
   // Staff messages: the admin panel is Russian-only, so are these.
   'staff.new_order': {

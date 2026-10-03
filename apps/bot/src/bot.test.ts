@@ -99,18 +99,21 @@ describe('/start and the main menu', () => {
 describe('menu items', () => {
   const orders = [
     { id: 'o1', order_number: 'VTL-20261003-0002', status: 'in_transit', total_uzs: 310000, created_at: '' },
+    { id: 'o3', order_number: 'VTL-20261003-0003', status: 'awaiting_payment', payment_reported: true, total_uzs: 50000, created_at: '' },
     { id: 'o2', order_number: 'VTL-20261003-0001', status: 'delivered', total_uzs: 89000, created_at: '' },
   ];
 
   it('Мои заказы: last orders with statuses and a button to all orders', async () => {
     const [msg] = await setup({ user: { registered: true, language: 'ru', orders } }).send('📦 Мои заказы');
-    expect(msg.text).toBe('Ваши последние заказы:\n• VTL-20261003-0002 — в пути, 310 000 сум\n• VTL-20261003-0001 — доставлен, 89 000 сум');
+    expect(msg.text).toBe(
+      'Ваши последние заказы:\n• №VTL-20261003-0002 — 🚚 В пути, 310 000 сум\n• №VTL-20261003-0003 — 🔵 Оплата проверяется, 50 000 сум\n• №VTL-20261003-0001 — ✅ Доставлен, 89 000 сум',
+    );
     expect(inlineUrl(msg)).toBe(`${MINI}/orders`);
   });
 
   it('Buyurtmalarim (Uzbek button) works the same way', async () => {
     const [msg] = await setup({ user: { registered: true, language: 'uz', orders } }).send('📦 Buyurtmalarim');
-    expect(msg.text).toContain('VTL-20261003-0002 — yo‘lda, 310 000 so‘m');
+    expect(msg.text).toContain('№VTL-20261003-0002 — 🚚 Yo‘lda, 310 000 so‘m');
   });
 
   it('unknown users are invited to open the shop first; blocked users are told so', async () => {
@@ -124,7 +127,7 @@ describe('menu items', () => {
     }).send('👤 Мой профиль');
     expect(msg.text).toContain('💰 Бонусы: 15 000 сум');
     expect(msg.text).toContain('📦 Заказов: 7');
-    expect(msg.text).toContain('• VTL-20261003-0001 — доставлен');
+    expect(msg.text).toContain('• №VTL-20261003-0001 — ✅ Доставлен');
     expect(inlineUrl(msg)).toBe(`${MINI}/profile`);
   });
 

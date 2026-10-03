@@ -87,9 +87,19 @@ export const AUDIT_ACTION: Record<string, string> = {
   'customer.blocked': 'Клиент заблокирован',
   'customer.unblocked': 'Клиент разблокирован',
   'settings.bank_transfer_updated': 'Изменены реквизиты',
+  'settings.card_transfer_updated': 'Изменены данные карты',
+  'settings.texts_updated': 'Изменены тексты магазина',
   'tariff.created': 'Добавлен тариф',
   'tariff.updated': 'Изменён тариф',
   'staff.created': 'Добавлен сотрудник',
   'staff.updated': 'Изменён сотрудник',
   'staff.sessions_revoked': 'Сессии сотрудника отозваны',
+};
+
+export const PAYMENT_METHOD: Record<string, string> = {
+  card_transfer: 'Перевод на карту',
+  bank_transfer: 'Перевод по реквизитам',
+  payme: 'Payme',
+  click: 'Click',
+  uzum: 'Uzum',
 };

@@ -6,6 +6,7 @@ import type {
   Cart,
   CategoryTrees,
   CheckoutDefaults,
+  LocalizedText,
   Order,
   OrderListItem,
   Page,
@@ -58,6 +59,19 @@ export function useSearch(q: string) {
     enabled: q.trim().length >= 2,
   });
 }
+
+/** How many products match the filters (live number on the "Показать N товаров" button). */
+export function useProductsCount(filters: ProductFilters) {
+  return useQuery({
+    queryKey: ['products-count', filters],
+    queryFn: async () => (await api<{ total: number }>(`/catalog/products/count${qs({ ...filters, sort: undefined })}`)).total,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/** Texts edited in the admin panel (product disclaimer). */
+export const useShopTexts = () =>
+  useQuery({ queryKey: ['shop-texts'], queryFn: () => api<{ product_disclaimer: LocalizedText }>('/catalog/texts'), staleTime: 300_000 });
 
 export const useProduct = (id: string) => useQuery({ queryKey: ['product', id], queryFn: () => api<ProductCard>(`/catalog/products/${id}`) });
 

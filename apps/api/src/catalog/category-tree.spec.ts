@@ -44,3 +44,18 @@ describe('collectDescendantIds', () => {
     expect(collectDescendantIds(rows, 'x')).toEqual(['x']);
   });
 });
+
+describe('product counts', () => {
+  it('counts distinct products of a category and its subcategories', () => {
+    const rows = [row('vitamins', null, 'product_type'), row('vit-d', 'vitamins', 'product_type'), row('vit-c', 'vitamins', 'product_type'), row('sleep', null, 'need')];
+    const links = new Map([
+      ['vitamins', new Set(['p1'])],
+      ['vit-d', new Set(['p1', 'p2'])], // p1 is in both -> counted once
+      ['vit-c', new Set(['p3'])],
+    ]);
+    const t = buildCategoryTrees(rows, links);
+    expect(t.product_type[0].product_count).toBe(3);
+    expect(t.product_type[0].children.map((c) => [c.slug, c.product_count])).toEqual([['vit-c', 1], ['vit-d', 2]]);
+    expect(t.need[0].product_count).toBe(0);
+  });
+});

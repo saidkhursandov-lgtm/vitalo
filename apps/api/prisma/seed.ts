@@ -6,6 +6,7 @@
  */
 import { createHash } from 'crypto';
 import { PrismaClient, TreeType } from '@prisma/client';
+import { SETTING_DEFAULTS } from '../src/settings/settings.service';
 
 const prisma = new PrismaClient();
 
@@ -35,6 +36,10 @@ const CATEGORIES: Record<TreeType, CategorySeed[]> = {
     { slug: 'energy', ru: 'Энергия', uz: 'Energiya' },
     { slug: 'sleep', ru: 'Сон и стресс', uz: 'Uyqu va stress' },
     { slug: 'heart', ru: 'Сердце и сосуды', uz: 'Yurak va qon tomirlar' },
+    { slug: 'memory', ru: 'Память и концентрация', uz: 'Xotira va diqqat' },
+    { slug: 'women', ru: 'Женское здоровье', uz: 'Ayollar salomatligi' },
+    { slug: 'men', ru: 'Мужское здоровье', uz: 'Erkaklar salomatligi' },
+    { slug: 'sport', ru: 'Спорт и восстановление', uz: 'Sport va tiklanish' },
   ],
   product_type: [
     { slug: 'vitamins', ru: 'Витамины', uz: 'Vitaminlar', children: [
@@ -115,6 +120,7 @@ const TARIFFS: { region: string; city?: string; tariff: number; threshold: numbe
 
 // Online providers stay disabled until the payments stage; timeouts per Master TZ §10.
 const PAYMENT_METHODS = [
+  { code: 'card_transfer', name_ru: 'Перевод на карту', name_uz: 'Kartaga o‘tkazma', status: 'enabled' as const, timeout_minutes: 12 * 60 },
   { code: 'bank_transfer', name_ru: 'Банковский перевод', name_uz: 'Bank o‘tkazmasi', status: 'enabled' as const, timeout_minutes: 12 * 60 },
   { code: 'payme', name_ru: 'Payme', name_uz: 'Payme', status: 'disabled' as const, timeout_minutes: 30 },
   { code: 'click', name_ru: 'Click', name_uz: 'Click', status: 'disabled' as const, timeout_minutes: 30 },
@@ -143,11 +149,10 @@ async function seedCheckoutSettings() {
   for (const m of PAYMENT_METHODS) {
     await prisma.payment_methods.upsert({ where: { code: m.code }, create: m, update: {} });
   }
-  await prisma.settings.upsert({
-    where: { key: 'bank_transfer_details' },
-    create: { key: 'bank_transfer_details', value: BANK_TRANSFER_DETAILS },
-    update: {},
-  });
+  const settings: Record<string, object> = { bank_transfer_details: BANK_TRANSFER_DETAILS, ...SETTING_DEFAULTS };
+  for (const [key, value] of Object.entries(settings)) {
+    await prisma.settings.upsert({ where: { key }, create: { key, value }, update: {} });
+  }
   for (const t of TARIFFS) {
     const id = uid(`tariff:${t.region}:${t.city ?? '*'}`);
     const data = {

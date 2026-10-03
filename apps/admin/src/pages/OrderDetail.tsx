@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
-import { dateTime, money, ORDER_STATUS, prettyPhone } from '../lib/format';
+import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone } from '../lib/format';
 
 interface Named {
   id: string;
@@ -182,7 +182,7 @@ export function OrderDetail() {
             </dd>
             <dt>Оплата</dt>
             <dd>
-              Банковский перевод · {money(o.payment?.amount_uzs)}
+              {PAYMENT_METHOD[o.payment?.method ?? ''] ?? o.payment?.method} · {money(o.payment?.amount_uzs)}
               {o.payment?.verified_at && <div className="muted small">подтверждено {dateTime(o.payment.verified_at)}</div>}
             </dd>
             <dt>Создан</dt>
@@ -259,9 +259,9 @@ function ConfirmPayment({ order, onDone, onClose }: ModalProps) {
     onSuccess: onDone,
   });
   return (
-    <Modal title="Подтвердить банковский перевод" onClose={onClose}>
+    <Modal title="Подтвердить оплату" onClose={onClose}>
       <p>
-        Деньги поступили на счёт: <strong>{money(order.payment?.amount_uzs)}</strong>, назначение «Оплата заказа {order.order_number}»?
+        {PAYMENT_METHOD[order.payment?.method ?? ''] ?? 'Перевод'}: деньги поступили — <strong>{money(order.payment?.amount_uzs)}</strong> за заказ {order.order_number}?
         Резерв товара превратится в списание, заказ станет «Оплачен».
       </p>
       <Field label="Комментарий (необязательно)">

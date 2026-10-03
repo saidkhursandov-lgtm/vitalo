@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TrashIcon } from '../components/Icons';
-import { Empty, ErrorState, Loading, RegionCitySelect } from '../components/ui';
+import { EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
 import { money, nameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useAddresses, useCart, useCartActions, useRegions, type CityRef } from '../lib/queries';
@@ -80,13 +80,15 @@ export function Cart() {
     return (
       <div className="page">
         <h1>{t('cart.title')}</h1>
-        <Empty action={<Link to="/catalog" className="btn">{t('cart.toCatalog')}</Link>}>{t('cart.empty')}</Empty>
+        <EmptyState title={t('cart.emptyTitle')} text={t('cart.empty')} action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>} />
       </div>
     );
   }
 
   const delivery = data.delivery;
   const busy = setQty.isPending || remove.isPending;
+  // Amount to pay: goods after discounts + delivery once the city is known (updates with every change).
+  const payable = data.goods_total_uzs - data.discount_total_uzs + (delivery?.cost_uzs ?? 0);
 
   return (
     <div className="page cart">
@@ -147,13 +149,13 @@ export function Cart() {
         )}
         <div className="sum-row total">
           <span>{t('cart.total')}</span>
-          <span>{money(data.goods_total_uzs - data.discount_total_uzs + (delivery?.cost_uzs ?? 0), lang)}</span>
+          <span>{money(payable, lang)}</span>
         </div>
       </section>
 
       <div className="sticky-action">
         <button className="btn btn-block" disabled={!data.can_checkout} onClick={() => navigate('/checkout', { state: selected })}>
-          {t('cart.checkout')}
+          {t('cart.checkout', { sum: money(payable, lang) })}
         </button>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { SearchIcon } from '../components/Icons';
-import { Empty, ErrorState, Loading, ProductGrid } from '../components/ui';
+import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { useI18n } from '../lib/i18n';
 import { useSearch } from '../lib/queries';
 
@@ -22,22 +22,37 @@ export function Search() {
 
   const results = useSearch(q);
   const items = results.data?.pages.flatMap((p) => p.items) ?? [];
+  const suggestions = [t('search.suggest1'), t('search.suggest2')];
 
   return (
     <div className="page">
-      <label className="search-box">
-        <SearchIcon width={20} height={20} />
+      {text && <div className="search-caption">{t('search.caption')}</div>}
+      <label className="search-box search-box-lg">
+        <SearchIcon width={22} height={22} />
         <input autoFocus type="search" enterKeyHint="search" placeholder={t('search.placeholder')} value={text} onChange={(e) => setText(e.target.value)} />
       </label>
 
-      {q.length < 2 ? (
-        <Empty>{t('search.hint')}</Empty>
-      ) : results.isPending ? (
+      {q.length < 2 ? null : results.isPending ? (
         <Loading />
       ) : results.isError ? (
         <ErrorState error={results.error} onRetry={() => void results.refetch()} />
       ) : items.length === 0 ? (
-        <Empty>{t('catalog.empty')}</Empty>
+        <EmptyState
+          title={t('search.emptyTitle')}
+          text={t('search.emptyHint')}
+          action={
+            <div className="chips wrap center">
+              {suggestions.map((s) => (
+                <button key={s} type="button" className="chip" onClick={() => setText(s)}>
+                  {s}
+                </button>
+              ))}
+              <Link to="/catalog" className="chip">
+                {t('common.toCatalog')}
+              </Link>
+            </div>
+          }
+        />
       ) : (
         <>
           <p className="hint small">{t('catalog.found', { n: results.data.pages[0].total })}</p>

@@ -36,6 +36,17 @@ export function Empty({ children, action }: { children: ReactNode; action?: Reac
   );
 }
 
+/** Empty screen: title, explanation and an action button (favorites, cart, orders, search). */
+export function EmptyState({ title, text, action }: { title: string; text?: string; action?: ReactNode }) {
+  return (
+    <div className="empty-state">
+      <h2>{title}</h2>
+      {text && <p className="hint">{text}</p>}
+      {action}
+    </div>
+  );
+}
+
 export function Price({ price, old, size = 'md' }: { price: number; old?: number | null; size?: 'md' | 'lg' }) {
   const { lang } = useI18n();
   const pct = discountPercent(price, old ?? null);

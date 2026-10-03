@@ -14,6 +14,28 @@ const ru = {
   'common.apply': 'Применить',
   'common.reset': 'Сбросить',
   'common.pieces': 'шт.',
+  'status.checking': '🔵 Оплата проверяется',
+  'pay.cardRecipient': 'Имя получателя',
+  'pay.cardNumber': 'Номер карты',
+  'pay.soon': 'Скоро',
+  'pay.cod': 'Оплата при получении',
+  'pay.bankDesc': 'Платёж через банк по реквизитам компании',
+  'pay.cardDesc': 'Перевод с вашей банковской карты',
+  'pay.card': 'Перевод на карту',
+  'orders.emptyTitle': 'У вас пока нет заказов',
+  'cart.emptyTitle': 'Ваша корзина пуста',
+  'favorites.emptyTitle': 'Ваше избранное пока пусто',
+  'common.toCatalog': 'Перейти в каталог',
+  'catalog.counting': 'Считаем…',
+  'catalog.show.many': 'Показать {n} товаров',
+  'catalog.show.few': 'Показать {n} товара',
+  'catalog.show.one': 'Показать {n} товар',
+  'catalog.availability': 'Наличие',
+  'search.suggest2': 'магний',
+  'search.suggest1': 'коллаген',
+  'search.emptyHint': 'Попробуйте «коллаген» или «магний»',
+  'search.emptyTitle': 'Ничего не нашли',
+  'search.caption': 'Поиск по товарам',
 
   'nav.home': 'Главная',
   'nav.catalog': 'Каталог',
@@ -21,7 +43,7 @@ const ru = {
   'nav.profile': 'Профиль',
   'nav.cart': 'Корзина',
 
-  'home.search': 'Поиск БАДов и брендов',
+  'home.search': 'Что вы ищете? Например: коллаген, магний, омега-3',
   'home.popular': 'Популярное',
   'home.new': 'Новинки',
   'home.byNeed': 'По потребности',
@@ -37,8 +59,8 @@ const ru = {
   'catalog.sort.price_desc': 'Сначала дороже',
   'catalog.sort.new': 'Новинки',
   'catalog.price': 'Цена, сум',
-  'catalog.priceFrom': 'от',
-  'catalog.priceTo': 'до',
+  'catalog.priceFrom': 'От',
+  'catalog.priceTo': 'До',
   'catalog.brand': 'Бренд',
   'catalog.form': 'Форма выпуска',
   'catalog.inStockOnly': 'Только в наличии',
@@ -46,7 +68,7 @@ const ru = {
   'catalog.empty': 'Ничего не найдено',
 
   'search.title': 'Поиск',
-  'search.placeholder': 'Название, бренд, состав…',
+  'search.placeholder': 'Что вы ищете? Например: коллаген, магний, омега-3',
   'search.hint': 'Например: коллаген, omega, витамин D',
 
   'product.inStock': 'В наличии',
@@ -74,10 +96,10 @@ const ru = {
   'product.favRemove': 'Убрать из избранного',
 
   'favorites.title': 'Избранное',
-  'favorites.empty': 'В избранном пока пусто. Нажмите ♡ на товаре, чтобы сохранить его.',
+  'favorites.empty': 'Сохраняйте понравившиеся товары, чтобы быстро вернуться к ним позже.',
 
   'cart.title': 'Корзина',
-  'cart.empty': 'Корзина пуста',
+  'cart.empty': 'Добавьте товары из каталога — они появятся здесь.',
   'cart.toCatalog': 'Перейти в каталог',
   'cart.unavailable': 'Нет в наличии — не войдёт в заказ',
   'cart.warn.price_changed': '«{name}»: цена изменилась с {old} на {new}',
@@ -89,7 +111,7 @@ const ru = {
   'cart.chooseCity': 'Выберите регион и город, чтобы рассчитать доставку',
   'cart.free': 'Бесплатно',
   'cart.total': 'Итого',
-  'cart.checkout': 'Оформить заказ',
+  'cart.checkout': 'Перейти к оформлению · {sum}',
 
   'checkout.title': 'Оформление заказа',
   'checkout.recipient': 'Получатель',
@@ -105,10 +127,10 @@ const ru = {
   'checkout.saveAddress': 'Сохранить адрес в профиле',
   'checkout.payment': 'Способ оплаты',
   'checkout.bankTransfer': 'Банковский перевод',
-  'checkout.bankTransferHint': 'Реквизиты появятся после подтверждения. Товар резервируется на 12 часов.',
+  'checkout.bankTransferHint': 'После оформления покажем, куда перевести деньги. Товар резервируется на 12 часов.',
   'checkout.summary': 'Ваш заказ',
   'checkout.skipped': 'Товары без остатка не войдут в заказ и останутся в корзине',
-  'checkout.confirm': 'Подтвердить и оплатить',
+  'checkout.confirm': 'Оплатить · {sum}',
   'checkout.required': 'Заполните поле',
   'checkout.phoneInvalid': 'Номер в формате +998 XX XXX XX XX',
   'checkout.fillAddress': 'Укажите регион и город, чтобы увидеть итоговую сумму',
@@ -116,7 +138,7 @@ const ru = {
   'pay.title': 'Оплата переводом',
   'pay.amount': 'Сумма к оплате',
   'pay.recipient': 'Получатель',
-  'pay.bank': 'Банк',
+  'pay.bank': 'Перевод по реквизитам',
   'pay.account': 'Расчётный счёт',
   'pay.mfo': 'МФО',
   'pay.inn': 'ИНН',
@@ -124,15 +146,15 @@ const ru = {
   'pay.until': 'Оплатите до {date}, иначе заказ отменится',
   'pay.copy': 'Копировать',
   'pay.copied': 'Скопировано',
-  'pay.iPaid': 'Я оплатил',
+  'pay.iPaid': 'Я оплатил(а)',
   'pay.waiting': 'Спасибо! Ожидаем подтверждения оплаты менеджером',
   'pay.paid': 'Оплата подтверждена',
   'pay.cancelled': 'Заказ отменён',
   'pay.toOrder': 'Перейти к заказу',
 
   'orders.title': 'Мои заказы',
-  'orders.empty': 'Заказов пока нет',
-  'orders.number': 'Заказ {n}',
+  'orders.empty': 'Оформленные заказы появятся здесь.',
+  'orders.number': 'Заказ №{n}',
   'orders.items': 'Товаров: {n}',
   'orders.cancel': 'Отменить заказ',
   'orders.cancelConfirm': 'Отменить заказ {n}? Товар вернётся на склад.',
@@ -145,15 +167,15 @@ const ru = {
   'orders.payUntil': 'Ожидаем оплату до {date}',
   'orders.all': 'Все заказы',
 
-  'status.new': 'Новый',
-  'status.awaiting_payment': 'Ожидает оплаты',
-  'status.paid': 'Оплачен',
-  'status.picking': 'Собирается',
-  'status.handed_to_delivery': 'Передан в доставку',
-  'status.in_transit': 'В пути',
-  'status.delivered': 'Доставлен',
-  'status.cancelled': 'Отменён',
-  'status.return': 'Возврат',
+  'status.new': '🟡 Ожидает оплаты',
+  'status.awaiting_payment': '🟡 Ожидает оплаты',
+  'status.paid': '🟢 Оплачен',
+  'status.picking': '📦 Собирается',
+  'status.handed_to_delivery': '🚚 Передан курьеру',
+  'status.in_transit': '🚚 В пути',
+  'status.delivered': '✅ Доставлен',
+  'status.cancelled': '⚪ Отменён',
+  'status.return': '↩️ Возврат',
 
   'profile.title': 'Профиль',
   'profile.language': 'Язык',
@@ -209,6 +231,28 @@ const uz: Record<MessageKey, string> = {
   'common.apply': 'Qo‘llash',
   'common.reset': 'Tozalash',
   'common.pieces': 'dona',
+  'status.checking': '🔵 To‘lov tekshirilmoqda',
+  'pay.cardRecipient': 'Oluvchining ismi',
+  'pay.cardNumber': 'Karta raqami',
+  'pay.soon': 'Tez orada',
+  'pay.cod': 'Qabul qilganda to‘lash',
+  'pay.bankDesc': 'Kompaniya rekvizitlari bo‘yicha bank orqali to‘lov',
+  'pay.cardDesc': 'Bank kartangizdan o‘tkazma',
+  'pay.card': 'Kartaga o‘tkazma',
+  'orders.emptyTitle': 'Sizda hozircha buyurtmalar yo‘q',
+  'cart.emptyTitle': 'Savatingiz bo‘sh',
+  'favorites.emptyTitle': 'Sevimlilaringiz hozircha bo‘sh',
+  'common.toCatalog': 'Katalogga o‘tish',
+  'catalog.counting': 'Hisoblanmoqda…',
+  'catalog.show.many': '{n} ta mahsulotni ko‘rsatish',
+  'catalog.show.few': '{n} ta mahsulotni ko‘rsatish',
+  'catalog.show.one': '{n} ta mahsulotni ko‘rsatish',
+  'catalog.availability': 'Mavjudligi',
+  'search.suggest2': 'magniy',
+  'search.suggest1': 'kollagen',
+  'search.emptyHint': '«kollagen» yoki «magniy» deb qidirib ko‘ring',
+  'search.emptyTitle': 'Hech narsa topilmadi',
+  'search.caption': 'Mahsulotlar bo‘yicha qidiruv',
 
   'nav.home': 'Bosh sahifa',
   'nav.catalog': 'Katalog',
@@ -216,7 +260,7 @@ const uz: Record<MessageKey, string> = {
   'nav.profile': 'Profil',
   'nav.cart': 'Savat',
 
-  'home.search': 'Mahsulot va brendlarni qidirish',
+  'home.search': 'Nima qidiryapsiz? Masalan: kollagen, magniy, omega-3',
   'home.popular': 'Ommabop',
   'home.new': 'Yangi mahsulotlar',
   'home.byNeed': 'Ehtiyoj bo‘yicha',
@@ -232,8 +276,8 @@ const uz: Record<MessageKey, string> = {
   'catalog.sort.price_desc': 'Avval qimmatlari',
   'catalog.sort.new': 'Yangilari',
   'catalog.price': 'Narx, so‘m',
-  'catalog.priceFrom': 'dan',
-  'catalog.priceTo': 'gacha',
+  'catalog.priceFrom': 'Dan',
+  'catalog.priceTo': 'Gacha',
   'catalog.brand': 'Brend',
   'catalog.form': 'Chiqarilish shakli',
   'catalog.inStockOnly': 'Faqat mavjudlari',
@@ -241,7 +285,7 @@ const uz: Record<MessageKey, string> = {
   'catalog.empty': 'Hech narsa topilmadi',
 
   'search.title': 'Qidiruv',
-  'search.placeholder': 'Nomi, brendi, tarkibi…',
+  'search.placeholder': 'Nima qidiryapsiz? Masalan: kollagen, magniy, omega-3',
   'search.hint': 'Masalan: kollagen, omega, D vitamini',
 
   'product.inStock': 'Mavjud',
@@ -269,10 +313,10 @@ const uz: Record<MessageKey, string> = {
   'product.favRemove': 'Sevimlilardan olib tashlash',
 
   'favorites.title': 'Sevimlilar',
-  'favorites.empty': 'Sevimlilar hozircha bo‘sh. Saqlash uchun mahsulotdagi ♡ belgisini bosing.',
+  'favorites.empty': 'Yoqqan mahsulotlarni saqlang — keyinroq ularga tezda qaytishingiz mumkin.',
 
   'cart.title': 'Savat',
-  'cart.empty': 'Savat bo‘sh',
+  'cart.empty': 'Katalogdan mahsulot qo‘shing — ular shu yerda paydo bo‘ladi.',
   'cart.toCatalog': 'Katalogga o‘tish',
   'cart.unavailable': 'Mavjud emas — buyurtmaga kirmaydi',
   'cart.warn.price_changed': '«{name}»: narx {old} dan {new} ga o‘zgardi',
@@ -284,7 +328,7 @@ const uz: Record<MessageKey, string> = {
   'cart.chooseCity': 'Yetkazib berish narxini hisoblash uchun viloyat va shaharni tanlang',
   'cart.free': 'Bepul',
   'cart.total': 'Jami',
-  'cart.checkout': 'Buyurtma berish',
+  'cart.checkout': 'Rasmiylashtirishga o‘tish · {sum}',
 
   'checkout.title': 'Buyurtmani rasmiylashtirish',
   'checkout.recipient': 'Qabul qiluvchi',
@@ -300,10 +344,10 @@ const uz: Record<MessageKey, string> = {
   'checkout.saveAddress': 'Manzilni profilda saqlash',
   'checkout.payment': 'To‘lov usuli',
   'checkout.bankTransfer': 'Bank o‘tkazmasi',
-  'checkout.bankTransferHint': 'Rekvizitlar tasdiqlangandan keyin ko‘rsatiladi. Mahsulot 12 soatga band qilinadi.',
+  'checkout.bankTransferHint': 'Rasmiylashtirgandan so‘ng pulni qayerga o‘tkazishni ko‘rsatamiz. Mahsulot 12 soatga band qilinadi.',
   'checkout.summary': 'Buyurtmangiz',
   'checkout.skipped': 'Qoldig‘i yo‘q mahsulotlar buyurtmaga kirmaydi va savatda qoladi',
-  'checkout.confirm': 'Tasdiqlash va to‘lash',
+  'checkout.confirm': 'To‘lash · {sum}',
   'checkout.required': 'Maydonni to‘ldiring',
   'checkout.phoneInvalid': 'Raqam +998 XX XXX XX XX formatida bo‘lsin',
   'checkout.fillAddress': 'Yakuniy summani ko‘rish uchun viloyat va shaharni tanlang',
@@ -311,7 +355,7 @@ const uz: Record<MessageKey, string> = {
   'pay.title': 'Bank o‘tkazmasi orqali to‘lov',
   'pay.amount': 'To‘lov summasi',
   'pay.recipient': 'Oluvchi',
-  'pay.bank': 'Bank',
+  'pay.bank': 'Rekvizitlar bo‘yicha o‘tkazma',
   'pay.account': 'Hisob raqami',
   'pay.mfo': 'MFO',
   'pay.inn': 'STIR',
@@ -326,8 +370,8 @@ const uz: Record<MessageKey, string> = {
   'pay.toOrder': 'Buyurtmaga o‘tish',
 
   'orders.title': 'Buyurtmalarim',
-  'orders.empty': 'Hozircha buyurtmalar yo‘q',
-  'orders.number': 'Buyurtma {n}',
+  'orders.empty': 'Rasmiylashtirilgan buyurtmalar shu yerda paydo bo‘ladi.',
+  'orders.number': 'Buyurtma №{n}',
   'orders.items': 'Mahsulotlar: {n}',
   'orders.cancel': 'Buyurtmani bekor qilish',
   'orders.cancelConfirm': '{n} buyurtmasini bekor qilasizmi? Mahsulot omborga qaytariladi.',
@@ -340,15 +384,15 @@ const uz: Record<MessageKey, string> = {
   'orders.payUntil': 'To‘lovni {date} gacha kutamiz',
   'orders.all': 'Barcha buyurtmalar',
 
-  'status.new': 'Yangi',
-  'status.awaiting_payment': 'To‘lov kutilmoqda',
-  'status.paid': 'To‘langan',
-  'status.picking': 'Yig‘ilmoqda',
-  'status.handed_to_delivery': 'Yetkazib berishga topshirildi',
-  'status.in_transit': 'Yo‘lda',
-  'status.delivered': 'Yetkazildi',
-  'status.cancelled': 'Bekor qilindi',
-  'status.return': 'Qaytarish',
+  'status.new': '🟡 To‘lov kutilmoqda',
+  'status.awaiting_payment': '🟡 To‘lov kutilmoqda',
+  'status.paid': '🟢 To‘langan',
+  'status.picking': '📦 Yig‘ilmoqda',
+  'status.handed_to_delivery': '🚚 Kuryerga topshirildi',
+  'status.in_transit': '🚚 Yo‘lda',
+  'status.delivered': '✅ Yetkazildi',
+  'status.cancelled': '⚪ Bekor qilindi',
+  'status.return': '↩️ Qaytarish',
 
   'profile.title': 'Profil',
   'profile.language': 'Til',
@@ -402,7 +446,18 @@ export function errorText(lang: Lang, code: string | undefined): string {
   return code && key in ru ? translate(lang, key) : translate(lang, 'common.error');
 }
 
-export const statusKey = (s: OrderStatus) => `status.${s}` as MessageKey;
+/** Russian plural form: 1 товар, 3 товара, 5 товаров, 21 товар, 11 товаров. */
+export function pluralForm(n: number): 'one' | 'few' | 'many' {
+  const d = n % 10;
+  const h = n % 100;
+  if (d === 1 && h !== 11) return 'one';
+  if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return 'few';
+  return 'many';
+}
+
+/** Order status shown to the customer; "Я оплатил(а)" pressed but not confirmed yet = checking. */
+export const statusKey = (s: OrderStatus, paymentReported = false) =>
+  `status.${paymentReported && (s === 'awaiting_payment' || s === 'new') ? 'checking' : s}` as MessageKey;
 
 interface I18n {
   lang: Lang;

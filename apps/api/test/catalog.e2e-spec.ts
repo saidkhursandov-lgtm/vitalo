@@ -4,7 +4,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './helpers';
 
 interface Item { id: string; sku: string; brand: string; price_uzs: number; in_stock: boolean; image_url: string | null }
-interface Node { slug: string; children: Node[] }
+interface Node { slug: string; product_count: number; children: Node[] }
 
 describe('Catalog (e2e)', () => {
   let app: INestApplication;
@@ -24,12 +24,43 @@ describe('Catalog (e2e)', () => {
       const need: Node[] = body.need;
       const types: Node[] = body.product_type;
 
-      expect(need.map((n) => n.slug)).toEqual(['immunity', 'beauty', 'joints', 'energy', 'sleep', 'heart']);
+      expect(need.map((n) => n.slug)).toEqual([
+        'immunity', 'beauty', 'joints', 'energy', 'sleep', 'heart', 'memory', 'women', 'men', 'sport',
+      ]);
       expect(need.find((n) => n.slug === 'beauty')!.children.map((n) => n.slug)).toEqual(['beauty-skin', 'beauty-hair']);
       expect(types.find((n) => n.slug === 'vitamins')!.children.map((n) => n.slug)).toEqual(
         ['vitamin-d', 'vitamin-c', 'vitamin-b', 'vitamin-k'],
       );
       expect(types.map((n) => n.slug)).not.toContain('immunity');
+    });
+
+    it('shows how many visible products each category has (subcategories included)', async () => {
+      const { body } = await get('/categories').expect(200);
+      const vitamins: Node = body.product_type.find((n: Node) => n.slug === 'vitamins');
+      const listed = (await get('/products?category=vitamins').expect(200)).body.total;
+      expect(vitamins.product_count).toBe(listed);
+      expect(vitamins.product_count).toBeGreaterThanOrEqual(Math.max(...vitamins.children.map((c) => c.product_count)));
+      expect(body.need.find((n: Node) => n.slug === 'women').product_count).toBe(0);
+    });
+  });
+
+  describe('GET /products/count', () => {
+    it('counts with the same filters as the list', async () => {
+      for (const qs of ['', '?brand=SunVita', '?in_stock=true', '?category=vitamins&price_max=80000', '?form=capsules']) {
+        const list = (await get(`/products${qs}`).expect(200)).body.total;
+        expect((await get(`/products/count${qs}`).expect(200)).body).toEqual({ total: list });
+      }
+    });
+
+    it('rejects invalid filters -> 400', async () => {
+      await get('/products/count?price_min=-1').expect(400);
+    });
+  });
+
+  describe('GET /texts', () => {
+    it('returns the product disclaimer in both languages', async () => {
+      const { body } = await get('/texts').expect(200);
+      expect(body.product_disclaimer).toEqual({ ru: 'БАД. НЕ ЯВЛЯЕТСЯ ЛЕКАРСТВЕННЫМ СРЕДСТВОМ.', uz: expect.any(String) });
     });
   });
 

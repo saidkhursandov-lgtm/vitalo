@@ -292,3 +292,52 @@ details.card[open] summary { margin-bottom: 8px; }
 /* ---------- dev login ---------- */
 .dev-login { max-width: 420px; margin: 0 auto; }
 .dev-badge { padding: 2px 10px; border-radius: 8px; background: #f5a623; color: #000; font-weight: 800; font-size: 12px; }
+
+/* ---------- UX update: search first, empty states, filter sheet, disclaimer, payment options ---------- */
+.search-hero {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; margin: 0 0 18px; padding: 0 16px;
+  border: 2px solid var(--button); border-radius: 16px; background: var(--section-bg); color: var(--hint);
+  font-size: 15px; text-align: left; cursor: pointer;
+}
+.search-hero svg { color: var(--button); flex: none; }
+.search-caption { font-size: 13px; font-weight: 600; color: var(--button); margin: 0 0 6px 4px; }
+.search-box-lg { min-height: 56px; border: 2px solid var(--button); border-radius: 16px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 20px; text-align: center; }
+.empty-state h2 { margin: 0; font-size: 19px; }
+.empty-state p { max-width: 320px; margin: 0 0 8px; }
+.chips.center { justify-content: center; }
+.row-end { display: inline-flex; align-items: center; gap: 6px; }
+.type-card { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 2px; }
+
+.sheet { display: flex; flex-direction: column; padding-bottom: 0; }
+.sheet-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 8px; flex: none; }
+.sheet-body { overflow-y: auto; padding-bottom: 8px; }
+.sheet .sheet-actions {
+  position: sticky; bottom: 0; margin: 0 -16px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg); border-top: 1px solid var(--border);
+}
+
+/* Always visible on the product page, just above the bottom navigation. */
+.product { padding-bottom: 64px; }
+.disclaimer {
+  position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); z-index: 9;
+  padding: 8px 16px; background: var(--secondary-bg); color: var(--text); border-top: 1px solid var(--border);
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; text-align: center; text-transform: uppercase;
+}
+
+.pay-option {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px; margin: 0 0 8px;
+  border: 1.5px solid var(--border); border-radius: 12px; cursor: pointer;
+}
+.pay-option.is-on { border-color: var(--button); background: color-mix(in srgb, var(--button) 8%, var(--section-bg)); }
+.pay-option input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--button); flex: none; }
+.pay-option.is-disabled { cursor: default; opacity: 0.55; align-items: center; }
+.pay-option.is-disabled span:nth-child(2) { flex: 1; }
+.soon-badge { padding: 2px 8px; border-radius: 8px; background: var(--secondary-bg); color: var(--hint); font-size: 12px; font-weight: 600; }
+.notice-info { background: color-mix(in srgb, var(--button) 10%, var(--bg)); color: var(--text); }
+
+/* Order status: one color per meaning (🟡 waiting, 🔵 checking, 🟢/✅ done, 📦🚚 on the way, ⚪ cancelled). */
+.status-checking, .status-picking, .status-handed_to_delivery, .status-in_transit { background: color-mix(in srgb, #2f80ed 16%, var(--bg)); color: color-mix(in srgb, #2f80ed 75%, var(--text)); }
+.status-cancelled { background: var(--secondary-bg); color: var(--hint); }
+.order-status-hero { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: -4px 0 14px; }
+.status-lg { padding: 8px 14px; border-radius: 12px; font-size: 17px; }

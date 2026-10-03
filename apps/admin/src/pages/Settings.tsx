@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, ROLE } from '../lib/format';
 
-const TABS = { bank: 'Реквизиты перевода', tariffs: 'Тарифы доставки', staff: 'Сотрудники' } as const;
+const TABS = { bank: 'Оплата', texts: 'Тексты', tariffs: 'Тарифы доставки', staff: 'Сотрудники' } as const;
 type Tab = keyof typeof TABS;
 
 export function Settings() {
@@ -23,7 +23,15 @@ export function Settings() {
           ))}
         </div>
       </PageHead>
-      {tab === 'bank' && <BankTransfer />}
+      {tab === 'bank' && (
+        <>
+          <CardTransfer />
+          <TextsForm fields={['payment_hint']} />
+          <h2 className="section-title">Перевод по реквизитам</h2>
+          <BankTransfer />
+        </>
+      )}
+      {tab === 'texts' && <TextsForm fields={['product_disclaimer']} />}
       {tab === 'tariffs' && <Tariffs />}
       {tab === 'staff' && <Staff />}
     </>
@@ -41,6 +49,117 @@ interface Bank {
   purpose_template: string;
 }
 const EMPTY_BANK: Bank = { recipient: '', bank_name: '', account: '', mfo: '', inn: '', purpose_template: 'Оплата заказа {order_number}' };
+
+// ---------------------------------------------------------------- card transfer
+
+interface Card {
+  card_number: string;
+  recipient: string;
+}
+
+const isTestValue = (s: string) => /ТЕСТ/i.test(s) || /^8600(0{12})$/.test(s);
+
+function CardTransfer() {
+  const client = useQueryClient();
+  const q = useQuery({ queryKey: ['settings', 'card'], queryFn: () => api<Card>('/staff/settings/card-transfer') });
+  const [f, setF] = useState<Card>({ card_number: '', recipient: '' });
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (q.data) setF({ ...q.data, card_number: q.data.card_number.replace(/(\d{4})(?=\d)/g, '$1 ') });
+  }, [q.data]);
+  const save = useMutation({
+    mutationFn: () => api<Card>('/staff/settings/card-transfer', { method: 'PUT', body: f }),
+    onSuccess: (c) => {
+      client.setQueryData(['settings', 'card'], c);
+      setSaved(true);
+    },
+  });
+  if (q.isPending) return <Loading />;
+  const test = q.data && (isTestValue(q.data.card_number) || isTestValue(q.data.recipient));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+
+  return (
+    <form className="card narrow" onSubmit={submit}>
+      <h2>Перевод на карту</h2>
+      {test && <div className="alert alert-warn">Сейчас здесь ТЕСТОВЫЕ данные — замените их на настоящие перед запуском.</div>}
+      <p className="muted">Клиент видит номер карты и имя получателя с кнопкой «Копировать».</p>
+      <div className="form-grid">
+        <Field label="Номер карты" hint="16 цифр, можно с пробелами">
+          <input value={f.card_number} inputMode="numeric" onChange={(e) => (setF({ ...f, card_number: e.target.value }), setSaved(false))} required />
+        </Field>
+        <Field label="Имя получателя">
+          <input value={f.recipient} onChange={(e) => (setF({ ...f, recipient: e.target.value }), setSaved(false))} required />
+        </Field>
+      </div>
+      <ErrorBox error={save.error} />
+      {saved && <div className="alert alert-ok">Сохранено</div>}
+      <button className="btn" disabled={save.isPending}>
+        Сохранить
+      </button>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------- customer-facing texts (RU/UZ)
+
+type TextKey = 'product_disclaimer' | 'payment_hint';
+type Texts = Record<TextKey, { ru: string; uz: string }>;
+const TEXT_INFO: Record<TextKey, { title: string; hint: string }> = {
+  payment_hint: { title: 'Подсказка на экране оплаты', hint: 'Показывается клиенту под реквизитами или номером карты.' },
+  product_disclaimer: { title: 'Пометка на карточке товара', hint: 'Всегда видна внизу карточки товара в магазине.' },
+};
+
+/** Edits some of the texts; the others are sent back unchanged (the API saves both at once). */
+function TextsForm({ fields }: { fields: TextKey[] }) {
+  const client = useQueryClient();
+  const q = useQuery({ queryKey: ['settings', 'texts'], queryFn: () => api<Texts>('/staff/settings/texts') });
+  const [f, setF] = useState<Texts | null>(null);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (q.data) setF(q.data);
+  }, [q.data]);
+  const save = useMutation({
+    mutationFn: () => api<Texts>('/staff/settings/texts', { method: 'PUT', body: { ...q.data, ...Object.fromEntries(fields.map((k) => [k, f![k]])) } }),
+    onSuccess: (t) => {
+      client.setQueryData(['settings', 'texts'], t);
+      setSaved(true);
+    },
+  });
+  if (q.isPending || !f) return <Loading />;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+  const set = (k: TextKey, lang: 'ru' | 'uz', v: string) => {
+    setF({ ...f, [k]: { ...f[k], [lang]: v } });
+    setSaved(false);
+  };
+
+  return (
+    <form className="card narrow" onSubmit={submit}>
+      {fields.map((k) => (
+        <div key={k}>
+          <h2>{TEXT_INFO[k].title}</h2>
+          <p className="muted">{TEXT_INFO[k].hint}</p>
+          <Field label="Русский">
+            <textarea rows={3} value={f[k].ru} onChange={(e) => set(k, 'ru', e.target.value)} required />
+          </Field>
+          <Field label="O‘zbekcha">
+            <textarea rows={3} value={f[k].uz} onChange={(e) => set(k, 'uz', e.target.value)} required />
+          </Field>
+        </div>
+      ))}
+      <ErrorBox error={save.error} />
+      {saved && <div className="alert alert-ok">Сохранено</div>}
+      <button className="btn" disabled={save.isPending}>
+        Сохранить
+      </button>
+    </form>
+  );
+}
 
 function BankTransfer() {
   const client = useQueryClient();

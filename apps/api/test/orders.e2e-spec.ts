@@ -326,6 +326,23 @@ describe('Orders (e2e)', () => {
       expect(body).toMatchObject({ amount_uzs: 140_000, purpose: `Оплата заказа ${order.order_number}`, customer_reported_paid_at: null });
       expect(body.requisites.recipient).toContain('ТЕСТ');
       expect(body.requisites).not.toHaveProperty('purpose_template');
+      expect(body).toMatchObject({ method: 'bank_transfer', card: null });
+      expect(body.hint.ru).toContain('Я оплатил(а)');
+    });
+
+    it('card transfer: the customer sees the card number and recipient instead of requisites', async () => {
+      const buyer = await newCustomer();
+      const cardProduct = await createTestProduct(prisma, { price: 30_000, stock: 3 });
+      const cardOrder = (await place(buyer, buyNow(cardProduct.id, 1, { payment_method: 'card_transfer' })).expect(201)).body;
+      expect(cardOrder.payment).toMatchObject({ method: 'card_transfer', status: 'payment_pending' });
+      const { body } = await http().get(`/api/orders/${cardOrder.id}/payment/bank-transfer`).set(bearer(buyer)).expect(200);
+      expect(body).toMatchObject({ method: 'card_transfer', requisites: null, card: { card_number: expect.stringMatching(/^[0-9]{16}$/) } });
+      expect(body.card.recipient).toContain('ТЕСТ');
+
+      await http().post(`/api/orders/${cardOrder.id}/payment/bank-transfer/paid`).set(bearer(buyer)).send({}).expect(200);
+      const list = (await http().get('/api/orders').set(bearer(buyer)).expect(200)).body;
+      const items = Array.isArray(list) ? list : list.items;
+      expect(items.find((o: { id: string }) => o.id === cardOrder.id).payment_reported).toBe(true);
     });
 
     it('"Я оплатил" records the claim and creates one manager task, however many clicks', async () => {

@@ -63,7 +63,7 @@ export class BotInternalController {
       where: { telegram_user_id: telegramId(raw) },
       include: {
         bonus_account: true,
-        orders: { orderBy: { created_at: 'desc' }, take: 5 },
+        orders: { orderBy: { created_at: 'desc' }, take: 5, include: { payments: { include: { manual: true } } } },
         _count: { select: { orders: true, favorites: true, addresses: { where: { deleted_at: null } } } },
       },
     });
@@ -77,7 +77,15 @@ export class BotInternalController {
       orders_total: u._count.orders,
       favorites_count: u._count.favorites,
       addresses_count: u._count.addresses,
-      orders: u.orders.map((o) => ({ id: o.id, order_number: o.order_number, status: o.status, total_uzs: Number(o.total_uzs), created_at: o.created_at })),
+      orders: u.orders.map((o) => ({
+        id: o.id,
+        order_number: o.order_number,
+        status: o.status,
+        // "Я оплатил(а)" pressed, manager has not confirmed yet -> the bot shows "🔵 Оплата проверяется"
+        payment_reported: o.payment_status === 'payment_pending' && o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at)),
+        total_uzs: Number(o.total_uzs),
+        created_at: o.created_at,
+      })),
     };
   }
 

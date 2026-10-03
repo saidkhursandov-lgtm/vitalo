@@ -9,7 +9,15 @@ import { errorText, useI18n } from '../lib/i18n';
 import { createIdempotencyKeys } from '../lib/idempotency';
 import { useAddressActions, useAddresses, useCheckoutDefaults, useRegions, type CityRef } from '../lib/queries';
 import { haptic } from '../lib/telegram';
-import type { Order, OrderPreview } from '../lib/types';
+import type { Order, OrderPreview, PaymentMethodCode } from '../lib/types';
+import type { MessageKey } from '../lib/i18n';
+
+const MANUAL_METHODS: { code: PaymentMethodCode; title: MessageKey; desc: MessageKey }[] = [
+  { code: 'card_transfer', title: 'pay.card', desc: 'pay.cardDesc' },
+  { code: 'bank_transfer', title: 'pay.bank', desc: 'pay.bankDesc' },
+];
+/** Shown disabled with a "Скоро" badge until connected (payment architecture stays the same). */
+const SOON_METHODS = ['Payme', 'Click', 'Uzum', 'cod'] as const;
 import { FreeShippingProgress } from './Cart';
 
 interface Form {
@@ -49,6 +57,7 @@ export function Checkout() {
   );
 
   const [form, setForm] = useState<Form | null>(null);
+  const [method, setMethod] = useState<PaymentMethodCode>('card_transfer');
   const [errors, setErrors] = useState<Partial<Record<keyof Form, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -78,8 +87,8 @@ export function Checkout() {
       : null;
 
   const preview = useQuery({
-    queryKey: ['preview', source, city],
-    queryFn: () => api<OrderPreview>('/orders/preview', { method: 'POST', body: { ...source, ...city, payment_method: 'bank_transfer' } }),
+    queryKey: ['preview', source, city, method],
+    queryFn: () => api<OrderPreview>('/orders/preview', { method: 'POST', body: { ...source, ...city, payment_method: method } }),
     enabled: !!city,
   });
 
@@ -119,7 +128,7 @@ export function Checkout() {
       ...city,
       address_text: saved ? saved.address_text : form.address_text.trim(),
       customer_comment: form.comment.trim() || undefined,
-      payment_method: 'bank_transfer',
+      payment_method: method,
       expected_total_uzs: preview.data.totals.total_uzs,
     };
     try {
@@ -206,13 +215,24 @@ export function Checkout() {
 
       <section className="card">
         <h2>{t('checkout.payment')}</h2>
-        <label className="radio-row">
-          <input type="radio" checked readOnly />
-          <span>
-            {t('checkout.bankTransfer')}
-            <span className="hint small block">{t('checkout.bankTransferHint')}</span>
-          </span>
-        </label>
+        {/* Only manual transfers work now; online providers and cash on delivery are shown as "Скоро". */}
+        {MANUAL_METHODS.map((m) => (
+          <label key={m.code} className={`pay-option ${method === m.code ? 'is-on' : ''}`}>
+            <input type="radio" name="payment" checked={method === m.code} onChange={() => setMethod(m.code)} />
+            <span>
+              <strong>{t(m.title)}</strong>
+              <span className="hint small block">{t(m.desc)}</span>
+            </span>
+          </label>
+        ))}
+        {SOON_METHODS.map((name) => (
+          <div key={name} className="pay-option is-disabled" aria-disabled="true">
+            <input type="radio" disabled />
+            <span>{name === 'cod' ? t('pay.cod') : name}</span>
+            <span className="soon-badge">{t('pay.soon')}</span>
+          </div>
+        ))}
+        <p className="hint small">{t('checkout.bankTransferHint')}</p>
       </section>
 
       <section className="card summary">
@@ -261,7 +281,7 @@ export function Checkout() {
 
       <div className="sticky-action">
         <button type="submit" className="btn btn-block" disabled={blocked}>
-          {placeOrder.isPending ? t('common.loading') : `${t('checkout.confirm')}${p ? ` · ${money(p.totals.total_uzs, lang)}` : ''}`}
+          {placeOrder.isPending ? t('common.loading') : t('checkout.confirm', { sum: p ? money(p.totals.total_uzs, lang) : '…' })}
         </button>
       </div>
     </form>

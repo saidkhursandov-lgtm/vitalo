@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronIcon, CloseIcon, FilterIcon } from '../components/Icons';
 import { Empty, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { nameOf } from '../lib/format';
-import { useI18n, type MessageKey } from '../lib/i18n';
-import { useBrands, useCategories, useForms, useProducts, type ProductFilters, type Sort } from '../lib/queries';
+import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
+import { useBrands, useCategories, useForms, useProducts, useProductsCount, type ProductFilters, type Sort } from '../lib/queries';
 import type { CategoryNode } from '../lib/types';
 
 /** Catalog root: the two independent trees (need / product type), up to 3 levels. */
@@ -47,7 +47,10 @@ function CategoryList({ nodes, depth }: { nodes: CategoryNode[]; depth: number }
         <li key={c.id}>
           <Link to={`/catalog/products?category=${c.slug}`} className="list-row" style={{ paddingLeft: 16 + depth * 16 }}>
             <span className={depth ? '' : 'strong'}>{nameOf(c, lang)}</span>
-            <ChevronIcon width={18} height={18} />
+            <span className="row-end">
+              <span className="hint small">{c.product_count}</span>
+              <ChevronIcon width={18} height={18} />
+            </span>
           </Link>
           {c.children.length > 0 && <CategoryList nodes={c.children} depth={depth + 1} />}
         </li>
@@ -110,7 +113,7 @@ export function ProductList() {
         <div className="chips scroll-x">
           {category.children.map((c) => (
             <Link key={c.id} className="chip" to={`/catalog/products?category=${c.slug}`}>
-              {nameOf(c, lang)}
+              {nameOf(c, lang)} · {c.product_count}
             </Link>
           ))}
         </div>
@@ -168,11 +171,20 @@ export function ProductList() {
   );
 }
 
+/** Bottom sheet: price, brand, form, availability; the main button shows how many products will be shown. */
 function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; onApply: (f: ProductFilters) => void; onClose: () => void }) {
   const { t } = useI18n();
   const brands = useBrands();
   const forms = useForms();
   const [draft, setDraft] = useState<ProductFilters>(filters);
+  // Ask the server for the number a moment after the last change, not on every keystroke.
+  const [counted, setCounted] = useState<ProductFilters>(filters);
+  useEffect(() => {
+    const id = setTimeout(() => setCounted(draft), 300);
+    return () => clearTimeout(id);
+  }, [draft]);
+  const count = useProductsCount({ ...counted, category: filters.category });
+
   const toggle = (key: 'brand' | 'form', value: string) => {
     const current = new Set(draft[key] ?? []);
     if (current.has(value)) current.delete(value);
@@ -180,10 +192,12 @@ function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; o
     setDraft({ ...draft, [key]: [...current] });
   };
   const price = (v: string) => (v && /^\d+$/.test(v) ? Number(v) : undefined);
+  const n = count.data;
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" role="dialog" aria-label={t('catalog.filters')} onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" aria-hidden />
         <div className="sheet-head">
           <h2>{t('catalog.filters')}</h2>
           <button className="icon-btn" aria-label={t('common.cancel')} onClick={onClose}>
@@ -191,41 +205,48 @@ function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; o
           </button>
         </div>
 
-        <h3>{t('catalog.price')}</h3>
-        <div className="field-row">
-          <input inputMode="numeric" placeholder={t('catalog.priceFrom')} value={draft.price_min ?? ''} onChange={(e) => setDraft({ ...draft, price_min: price(e.target.value) })} />
-          <input inputMode="numeric" placeholder={t('catalog.priceTo')} value={draft.price_max ?? ''} onChange={(e) => setDraft({ ...draft, price_max: price(e.target.value) })} />
-        </div>
+        <div className="sheet-body">
+          <h3>{t('catalog.price')}</h3>
+          <div className="field-row">
+            <label className="field">
+              <span>{t('catalog.priceFrom')}</span>
+              <input inputMode="numeric" placeholder="0" value={draft.price_min ?? ''} onChange={(e) => setDraft({ ...draft, price_min: price(e.target.value) })} />
+            </label>
+            <label className="field">
+              <span>{t('catalog.priceTo')}</span>
+              <input inputMode="numeric" placeholder="1 000 000" value={draft.price_max ?? ''} onChange={(e) => setDraft({ ...draft, price_max: price(e.target.value) })} />
+            </label>
+          </div>
 
-        <h3>{t('catalog.brand')}</h3>
-        <div className="chips wrap">
+          <h3>{t('catalog.brand')}</h3>
           {brands.data?.map(({ brand }) => (
-            <button key={brand} className={`chip ${draft.brand?.includes(brand) ? 'is-on' : ''}`} onClick={() => toggle('brand', brand)}>
+            <label key={brand} className="check-row">
+              <input type="checkbox" checked={draft.brand?.includes(brand) ?? false} onChange={() => toggle('brand', brand)} />
               {brand}
-            </button>
+            </label>
           ))}
-        </div>
 
-        <h3>{t('catalog.form')}</h3>
-        <div className="chips wrap">
+          <h3>{t('catalog.form')}</h3>
           {forms.data?.map(({ form }) => (
-            <button key={form} className={`chip ${draft.form?.includes(form) ? 'is-on' : ''}`} onClick={() => toggle('form', form)}>
+            <label key={form} className="check-row">
+              <input type="checkbox" checked={draft.form?.includes(form) ?? false} onChange={() => toggle('form', form)} />
               {form}
-            </button>
+            </label>
           ))}
-        </div>
 
-        <label className="check-row">
-          <input type="checkbox" checked={!!draft.in_stock} onChange={(e) => setDraft({ ...draft, in_stock: e.target.checked || undefined })} />
-          {t('catalog.inStockOnly')}
-        </label>
+          <h3>{t('catalog.availability')}</h3>
+          <label className="check-row">
+            <input type="checkbox" checked={!!draft.in_stock} onChange={(e) => setDraft({ ...draft, in_stock: e.target.checked || undefined })} />
+            {t('catalog.inStockOnly')}
+          </label>
+        </div>
 
         <div className="sheet-actions">
-          <button className="btn btn-secondary" onClick={() => onApply({ sort: filters.sort })}>
+          <button className="btn btn-secondary" onClick={() => setDraft({ sort: filters.sort })}>
             {t('common.reset')}
           </button>
-          <button className="btn" onClick={() => onApply(draft)}>
-            {t('common.apply')}
+          <button className="btn" disabled={n === 0} onClick={() => onApply(draft)}>
+            {n === undefined ? t('catalog.counting') : t(`catalog.show.${pluralForm(n)}` as MessageKey, { n })}
           </button>
         </div>
       </div>

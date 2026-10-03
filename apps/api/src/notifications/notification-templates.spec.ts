@@ -1,23 +1,25 @@
 import { renderNotification } from './notification-templates';
 
 describe('notification texts', () => {
-  it('customer messages follow the user language', () => {
+  it('customer messages use the same status names as the order screen, in the user language', () => {
     expect(renderNotification('order.paid', { order_number: 'VTL-20261003-0001', lang: 'ru' })).toBe(
-      '✅ Оплата заказа VTL-20261003-0001 подтверждена. Начинаем собирать ваш заказ.',
+      'Заказ №VTL-20261003-0001: 🟢 Оплачен\nНачинаем собирать ваш заказ.',
     );
-    expect(renderNotification('order.in_transit', { order_number: 'VTL-1', lang: 'uz' })).toBe('🚚 VTL-1 buyurtmasi yo‘lda.');
+    expect(renderNotification('order.handed_to_delivery', { order_number: 'VTL-1', lang: 'ru' })).toBe('Заказ №VTL-1: 🚚 Передан курьеру');
+    expect(renderNotification('order.in_transit', { order_number: 'VTL-1', lang: 'uz' })).toBe('№VTL-1 buyurtma: 🚚 Yo‘lda');
+    expect(renderNotification('order.delivered', { order_number: 'VTL-1', lang: 'ru' })).toBe('Заказ №VTL-1: ✅ Доставлен\nСпасибо, что выбрали VITALO!');
   });
 
   it('defaults to Russian and adds the cancel reason when present', () => {
-    expect(renderNotification('order.cancelled', { order_number: 'VTL-1' })).toBe('❌ Заказ VTL-1 отменён.');
+    expect(renderNotification('order.cancelled', { order_number: 'VTL-1' })).toBe('Заказ №VTL-1: ⚪ Отменён');
     expect(renderNotification('order.cancelled', { order_number: 'VTL-1', reason: 'Не оплачен вовремя', lang: 'uz' })).toBe(
-      '❌ VTL-1 buyurtmasi bekor qilindi.\nSabab: Не оплачен вовремя',
+      '№VTL-1 buyurtma: ⚪ Bekor qilindi\nSabab: Не оплачен вовремя',
     );
   });
 
   it('automatic cancellation shows a localized reason, not the internal one', () => {
     expect(renderNotification('order.cancelled', { order_number: 'VTL-1', reason: '@expired', lang: 'ru' })).toBe(
-      '❌ Заказ VTL-1 отменён.\nПричина: заказ не был оплачен вовремя',
+      'Заказ №VTL-1: ⚪ Отменён\nПричина: заказ не был оплачен вовремя',
     );
     expect(renderNotification('order.cancelled', { order_number: 'VTL-1', reason: '@expired', lang: 'uz' })).toContain('to‘lanmadi');
   });

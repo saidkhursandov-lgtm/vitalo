@@ -119,8 +119,9 @@ describe('Telegram notifications (e2e)', () => {
 
       await drain();
       const texts = fake.sent.filter((m) => m.chatId === chatId).map((m) => m.text);
-      expect(texts[0]).toContain('to‘lov tasdiqlandi'); // Uzbek
-      expect(texts[3]).toContain('yetkazildi');
+      expect(texts[0]).toContain('🟢 To‘langan'); // Uzbek
+      expect(texts[1]).toContain('🚚 Kuryerga topshirildi');
+      expect(texts[3]).toContain('✅ Yetkazildi');
     });
 
     it('cancellation: staff reason is shown; automatic expiry gets a localized reason', async () => {
@@ -134,8 +135,8 @@ describe('Telegram notifications (e2e)', () => {
 
       await drain();
       const text = (chat: bigint) => fake.sent.find((m) => m.chatId === chat)?.text;
-      expect(text(a.chatId)).toBe(`❌ Заказ ${a.order.order_number} отменён.\nПричина: Нет в наличии у поставщика`);
-      expect(text(b.chatId)).toBe(`❌ Заказ ${b.order.order_number} отменён.\nПричина: заказ не был оплачен вовремя`);
+      expect(text(a.chatId)).toBe(`Заказ №${a.order.order_number}: ⚪ Отменён\nПричина: Нет в наличии у поставщика`);
+      expect(text(b.chatId)).toBe(`Заказ №${b.order.order_number}: ⚪ Отменён\nПричина: заказ не был оплачен вовремя`);
     });
 
     it('nothing is queued when the order change is rolled back', async () => {
@@ -221,7 +222,7 @@ describe('Telegram notifications (e2e)', () => {
       const r = await drain();
       expect(r.skipped).toBe(1);
       const toUser = fake.sent.filter((m) => m.chatId === chatId).map((m) => m.text);
-      expect(toUser).toEqual(['🎉 Заказ VTL-X доставлен. Спасибо, что выбрали VITALO!']);
+      expect(toUser).toEqual(['Заказ №VTL-X: ✅ Доставлен\nСпасибо, что выбрали VITALO!']);
     });
 
     it('two workers at once never send the same message twice', async () => {

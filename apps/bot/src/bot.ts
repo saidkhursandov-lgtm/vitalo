@@ -12,6 +12,12 @@ export interface BotDeps {
   botInfo?: UserFromGetMe;
 }
 
+/** Same names as the Mini App order screen and the notifications; "Я оплатил(а)" pressed -> checking. */
+export function statusLabel(lang: Lang, o: { status: string; payment_reported?: boolean }): string {
+  const key = o.payment_reported && (o.status === 'awaiting_payment' || o.status === 'new') ? 'checking' : o.status;
+  return t(lang, `status.${key}` as TextKey);
+}
+
 /** Telegram allows these characters in deep-link payloads; anything else is ignored. */
 export const REFERRAL_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -86,7 +92,7 @@ export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
     if (user.blocked) return void (await ctx.reply(t(lang, 'blocked')));
     if (!user.registered) return replyWithShop(ctx, lang, t(lang, 'notRegistered'));
     if (!user.orders?.length) return replyWithShop(ctx, lang, t(lang, 'ordersEmpty'));
-    const lines = user.orders.map((o) => `• ${o.order_number} — ${t(lang, `status.${o.status}` as TextKey)}, ${money(o.total_uzs, lang)}`);
+    const lines = user.orders.map((o) => `• №${o.order_number} — ${statusLabel(lang, o)}, ${money(o.total_uzs, lang)}`);
     await replyWithShop(ctx, lang, `${t(lang, 'ordersTitle')}\n${lines.join('\n')}`, 'allOrders', '/orders');
   };
 
@@ -102,7 +108,7 @@ export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
       favorites: user.favorites_count ?? 0,
       addresses: user.addresses_count ?? 0,
     });
-    const recent = (user.orders ?? []).slice(0, 3).map((o) => `• ${o.order_number} — ${t(lang, `status.${o.status}` as TextKey)}`);
+    const recent = (user.orders ?? []).slice(0, 3).map((o) => `• №${o.order_number} — ${statusLabel(lang, o)}`);
     await replyWithShop(ctx, lang, recent.length ? `${text}\n\n${recent.join('\n')}` : text, 'openProfile', '/profile');
   };
 

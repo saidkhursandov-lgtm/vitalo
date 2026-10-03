@@ -9,7 +9,10 @@ import { errorText, useI18n, type MessageKey } from '../lib/i18n';
 import { useBankTransfer } from '../lib/queries';
 import { haptic } from '../lib/telegram';
 
-function CopyRow({ label, value }: { label: string; value: string }) {
+/** "8600123456789012" -> "8600 1234 5678 9012" */
+export const prettyCard = (digits: string) => digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+
+function CopyRow({ label, value, copyValue = value }: { label: string; value: string; copyValue?: string }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
@@ -20,22 +23,21 @@ function CopyRow({ label, value }: { label: string; value: string }) {
       </div>
       <button
         type="button"
-        className="icon-btn"
-        aria-label={copied ? t('pay.copied') : t('pay.copy')}
+        className="btn btn-secondary btn-sm"
         onClick={() =>
-          void navigator.clipboard?.writeText(value).then(() => {
+          void navigator.clipboard?.writeText(copyValue).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           })
         }
       >
-        {copied ? <span className="small">✓</span> : <CopyIcon width={20} height={20} />}
+        <CopyIcon width={16} height={16} /> {copied ? t('pay.copied') : t('pay.copy')}
       </button>
     </div>
   );
 }
 
-/** Bank transfer: requisites from admin settings + "Я оплатил" (then a manager confirms). */
+/** Manual transfer instruction (card or bank requisites, from admin settings) + "Я оплатил(а)". */
 export function Payment() {
   const { id = '' } = useParams();
   const { t, lang } = useI18n();
@@ -57,20 +59,27 @@ export function Payment() {
 
   const paid = d.payment_status === 'payment_success';
   const cancelled = d.status === 'cancelled';
-  const reported = !!d.customer_reported_paid_at;
-  const r = d.requisites;
-  const fields: [MessageKey, string][] = [
-    ['pay.recipient', r.recipient],
-    ['pay.bank', r.bank_name],
-    ['pay.account', r.account],
-    ['pay.mfo', r.mfo],
-    ['pay.inn', r.inn],
-    ['pay.purpose', d.purpose],
-  ];
+  const reported = !!d.customer_reported_paid_at || reportPaid.isSuccess;
+  const rows: [MessageKey, string, string?][] =
+    d.method === 'card_transfer' && d.card
+      ? [
+          ['pay.cardNumber', prettyCard(d.card.card_number), d.card.card_number],
+          ['pay.cardRecipient', d.card.recipient],
+        ]
+      : d.requisites
+        ? [
+            ['pay.recipient', d.requisites.recipient],
+            ['pay.bank', d.requisites.bank_name],
+            ['pay.account', d.requisites.account],
+            ['pay.mfo', d.requisites.mfo],
+            ['pay.inn', d.requisites.inn],
+            ['pay.purpose', d.purpose],
+          ]
+        : [];
 
   return (
     <div className="page">
-      <h1>{t('pay.title')}</h1>
+      <h1>{t(d.method === 'card_transfer' ? 'pay.card' : 'pay.bank')}</h1>
       <p className="hint">{t('orders.number', { n: d.order_number })}</p>
 
       <section className="card amount-card">
@@ -86,18 +95,17 @@ export function Payment() {
       ) : (
         <>
           <section className="card">
-            {fields.map(([label, value]) => (
-              <CopyRow key={label} label={t(label)} value={value} />
+            {rows.map(([label, value, copy]) => (
+              <CopyRow key={label} label={t(label)} value={value} copyValue={copy} />
             ))}
           </section>
+          <p className="notice notice-info">{lang === 'uz' ? d.hint.uz : d.hint.ru}</p>
 
-          {reported || reportPaid.isSuccess ? (
+          {reported ? (
             <div className="notice notice-ok">{t('pay.waiting')}</div>
           ) : (
             <div className="sticky-action">
-              {reportPaid.isError && (
-                <p className="error-text">{errorText(lang, reportPaid.error instanceof ApiError ? reportPaid.error.code : undefined)}</p>
-              )}
+              {reportPaid.isError && <p className="error-text">{errorText(lang, reportPaid.error instanceof ApiError ? reportPaid.error.code : undefined)}</p>}
               <button className="btn btn-block" disabled={reportPaid.isPending} onClick={() => reportPaid.mutate()}>
                 {t('pay.iPaid')}
               </button>

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { buildCategoryTrees, CategoryTrees, collectDescendantIds } from './category-tree';
 import { ListProductsQuery, ProductSort, SearchQuery } from './catalog.dto';
 import { cardInclude, listInclude, ProductListItem, toProductCard, toProductListItem } from './product.mapper';
@@ -31,11 +32,34 @@ function toPage<T>(items: T[], total: number, page: number): Page<T> {
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
+  ) {}
 
+  /** Both trees; every node carries product_count = products available to customers in it or below it. */
   async getCategoryTrees(): Promise<CategoryTrees> {
-    const rows = await this.prisma.categories.findMany({ where: { status: 'active' } });
-    return buildCategoryTrees(rows);
+    const [rows, links] = await Promise.all([
+      this.prisma.categories.findMany({ where: { status: 'active' } }),
+      this.prisma.product_categories.findMany({ where: { product: { status: 'active' } }, select: { category_id: true, product_id: true } }),
+    ]);
+    const productsByCategory = new Map<string, Set<string>>();
+    for (const l of links) {
+      if (!productsByCategory.has(l.category_id)) productsByCategory.set(l.category_id, new Set());
+      productsByCategory.get(l.category_id)!.add(l.product_id);
+    }
+    return buildCategoryTrees(rows, productsByCategory);
+  }
+
+  /** Same filters as the list, only the number (for the "Показать N товаров" button). */
+  async countProducts(q: ListProductsQuery): Promise<{ total: number }> {
+    const { where, inStock } = await this.filterWhere(q);
+    return { total: await this.prisma.products.count({ where: q.in_stock ? { AND: [where, inStock] } : where }) };
+  }
+
+  /** Public texts for the shop (editable in the admin panel). */
+  async texts() {
+    return { product_disclaimer: await this.settings.getOrDefault('product_disclaimer') };
   }
 
   async listBrands(): Promise<{ brand: string; count: number }[]> {
@@ -58,7 +82,7 @@ export class CatalogService {
     return rows.map((r) => ({ form: r.form!, count: r._count._all }));
   }
 
-  async listProducts(q: ListProductsQuery): Promise<Page<ProductListItem>> {
+  private async filterWhere(q: ListProductsQuery): Promise<{ where: Prisma.productsWhereInput; inStock: Prisma.productsWhereInput }> {
     const where: Prisma.productsWhereInput = { status: 'active' };
 
     if (q.category) {
@@ -78,11 +102,15 @@ export class CatalogService {
         ...(q.price_max != null && { lte: BigInt(q.price_max) }),
       };
     }
-
-    // Out-of-stock products always go after in-stock ones (any sort): the list is two segments glued together.
     const inStock: Prisma.productsWhereInput = {
       inventory: { some: { actual_qty: { gt: this.prisma.inventory.fields.reserved_qty } } },
     };
+    return { where, inStock };
+  }
+
+  async listProducts(q: ListProductsQuery): Promise<Page<ProductListItem>> {
+    const { where, inStock } = await this.filterWhere(q);
+    // Out-of-stock products always go after in-stock ones (any sort): the list is two segments glued together.
     const whereIn: Prisma.productsWhereInput = { AND: [where, inStock] };
     const whereOut: Prisma.productsWhereInput = q.in_stock ? { id: { in: [] } } : { AND: [where, { NOT: inStock }] };
 

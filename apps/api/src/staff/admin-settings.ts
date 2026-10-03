@@ -16,12 +16,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags, PartialType } from '@nestjs/swagger';
 import { Prisma, StaffRole, StaffStatus, TariffStatus } from '@prisma/client';
-import { Transform } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BankTransferDetails, SETTING_KEYS } from '../settings/settings.service';
+import { BankTransferDetails, SETTING_KEYS, SettingsService } from '../settings/settings.service';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
 
@@ -42,6 +42,33 @@ export class BankTransferDto implements BankTransferDetails {
   @Matches(/\{order_number\}/, { message: 'purpose_template must contain {order_number}' })
   @MaxLength(200)
   purpose_template!: string;
+}
+
+export class LocalizedTextDto {
+  @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(1000) ru!: string;
+  @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(1000) uz!: string;
+}
+
+export class CardTransferDto {
+  @ApiProperty({ example: '8600 1234 5678 9012', description: '16 цифр, пробелы допускаются' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.replace(/\s/g, '') : value))
+  @Matches(/^\d{16}$/, { message: 'card_number: 16 digits' })
+  card_number!: string;
+
+  @ApiProperty({ example: 'ALISHER KARIMOV' }) @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) recipient!: string;
+}
+
+/** Customer-facing texts editable by the admin. */
+export class ShopTextsDto {
+  @ApiProperty({ type: LocalizedTextDto, description: 'Пометка внизу карточки товара' })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  product_disclaimer!: LocalizedTextDto;
+
+  @ApiProperty({ type: LocalizedTextDto, description: 'Подсказка на экране оплаты переводом' })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  payment_hint!: LocalizedTextDto;
 }
 
 export class TariffDto {
@@ -88,7 +115,37 @@ export class AdminSettingsService {
     private readonly delivery: DeliveryService,
     private readonly audit: AuditService,
     private readonly staffAuth: StaffAuthService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** Saves one settings row and writes before/after to the audit log. */
+  private async saveSetting(staffId: string, key: string, value: object, action: string) {
+    const json = value as Prisma.InputJsonValue;
+    await this.prisma.$transaction(async (tx) => {
+      const before = await tx.settings.findUnique({ where: { key } });
+      await tx.settings.upsert({ where: { key }, create: { key, value: json }, update: { value: json } });
+      await this.audit.log({ staffId, action, entityType: 'settings', before: before?.value, after: { key, value: json } }, tx);
+    });
+  }
+
+  cardTransfer() {
+    return this.settings.getOrDefault('card_transfer_details');
+  }
+
+  async setCardTransfer(staffId: string, dto: CardTransferDto) {
+    await this.saveSetting(staffId, SETTING_KEYS.cardTransferDetails, { card_number: dto.card_number, recipient: dto.recipient }, 'settings.card_transfer_updated');
+    return this.cardTransfer();
+  }
+
+  async shopTexts() {
+    return { product_disclaimer: await this.settings.getOrDefault('product_disclaimer'), payment_hint: await this.settings.getOrDefault('payment_hint') };
+  }
+
+  async setShopTexts(staffId: string, dto: ShopTextsDto) {
+    await this.saveSetting(staffId, SETTING_KEYS.productDisclaimer, { ru: dto.product_disclaimer.ru, uz: dto.product_disclaimer.uz }, 'settings.texts_updated');
+    await this.saveSetting(staffId, SETTING_KEYS.paymentHint, { ru: dto.payment_hint.ru, uz: dto.payment_hint.uz }, 'settings.texts_updated');
+    return this.shopTexts();
+  }
 
   async bankTransfer() {
     const row = await this.prisma.settings.findUnique({ where: { key: SETTING_KEYS.bankTransferDetails } });
@@ -277,6 +334,26 @@ export class AdminSettingsController {
   @Put('bank-transfer')
   setBankTransfer(@CurrentStaff() me: StaffContext, @Body() dto: BankTransferDto) {
     return this.settings.setBankTransfer(me.staff.id, dto);
+  }
+
+  @Get('card-transfer')
+  cardTransfer() {
+    return this.settings.cardTransfer();
+  }
+
+  @Put('card-transfer')
+  setCardTransfer(@CurrentStaff() me: StaffContext, @Body() dto: CardTransferDto) {
+    return this.settings.setCardTransfer(me.staff.id, dto);
+  }
+
+  @Get('texts')
+  texts() {
+    return this.settings.shopTexts();
+  }
+
+  @Put('texts')
+  setTexts(@CurrentStaff() me: StaffContext, @Body() dto: ShopTextsDto) {
+    return this.settings.setShopTexts(me.staff.id, dto);
   }
 
   @Get('tariffs')

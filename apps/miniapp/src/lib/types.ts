@@ -21,8 +21,17 @@ export interface UserProfile {
 export interface CategoryNode extends Named {
   id: string;
   slug: string;
+  /** Products available to customers in this category and its subcategories. */
+  product_count: number;
   children: CategoryNode[];
 }
+
+export interface LocalizedText {
+  ru: string;
+  uz: string;
+}
+
+export type PaymentMethodCode = 'card_transfer' | 'bank_transfer';
 
 export interface CategoryTrees {
   need: CategoryNode[];
@@ -163,6 +172,7 @@ export interface OrderListItem {
   status: OrderStatus;
   total_uzs: number;
   items_count: number;
+  payment_reported?: boolean;
 }
 
 export interface OrderPreview {
@@ -174,13 +184,17 @@ export interface OrderPreview {
   can_place: boolean;
 }
 
+/** Payment instruction for a manual transfer (card or bank requisites). */
 export interface BankTransfer {
+  method: PaymentMethodCode;
   order_number: string;
   status: OrderStatus;
   payment_status: Order['payment_status'];
   amount_uzs: number;
   purpose: string;
-  requisites: { recipient: string; bank_name: string; account: string; mfo: string; inn: string };
+  requisites: { recipient: string; bank_name: string; account: string; mfo: string; inn: string } | null;
+  card: { card_number: string; recipient: string } | null;
+  hint: LocalizedText;
   pay_until: string | null;
   customer_reported_paid_at: string | null;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dateTime, discountPercent, money, nameOf, normalizePhone, prettyPhone, textOf } from './format';
-import { dictionaries, errorText, translate } from './i18n';
+import { dictionaries, errorText, pluralForm, statusKey, translate } from './i18n';
 import { createIdempotencyKeys } from './idempotency';
 import { qs } from './api';
 
@@ -15,8 +15,25 @@ describe('i18n', () => {
     }
   });
 
+  it('"Показать N товаров" uses the right Russian word form', () => {
+    const show = (n: number) => translate('ru', `catalog.show.${pluralForm(n)}`, { n });
+    expect(show(1)).toBe('Показать 1 товар');
+    expect(show(3)).toBe('Показать 3 товара');
+    expect(show(5)).toBe('Показать 5 товаров');
+    expect(show(11)).toBe('Показать 11 товаров');
+    expect(show(21)).toBe('Показать 21 товар');
+    expect(show(0)).toBe('Показать 0 товаров');
+  });
+
+  it('order status labels: "Оплата проверяется" after «Я оплатил(а)»', () => {
+    expect(translate('ru', statusKey('awaiting_payment'))).toBe('🟡 Ожидает оплаты');
+    expect(translate('ru', statusKey('awaiting_payment', true))).toBe('🔵 Оплата проверяется');
+    expect(translate('ru', statusKey('paid', true))).toBe('🟢 Оплачен');
+    expect(translate('ru', statusKey('cancelled'))).toBe('⚪ Отменён');
+  });
+
   it('fills placeholders', () => {
-    expect(translate('ru', 'orders.number', { n: 'VTL-20261002-0001' })).toBe('Заказ VTL-20261002-0001');
+    expect(translate('ru', 'orders.number', { n: 'VTL-20261002-0001' })).toBe('Заказ №VTL-20261002-0001');
     expect(translate('uz', 'catalog.found', { n: 7 })).toBe('Topilgan mahsulotlar: 7');
   });
 

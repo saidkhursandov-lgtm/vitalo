@@ -20,7 +20,7 @@ import {
 import { MAX_LINE_QTY } from '../cart/cart-reconcile';
 import { PageQuery } from '../catalog/catalog.dto';
 
-export const PAYMENT_METHOD_CODES = ['bank_transfer', 'payme', 'click', 'uzum'] as const;
+export const PAYMENT_METHOD_CODES = ['card_transfer', 'bank_transfer', 'payme', 'click', 'uzum'] as const;
 export type PaymentMethodCode = (typeof PAYMENT_METHOD_CODES)[number];
 
 /** "90 123-45-67", "+998 90 1234567", "998901234567" -> "+998901234567". */

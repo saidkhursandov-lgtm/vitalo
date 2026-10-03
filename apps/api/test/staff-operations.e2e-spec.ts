@@ -34,7 +34,7 @@ describe('Admin panel operations (e2e)', () => {
     prisma.audit_logs.findMany({ where: { entity_id: entityId, ...(action && { action }) }, orderBy: { created_at: 'asc' } });
 
   /** A customer buys `qty` of a fresh product; returns the order and the product. */
-  async function placeOrder(qty = 2, stock = 10, price = 50_000) {
+  async function placeOrder(qty = 2, stock = 10, price = 50_000, payment_method = 'bank_transfer') {
     const p = await createTestProduct(prisma, { price, stock });
     const customer = await loginCustomer(app, ++tg);
     const res = await http()
@@ -48,7 +48,7 @@ describe('Admin panel operations (e2e)', () => {
         recipient_phone: '+998901112233',
         ...addr.tashkent,
         address_text: 'ул. Тестовая, 1',
-        payment_method: 'bank_transfer',
+        payment_method,
       })
       .expect(201);
     return { order: res.body, product: p, customer };
@@ -344,6 +344,41 @@ describe('Admin panel operations (e2e)', () => {
         expect(await prisma.audit_logs.count({ where: { action: 'settings.bank_transfer_updated' } })).toBeGreaterThan(0);
       } finally {
         await as(t.admin).put('/staff/settings/bank-transfer', before).expect(200);
+      }
+    });
+
+    it('card for transfers: validated, spaces allowed, used by the shop, audited', async () => {
+      const before = (await as(t.admin).get('/staff/settings/card-transfer').expect(200)).body;
+      try {
+        await as(t.admin).put('/staff/settings/card-transfer', { ...before, card_number: '8600 1234' }).expect(400);
+        await as(t.admin).put('/staff/settings/card-transfer', { ...before, recipient: '' }).expect(400);
+        const saved = (await as(t.admin).put('/staff/settings/card-transfer', { card_number: '8600 1234 5678 9012', recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' }).expect(200)).body;
+        expect(saved).toEqual({ card_number: '8600123456789012', recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' });
+
+        const { order, customer } = await placeOrder(1, 10, 50_000, 'card_transfer');
+        const shown = (await http().get(`/api/orders/${order.id}/payment/bank-transfer`).set(bearer(customer)).expect(200)).body;
+        expect(shown).toMatchObject({ method: 'card_transfer', requisites: null, card: saved });
+        expect(await prisma.audit_logs.count({ where: { action: 'settings.card_transfer_updated' } })).toBeGreaterThan(0);
+      } finally {
+        await as(t.admin).put('/staff/settings/card-transfer', before).expect(200);
+      }
+    });
+
+    it('shop texts (disclaimer, payment hint): RU and UZ required, shown to customers, audited', async () => {
+      const before = (await as(t.admin).get('/staff/settings/texts').expect(200)).body;
+      expect(before.product_disclaimer.ru).toBe('БАД. НЕ ЯВЛЯЕТСЯ ЛЕКАРСТВЕННЫМ СРЕДСТВОМ.');
+      try {
+        await as(t.admin).put('/staff/settings/texts', { ...before, product_disclaimer: { ru: 'только RU' } }).expect(400);
+        const next = { product_disclaimer: { ru: 'БАД (тест)', uz: 'BFQ (test)' }, payment_hint: { ru: 'Подсказка', uz: 'Maslahat' } };
+        await as(t.admin).put('/staff/settings/texts', next).expect(200);
+
+        expect((await http().get('/api/catalog/texts').expect(200)).body.product_disclaimer).toEqual(next.product_disclaimer);
+        const { order, customer } = await placeOrder(1);
+        const shown = (await http().get(`/api/orders/${order.id}/payment/bank-transfer`).set(bearer(customer)).expect(200)).body;
+        expect(shown.hint).toEqual(next.payment_hint);
+        expect(await prisma.audit_logs.count({ where: { action: 'settings.texts_updated' } })).toBeGreaterThan(0);
+      } finally {
+        await as(t.admin).put('/staff/settings/texts', before).expect(200);
       }
     });
 
