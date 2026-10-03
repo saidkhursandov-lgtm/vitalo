@@ -10,7 +10,8 @@ export function auditJson(value: unknown): Prisma.InputJsonValue {
 }
 
 export interface AuditEntry {
-  staffId: string;
+  /** null = the system itself (e.g. the Excel product import), not an employee. */
+  staffId: string | null;
   action: string; // e.g. "product.updated", "order.status_changed"
   entityType: string;
   entityId?: string | null;

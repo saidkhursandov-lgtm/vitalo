@@ -156,7 +156,7 @@ export class AdminInventoryService {
     };
   }
 
-  receipt(staffId: string, dto: ReceiptDto) {
+  receipt(staffId: string | null, dto: ReceiptDto) {
     return this.op(staffId, dto, 'inventory.receipt', async (tx, row) => {
       await tx.inventory.update({ where: { id: row.id }, data: { actual_qty: row.actual_qty + dto.qty } });
       await tx.inventory_batches.create({
@@ -190,7 +190,7 @@ export class AdminInventoryService {
   }
 
   /** Stock count: sets the counted quantity; the movement stores the signed difference. */
-  adjustment(staffId: string, dto: AdjustmentDto) {
+  adjustment(staffId: string | null, dto: AdjustmentDto) {
     return this.op(staffId, dto, 'inventory.adjustment', async (tx, row) => {
       if (dto.actual_qty < row.reserved_qty) {
         throw new ConflictException({ code: 'STOCK_RESERVED', message: `${row.reserved_qty} units are reserved by orders`, reserved_qty: row.reserved_qty });
@@ -218,7 +218,7 @@ export class AdminInventoryService {
   }
 
   private async op(
-    staffId: string,
+    staffId: string | null,
     dto: StockTarget & object,
     action: string,
     fn: (tx: Prisma.TransactionClient, row: InventoryRow) => Promise<object>,
@@ -249,7 +249,7 @@ export class AdminInventoryService {
     });
   }
 
-  private move(tx: Prisma.TransactionClient, staffId: string, t: StockTarget, type: MovementType, qty: number, reason: string | null) {
+  private move(tx: Prisma.TransactionClient, staffId: string | null, t: StockTarget, type: MovementType, qty: number, reason: string | null) {
     return tx.inventory_movements.create({
       data: { product_id: t.product_id, warehouse_id: t.warehouse_id, movement_type: type, qty, reason, created_by: staffId },
     });

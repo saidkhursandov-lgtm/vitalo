@@ -26,3 +26,7 @@ apps/api/uploads/
 
 # Runtime files of the dev tunnel (current public URLs)
 .runtime/
+
+# Product import inputs: business data (cost prices) and original photos stay on this computer
+/photos/
+/VITALO_*.xlsx

@@ -44,7 +44,7 @@ import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 
 const PAGE_SIZE = 50;
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 /** Optional texts: "" means "clear the field". */
 const textOrNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
@@ -195,7 +195,7 @@ export class AdminProductsService {
     return toAdminProduct(p);
   }
 
-  async create(staffId: string, dto: ProductInput) {
+  async create(staffId: string | null, dto: ProductInput) {
     const id = await this.write(async (tx) => {
       const { category_ids, ...data } = dto;
       await this.assertCategories(tx, category_ids);
@@ -208,7 +208,7 @@ export class AdminProductsService {
   }
 
   /** Includes archiving (status = archived). Products are never deleted (DB trigger forbids it too). */
-  async update(staffId: string, id: string, dto: ProductPatch) {
+  async update(staffId: string | null, id: string, dto: ProductPatch) {
     await this.write(async (tx) => {
       const before = await tx.products.findUnique({ where: { id }, include: { categories: true } });
       if (!before) throw new NotFoundException('Product not found');
@@ -235,7 +235,8 @@ export class AdminProductsService {
     return this.get(id);
   }
 
-  async addPhoto(staffId: string, id: string, file: Express.Multer.File | undefined) {
+  /** `title` keeps the original file name (the Excel import uses it to avoid adding the same photo twice). */
+  async addPhoto(staffId: string | null, id: string, file: Pick<Express.Multer.File, 'buffer'> | undefined, title?: string) {
     if (!file) throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Send the image in the "file" field' });
     const kind = detectImage(file.buffer);
     if (!kind) throw new BadRequestException({ code: 'UNSUPPORTED_IMAGE', message: 'Only JPEG, PNG or WebP images' });
@@ -250,6 +251,7 @@ export class AdminProductsService {
         media_type: 'image',
         url,
         is_main: !hasMain,
+        title: title ?? null,
         sort_order: product.media.reduce((m, x) => Math.max(m, x.sort_order), -1) + 1,
       },
     });
@@ -257,7 +259,7 @@ export class AdminProductsService {
     return this.get(id);
   }
 
-  async setMainPhoto(staffId: string, id: string, mediaId: string) {
+  async setMainPhoto(staffId: string | null, id: string, mediaId: string) {
     await this.write(async (tx) => {
       const media = await tx.product_media.findFirst({ where: { id: mediaId, product_id: id } });
       if (!media) throw new NotFoundException('Photo not found');

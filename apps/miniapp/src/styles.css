@@ -100,6 +100,10 @@ p { margin: 0 0 8px; }
 .logo { font-family: var(--font); font-weight: 700; letter-spacing: 0.14em; color: var(--dark); line-height: 1; }
 .logo-md { font-size: 19px; }
 .logo-lg { font-size: 30px; }
+/* Image logo (public/brand): fixed height, width follows the file. 26 px keeps the 56 px top bar. */
+.logo-img { display: block; width: auto; max-width: 100%; object-fit: contain; }
+.logo-img-md { height: 26px; max-width: 160px; }
+.logo-img-lg { height: 44px; max-width: min(240px, 70vw); }
 .content { max-width: 720px; margin: 0 auto; }
 .page { padding: 16px 16px 28px; }
 

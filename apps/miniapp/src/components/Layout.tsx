@@ -48,7 +48,7 @@ export function Layout() {
             <BackIcon />
           </button>
         ) : (
-          <Link to="/" className="logo-link" aria-label="VITALO">
+          <Link to="/" className="logo-link">
             <Logo />
           </Link>
         )}

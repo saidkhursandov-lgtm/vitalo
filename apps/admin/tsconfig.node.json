@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["node", "vitest/config"]
   },
-  "include": ["vite.config.ts", "../miniapp/dev-login-plugin.ts"]
+  "include": ["vite.config.ts", "../miniapp/dev-login-plugin.ts", "../miniapp/brand-plugin.ts"]
 }
