@@ -7,11 +7,20 @@ export const SETTING_KEYS = {
   cardTransferDetails: 'card_transfer_details',
   paymentHint: 'payment_hint',
   productDisclaimer: 'product_disclaimer',
+  supportContact: 'support_contact',
+  paymentCheckHours: 'payment_check_hours',
+  deliveryDaysLabel: 'delivery_days_label',
 } as const;
 
 export interface LocalizedText {
   ru: string;
   uz: string;
+}
+
+/** Daily window (Tashkent time, "HH:MM") when managers confirm payments. */
+export interface PaymentCheckHours {
+  from: string;
+  to: string;
 }
 
 export interface CardTransferDetails {
@@ -31,7 +40,16 @@ export const SETTING_DEFAULTS = {
     ru: 'Переведите сумму заказа на карту, затем нажмите «Я оплатил(а)». После проверки платежа менеджером статус заказа изменится на «Оплачен», и мы начнём сборку.',
     uz: 'Buyurtma summasini kartaga o‘tkazing, so‘ng «To‘ladim» tugmasini bosing. Menejer to‘lovni tekshirgach, buyurtma holati «To‘langan»ga o‘zgaradi va biz yig‘ishni boshlaymiz.',
   } as LocalizedText,
+  support_contact: '@VITALO_support' as string,
+  payment_check_hours: { from: '08:00', to: '22:00' } as PaymentCheckHours,
+  delivery_days_label: { ru: 'рабочих дней', uz: 'ish kuni' } as LocalizedText,
 };
+
+/** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */
+export function supportLink(contact: string): string | null {
+  const m = contact.trim().match(/^(?:https?:\/\/)?(?:t\.me\/|@)?([A-Za-z0-9_]{5,32})$/);
+  return m ? `https://t.me/${m[1]}` : null;
+}
 
 export interface BankTransferDetails {
   recipient: string;

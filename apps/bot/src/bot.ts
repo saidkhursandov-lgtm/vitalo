@@ -3,6 +3,15 @@ import type { UserFromGetMe } from 'grammy/types';
 import type { UserSummary, VitaloApi } from './api-client';
 import { bothLangs, langFromTelegram, money, t, type Lang, type TextKey } from './texts';
 
+/** Used when the API has no contact saved (the admin edits it in Настройки). */
+export const DEFAULT_SUPPORT = '@VITALO_support';
+
+/** "@VITALO_support" / "t.me/VITALO_support" -> https://t.me/VITALO_support */
+export function supportUrl(contact: string): string | null {
+  const m = contact.trim().match(/^(?:https?:\/\/)?(?:t\.me\/|@)?([A-Za-z0-9_]{5,32})$/);
+  return m ? `https://t.me/${m[1]}` : null;
+}
+
 export interface BotDeps {
   token: string;
   api: VitaloApi;
@@ -116,7 +125,9 @@ export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
     const { lang } = await context(ctx);
     try {
       const info = await api.info();
-      await ctx.reply(info.support_contact ? t(lang, 'support', { contact: info.support_contact }) : t(lang, 'supportMissing'));
+      const contact = info.support_contact || DEFAULT_SUPPORT;
+      const url = info.support_url ?? supportUrl(contact);
+      await ctx.reply(t(lang, 'support', { contact }), url ? { reply_markup: new InlineKeyboard().url(t(lang, 'supportButton'), url) } : undefined);
     } catch {
       await ctx.reply(t(lang, 'apiDown'));
     }

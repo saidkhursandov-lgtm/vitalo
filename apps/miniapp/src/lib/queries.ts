@@ -1,19 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from './api';
-import type {
-  Address,
-  BankTransfer,
-  Cart,
-  CategoryTrees,
-  CheckoutDefaults,
-  LocalizedText,
-  Order,
-  OrderListItem,
-  Page,
-  ProductCard,
-  ProductListItem,
-  Region,
-} from './types';
+import type { Address, BankTransfer, Cart, CategoryTrees, CheckoutDefaults, DeliveryEta, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -70,8 +57,19 @@ export function useProductsCount(filters: ProductFilters) {
 }
 
 /** Texts edited in the admin panel (product disclaimer). */
-export const useShopTexts = () =>
-  useQuery({ queryKey: ['shop-texts'], queryFn: () => api<{ product_disclaimer: LocalizedText }>('/catalog/texts'), staleTime: 300_000 });
+export const useShopTexts = () => useQuery({ queryKey: ['shop-texts'], queryFn: () => api<ShopInfo>('/catalog/texts'), staleTime: 300_000 });
+
+/** Delivery term for one city (null when there is no tariff). */
+export const useDeliveryEta = (city: CityRef | null) =>
+  useQuery({
+    queryKey: ['eta', city],
+    queryFn: () => api<DeliveryEta | null>(`/delivery/eta?region_id=${city!.region_id}&city_id=${city!.city_id}`),
+    enabled: !!city,
+    staleTime: 300_000,
+  });
+
+export const useLegalStatus = () => useQuery({ queryKey: ['legal-status'], queryFn: () => api<LegalStatus>('/legal/status'), staleTime: Infinity });
+export const useLegalDocuments = () => useQuery({ queryKey: ['legal-docs'], queryFn: () => api<LegalDocument[]>('/legal/documents'), staleTime: 600_000 });
 
 export const useProduct = (id: string) => useQuery({ queryKey: ['product', id], queryFn: () => api<ProductCard>(`/catalog/products/${id}`) });
 

@@ -4,6 +4,11 @@ import { Type } from 'class-transformer';
 import { IsInt, IsUUID, Min } from 'class-validator';
 import { DeliveryService } from './delivery.service';
 
+export class DeliveryCityQuery {
+  @ApiProperty() @IsUUID() region_id!: string;
+  @ApiProperty() @IsUUID() city_id!: string;
+}
+
 export class DeliveryQuoteQuery {
   @ApiProperty() @IsUUID() region_id!: string;
   @ApiProperty() @IsUUID() city_id!: string;
@@ -22,6 +27,16 @@ export class DeliveryController {
   @Get('regions')
   regions() {
     return this.delivery.listRegions();
+  }
+
+  @Get('terms')
+  terms() {
+    return this.delivery.terms();
+  }
+
+  @Get('eta')
+  eta(@Query() q: DeliveryCityQuery) {
+    return this.delivery.eta(q.region_id, q.city_id);
   }
 
   @Get('quote')

@@ -10,12 +10,14 @@ import { createHash, randomUUID } from 'crypto';
 import { stableStringify } from '../common/stable-json';
 import { formatUzs, tashkentDateString } from '../common/tashkent';
 import { DeliveryService } from '../delivery/delivery.service';
+import { LegalService } from '../legal/legal.module';
 import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockLine, StockService } from '../inventory/stock.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
 import { formatOrderNumber } from './order-number';
+import { CUSTOMER_CANCELLABLE } from './order-state';
 import { OrderLifecycleService } from './order-lifecycle.service';
 import { orderViewInclude, OrderView, toOrderView } from './order-view';
 import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
@@ -33,6 +35,7 @@ interface PricedLine {
   product_id: string;
   sku: string;
   name_ru: string;
+  name_uz: string | null;
   qty: number;
   unit_price_uzs: number;
   line_total_uzs: number;
@@ -61,6 +64,7 @@ export class OrdersService {
     private readonly lifecycle: OrderLifecycleService,
     private readonly settings: SettingsService,
     private readonly notifications: NotificationsService,
+    private readonly legal: LegalService,
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
@@ -89,6 +93,7 @@ export class OrdersService {
 
     const existing = await this.prisma.idempotency_keys.findUnique({ where: { key } });
     if (existing) return this.replay(existing, requestHash);
+    await this.legal.assertAccepted(userId);
 
     try {
       const order = await this.prisma.$transaction(async (tx) => {
@@ -140,10 +145,11 @@ export class OrdersService {
     };
   }
 
-  async get(userId: string, orderId: string): Promise<OrderView> {
+  async get(userId: string, orderId: string): Promise<OrderView & { delivery_eta: Awaited<ReturnType<DeliveryService['eta']>> }> {
     const order = await this.prisma.orders.findFirst({ where: { id: orderId, user_id: userId }, include: orderViewInclude });
     if (!order) throw new NotFoundException('Order not found');
-    return toOrderView(order);
+    // Current delivery term for the order's city (working days).
+    return { ...toOrderView(order), delivery_eta: await this.delivery.eta(order.region_id, order.city_id) };
   }
 
   /** Last used recipient/address, to prefill checkout (Master TZ §7). */
@@ -165,6 +171,10 @@ export class OrdersService {
     return this.prisma.$transaction(async (tx) => {
       const order = await this.lifecycle.lockOrder(tx, orderId);
       if (order.user_id !== userId) throw new NotFoundException('Order not found');
+      const reported = await tx.manual_payment_confirmations.count({ where: { payment: { order_id: orderId }, customer_confirmed_at: { not: null } } });
+      if (reported && CUSTOMER_CANCELLABLE.includes(order.status)) {
+        throw new ConflictException({ code: 'PAYMENT_BEING_CHECKED', message: 'The payment is being checked; please contact support to cancel' });
+      }
       await this.lifecycle.cancelUnpaid(tx, order, { type: 'customer', id: userId }, reason || 'Cancelled by customer');
       return toOrderView(await tx.orders.findUniqueOrThrow({ where: { id: orderId }, include: orderViewInclude }));
     }, TX_OPTIONS);
@@ -198,6 +208,7 @@ export class OrdersService {
       hint: await this.settings.getOrDefault('payment_hint'),
       pay_until: order.reserved_until,
       customer_reported_paid_at: order.payment!.customer_reported_paid_at,
+      delivery_eta: order.delivery_eta,
     };
   }
 
@@ -346,7 +357,7 @@ export class OrdersService {
       const p = byId.get(l.product_id);
       if (!p) throw new ConflictException({ code: 'PRODUCT_UNAVAILABLE', message: 'Product is no longer sold', product_id: l.product_id });
       const price = Number(p.price_uzs);
-      return { product_id: p.id, sku: p.sku, name_ru: p.name_ru, qty: l.qty, unit_price_uzs: price, line_total_uzs: price * l.qty };
+      return { product_id: p.id, sku: p.sku, name_ru: p.name_ru, name_uz: p.name_uz, qty: l.qty, unit_price_uzs: price, line_total_uzs: price * l.qty };
     });
   }
 

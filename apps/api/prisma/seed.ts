@@ -5,7 +5,7 @@
  * Run: npm run seed
  */
 import { createHash } from 'crypto';
-import { PrismaClient, TreeType } from '@prisma/client';
+import { Prisma, PrismaClient, TreeType } from '@prisma/client';
 import { SETTING_DEFAULTS } from '../src/settings/settings.service';
 
 const prisma = new PrismaClient();
@@ -149,7 +149,7 @@ async function seedCheckoutSettings() {
   for (const m of PAYMENT_METHODS) {
     await prisma.payment_methods.upsert({ where: { code: m.code }, create: m, update: {} });
   }
-  const settings: Record<string, object> = { bank_transfer_details: BANK_TRANSFER_DETAILS, ...SETTING_DEFAULTS };
+  const settings = { bank_transfer_details: BANK_TRANSFER_DETAILS, ...SETTING_DEFAULTS } as unknown as Record<string, Prisma.InputJsonValue>;
   for (const [key, value] of Object.entries(settings)) {
     await prisma.settings.upsert({ where: { key }, create: { key, value }, update: {} });
   }
@@ -161,6 +161,8 @@ async function seedCheckoutSettings() {
       tariff_uzs: BigInt(t.tariff),
       free_shipping_threshold_uzs: BigInt(t.threshold),
       status: 'active' as const,
+      // delivery term, working days: Tashkent city 2-5, regions 5-10 (city tariffs take the region one)
+      ...(!t.city && { min_days: t.region === 'tashkent-city' ? 2 : 5, max_days: t.region === 'tashkent-city' ? 5 : 10 }),
     };
     await prisma.delivery_tariffs.upsert({ where: { id }, create: { id, ...data }, update: {} });
   }

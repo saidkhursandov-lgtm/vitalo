@@ -3,6 +3,11 @@ import { formatUzs } from '../common/tashkent';
 export interface Tariff {
   tariff_uzs: number;
   free_shipping_threshold_uzs: number;
+  /** Delivery term in working days (null = not set). */
+  min_days?: number | null;
+  max_days?: number | null;
+  note_ru?: string | null;
+  note_uz?: string | null;
 }
 
 export interface DeliveryQuote extends Tariff {
@@ -24,6 +29,10 @@ export function quoteDelivery(tariff: Tariff, goodsAfterDiscountsUzs: number): D
 
   return {
     ...tariff,
+    min_days: tariff.min_days ?? null,
+    max_days: tariff.max_days ?? null,
+    note_ru: tariff.note_ru ?? null,
+    note_uz: tariff.note_uz ?? null,
     cost_uzs: isFree ? 0 : tariff.tariff_uzs,
     is_free: isFree,
     remaining_for_free_uzs: remaining,

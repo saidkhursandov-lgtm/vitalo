@@ -20,6 +20,7 @@ export interface StaffInfo {
 
 export interface ShopInfo {
   support_contact: string | null;
+  support_url?: string | null;
   about_ru: string;
   about_uz: string;
 }

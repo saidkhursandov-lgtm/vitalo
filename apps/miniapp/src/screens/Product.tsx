@@ -5,6 +5,7 @@ import { nameOf, textOf } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
 import { useCartActions, useProduct, useShopTexts } from '../lib/queries';
 import { haptic } from '../lib/telegram';
+import { DeliveryTerm } from '../components/Delivery';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip, Stepper, useToast } from '../components/ui';
 
 const SECTIONS: [field: string, title: MessageKey][] = [
@@ -135,7 +136,8 @@ export function Product() {
 
       <section className="card">
         <h2>{t('product.delivery')}</h2>
-        <p className="hint">{t('product.deliveryInfo')}</p>
+        <DeliveryTerm />
+        <p className="hint small">{t('product.deliveryInfo')}</p>
       </section>
 
       <ProductStrip title={t('product.similar')} products={p.similar} />

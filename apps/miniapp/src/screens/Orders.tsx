@@ -5,9 +5,17 @@ import { EmptyState, ErrorState, Loading, StatusPill } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, nameOf, prettyPhone } from '../lib/format';
 import { errorText, statusKey, useI18n } from '../lib/i18n';
-import { useOrder, useOrders } from '../lib/queries';
-import { confirmDialog, haptic } from '../lib/telegram';
+import { useOrder, useOrders, useShopTexts } from '../lib/queries';
+import { daysText } from '../lib/shop';
+import { haptic } from '../lib/telegram';
+import { useConfirm } from '../components/Confirm';
+import { SupportButton } from '../components/Support';
 import type { Order, OrderListItem } from '../lib/types';
+
+/** The same status twice in a row (e.g. "new" -> "awaiting_payment" shown as "Ожидает оплаты" twice) is shown once. */
+export function dedupeHistory<T extends { to_status: string }>(history: T[], label: (s: string) => string = (s) => s): T[] {
+  return history.filter((h, i) => i === 0 || label(h.to_status) !== label(history[i - 1].to_status));
+}
 
 export function OrderRow({ order }: { order: OrderListItem }) {
   const { t, lang } = useI18n();
@@ -63,6 +71,8 @@ export function OrderDetail() {
   const { id = '' } = useParams();
   const { t, lang } = useI18n();
   const client = useQueryClient();
+  const confirm = useConfirm();
+  const shop = useShopTexts();
   const order = useOrder(id);
   const cancel = useMutation({
     mutationFn: () => api<Order>(`/orders/${id}/cancel`, { method: 'POST', body: {} }),
@@ -79,9 +89,11 @@ export function OrderDetail() {
   const o = order.data;
   const unpaid = o.status === 'new' || o.status === 'awaiting_payment';
   const reported = !!o.payment?.customer_reported_paid_at;
+  const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
 
   async function onCancel() {
-    if (await confirmDialog(t('orders.cancelConfirm', { n: o.order_number }))) cancel.mutate();
+    const ok = await confirm({ message: t('orders.cancelConfirm', { n: o.order_number }), ok: t('orders.cancelYes'), cancel: t('orders.cancelNo'), danger: true });
+    if (ok) cancel.mutate();
   }
 
   return (
@@ -99,7 +111,7 @@ export function OrderDetail() {
         {o.items.map((i) => (
           <div key={i.product_id} className="sum-row">
             <Link to={`/product/${i.product_id}`}>
-              {i.name_ru} × {i.qty}
+              {(lang === 'uz' && i.name_uz) || i.name_ru} × {i.qty}
             </Link>
             <span>{money(i.line_total_uzs, lang)}</span>
           </div>
@@ -121,6 +133,7 @@ export function OrderDetail() {
           <br />
           {o.delivery.address_text}
         </p>
+        {term && <p className="hint small">{t('delivery.term', { days: term })}</p>}
         <h2>{t('orders.recipient')}</h2>
         <p>
           {o.recipient.name}, {prettyPhone(o.recipient.phone)}
@@ -130,7 +143,7 @@ export function OrderDetail() {
       <section className="card">
         <h2>{t('orders.history')}</h2>
         <ol className="timeline">
-          {o.history.map((h, i) => {
+          {dedupeHistory(o.history, (s) => t(statusKey(s as Order['status']))).map((h, i) => {
             const I = STATUS_ICONS[h.to_status];
             return (
               <li key={i}>
@@ -149,6 +162,7 @@ export function OrderDetail() {
         <div className="notice notice-error">{errorText(lang, cancel.error instanceof ApiError ? cancel.error.code : undefined)}</div>
       )}
       {o.status === 'paid' && <p className="hint small">{t('orders.paidNoCancel')}</p>}
+      {unpaid && reported && <p className="hint small">{t('orders.checkingNoCancel')}</p>}
 
       <div className="actions">
         {unpaid && !reported && (o.payment?.method === 'card_transfer' || o.payment?.method === 'bank_transfer') && (
@@ -161,6 +175,8 @@ export function OrderDetail() {
             {t('orders.cancel')}
           </button>
         )}
+        {/* After "Я оплатил(а)" there is no cancel button: only support can cancel a payment being checked. */}
+        <SupportButton />
       </div>
     </div>
   );

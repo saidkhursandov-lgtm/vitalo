@@ -64,7 +64,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const editable = can('products.edit');
   const navigate = useNavigate();
   const client = useQueryClient();
-  const categories = useQuery({ queryKey: ['categories'], queryFn: () => api<{ need: CategoryNode[]; product_type: CategoryNode[] }>('/catalog/categories') });
+  const categories = useQuery({ queryKey: ['categories', 'all'], queryFn: () => api<{ need: CategoryNode[]; product_type: CategoryNode[] }>('/catalog/categories?include_empty=true') });
   const [f, setF] = useState<Form>(() => toForm(product));
   const [cats, setCats] = useState<Set<string>>(new Set(product?.category_ids ?? []));
   const [lang, setLang] = useState<'ru' | 'uz'>('ru');

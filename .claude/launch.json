@@ -4,23 +4,68 @@
     {
       "name": "vitalo-api",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start:dev", "--prefix", "apps/api"],
+      "runtimeArgs": [
+        "run",
+        "start:dev",
+        "--prefix",
+        "apps/api"
+      ],
       "port": 3000,
       "url": "http://localhost:3000"
     },
     {
       "name": "vitalo-miniapp",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "apps/miniapp"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "apps/miniapp"
+      ],
       "port": 5173,
       "url": "http://localhost:5173"
     },
     {
       "name": "vitalo-admin",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "apps/admin"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "apps/admin"
+      ],
       "port": 5174,
       "url": "http://localhost:5174"
+    },
+    {
+      "name": "vitalo-api-testdb",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set DATABASE_URL=postgresql://vitalo:vitalo@localhost:5432/vitalo_test&& set PORT=3100&& set JOBS_ENABLED=false&& npm run start:dev --prefix apps/api"
+      ],
+      "port": 3100,
+      "url": "http://localhost:3100"
+    },
+    {
+      "name": "vitalo-miniapp-testdb",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set VITALO_API_URL=http://localhost:3100&& set VITE_PORT=5183&& npm run dev --prefix apps/miniapp"
+      ],
+      "port": 5183,
+      "url": "http://localhost:5183"
+    },
+    {
+      "name": "vitalo-admin-testdb",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set VITALO_API_URL=http://localhost:3100&& set VITE_PORT=5184&& npm run dev --prefix apps/admin"
+      ],
+      "port": 5184,
+      "url": "http://localhost:5184"
     }
   ]
 }

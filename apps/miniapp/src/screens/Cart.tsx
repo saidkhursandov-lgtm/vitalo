@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
+import { QuoteTerm } from '../components/Delivery';
 import { EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
 import { money, nameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
@@ -133,7 +134,14 @@ export function Cart() {
       <section className="card">
         <h2>{t('cart.deliveryTo')}</h2>
         {regions.data && <RegionCitySelect regions={regions.data} regionId={city.region_id} cityId={city.city_id} onChange={setCity} />}
-        {delivery ? <FreeShippingProgress quote={delivery} /> : <p className="hint small">{t('cart.chooseCity')}</p>}
+        {delivery ? (
+          <>
+            <QuoteTerm min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />
+            <FreeShippingProgress quote={delivery} />
+          </>
+        ) : (
+          <p className="hint small">{t('cart.chooseCity')}</p>
+        )}
       </section>
 
       <section className="card summary">

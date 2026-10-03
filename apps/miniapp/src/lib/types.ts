@@ -85,6 +85,47 @@ export interface DeliveryQuote {
   remaining_for_free_uzs: number;
   message_ru: string;
   message_uz: string;
+  min_days?: number | null;
+  max_days?: number | null;
+  note_ru?: string | null;
+  note_uz?: string | null;
+}
+
+/** Delivery term in working days (null = not set for this city). */
+export interface DeliveryEta {
+  min_days: number | null;
+  max_days: number | null;
+  note_ru: string | null;
+  note_uz: string | null;
+}
+
+export interface DaysRange {
+  min_days: number;
+  max_days: number;
+}
+
+/** /catalog/texts: everything editable in the admin panel that the shop shows. */
+export interface ShopInfo {
+  product_disclaimer: LocalizedText;
+  support_contact: string;
+  support_url: string | null;
+  payment_check_hours: { from: string; to: string };
+  delivery_days_label: LocalizedText;
+  delivery_terms: { tashkent: DaysRange | null; regions: DaysRange | null };
+}
+
+export type LegalCode = 'offer' | 'privacy';
+
+export interface LegalDocument {
+  code: LegalCode;
+  version: string;
+  text_ru: string;
+  text_uz: string;
+}
+
+export interface LegalStatus {
+  accepted: boolean;
+  documents: { code: LegalCode; version: string; accepted: boolean }[];
 }
 
 export type CartWarning =
@@ -158,10 +199,11 @@ export interface Order {
   recipient: { name: string; phone: string };
   delivery: { region: Named; city: Named; address_text: string; cost_uzs: number };
   customer_comment: string | null;
-  items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
+  items: { product_id: string; sku: string; name_ru: string; name_uz?: string | null; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
   totals: Totals;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null } | null;
   can_cancel: boolean;
+  delivery_eta?: DeliveryEta | null;
   history: { from_status: string | null; to_status: OrderStatus; reason: string | null; created_at: string }[];
 }
 
@@ -176,7 +218,7 @@ export interface OrderListItem {
 }
 
 export interface OrderPreview {
-  items: { product_id: string; name_ru: string; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
+  items: { product_id: string; name_ru: string; name_uz?: string | null; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
   skipped_unavailable: string[];
   totals: Totals;
   delivery: DeliveryQuote;
@@ -197,6 +239,7 @@ export interface BankTransfer {
   hint: LocalizedText;
   pay_until: string | null;
   customer_reported_paid_at: string | null;
+  delivery_eta?: DeliveryEta | null;
 }
 
 export interface CheckoutDefaults {

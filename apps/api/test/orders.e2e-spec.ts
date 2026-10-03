@@ -442,6 +442,21 @@ describe('Orders (e2e)', () => {
       await http().post(`/api/orders/${order.id}/payment/bank-transfer/paid`).set(bearer(token)).send({}).expect(409);
     });
 
+    it('after "Я оплатил(а)" the customer cannot cancel (payment is being checked); support can', async () => {
+      const token = await newCustomer();
+      const p = await createTestProduct(prisma, { price: 1_000, stock: 5 });
+      const order = (await place(token, buyNow(p.id, 1)).expect(201)).body;
+      await http().post(`/api/orders/${order.id}/payment/bank-transfer/paid`).set(bearer(token)).send({}).expect(200);
+
+      const view = (await http().get(`/api/orders/${order.id}`).set(bearer(token)).expect(200)).body;
+      expect(view).toMatchObject({ status: 'awaiting_payment', can_cancel: false, delivery_eta: { min_days: 2, max_days: 5 } });
+      const res = await http().post(`/api/orders/${order.id}/cancel`).set(bearer(token)).send({}).expect(409);
+      expect(res.body.code).toBe('PAYMENT_BEING_CHECKED');
+      expect(await stockOf(prisma, p.id)).toEqual({ actual: 5, reserved: 1 });
+      const details = (await http().get(`/api/orders/${order.id}/payment/bank-transfer`).set(bearer(token)).expect(200)).body;
+      expect(details.delivery_eta).toMatchObject({ min_days: 2, max_days: 5 });
+    });
+
     it("other customers' orders are invisible", async () => {
       const p = await createTestProduct(prisma, { price: 1_000, stock: 5 });
       const order = (await place(await newCustomer(), buyNow(p.id, 1)).expect(201)).body;

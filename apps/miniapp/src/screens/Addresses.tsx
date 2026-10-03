@@ -6,10 +6,11 @@ import { ApiError } from '../lib/api';
 import { nameOf } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { useAddressActions, useAddresses, useRegions } from '../lib/queries';
-import { confirmDialog } from '../lib/telegram';
+import { useConfirm } from '../components/Confirm';
 
 export function Addresses() {
   const { t, lang } = useI18n();
+  const confirm = useConfirm();
   const addresses = useAddresses();
   const { makePrimary, remove } = useAddressActions();
 
@@ -45,7 +46,7 @@ export function Addresses() {
               </Link>
               <button
                 className="btn btn-secondary btn-sm danger"
-                onClick={() => void confirmDialog(t('addresses.deleteConfirm')).then((ok) => ok && remove.mutate(a.id))}
+                onClick={() => void confirm({ message: t('addresses.deleteConfirm'), ok: t('common.delete'), danger: true }).then((ok) => ok && remove.mutate(a.id))}
               >
                 {t('common.delete')}
               </button>

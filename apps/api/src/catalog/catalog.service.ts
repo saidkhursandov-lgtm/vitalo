@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SettingsService } from '../settings/settings.service';
-import { buildCategoryTrees, CategoryTrees, collectDescendantIds } from './category-tree';
+import { DeliveryService } from '../delivery/delivery.service';
+import { SettingsService, supportLink } from '../settings/settings.service';
+import { buildCategoryTrees, CategoryTrees, collectDescendantIds, pruneEmpty } from './category-tree';
 import { ListProductsQuery, ProductSort, SearchQuery } from './catalog.dto';
 import { cardInclude, listInclude, ProductListItem, toProductCard, toProductListItem } from './product.mapper';
 
@@ -35,10 +36,12 @@ export class CatalogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    private readonly delivery: DeliveryService,
   ) {}
 
   /** Both trees; every node carries product_count = products available to customers in it or below it. */
-  async getCategoryTrees(): Promise<CategoryTrees> {
+  /** Customers get only categories with products; includeEmpty = all of them (admin product card). */
+  async getCategoryTrees(includeEmpty = false): Promise<CategoryTrees> {
     const [rows, links] = await Promise.all([
       this.prisma.categories.findMany({ where: { status: 'active' } }),
       this.prisma.product_categories.findMany({ where: { product: { status: 'active' } }, select: { category_id: true, product_id: true } }),
@@ -48,7 +51,8 @@ export class CatalogService {
       if (!productsByCategory.has(l.category_id)) productsByCategory.set(l.category_id, new Set());
       productsByCategory.get(l.category_id)!.add(l.product_id);
     }
-    return buildCategoryTrees(rows, productsByCategory);
+    const trees = buildCategoryTrees(rows, productsByCategory);
+    return includeEmpty ? trees : pruneEmpty(trees);
   }
 
   /** Same filters as the list, only the number (for the "Показать N товаров" button). */
@@ -57,9 +61,17 @@ export class CatalogService {
     return { total: await this.prisma.products.count({ where: q.in_stock ? { AND: [where, inStock] } : where }) };
   }
 
-  /** Public texts for the shop (editable in the admin panel). */
+  /** Everything the Mini App shows from settings: texts, support contact, payment hours, delivery terms. */
   async texts() {
-    return { product_disclaimer: await this.settings.getOrDefault('product_disclaimer') };
+    const support = await this.settings.getOrDefault('support_contact');
+    return {
+      product_disclaimer: await this.settings.getOrDefault('product_disclaimer'),
+      support_contact: support,
+      support_url: supportLink(support),
+      payment_check_hours: await this.settings.getOrDefault('payment_check_hours'),
+      delivery_days_label: await this.settings.getOrDefault('delivery_days_label'),
+      delivery_terms: await this.delivery.terms(),
+    };
   }
 
   async listBrands(): Promise<{ brand: string; count: number }[]> {

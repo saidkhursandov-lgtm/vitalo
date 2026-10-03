@@ -9,6 +9,7 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { CartModule } from './cart/cart.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { DeliveryModule } from './delivery/delivery.module';
+import { LegalModule } from './legal/legal.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SettingsModule } from './settings/settings.service';
@@ -37,6 +38,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     FavoritesModule,
     AddressesModule,
     BotInternalModule,
+    LegalModule,
   ],
 })
 export class AppModule {}

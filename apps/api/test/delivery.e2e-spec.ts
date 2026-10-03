@@ -37,6 +37,23 @@ describe('Delivery (e2e)', () => {
     expect((await quote(addr.kattakurgan, 100_000).expect(200)).body.cost_uzs).toBe(45_000);
   });
 
+  it('delivery term: from the tariff, a city without its own term takes the region one (A3)', async () => {
+    expect((await quote(addr.tashkent, 100_000).expect(200)).body).toMatchObject({ min_days: 2, max_days: 5 });
+    expect((await quote(addr.kattakurgan, 100_000).expect(200)).body).toMatchObject({ cost_uzs: 45_000, min_days: 5, max_days: 10 });
+    const eta = await request(app.getHttpServer()).get(`/api/delivery/eta?region_id=${addr.samarkand.region_id}&city_id=${addr.samarkand.city_id}`).expect(200);
+    expect(eta.body).toMatchObject({ min_days: 5, max_days: 10 });
+    const terms = await request(app.getHttpServer()).get('/api/delivery/terms').expect(200);
+    expect(terms.body).toEqual({ tashkent: { min_days: 2, max_days: 5 }, regions: { min_days: 5, max_days: 10 } });
+    const shop = await request(app.getHttpServer()).get('/api/catalog/texts').expect(200);
+    expect(shop.body).toMatchObject({
+      support_contact: '@VITALO_support',
+      support_url: 'https://t.me/VITALO_support',
+      payment_check_hours: { from: '08:00', to: '22:00' },
+      delivery_days_label: { ru: 'рабочих дней', uz: 'ish kuni' },
+      delivery_terms: terms.body,
+    });
+  });
+
   it('a city from another region is rejected', async () => {
     const res = await quote({ region_id: addr.tashkent.region_id, city_id: addr.samarkand.city_id }, 1).expect(400);
     expect(res.body.code).toBe('INVALID_ADDRESS');

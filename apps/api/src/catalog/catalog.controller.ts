@@ -1,5 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ListProductsQuery, SearchQuery } from './catalog.dto';
 import { CatalogService } from './catalog.service';
 
@@ -9,8 +9,9 @@ export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
 
   @Get('categories')
-  categories() {
-    return this.catalog.getCategoryTrees();
+  @ApiQuery({ name: 'include_empty', required: false, description: 'true — вместе с пустыми категориями (админка)' })
+  categories(@Query('include_empty') includeEmpty?: string) {
+    return this.catalog.getCategoryTrees(includeEmpty === 'true');
   }
 
   @Get('brands')

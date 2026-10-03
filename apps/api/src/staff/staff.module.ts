@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { DeliveryModule } from '../delivery/delivery.module';
+import { AdminLegalController, LegalModule } from '../legal/legal.module';
 import { OrdersModule } from '../orders/orders.module';
 import { AdminCustomersController, AdminCustomersService } from './admin-customers';
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
@@ -14,7 +15,7 @@ import { StaffAuthController } from './staff.controllers';
 
 /** Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions. */
 @Module({
-  imports: [AuthModule, OrdersModule, DeliveryModule],
+  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule],
   controllers: [
     StaffAuthController,
     DashboardController,
@@ -25,6 +26,7 @@ import { StaffAuthController } from './staff.controllers';
     AdminSettingsController,
     StaffUsersController,
     AuditController,
+    AdminLegalController,
   ],
   providers: [
     StaffAuthService,

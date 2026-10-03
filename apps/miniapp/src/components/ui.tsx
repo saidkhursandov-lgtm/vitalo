@@ -265,7 +265,7 @@ export function RegionCitySelect({
         <span>{t('checkout.region')}</span>
         <select value={regionId} onChange={(e) => onChange({ region_id: e.target.value, city_id: '' })}>
           <option value="">{t('checkout.choose')}</option>
-          {regions.map((r) => (
+          {[...regions].sort((a, b) => nameOf(a, lang).localeCompare(nameOf(b, lang), lang)).map((r) => (
             <option key={r.id} value={r.id}>
               {nameOf(r, lang)}
             </option>
@@ -276,7 +276,7 @@ export function RegionCitySelect({
         <span>{t('checkout.city')}</span>
         <select value={cityId} disabled={!region} onChange={(e) => onChange({ region_id: regionId, city_id: e.target.value })}>
           <option value="">{t('checkout.choose')}</option>
-          {region?.cities.map((c) => (
+          {[...(region?.cities ?? [])].sort((a, b) => nameOf(a, lang).localeCompare(nameOf(b, lang), lang)).map((c) => (
             <option key={c.id} value={c.id}>
               {nameOf(c, lang)}
             </option>

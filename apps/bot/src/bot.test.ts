@@ -135,9 +135,12 @@ describe('menu items', () => {
     const s = setup({ info: { support_contact: '@vitalo_help' } });
     expect(inlineUrl((await s.send('🛍 Магазин'))[0])).toBe(`${MINI}/`);
     expect((await s.send('🔥 Акции'))[0].text).toContain('акций нет');
-    expect((await s.send('💬 Поддержка'))[0].text).toBe('Поддержка VITALO: @vitalo_help');
+    const support = (await s.send('💬 Поддержка'))[0];
+    expect(support.text).toBe('Поддержка VITALO: @vitalo_help');
+    expect(support.reply_markup.inline_keyboard[0][0].url).toBe('https://t.me/vitalo_help');
     expect((await s.send('ℹ️ О VITALO'))[0].text).toBe('О нас');
-    expect((await setup().send('💬 Поддержка'))[0].text).toBe('Контакт поддержки скоро появится.');
+    // Nothing saved in the settings: the default contact, never "скоро появится".
+    expect((await setup().send('💬 Поддержка'))[0].text).toBe('Поддержка VITALO: @VITALO_support');
   });
 
   it('when the API is down the bot answers politely instead of failing', async () => {

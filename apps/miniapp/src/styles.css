@@ -320,7 +320,9 @@ select:disabled { color: var(--muted); background-color: var(--surface-2); }
 .tile-brand { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-name {
   font-size: 13.5px; line-height: 1.35; font-weight: 500; margin: 0 0 6px; min-height: 2.7em;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  /* whole words; a single very long word may still break, never the first word on its own */
+  overflow-wrap: break-word; word-break: normal; hyphens: auto;
 }
 .tile .price { margin-top: auto; }
 
@@ -503,3 +505,42 @@ details.card[open] summary { margin-bottom: 4px; }
 /* ---------- dev login ---------- */
 .dev-login { max-width: 420px; margin: 0 auto; }
 .dev-badge { padding: 3px 10px; border-radius: 8px; background: var(--warning-soft); color: var(--warning); font-weight: 700; font-size: 12px; }
+
+/* ---------- launch, block A: welcome / documents / confirm / next steps ---------- */
+.welcome {
+  min-height: 100vh; display: flex; flex-direction: column; gap: 20px; max-width: 520px; margin: 0 auto;
+  padding: 16px 16px calc(20px + var(--safe-b)); background: var(--surface);
+}
+.welcome-lang { align-self: flex-end; width: 220px; margin: 0; }
+.welcome-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+.welcome-body h1 { margin: 12px 0 0; }
+.welcome-body p { max-width: 340px; margin: 0; }
+.welcome-actions .check-row span { line-height: 1.45; }
+.welcome-actions .link { text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; }
+
+.legal-page .card { padding: 18px 16px; }
+.markdown { font-size: 14px; line-height: 1.6; overflow-wrap: break-word; }
+.markdown p { margin: 0 0 12px; }
+.markdown h3 { font-size: 15px; margin: 18px 0 8px; }
+.markdown ul, .markdown ol { margin: 0 0 12px; padding-left: 22px; }
+.markdown li { margin: 0 0 4px; }
+.markdown > :last-child { margin-bottom: 0; }
+
+.confirm-sheet { max-width: 520px; margin: 0 auto; }
+.confirm-text { margin: 8px 0 4px; font-size: 16px; font-weight: 500; line-height: 1.45; }
+.confirm-actions { grid-template-columns: 1fr 1fr !important; }
+.btn-danger-solid { background: var(--error); border-color: var(--error); color: #ffffff; }
+.btn-danger-solid:active { background: #a12c24; }
+
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; }
+.step-num {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--neutral-soft); color: var(--muted); font-size: 13px; font-weight: 700;
+}
+.steps li.is-current .step-num { background: var(--primary-soft); color: var(--primary-text); box-shadow: inset 0 0 0 1.5px var(--primary); }
+.steps li > span:last-child { padding-top: 3px; }
+.term { margin: 4px 0 8px; font-weight: 600; }
+
+button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border); font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.card.list > button.list-row:last-child { border-bottom: 0; }

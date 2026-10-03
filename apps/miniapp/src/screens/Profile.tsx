@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronIcon } from '../components/Icons';
+import { ChevronIcon, SupportIcon } from '../components/Icons';
+import { useSupportUrl } from '../components/Support';
+import { openSupport } from '../lib/shop';
 import { api } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
@@ -12,6 +14,7 @@ export function Profile() {
   const { t, lang, setLang } = useI18n();
   const user = useUser();
   const orders = useOrders();
+  const supportUrl = useSupportUrl();
   const recent = orders.data?.pages[0].items.slice(0, 3) ?? [];
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
   const [marketing, setMarketing] = useState(user.marketing_opt_in);
@@ -65,6 +68,10 @@ export function Profile() {
           <span>{t('profile.addresses')}</span>
           <ChevronIcon width={18} height={18} />
         </Link>
+        <button type="button" className="list-row" onClick={() => openSupport(supportUrl)}>
+          <span>{t('profile.support')}</span>
+          <SupportIcon width={18} height={18} />
+        </button>
       </section>
 
       {recent.length > 0 && (

@@ -15,6 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { createHash, timingSafeEqual } from 'crypto';
 import type { Request } from 'express';
+import { SETTING_DEFAULTS, supportLink } from '../settings/settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Settings keys the bot reads (editable in the `settings` table). */
@@ -104,7 +105,8 @@ export class BotInternalController {
       return typeof v === 'string' && v.trim() ? v : null;
     };
     return {
-      support_contact: get(BOT_SETTING_KEYS.support),
+      support_contact: get(BOT_SETTING_KEYS.support) ?? SETTING_DEFAULTS.support_contact,
+      support_url: supportLink(get(BOT_SETTING_KEYS.support) ?? SETTING_DEFAULTS.support_contact),
       about_ru: get(BOT_SETTING_KEYS.aboutRu) ?? DEFAULT_ABOUT_RU,
       about_uz: get(BOT_SETTING_KEYS.aboutUz) ?? DEFAULT_ABOUT_UZ,
     };

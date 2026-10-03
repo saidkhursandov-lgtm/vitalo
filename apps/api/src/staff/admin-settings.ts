@@ -15,9 +15,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags, PartialType } from '@nestjs/swagger';
-import { Prisma, StaffRole, StaffStatus, TariffStatus } from '@prisma/client';
+import { EntityStatus, Prisma, StaffRole, StaffStatus, TariffStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -26,6 +26,7 @@ import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+const textOrNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
 
 // ---------------- DTOs ----------------
 
@@ -77,6 +78,39 @@ export class TariffDto {
   @ApiProperty() @IsInt() @Min(0) tariff_uzs!: number;
   @ApiProperty() @IsInt() @Min(0) free_shipping_threshold_uzs!: number;
   @ApiPropertyOptional({ enum: TariffStatus }) @IsOptional() @IsEnum(TariffStatus) status?: TariffStatus;
+  @ApiPropertyOptional({ nullable: true, description: 'Срок доставки от, рабочих дней (пусто у города — берётся срок региона)' }) @IsOptional() @IsInt() @Min(0) @Max(90) min_days?: number | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(0) @Max(90) max_days?: number | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) note_ru?: string | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) note_uz?: string | null;
+  @ApiPropertyOptional({ description: 'Тестовый тариф (подсвечивается в админке)' }) @IsOptional() @IsBoolean() is_test?: boolean;
+}
+
+export class CityDto {
+  @ApiProperty() @IsUUID() region_id!: string;
+  @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) name_ru!: string;
+  @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) name_uz!: string;
+}
+
+export class CityPatch {
+  @ApiPropertyOptional() @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) name_ru?: string;
+  @ApiPropertyOptional() @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) name_uz?: string;
+  @ApiPropertyOptional({ enum: EntityStatus }) @IsOptional() @IsEnum(EntityStatus) status?: EntityStatus;
+}
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export class ShopContactsDto {
+  @ApiProperty({ example: '@VITALO_support', description: 'Telegram-контакт поддержки' })
+  @Transform(trim)
+  @Matches(/^(?:https?:\/\/)?(?:t\.me\/|@)?[A-Za-z0-9_]{5,32}$/, { message: 'support_contact: @username or t.me/username' })
+  support_contact!: string;
+
+  @ApiProperty({ example: '08:00' }) @Matches(HHMM, { message: 'payment_check_from: HH:MM' }) payment_check_from!: string;
+  @ApiProperty({ example: '22:00' }) @Matches(HHMM, { message: 'payment_check_to: HH:MM' }) payment_check_to!: string;
+
+  @ApiProperty({ type: LocalizedTextDto, description: 'Подпись срока доставки: «рабочих дней»' })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  delivery_days_label!: LocalizedTextDto;
 }
 
 export class TariffPatch extends PartialType(TariffDto) {}
@@ -147,6 +181,52 @@ export class AdminSettingsService {
     return this.shopTexts();
   }
 
+  async shopContacts() {
+    const hours = await this.settings.getOrDefault('payment_check_hours');
+    return {
+      support_contact: await this.settings.getOrDefault('support_contact'),
+      payment_check_from: hours.from,
+      payment_check_to: hours.to,
+      delivery_days_label: await this.settings.getOrDefault('delivery_days_label'),
+    };
+  }
+
+  async setShopContacts(staffId: string, dto: ShopContactsDto) {
+    await this.saveSetting(staffId, SETTING_KEYS.supportContact, dto.support_contact as unknown as object, 'settings.contacts_updated');
+    await this.saveSetting(staffId, SETTING_KEYS.paymentCheckHours, { from: dto.payment_check_from, to: dto.payment_check_to }, 'settings.contacts_updated');
+    await this.saveSetting(staffId, SETTING_KEYS.deliveryDaysLabel, { ru: dto.delivery_days_label.ru, uz: dto.delivery_days_label.uz }, 'settings.contacts_updated');
+    return this.shopContacts();
+  }
+
+  /** All regions and cities, inactive included (customers only see active ones). */
+  async regions() {
+    const regions = await this.prisma.regions.findMany({ orderBy: { name_ru: 'asc' }, include: { cities: { orderBy: { name_ru: 'asc' } } } });
+    return regions.map((r) => ({
+      id: r.id,
+      name_ru: r.name_ru,
+      name_uz: r.name_uz,
+      status: r.status,
+      cities: r.cities.map((c) => ({ id: c.id, name_ru: c.name_ru, name_uz: c.name_uz, status: c.status })),
+    }));
+  }
+
+  async createCity(staffId: string, dto: CityDto) {
+    if (!(await this.prisma.regions.count({ where: { id: dto.region_id } }))) throw new NotFoundException('Region not found');
+    const dup = await this.prisma.cities.count({ where: { region_id: dto.region_id, name_ru: { equals: dto.name_ru, mode: 'insensitive' } } });
+    if (dup) throw new ConflictException({ code: 'CITY_EXISTS', message: 'This city already exists in the region' });
+    const c = await this.prisma.cities.create({ data: dto });
+    await this.audit.log({ staffId, action: 'city.created', entityType: 'city', entityId: c.id, after: c });
+    return this.regions();
+  }
+
+  async updateCity(staffId: string, id: string, dto: CityPatch) {
+    const before = await this.prisma.cities.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException('City not found');
+    const after = await this.prisma.cities.update({ where: { id }, data: dto });
+    await this.audit.log({ staffId, action: 'city.updated', entityType: 'city', entityId: id, before, after });
+    return this.regions();
+  }
+
   async bankTransfer() {
     const row = await this.prisma.settings.findUnique({ where: { key: SETTING_KEYS.bankTransferDetails } });
     return (row?.value as BankTransferDetails | undefined) ?? null;
@@ -171,12 +251,17 @@ export class AdminSettingsService {
       tariff_uzs: Number(t.tariff_uzs),
       free_shipping_threshold_uzs: Number(t.free_shipping_threshold_uzs),
       status: t.status,
+      min_days: t.min_days,
+      max_days: t.max_days,
+      note_ru: t.note_ru,
+      note_uz: t.note_uz,
+      is_test: t.is_test,
     }));
   }
 
   async createTariff(staffId: string, dto: TariffDto) {
     await this.prisma.$transaction(async (tx) => {
-      await this.validateTariff(tx, dto.region_id, dto.city_id ?? null, dto.status ?? 'active');
+      await this.validateTariff(tx, dto.region_id, dto.city_id ?? null, dto.status ?? 'active', undefined, { min: dto.min_days ?? null, max: dto.max_days ?? null });
       const t = await tx.delivery_tariffs.create({ data: this.tariffData(dto) as Prisma.delivery_tariffsUncheckedCreateInput });
       await this.audit.log({ staffId, action: 'tariff.created', entityType: 'delivery_tariff', entityId: t.id, after: t }, tx);
     });
@@ -189,7 +274,10 @@ export class AdminSettingsService {
       if (!before) throw new NotFoundException('Tariff not found');
       const regionId = dto.region_id ?? before.region_id;
       const cityId = dto.city_id === undefined ? before.city_id : dto.city_id;
-      await this.validateTariff(tx, regionId, cityId, dto.status ?? before.status, id);
+      await this.validateTariff(tx, regionId, cityId, dto.status ?? before.status, id, {
+        min: dto.min_days === undefined ? before.min_days : dto.min_days,
+        max: dto.max_days === undefined ? before.max_days : dto.max_days,
+      });
       const after = await tx.delivery_tariffs.update({ where: { id }, data: this.tariffData(dto) });
       await this.audit.log({ staffId, action: 'tariff.updated', entityType: 'delivery_tariff', entityId: id, before, after }, tx);
     });
@@ -299,11 +387,22 @@ export class AdminSettingsService {
       ...(dto.tariff_uzs !== undefined && { tariff_uzs: BigInt(dto.tariff_uzs) }),
       ...(dto.free_shipping_threshold_uzs !== undefined && { free_shipping_threshold_uzs: BigInt(dto.free_shipping_threshold_uzs) }),
       ...(dto.status && { status: dto.status }),
+      ...(dto.min_days !== undefined && { min_days: dto.min_days }),
+      ...(dto.max_days !== undefined && { max_days: dto.max_days }),
+      ...(dto.note_ru !== undefined && { note_ru: dto.note_ru }),
+      ...(dto.note_uz !== undefined && { note_uz: dto.note_uz }),
+      ...(dto.is_test !== undefined && { is_test: dto.is_test }),
     };
   }
 
   /** City must be in the region; only one active tariff per region (default) or per city. */
-  private async validateTariff(tx: Prisma.TransactionClient, regionId: string, cityId: string | null, status: TariffStatus, exceptId?: string) {
+  private async validateTariff(tx: Prisma.TransactionClient, regionId: string, cityId: string | null, status: TariffStatus, exceptId?: string, days?: { min?: number | null; max?: number | null }) {
+    if (days && days.min != null && days.max != null && days.min > days.max) {
+      throw new ConflictException({ code: 'INVALID_DAYS', message: 'min_days must not be greater than max_days' });
+    }
+    if (days && (days.min == null) !== (days.max == null)) {
+      throw new ConflictException({ code: 'INVALID_DAYS', message: 'Set both min_days and max_days, or neither' });
+    }
     if (cityId) await this.delivery.assertCityInRegion(regionId, cityId, tx);
     else if (!(await tx.regions.count({ where: { id: regionId } }))) {
       throw new ConflictException({ code: 'INVALID_ADDRESS', message: 'Unknown region' });
@@ -354,6 +453,31 @@ export class AdminSettingsController {
   @Put('texts')
   setTexts(@CurrentStaff() me: StaffContext, @Body() dto: ShopTextsDto) {
     return this.settings.setShopTexts(me.staff.id, dto);
+  }
+
+  @Get('contacts')
+  contacts() {
+    return this.settings.shopContacts();
+  }
+
+  @Put('contacts')
+  setContacts(@CurrentStaff() me: StaffContext, @Body() dto: ShopContactsDto) {
+    return this.settings.setShopContacts(me.staff.id, dto);
+  }
+
+  @Get('regions')
+  regions() {
+    return this.settings.regions();
+  }
+
+  @Post('cities')
+  createCity(@CurrentStaff() me: StaffContext, @Body() dto: CityDto) {
+    return this.settings.createCity(me.staff.id, dto);
+  }
+
+  @Patch('cities/:id')
+  updateCity(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: CityPatch) {
+    return this.settings.updateCity(me.staff.id, id, dto);
   }
 
   @Get('tariffs')

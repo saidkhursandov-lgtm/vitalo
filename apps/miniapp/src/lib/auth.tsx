@@ -15,6 +15,10 @@ type State =
   | { status: 'error' };
 
 const UserContext = createContext<UserProfile | null>(null);
+const RefreshUserContext = createContext<() => Promise<void>>(async () => undefined);
+
+/** Reloads the profile (e.g. after the welcome screen changed marketing_opt_in). */
+export const useRefreshUser = () => useContext(RefreshUserContext);
 
 export function useUser(): UserProfile {
   const user = useContext(UserContext);
@@ -85,6 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void start();
   }, [start, queryClient]);
 
+  const refreshUser = useCallback(async () => {
+    signedIn(await api<UserProfile>('/auth/me'));
+  }, [signedIn]);
+
   const setLang = useCallback(
     (next: Lang) => {
       setLangState(next);
@@ -96,7 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   let content: ReactNode;
-  if (state.status === 'ready') content = <UserContext.Provider value={state.user}>{children}</UserContext.Provider>;
+  if (state.status === 'ready')
+    content = (
+      <UserContext.Provider value={state.user}>
+        <RefreshUserContext.Provider value={refreshUser}>{children}</RefreshUserContext.Provider>
+      </UserContext.Provider>
+    );
   // `import.meta.env.DEV &&` lets the production build drop DevLogin entirely.
   else if (import.meta.env.DEV && state.status === 'dev-login') content = <DevLogin onLogin={login} />;
   else if (state.status === 'outside') content = (

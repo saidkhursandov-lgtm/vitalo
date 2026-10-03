@@ -52,6 +52,13 @@ export function buildCategoryTrees(rows: CategoryRow[], productsByCategory: Map<
   return trees;
 }
 
+/** Drops categories (and subcategories) that have no visible products. */
+export function pruneEmpty(trees: CategoryTrees): CategoryTrees {
+  const prune = (nodes: CategoryNode[]): CategoryNode[] =>
+    nodes.filter((n) => n.product_count > 0).map((n) => ({ ...n, children: prune(n.children) }));
+  return { need: prune(trees.need), product_type: prune(trees.product_type) };
+}
+
 /** The category itself plus all its descendants (filter "Витамины" must include "Витамин D"). */
 export function collectDescendantIds(rows: Pick<CategoryRow, 'id' | 'parent_id'>[], rootId: string): string[] {
   const childrenOf = new Map<string, string[]>();

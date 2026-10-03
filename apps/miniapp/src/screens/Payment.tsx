@@ -6,7 +6,10 @@ import { ErrorState, Loading } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
-import { useBankTransfer } from '../lib/queries';
+import { useBankTransfer, useShopTexts } from '../lib/queries';
+import { copyText, daysText, paymentCheckWhen } from '../lib/shop';
+import { SupportButton } from '../components/Support';
+import type { DeliveryEta } from '../lib/types';
 import { haptic } from '../lib/telegram';
 
 /** "8600123456789012" -> "8600 1234 5678 9012" */
@@ -25,7 +28,8 @@ function CopyRow({ label, value, copyValue = value }: { label: string; value: st
         type="button"
         className="btn btn-secondary btn-sm"
         onClick={() =>
-          void navigator.clipboard?.writeText(copyValue).then(() => {
+          void copyText(copyValue).then((ok) => {
+            if (!ok) return;
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           })
@@ -34,6 +38,60 @@ function CopyRow({ label, value, copyValue = value }: { label: string; value: st
         <CopyIcon width={16} height={16} /> {copied ? t('pay.copied') : t('pay.copy')}
       </button>
     </div>
+  );
+}
+
+/**
+ * After "Я оплатил(а)": what happens next — payment check (with the daily hours from the settings),
+ * picking, courier, delivery term — and the support / copy number / my orders buttons (A5).
+ */
+function NextSteps({ orderNumber, eta }: { orderNumber: string; eta?: DeliveryEta | null }) {
+  const { t, lang } = useI18n();
+  const shop = useShopTexts();
+  const [copied, setCopied] = useState(false);
+  const hours = shop.data?.payment_check_hours ?? { from: '08:00', to: '22:00' };
+  const when = paymentCheckWhen(hours);
+  const term = daysText(eta?.min_days, eta?.max_days, shop.data?.delivery_days_label, lang);
+  const steps = [
+    when === 'now' ? t('pay.next.check', hours) : t(when === 'today' ? 'pay.next.checkToday' : 'pay.next.checkTomorrow', hours),
+    t('pay.next.pick'),
+    t('pay.next.courier'),
+    term ? t('pay.next.delivery', { days: term }) : t('pay.next.deliveryNoTerm'),
+  ];
+  return (
+    <>
+      <div className="notice notice-ok">{t('pay.waiting')}</div>
+      <section className="card">
+        <h2>{t('pay.next.title')}</h2>
+        <ol className="steps">
+          {steps.map((s, i) => (
+            <li key={i} className={i === 0 ? 'is-current' : ''}>
+              <span className="step-num" aria-hidden>
+                {i + 1}
+              </span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <SupportButton className="btn btn-block" />
+      <button
+        type="button"
+        className="btn btn-secondary btn-block"
+        onClick={() =>
+          void copyText(orderNumber).then((ok) => {
+            if (!ok) return;
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+        }
+      >
+        <CopyIcon width={18} height={18} /> {copied ? t('pay.copied') : t('pay.copyNumber')}
+      </button>
+      <Link to="/orders" className="btn btn-secondary btn-block">
+        {t('pay.toOrders')}
+      </Link>
+    </>
   );
 }
 
@@ -85,13 +143,15 @@ export function Payment() {
       <section className="card amount-card">
         <div className="hint small">{t('pay.amount')}</div>
         <div className="amount">{money(d.amount_uzs, lang)}</div>
-        {!paid && !cancelled && d.pay_until && <p className="small">{t('pay.until', { date: dateTime(d.pay_until, lang) })}</p>}
+        {!paid && !cancelled && !reported && d.pay_until && <p className="small">{t('pay.until', { date: dateTime(d.pay_until, lang) })}</p>}
       </section>
 
       {paid ? (
         <div className="notice notice-ok">{t('pay.paid')}</div>
       ) : cancelled ? (
         <div className="notice notice-error">{t('pay.cancelled')}</div>
+      ) : reported ? (
+        <NextSteps orderNumber={d.order_number} eta={d.delivery_eta} />
       ) : (
         <>
           <section className="card">
@@ -101,9 +161,7 @@ export function Payment() {
           </section>
           <p className="notice notice-info">{lang === 'uz' ? d.hint.uz : d.hint.ru}</p>
 
-          {reported ? (
-            <div className="notice notice-ok">{t('pay.waiting')}</div>
-          ) : (
+          {(
             <div className="sticky-action">
               {reportPaid.isError && <p className="error-text">{errorText(lang, reportPaid.error instanceof ApiError ? reportPaid.error.code : undefined)}</p>}
               <button className="btn btn-block" disabled={reportPaid.isPending} onClick={() => reportPaid.mutate()}>
@@ -114,9 +172,11 @@ export function Payment() {
         </>
       )}
 
-      <Link to={`/orders/${id}`} className="btn btn-secondary btn-block">
-        {t('pay.toOrder')}
-      </Link>
+      {!(reported && !paid && !cancelled) && (
+        <Link to={`/orders/${id}`} className="btn btn-secondary btn-block">
+          {t('pay.toOrder')}
+        </Link>
+      )}
     </div>
   );
 }

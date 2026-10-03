@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { CUSTOMER_CANCELLABLE } from './order-state';
 
 export const orderViewInclude = {
-  items: { orderBy: { name_ru_snapshot: 'asc' } },
+  items: { orderBy: { name_ru_snapshot: 'asc' }, include: { product: { select: { name_uz: true } } } },
   region: true,
   city: true,
   history: { orderBy: { created_at: 'asc' } },
@@ -42,6 +42,7 @@ export function toOrderView(o: OrderForView) {
       product_id: i.product_id,
       sku: i.sku_snapshot,
       name_ru: i.name_ru_snapshot,
+      name_uz: i.product.name_uz, // current Uzbek name (the order keeps only the Russian snapshot)
       qty: i.qty,
       unit_price_uzs: num(i.unit_price_uzs),
       line_total_uzs: num(i.line_total_uzs),
@@ -65,7 +66,8 @@ export function toOrderView(o: OrderForView) {
           verified_at: verified?.verified_at ?? null,
         }
       : null,
-    can_cancel: CUSTOMER_CANCELLABLE.includes(o.status),
+    // After "Я оплатил(а)" the payment is being checked: only support can cancel.
+    can_cancel: CUSTOMER_CANCELLABLE.includes(o.status) && !reported,
     history: o.history.map((h) => ({
       from_status: h.from_status,
       to_status: h.to_status,

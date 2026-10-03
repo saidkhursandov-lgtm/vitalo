@@ -19,8 +19,8 @@ describe('Catalog (e2e)', () => {
   afterAll(() => app.close());
 
   describe('GET /categories', () => {
-    it('returns two separate trees with nested children', async () => {
-      const { body } = await get('/categories').expect(200);
+    it('returns two separate trees with nested children (admin: include_empty=true)', async () => {
+      const { body } = await get('/categories?include_empty=true').expect(200);
       const need: Node[] = body.need;
       const types: Node[] = body.product_type;
 
@@ -34,8 +34,19 @@ describe('Catalog (e2e)', () => {
       expect(types.map((n) => n.slug)).not.toContain('immunity');
     });
 
+    it('customers do not see categories without products; the admin list keeps them', async () => {
+      const all = (await get('/categories?include_empty=true').expect(200)).body;
+      const shown = (await get('/categories').expect(200)).body;
+      const slugs = (nodes: Node[]): string[] => nodes.flatMap((n) => [n.slug, ...slugs(n.children)]);
+      const nonEmpty = (nodes: Node[]): string[] => nodes.filter((n) => n.product_count > 0).flatMap((n) => [n.slug, ...nonEmpty(n.children)]);
+      expect(slugs(shown.need)).toEqual(nonEmpty(all.need));
+      expect(slugs(shown.product_type)).toEqual(nonEmpty(all.product_type));
+      expect(slugs(shown.need)).not.toContain('women');
+      expect(slugs(all.need)).toContain('women');
+    });
+
     it('shows how many visible products each category has (subcategories included)', async () => {
-      const { body } = await get('/categories').expect(200);
+      const { body } = await get('/categories?include_empty=true').expect(200);
       const vitamins: Node = body.product_type.find((n: Node) => n.slug === 'vitamins');
       const listed = (await get('/products?category=vitamins').expect(200)).body.total;
       expect(vitamins.product_count).toBe(listed);

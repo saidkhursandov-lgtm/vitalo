@@ -53,11 +53,15 @@ describe('Internal API for the bot, start_param, CORS (e2e)', () => {
 
   it('info: defaults, overridable through settings', async () => {
     const before = (await asBot('/info').expect(200)).body;
-    expect(before.support_contact).toBeNull();
+    expect(before).toMatchObject({ support_contact: '@VITALO_support', support_url: 'https://t.me/VITALO_support' });
     expect(before.about_ru).toContain('VITALO');
-    await prisma.settings.create({ data: { key: 'support_contact', value: '@vitalo_help' } });
-    expect((await asBot('/info').expect(200)).body.support_contact).toBe('@vitalo_help');
+    const saved = await prisma.settings.findUnique({ where: { key: 'support_contact' } });
+    await prisma.settings.upsert({ where: { key: 'support_contact' }, create: { key: 'support_contact', value: '@vitalo_help' }, update: { value: '@vitalo_help' } });
+    expect((await asBot('/info').expect(200)).body).toMatchObject({ support_contact: '@vitalo_help', support_url: 'https://t.me/vitalo_help' });
+    // Nothing saved -> the default contact, never "скоро появится"
     await prisma.settings.delete({ where: { key: 'support_contact' } });
+    expect((await asBot('/info').expect(200)).body.support_contact).toBe('@VITALO_support');
+    if (saved) await prisma.settings.create({ data: { key: saved.key, value: saved.value as string } });
   });
 
   describe('referral code (start_param) at login', () => {

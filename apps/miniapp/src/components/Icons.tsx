@@ -18,6 +18,7 @@ import {
   Info,
   LayoutGrid,
   MapPin,
+  MessageCircle,
   Minus,
   Package,
   PackageCheck,
@@ -65,6 +66,7 @@ export const PinIcon = make(MapPin);
 export const OfflineIcon = make(WifiOff);
 export const AlertIcon = make(CircleAlert);
 export const InfoIcon = make(Info);
+export const SupportIcon = make(MessageCircle);
 
 export const HeartIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
   <Heart strokeWidth={STROKE} aria-hidden fill={filled ? 'currentColor' : 'none'} {...p} />

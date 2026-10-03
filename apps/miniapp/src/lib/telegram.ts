@@ -7,7 +7,6 @@ interface TelegramWebApp {
   ready(): void;
   expand(): void;
   isVersionAtLeast(version: string): boolean;
-  showConfirm(message: string, callback: (ok: boolean) => void): void;
   setHeaderColor?(color: string): void;
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
@@ -45,14 +44,6 @@ export function initTelegram() {
     // Old Telegram clients: keep their default colours.
   }
   document.documentElement.classList.add('in-telegram');
-}
-
-export function confirmDialog(message: string): Promise<boolean> {
-  const app = telegram();
-  if (app?.isVersionAtLeast('6.2')) {
-    return new Promise((resolve) => app.showConfirm(message, resolve));
-  }
-  return Promise.resolve(window.confirm(message));
 }
 
 export function haptic(type: 'error' | 'success' | 'warning') {

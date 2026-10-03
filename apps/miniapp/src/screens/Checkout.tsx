@@ -19,6 +19,7 @@ const MANUAL_METHODS: { code: PaymentMethodCode; title: MessageKey; desc: Messag
 /** Shown disabled with a "Скоро" badge until connected (payment architecture stays the same). */
 const SOON_METHODS = ['Payme', 'Click', 'Uzum', 'cod'] as const;
 import { FreeShippingProgress } from './Cart';
+import { QuoteTerm } from '../components/Delivery';
 
 interface Form {
   name: string;
@@ -251,7 +252,7 @@ export function Checkout() {
                 return (
                   <div key={i.product_id} className="sum-row">
                     <span>
-                      {i.name_ru} × {i.qty}
+                      {(lang === 'uz' && i.name_uz) || i.name_ru} × {i.qty}
                       {problem && <span className="error-text small block">{t('product.maxQty', { n: problem.available })}</span>}
                     </span>
                     <span>{money(i.line_total_uzs, lang)}</span>
@@ -264,6 +265,7 @@ export function Checkout() {
                 <span>{p.totals.delivery_cost_uzs ? money(p.totals.delivery_cost_uzs, lang) : t('cart.free')}</span>
               </div>
               <FreeShippingProgress quote={p.delivery} />
+              <QuoteTerm min={p.delivery.min_days} max={p.delivery.max_days} note={lang === 'uz' ? p.delivery.note_uz : p.delivery.note_ru} />
               <div className="sum-row total">
                 <span>{t('cart.total')}</span>
                 <span>{money(p.totals.total_uzs, lang)}</span>

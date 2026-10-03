@@ -891,6 +891,11 @@ model delivery_tariffs {
   tariff_uzs                  BigInt
   free_shipping_threshold_uzs BigInt
   status                      TariffStatus @default(active)
+  min_days                    Int? // delivery term, working days; NULL on a city tariff = take the region one
+  max_days                    Int?
+  note_ru                     String?
+  note_uz                     String?
+  is_test                     Boolean      @default(false) // created automatically, "test, check" in the admin
   region                      regions      @relation(fields: [region_id], references: [id])
   city                        cities?      @relation(fields: [city_id], references: [id])
 
