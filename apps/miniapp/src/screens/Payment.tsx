@@ -53,7 +53,7 @@ export function Payment() {
     onError: () => haptic('error'),
   });
 
-  if (details.isPending) return <Loading />;
+  if (details.isPending) return <div className="page"><Loading /></div>;
   if (details.isError) return <ErrorState error={details.error} onRetry={() => void details.refetch()} />;
   const d = details.data;
 

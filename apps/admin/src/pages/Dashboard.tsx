@@ -5,6 +5,7 @@ import { ErrorBox, Loading, OrderStatus, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { money, ORDER_STATUS } from '../lib/format';
+import { ForwardIcon } from '../components/Icons';
 
 interface DashboardData {
   revenue_uzs: number;
@@ -133,7 +134,7 @@ export function Dashboard() {
             )}
             {can('inventory.view') && (
               <Link to="/inventory?low_only=true" className="link">
-                Открыть склад →
+                Открыть склад <ForwardIcon />
               </Link>
             )}
           </section>

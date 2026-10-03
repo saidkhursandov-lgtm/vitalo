@@ -25,11 +25,18 @@ describe('i18n', () => {
     expect(show(0)).toBe('Показать 0 товаров');
   });
 
-  it('order status labels: "Оплата проверяется" after «Я оплатил(а)»', () => {
-    expect(translate('ru', statusKey('awaiting_payment'))).toBe('🟡 Ожидает оплаты');
-    expect(translate('ru', statusKey('awaiting_payment', true))).toBe('🔵 Оплата проверяется');
-    expect(translate('ru', statusKey('paid', true))).toBe('🟢 Оплачен');
-    expect(translate('ru', statusKey('cancelled'))).toBe('⚪ Отменён');
+  it('order status labels: no emoji, "Оплата проверяется" after «Я оплатил(а)»', () => {
+    expect(translate('ru', statusKey('awaiting_payment'))).toBe('Ожидает оплаты');
+    expect(translate('ru', statusKey('awaiting_payment', true))).toBe('Оплата проверяется');
+    expect(translate('ru', statusKey('paid', true))).toBe('Оплачен');
+    expect(translate('ru', statusKey('cancelled'))).toBe('Отменён');
+  });
+
+  it('no emoji in Mini App texts (icons are SVG)', () => {
+    const emoji = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+    for (const dict of Object.values(dictionaries)) {
+      for (const [key, text] of Object.entries(dict)) expect(emoji.test(text), key).toBe(false);
+    }
   });
 
   it('fills placeholders', () => {

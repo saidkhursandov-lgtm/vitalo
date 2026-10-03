@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ErrorBox, Loading, PageHead, Pagination } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { AUDIT_ACTION, dateTime, ROLE } from '../lib/format';
+import { CloseIcon, SearchIcon } from '../components/Icons';
 
 interface AuditRow {
   id: string;
@@ -62,7 +63,7 @@ export function Audit() {
         <input type="date" value={filters.date_to ?? ''} onChange={(e) => set('date_to', e.target.value)} aria-label="По дату" />
         {filters.entity_id && (
           <button className="btn btn-sm btn-ghost" onClick={() => set('entity_id', '')}>
-            Только объект {filters.entity_id.slice(0, 8)}… ✕
+            Только объект {filters.entity_id.slice(0, 8)}… <CloseIcon />
           </button>
         )}
       </div>
@@ -95,8 +96,8 @@ export function Audit() {
                     <td>
                       {r.entity_id && LINK[r.entity_type] ? <Link to={`${LINK[r.entity_type]}${r.entity_id}`}>{r.entity_type}</Link> : r.entity_type}
                       {r.entity_id && (
-                        <button className="btn btn-sm btn-ghost" title="Все записи по этому объекту" onClick={() => set('entity_id', r.entity_id!)}>
-                          ⌕
+                        <button className="btn btn-sm btn-ghost btn-icon" title="Все записи по этому объекту" aria-label="Все записи по этому объекту" onClick={() => set('entity_id', r.entity_id!)}>
+                          <SearchIcon />
                         </button>
                       )}
                     </td>

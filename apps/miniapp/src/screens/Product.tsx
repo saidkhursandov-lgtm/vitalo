@@ -26,7 +26,7 @@ export function Product() {
   const [qty, setQty] = useState(1);
   const [imageIdx, setImageIdx] = useState(0);
 
-  if (product.isPending) return <Loading />;
+  if (product.isPending) return <div className="page"><Loading variant="product" /></div>;
   if (product.isError) {
     if (product.error instanceof ApiError && product.error.status === 404) return <Empty>{t('product.notFound')}</Empty>;
     return <ErrorState error={product.error} onRetry={() => void product.refetch()} />;

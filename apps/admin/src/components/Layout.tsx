@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useSession } from '../lib/auth';
 import { ROLE } from '../lib/format';
 import { navFor } from '../lib/nav';
+import { Logo } from './Logo';
 
 export function Layout() {
   const { staff, permissions, logout } = useSession();
@@ -9,7 +10,7 @@ export function Layout() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          VITALO <span>admin</span>
+          <Logo /> <span>admin</span>
         </div>
         <nav>
           {navFor(permissions).map((n) => (

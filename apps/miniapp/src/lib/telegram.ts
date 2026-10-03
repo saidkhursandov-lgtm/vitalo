@@ -8,6 +8,9 @@ interface TelegramWebApp {
   expand(): void;
   isVersionAtLeast(version: string): boolean;
   showConfirm(message: string, callback: (ok: boolean) => void): void;
+  setHeaderColor?(color: string): void;
+  setBackgroundColor?(color: string): void;
+  setBottomBarColor?(color: string): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
   HapticFeedback?: { notificationOccurred(type: 'error' | 'success' | 'warning'): void };
 }
@@ -24,11 +27,23 @@ export function telegram(): TelegramWebApp | null {
   return app && app.initData ? app : null;
 }
 
+/** Brand colours for Telegram's own header and background (the Mini App is light only). */
+export const BRAND_COLORS = { header: '#ffffff', background: '#f3f5f4', bottomBar: '#ffffff' } as const;
+
 export function initTelegram() {
   const app = telegram();
   if (!app) return;
   app.ready();
   app.expand();
+  try {
+    if (app.isVersionAtLeast('6.1')) {
+      app.setHeaderColor?.(BRAND_COLORS.header);
+      app.setBackgroundColor?.(BRAND_COLORS.background);
+    }
+    if (app.isVersionAtLeast('7.10')) app.setBottomBarColor?.(BRAND_COLORS.bottomBar);
+  } catch {
+    // Old Telegram clients: keep their default colours.
+  }
   document.documentElement.classList.add('in-telegram');
 }
 

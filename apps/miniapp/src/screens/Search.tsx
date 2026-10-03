@@ -33,7 +33,7 @@ export function Search() {
       </label>
 
       {q.length < 2 ? null : results.isPending ? (
-        <Loading />
+        <Loading variant="grid" />
       ) : results.isError ? (
         <ErrorState error={results.error} onRetry={() => void results.refetch()} />
       ) : items.length === 0 ? (

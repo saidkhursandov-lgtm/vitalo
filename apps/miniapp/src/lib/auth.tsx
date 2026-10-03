@@ -5,6 +5,7 @@ import { api, ApiError, hasToken, setToken, setUnauthorizedHandler } from './api
 import { I18nProvider, translate } from './i18n';
 import { isLocalDevHost, startParam, telegram } from './telegram';
 import type { Lang, UserProfile } from './types';
+import { Logo } from '../components/Logo';
 
 type State =
   | { status: 'loading' }
@@ -98,17 +99,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (state.status === 'ready') content = <UserContext.Provider value={state.user}>{children}</UserContext.Provider>;
   // `import.meta.env.DEV &&` lets the production build drop DevLogin entirely.
   else if (import.meta.env.DEV && state.status === 'dev-login') content = <DevLogin onLogin={login} />;
-  else if (state.status === 'outside') content = <div className="screen-center">{translate(lang, 'auth.outside')}</div>;
+  else if (state.status === 'outside') content = (
+      <div className="screen-center">
+        <Logo size="lg" />
+        <p className="hint">{translate(lang, 'auth.outside')}</p>
+      </div>
+    );
   else if (state.status === 'error')
     content = (
       <div className="screen-center">
+        <Logo size="lg" />
         <p>{translate(lang, 'auth.loginFailed')}</p>
         <button className="btn" onClick={() => void start()}>
           {translate(lang, 'common.retry')}
         </button>
       </div>
     );
-  else content = <div className="screen-center hint">{translate(lang, 'common.loading')}</div>;
+  else
+    content = (
+      <div className="screen-center" role="status" aria-busy="true" aria-label={translate(lang, 'common.loading')}>
+        <Logo size="lg" />
+        <span className="skel" style={{ width: 120, height: 6, borderRadius: 3 }} />
+      </div>
+    );
 
   return (
     <I18nProvider lang={lang} setLang={setLang}>

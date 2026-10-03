@@ -1,8 +1,16 @@
 import { useEffect, type ReactNode } from 'react';
 import { errorText } from '../lib/api';
 import { ORDER_STATUS, PAYMENT_STATUS } from '../lib/format';
+import { CloseIcon, NextIcon, PrevIcon } from './Icons';
 
-export const Loading = () => <div className="muted pad">Загрузка…</div>;
+/** Skeleton rows instead of a spinner. */
+export const Loading = () => (
+  <div className="skeleton" role="status" aria-busy="true" aria-label="Загрузка">
+    {[70, 90, 55, 80].map((w, i) => (
+      <span key={i} className="skel" style={{ width: `${w}%` }} />
+    ))}
+  </div>
+);
 
 export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   if (!error) return null;
@@ -18,23 +26,33 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
   );
 }
 
-export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'ok' | 'warn' | 'bad' | 'info'; children: ReactNode }) {
-  return <span className={`badge badge-${tone}`}>{children}</span>;
+export function Badge({ tone = 'neutral', dot, children }: { tone?: 'neutral' | 'ok' | 'warn' | 'bad' | 'info'; dot?: boolean; children: ReactNode }) {
+  return (
+    <span className={`badge badge-${tone}`}>
+      {dot && <span className="badge-dot" aria-hidden />}
+      {children}
+    </span>
+  );
 }
 
 const STATUS_TONE: Record<string, 'neutral' | 'ok' | 'warn' | 'bad' | 'info'> = {
   new: 'warn',
   awaiting_payment: 'warn',
-  paid: 'info',
+  paid: 'ok',
   picking: 'info',
   handed_to_delivery: 'info',
   in_transit: 'info',
   delivered: 'ok',
-  cancelled: 'bad',
-  return: 'bad',
+  cancelled: 'neutral',
+  return: 'neutral',
 };
 
-export const OrderStatus = ({ status }: { status: string }) => <Badge tone={STATUS_TONE[status]}>{ORDER_STATUS[status] ?? status}</Badge>;
+/** Order status pill: coloured, with a dot (same colours as in the Mini App). */
+export const OrderStatus = ({ status }: { status: string }) => (
+  <Badge tone={STATUS_TONE[status]} dot>
+    {ORDER_STATUS[status] ?? status}
+  </Badge>
+);
 
 export const PaymentStatus = ({ status }: { status: string }) => (
   <Badge tone={status === 'payment_success' ? 'ok' : status === 'payment_pending' ? 'warn' : 'bad'}>{PAYMENT_STATUS[status] ?? status}</Badge>
@@ -45,13 +63,13 @@ export function Pagination({ page, totalPages, onPage }: { page: number; totalPa
   return (
     <div className="pagination">
       <button className="btn btn-sm btn-ghost" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        ← Назад
+        <PrevIcon /> Назад
       </button>
       <span className="muted">
         Страница {page} из {totalPages}
       </span>
       <button className="btn btn-sm btn-ghost" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
-        Вперёд →
+        Вперёд <NextIcon />
       </button>
     </div>
   );
@@ -68,8 +86,8 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
       <div className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="btn btn-sm btn-ghost" aria-label="Закрыть" onClick={onClose}>
-            ✕
+          <button className="btn btn-sm btn-ghost btn-icon" aria-label="Закрыть" onClick={onClose}>
+            <CloseIcon size={18} />
           </button>
         </div>
         {children}

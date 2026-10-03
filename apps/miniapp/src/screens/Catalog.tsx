@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronIcon, CloseIcon, FilterIcon } from '../components/Icons';
-import { Empty, ErrorState, Loading, ProductGrid } from '../components/ui';
+import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { nameOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useBrands, useCategories, useForms, useProducts, useProductsCount, type ProductFilters, type Sort } from '../lib/queries';
@@ -29,7 +29,7 @@ export function Catalog() {
         <ChevronIcon width={18} height={18} />
       </Link>
       {categories.isPending ? (
-        <Loading />
+        <Loading variant="list" count={6} />
       ) : categories.isError ? (
         <ErrorState error={categories.error} onRetry={() => void categories.refetch()} />
       ) : (
@@ -134,11 +134,18 @@ export function ProductList() {
       </div>
 
       {products.isPending ? (
-        <Loading />
+        <Loading variant="grid" />
       ) : products.isError ? (
         <ErrorState error={products.error} onRetry={() => void products.refetch()} />
       ) : items.length === 0 ? (
-        <Empty>{t('catalog.empty')}</Empty>
+        <EmptyState
+          title={t('catalog.empty')}
+          action={
+            <button className="btn btn-secondary" onClick={() => setParams(filters.category ? { category: filters.category } : {}, { replace: true })}>
+              {t('common.reset')}
+            </button>
+          }
+        />
       ) : (
         <>
           <p className="hint small">{t('catalog.found', { n: products.data.pages[0].total })}</p>

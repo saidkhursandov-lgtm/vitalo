@@ -5,6 +5,7 @@ import { ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus }
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone } from '../lib/format';
+import { CheckIcon, ForwardIcon } from '../components/Icons';
 
 interface Named {
   id: string;
@@ -223,7 +224,7 @@ export function OrderDetail() {
                 <ul className="small">
                   {Object.keys(e.after).map((k) => (
                     <li key={k}>
-                      {FIELD[k] ?? k}: <s className="muted">{String(e.before[k] ?? '—')}</s> → {String(e.after[k] ?? '—')}
+                      {FIELD[k] ?? k}: <s className="muted">{String(e.before[k] ?? '—')}</s> <ForwardIcon size={13} className="inline-icon" /> {String(e.after[k] ?? '—')}
                     </li>
                   ))}
                 </ul>
@@ -235,7 +236,7 @@ export function OrderDetail() {
               <h3>Задачи менеджера</h3>
               {o.tasks.map((t, i) => (
                 <div key={i} className="small">
-                  {t.status === 'done' ? '✓' : '•'} {t.note ?? t.type} <span className="muted">({dateTime(t.created_at)})</span>
+                  {t.status === 'done' ? <CheckIcon size={14} className="inline-icon text-ok" /> : <span className="badge-dot inline-icon" aria-hidden />} {t.note ?? t.type} <span className="muted">({dateTime(t.created_at)})</span>
                 </div>
               ))}
             </>

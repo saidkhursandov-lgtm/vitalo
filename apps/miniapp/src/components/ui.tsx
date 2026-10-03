@@ -2,22 +2,124 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { discountPercent, money, nameOf } from '../lib/format';
-import { errorText, useI18n } from '../lib/i18n';
+import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
-import type { ProductListItem, Region } from '../lib/types';
-import { HeartIcon } from './Icons';
+import type { OrderStatus, ProductListItem, Region } from '../lib/types';
+import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
 
-export function Loading() {
+// ---------------------------------------------------------------- loading skeletons (no spinners)
+
+const Bar = ({ w = '100%', h = 14, r }: { w?: string | number; h?: number; r?: number }) => (
+  <span className="skel" style={{ width: w, height: h, borderRadius: r }} />
+);
+
+function SkeletonTile() {
+  return (
+    <div className="tile tile-skel">
+      <span className="skel tile-img" />
+      <div className="tile-body">
+        <Bar w="55%" h={16} />
+        <Bar w="90%" />
+        <Bar w="40%" h={12} />
+      </div>
+    </div>
+  );
+}
+
+export type SkeletonVariant = 'grid' | 'strip' | 'list' | 'product' | 'chips' | 'block';
+
+/** Grey placeholders in the shape of the content that is loading. */
+export function Loading({ variant = 'block', count }: { variant?: SkeletonVariant; count?: number }) {
   const { t } = useI18n();
-  return <div className="state hint">{t('common.loading')}</div>;
+  const n = (d: number) => Array.from({ length: count ?? d }, (_, i) => i);
+  let body: ReactNode;
+  switch (variant) {
+    case 'grid':
+      body = <div className="grid">{n(4).map((i) => <SkeletonTile key={i} />)}</div>;
+      break;
+    case 'strip':
+      body = <div className="strip">{n(3).map((i) => <SkeletonTile key={i} />)}</div>;
+      break;
+    case 'chips':
+      body = <div className="chips">{n(4).map((i) => <Bar key={i} w={96 + (i % 2) * 28} h={44} r={22} />)}</div>;
+      break;
+    case 'list':
+      body = (
+        <div className="card list">
+          {n(4).map((i) => (
+            <div key={i} className="list-row skel-row">
+              <span className="skel-col">
+                <Bar w="60%" h={15} />
+                <Bar w="35%" h={12} />
+              </span>
+              <Bar w={64} h={24} r={12} />
+            </div>
+          ))}
+        </div>
+      );
+      break;
+    case 'product':
+      body = (
+        <>
+          <span className="skel gallery" />
+          <span className="skel-col">
+            <Bar w="30%" h={12} />
+            <Bar w="85%" h={22} />
+            <Bar w="40%" h={24} />
+            <Bar w="100%" h={48} r={12} />
+          </span>
+        </>
+      );
+      break;
+    default:
+      body = (
+        <div className="card skel-col">
+          <Bar w="45%" h={18} />
+          <Bar />
+          <Bar w="80%" />
+          <Bar w="65%" />
+        </div>
+      );
+  }
+  return (
+    <div className="skeleton" role="status" aria-busy="true" aria-label={t('common.loading')}>
+      {body}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- empty and error states
+
+/** One look for every empty screen: icon, title, explanation and an action button. */
+export function EmptyState({ icon: I = SearchEmptyIcon, title, text, action }: { icon?: Icon; title: string; text?: string; action?: ReactNode }) {
+  return (
+    <div className="empty-state">
+      <span className="state-icon">
+        <I width={28} height={28} />
+      </span>
+      <h2>{title}</h2>
+      {text && <p className="hint">{text}</p>}
+      {action}
+    </div>
+  );
+}
+
+/** Short empty message (old call sites): same component, title only. */
+export function Empty({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return <EmptyState title={String(children)} action={action} />;
 }
 
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const { t, lang } = useI18n();
   const code = error instanceof ApiError ? error.code : undefined;
+  const text = errorText(lang, code);
   return (
-    <div className="state">
-      <p>{errorText(lang, code)}</p>
+    <div className="empty-state is-error" role="alert">
+      <span className="state-icon">
+        <OfflineIcon width={28} height={28} />
+      </span>
+      <h2>{t('common.error')}</h2>
+      <p className="hint">{text === t('common.error') ? t('common.errorHint') : text}</p>
       {onRetry && (
         <button className="btn btn-secondary" onClick={onRetry}>
           {t('common.retry')}
@@ -27,23 +129,18 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   );
 }
 
-export function Empty({ children, action }: { children: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="state hint">
-      <p>{children}</p>
-      {action}
-    </div>
-  );
-}
+// ---------------------------------------------------------------- order status pill
 
-/** Empty screen: title, explanation and an action button (favorites, cart, orders, search). */
-export function EmptyState({ title, text, action }: { title: string; text?: string; action?: ReactNode }) {
+/** Coloured pill: dot + text in lists, SVG icon + text on the order screen. */
+export function StatusPill({ status, reported = false, large = false }: { status: OrderStatus; reported?: boolean; large?: boolean }) {
+  const { t } = useI18n();
+  const shown = shownStatus(status, reported);
+  const I = STATUS_ICONS[shown];
   return (
-    <div className="empty-state">
-      <h2>{title}</h2>
-      {text && <p className="hint">{text}</p>}
-      {action}
-    </div>
+    <span className={`status status-${shown}${large ? ' status-lg' : ''}`}>
+      {large && I ? <I width={18} height={18} /> : <span className="status-dot" aria-hidden />}
+      {t(statusKey(status, reported))}
+    </span>
   );
 }
 
@@ -80,7 +177,10 @@ export function FavoriteButton({ productId, className = '' }: { productId: strin
         toggle.mutate({ id: productId, on: !on });
       }}
     >
-      <HeartIcon filled={on} width={20} height={20} />
+      {/* 44×44 tap area, smaller visible circle */}
+      <span className="fav-dot">
+        <HeartIcon filled={on} width={18} height={18} />
+      </span>
     </button>
   );
 }
@@ -95,9 +195,9 @@ export function ProductTile({ product }: { product: ProductListItem }) {
         {!product.in_stock && <span className="tile-out">{t('product.outOfStock')}</span>}
       </div>
       <div className="tile-body">
-        <Price price={product.price_uzs} old={product.old_price_uzs} />
+        <div className="tile-brand">{product.brand}</div>
         <div className="tile-name">{nameOf(product, lang)}</div>
-        <div className="tile-brand hint">{product.brand}</div>
+        <Price price={product.price_uzs} old={product.old_price_uzs} />
       </div>
     </Link>
   );
@@ -135,11 +235,11 @@ export function Stepper({ value, min = 1, max, onChange, disabled }: { value: nu
   return (
     <div className="stepper">
       <button type="button" aria-label="−" disabled={disabled || value <= min} onClick={() => onChange(value - 1)}>
-        −
+        <MinusIcon width={18} height={18} />
       </button>
       <span aria-live="polite">{value}</span>
       <button type="button" aria-label="+" disabled={disabled || value >= max} onClick={() => onChange(value + 1)}>
-        +
+        <PlusIcon width={18} height={18} />
       </button>
     </div>
   );

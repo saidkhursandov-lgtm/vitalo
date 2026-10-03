@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { errorText } from '../lib/api';
 import { ROLE } from '../lib/format';
+import { Logo } from '../components/Logo';
 
 /** Seeded test employees (prisma/seed.ts), one per role. */
 const TEST_STAFF = [
@@ -32,6 +33,7 @@ export function DevLogin({ onLogin }: { onLogin: (initData: string) => Promise<v
   return (
     <div className="center-screen">
       <div className="login-card">
+        <Logo size="lg" />
         <span className="badge badge-warn">DEV</span>
         <h1>Вход в админ-панель</h1>
         <p className="muted">

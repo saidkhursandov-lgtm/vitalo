@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Empty, ErrorState, Loading, RegionCitySelect } from '../components/ui';
+import { PinIcon } from '../components/Icons';
+import { Empty, EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
 import { ApiError } from '../lib/api';
 import { nameOf } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
@@ -16,17 +17,17 @@ export function Addresses() {
     <div className="page">
       <h1>{t('addresses.title')}</h1>
       {addresses.isPending ? (
-        <Loading />
+        <Loading variant="list" count={2} />
       ) : addresses.isError ? (
         <ErrorState error={addresses.error} onRetry={() => void addresses.refetch()} />
       ) : addresses.data.length === 0 ? (
-        <Empty>{t('addresses.empty')}</Empty>
+        <EmptyState icon={PinIcon} title={t('addresses.empty')} />
       ) : (
         addresses.data.map((a) => (
           <section key={a.id} className="card address">
             <div className="address-head">
               <strong>{a.label || nameOf(a.city, lang)}</strong>
-              {a.is_primary && <span className="status status-paid">{t('addresses.primary')}</span>}
+              {a.is_primary && <span className="tag">{t('addresses.primary')}</span>}
             </div>
             <p>
               {nameOf(a.region, lang)}, {nameOf(a.city, lang)}
@@ -73,7 +74,7 @@ export function AddressEdit() {
   const [draft, setDraft] = useState<{ label: string; region_id: string; city_id: string; address_text: string; is_primary: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (regions.isPending || addresses.isPending) return <Loading />;
+  if (regions.isPending || addresses.isPending) return <div className="page"><Loading /></div>;
   if (regions.isError) return <ErrorState error={regions.error} />;
   if (!isNew && !current) return <Empty>{t('common.error')}</Empty>;
 

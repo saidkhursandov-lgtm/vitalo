@@ -5,6 +5,7 @@ import { Badge, ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, Paginati
 import { api, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, prettyPhone } from '../lib/format';
+import { BackIcon } from '../components/Icons';
 
 interface CustomerRow {
   id: string;
@@ -144,7 +145,7 @@ export function CustomerDetail() {
         }
       >
         <Link to="/customers" className="btn btn-ghost">
-          ← К списку
+          <BackIcon /> К списку
         </Link>
         {can('customers.block') && (
           <button className={`btn ${blocked ? '' : 'btn-danger'}`} onClick={() => setModal(true)}>

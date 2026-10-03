@@ -1,20 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronIcon } from '../components/Icons';
-import { EmptyState, ErrorState, Loading } from '../components/ui';
+import { ChevronIcon, OrdersIcon, STATUS_ICONS } from '../components/Icons';
+import { EmptyState, ErrorState, Loading, StatusPill } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, nameOf, prettyPhone } from '../lib/format';
 import { errorText, statusKey, useI18n } from '../lib/i18n';
 import { useOrder, useOrders } from '../lib/queries';
 import { confirmDialog, haptic } from '../lib/telegram';
 import type { Order, OrderListItem } from '../lib/types';
-
-/** Colored status; "Я оплатил(а)" pressed but not confirmed yet = "🔵 Оплата проверяется". */
-export function StatusChip({ status, reported = false, large = false }: { status: OrderListItem['status']; reported?: boolean; large?: boolean }) {
-  const { t } = useI18n();
-  const shown = reported && (status === 'awaiting_payment' || status === 'new') ? 'checking' : status;
-  return <span className={`status status-${shown}${large ? ' status-lg' : ''}`}>{t(statusKey(status, reported))}</span>;
-}
 
 export function OrderRow({ order }: { order: OrderListItem }) {
   const { t, lang } = useI18n();
@@ -27,7 +20,7 @@ export function OrderRow({ order }: { order: OrderListItem }) {
         </div>
       </div>
       <div className="order-row-right">
-        <StatusChip status={order.status} reported={order.payment_reported} />
+        <StatusPill status={order.status} reported={order.payment_reported} />
         <strong>{money(order.total_uzs, lang)}</strong>
       </div>
       <ChevronIcon width={18} height={18} className="hint" />
@@ -44,11 +37,11 @@ export function Orders() {
     <div className="page">
       <h1>{t('orders.title')}</h1>
       {orders.isPending ? (
-        <Loading />
+        <Loading variant="list" />
       ) : orders.isError ? (
         <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />
       ) : items.length === 0 ? (
-        <EmptyState title={t('orders.emptyTitle')} text={t('orders.empty')} action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>} />
+        <EmptyState icon={OrdersIcon} title={t('orders.emptyTitle')} text={t('orders.empty')} action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>} />
       ) : (
         <div className="card list">
           {items.map((o) => (
@@ -81,7 +74,7 @@ export function OrderDetail() {
     onError: () => haptic('error'),
   });
 
-  if (order.isPending) return <Loading />;
+  if (order.isPending) return <div className="page"><Loading /><Loading /></div>;
   if (order.isError) return <ErrorState error={order.error} onRetry={() => void order.refetch()} />;
   const o = order.data;
   const unpaid = o.status === 'new' || o.status === 'awaiting_payment';
@@ -95,7 +88,7 @@ export function OrderDetail() {
     <div className="page">
       <h1>{t('orders.number', { n: o.order_number })}</h1>
       <div className="order-status-hero">
-        <StatusChip status={o.status} reported={reported} large />
+        <StatusPill status={o.status} reported={reported} large />
         <span className="hint small">{dateTime(o.created_at, lang)}</span>
       </div>
 
@@ -137,12 +130,18 @@ export function OrderDetail() {
       <section className="card">
         <h2>{t('orders.history')}</h2>
         <ol className="timeline">
-          {o.history.map((h, i) => (
-            <li key={i}>
-              <strong>{t(statusKey(h.to_status))}</strong>
-              <span className="hint small">{dateTime(h.created_at, lang)}</span>
-            </li>
-          ))}
+          {o.history.map((h, i) => {
+            const I = STATUS_ICONS[h.to_status];
+            return (
+              <li key={i}>
+                <span className="timeline-icon" aria-hidden>
+                  {I && <I width={14} height={14} />}
+                </span>
+                <strong>{t(statusKey(h.to_status))}</strong>
+                <span className="hint small">{dateTime(h.created_at, lang)}</span>
+              </li>
+            );
+          })}
         </ol>
       </section>
 

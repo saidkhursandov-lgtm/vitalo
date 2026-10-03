@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { HeartIcon } from '../components/Icons';
 import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { useI18n } from '../lib/i18n';
 import { useFavorites } from '../lib/queries';
@@ -11,11 +12,12 @@ export function Favorites() {
     <div className="page">
       <h1>{t('favorites.title')}</h1>
       {favorites.isPending ? (
-        <Loading />
+        <Loading variant="grid" />
       ) : favorites.isError ? (
         <ErrorState error={favorites.error} onRetry={() => void favorites.refetch()} />
       ) : favorites.data.length === 0 ? (
         <EmptyState
+          icon={HeartIcon}
           title={t('favorites.emptyTitle')}
           text={t('favorites.empty')}
           action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>}

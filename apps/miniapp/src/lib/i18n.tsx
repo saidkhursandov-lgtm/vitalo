@@ -4,6 +4,7 @@ import type { Lang, OrderStatus } from './types';
 const ru = {
   'common.loading': 'Загрузка…',
   'common.error': 'Что-то пошло не так',
+  'common.errorHint': 'Проверьте интернет и попробуйте ещё раз.',
   'common.retry': 'Повторить',
   'common.save': 'Сохранить',
   'common.cancel': 'Отмена',
@@ -14,7 +15,7 @@ const ru = {
   'common.apply': 'Применить',
   'common.reset': 'Сбросить',
   'common.pieces': 'шт.',
-  'status.checking': '🔵 Оплата проверяется',
+  'status.checking': 'Оплата проверяется',
   'pay.cardRecipient': 'Имя получателя',
   'pay.cardNumber': 'Номер карты',
   'pay.soon': 'Скоро',
@@ -167,15 +168,15 @@ const ru = {
   'orders.payUntil': 'Ожидаем оплату до {date}',
   'orders.all': 'Все заказы',
 
-  'status.new': '🟡 Ожидает оплаты',
-  'status.awaiting_payment': '🟡 Ожидает оплаты',
-  'status.paid': '🟢 Оплачен',
-  'status.picking': '📦 Собирается',
-  'status.handed_to_delivery': '🚚 Передан курьеру',
-  'status.in_transit': '🚚 В пути',
-  'status.delivered': '✅ Доставлен',
-  'status.cancelled': '⚪ Отменён',
-  'status.return': '↩️ Возврат',
+  'status.new': 'Ожидает оплаты',
+  'status.awaiting_payment': 'Ожидает оплаты',
+  'status.paid': 'Оплачен',
+  'status.picking': 'Собирается',
+  'status.handed_to_delivery': 'Передан курьеру',
+  'status.in_transit': 'В пути',
+  'status.delivered': 'Доставлен',
+  'status.cancelled': 'Отменён',
+  'status.return': 'Возврат',
 
   'profile.title': 'Профиль',
   'profile.language': 'Язык',
@@ -221,6 +222,7 @@ export type MessageKey = keyof typeof ru;
 const uz: Record<MessageKey, string> = {
   'common.loading': 'Yuklanmoqda…',
   'common.error': 'Nimadir xato ketdi',
+  'common.errorHint': 'Internetni tekshiring va qayta urinib ko‘ring.',
   'common.retry': 'Qayta urinish',
   'common.save': 'Saqlash',
   'common.cancel': 'Bekor qilish',
@@ -231,7 +233,7 @@ const uz: Record<MessageKey, string> = {
   'common.apply': 'Qo‘llash',
   'common.reset': 'Tozalash',
   'common.pieces': 'dona',
-  'status.checking': '🔵 To‘lov tekshirilmoqda',
+  'status.checking': 'To‘lov tekshirilmoqda',
   'pay.cardRecipient': 'Oluvchining ismi',
   'pay.cardNumber': 'Karta raqami',
   'pay.soon': 'Tez orada',
@@ -384,15 +386,15 @@ const uz: Record<MessageKey, string> = {
   'orders.payUntil': 'To‘lovni {date} gacha kutamiz',
   'orders.all': 'Barcha buyurtmalar',
 
-  'status.new': '🟡 To‘lov kutilmoqda',
-  'status.awaiting_payment': '🟡 To‘lov kutilmoqda',
-  'status.paid': '🟢 To‘langan',
-  'status.picking': '📦 Yig‘ilmoqda',
-  'status.handed_to_delivery': '🚚 Kuryerga topshirildi',
-  'status.in_transit': '🚚 Yo‘lda',
-  'status.delivered': '✅ Yetkazildi',
-  'status.cancelled': '⚪ Bekor qilindi',
-  'status.return': '↩️ Qaytarish',
+  'status.new': 'To‘lov kutilmoqda',
+  'status.awaiting_payment': 'To‘lov kutilmoqda',
+  'status.paid': 'To‘langan',
+  'status.picking': 'Yig‘ilmoqda',
+  'status.handed_to_delivery': 'Kuryerga topshirildi',
+  'status.in_transit': 'Yo‘lda',
+  'status.delivered': 'Yetkazildi',
+  'status.cancelled': 'Bekor qilindi',
+  'status.return': 'Qaytarish',
 
   'profile.title': 'Profil',
   'profile.language': 'Til',
@@ -456,8 +458,11 @@ export function pluralForm(n: number): 'one' | 'few' | 'many' {
 }
 
 /** Order status shown to the customer; "Я оплатил(а)" pressed but not confirmed yet = checking. */
-export const statusKey = (s: OrderStatus, paymentReported = false) =>
-  `status.${paymentReported && (s === 'awaiting_payment' || s === 'new') ? 'checking' : s}` as MessageKey;
+/** Status for colour and icon: "Я оплатил(а)" pressed but not confirmed yet = checking. */
+export const shownStatus = (s: OrderStatus, paymentReported = false): OrderStatus | 'checking' =>
+  paymentReported && (s === 'awaiting_payment' || s === 'new') ? 'checking' : s;
+
+export const statusKey = (s: OrderStatus, paymentReported = false) => `status.${shownStatus(s, paymentReported)}` as MessageKey;
 
 interface I18n {
   lang: Lang;

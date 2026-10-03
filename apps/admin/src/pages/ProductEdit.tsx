@@ -5,6 +5,7 @@ import { Badge, ErrorBox, Field, Loading, PageHead, toInt } from '../components/
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { PRODUCT_STATUS } from '../lib/format';
+import { BackIcon } from '../components/Icons';
 
 interface CategoryNode {
   id: string;
@@ -116,7 +117,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     <form onSubmit={submit}>
       <PageHead title={product ? `Товар: ${product.name_ru as string}` : 'Новый товар'}>
         <Link to="/products" className="btn btn-ghost">
-          ← К списку
+          <BackIcon /> К списку
         </Link>
         {editable && product && product.status !== 'archived' && (
           <button

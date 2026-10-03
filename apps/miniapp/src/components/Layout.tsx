@@ -4,6 +4,7 @@ import { useI18n } from '../lib/i18n';
 import { useCartCount } from '../lib/queries';
 import { telegram } from '../lib/telegram';
 import { BackIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, UserIcon } from './Icons';
+import { Logo } from './Logo';
 
 const TABS = ['/', '/catalog', '/favorites', '/profile'];
 /** Focused flows hide the bottom navigation. */
@@ -47,8 +48,8 @@ export function Layout() {
             <BackIcon />
           </button>
         ) : (
-          <Link to="/" className="logo">
-            VITALO
+          <Link to="/" className="logo-link" aria-label="VITALO">
+            <Logo />
           </Link>
         )}
         <Link to="/cart" className="icon-btn cart-btn" aria-label={t('nav.cart')}>

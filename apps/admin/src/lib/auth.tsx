@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DevLogin } from '../pages/DevLogin';
 import { api, ApiError, errorText, hasToken, setToken, setUnauthorizedHandler } from './api';
+import { Logo } from '../components/Logo';
 
 export type Permission =
   | 'dashboard.view'
@@ -106,17 +107,29 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   }
   // `import.meta.env.DEV &&` lets the production build drop DevLogin entirely.
   if (import.meta.env.DEV && state.status === 'dev-login') return <DevLogin onLogin={signIn} />;
-  if (state.status === 'outside') return <div className="center-screen">Откройте админ-панель через Telegram-бота VITALO.</div>;
+  if (state.status === 'outside')
+    return (
+      <div className="center-screen">
+        <Logo size="lg" />
+        <p className="muted">Откройте админ-панель через Telegram-бота VITALO.</p>
+      </div>
+    );
   if (state.status === 'error')
     return (
       <div className="center-screen">
+        <Logo size="lg" />
         <p>{state.message}</p>
         <button className="btn" onClick={() => void start()}>
           Повторить
         </button>
       </div>
     );
-  return <div className="center-screen muted">Загрузка…</div>;
+  return (
+    <div className="center-screen" role="status" aria-busy="true" aria-label="Загрузка">
+      <Logo size="lg" />
+      <span className="skel" style={{ width: 120, height: 6 }} />
+    </div>
+  );
 }
 
 declare global {

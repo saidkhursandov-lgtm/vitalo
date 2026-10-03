@@ -5,6 +5,7 @@ import { ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '..
 import { api, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { CONDITION, dateTime, MOVEMENT } from '../lib/format';
+import { CloseIcon } from '../components/Icons';
 
 interface StockRow {
   product_id: string;
@@ -277,7 +278,7 @@ function Movements() {
         </select>
         {productId && (
           <button className="btn btn-sm btn-ghost" onClick={() => set('product_id', '')}>
-            Показать все товары ✕
+            Показать все товары <CloseIcon />
           </button>
         )}
       </div>

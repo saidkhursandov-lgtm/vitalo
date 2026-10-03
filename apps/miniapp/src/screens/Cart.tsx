@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { TrashIcon } from '../components/Icons';
+import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
 import { money, nameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
@@ -72,7 +72,7 @@ export function Cart() {
     if (primary && !city.region_id) setCity({ region_id: primary.region.id, city_id: primary.city.id });
   }, [addresses.data, city.region_id]);
 
-  if (cart.isPending && !cart.data) return <Loading />;
+  if (cart.isPending && !cart.data) return <div className="page"><Loading variant="list" count={3} /></div>;
   if (cart.isError) return <ErrorState error={cart.error} onRetry={() => void cart.refetch()} />;
   const data = cart.data!;
 
@@ -80,7 +80,7 @@ export function Cart() {
     return (
       <div className="page">
         <h1>{t('cart.title')}</h1>
-        <EmptyState title={t('cart.emptyTitle')} text={t('cart.empty')} action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>} />
+        <EmptyState icon={CartIcon} title={t('cart.emptyTitle')} text={t('cart.empty')} action={<Link to="/catalog" className="btn">{t('common.toCatalog')}</Link>} />
       </div>
     );
   }
@@ -112,11 +112,11 @@ export function Cart() {
                 <div className="cart-row">
                   <div className="stepper">
                     <button aria-label="−" disabled={busy || l.qty <= 1} onClick={() => setQty.mutate({ product_id: l.product_id, qty: l.qty - 1 })}>
-                      −
+                      <MinusIcon width={18} height={18} />
                     </button>
                     <span>{l.qty}</span>
                     <button aria-label="+" disabled={busy || l.qty >= l.available_qty} onClick={() => setQty.mutate({ product_id: l.product_id, qty: l.qty + 1 })}>
-                      +
+                      <PlusIcon width={18} height={18} />
                     </button>
                   </div>
                   <strong>{money(l.line_total_uzs, lang)}</strong>

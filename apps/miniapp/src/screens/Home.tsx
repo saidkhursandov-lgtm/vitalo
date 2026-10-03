@@ -26,7 +26,10 @@ export function Home() {
       </button>
 
       {categories.isPending ? (
-        <Loading />
+        <>
+          <Loading variant="chips" />
+          <Loading variant="block" />
+        </>
       ) : categories.isError ? (
         <ErrorState error={categories.error} onRetry={() => void categories.refetch()} />
       ) : (
@@ -73,7 +76,7 @@ export function Home() {
         products={fresh.data?.pages[0].items.slice(0, 10) ?? []}
         more={<Link to="/catalog/products?sort=new" className="link">{t('home.all')}</Link>}
       />
-      {popular.isPending && <Loading />}
+      {popular.isPending && <Loading variant="strip" />}
     </div>
   );
 }

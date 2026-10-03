@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Logo } from '../components/Logo';
 import { useI18n } from '../lib/i18n';
 
 /** Test customers for the dev login (fake Telegram ids). */
@@ -30,6 +31,7 @@ export function DevLogin({ onLogin }: { onLogin: (initData: string) => Promise<v
 
   return (
     <div className="screen-center dev-login">
+      <Logo size="lg" />
       <div className="dev-badge">DEV</div>
       <h1>{t('auth.devTitle')}</h1>
       <p className="hint">{t('auth.devHint')}</p>

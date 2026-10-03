@@ -96,7 +96,7 @@ export function Checkout() {
     mutationFn: ({ body, key }: { body: object; key: string }) => api<Order>('/orders', { method: 'POST', body, headers: { 'Idempotency-Key': key } }),
   });
 
-  if (!form || regions.isPending) return <Loading />;
+  if (!form || regions.isPending) return <div className="page"><Loading /><Loading /></div>;
   if (regions.isError) return <ErrorState error={regions.error} onRetry={() => void regions.refetch()} />;
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => {
