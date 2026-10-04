@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react';
 import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
-import { nameOf, textOf } from '../lib/format';
-import { errorText, useI18n, type MessageKey } from '../lib/i18n';
-import { useCartActions, useProduct, useShopTexts } from '../lib/queries';
-import { haptic } from '../lib/telegram';
+import { money, nameOf, textOf } from '../lib/format';
+import { useI18n, type MessageKey } from '../lib/i18n';
+import { useCart, useProduct, useShopTexts } from '../lib/queries';
+import { useQuickCart } from '../lib/quick-cart';
+import { QuickAdd, useQuickNotify } from '../components/QuickAdd';
+import { useToast } from '../components/Toast';
+import { CartIcon } from '../components/Icons';
+import type { ProductCard } from '../lib/types';
+import { tapHaptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
 import { Picture } from '../components/Picture';
-import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip, Stepper, useToast } from '../components/ui';
+import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip } from '../components/ui';
 
 const SECTIONS: [field: string, title: MessageKey][] = [
   ['composition', 'product.composition'],
@@ -21,12 +26,8 @@ const SECTIONS: [field: string, title: MessageKey][] = [
 export function Product() {
   const { id = '' } = useParams();
   const { t, lang } = useI18n();
-  const navigate = useNavigate();
   const product = useProduct(id);
   const texts = useShopTexts();
-  const { add } = useCartActions();
-  const toast = useToast();
-  const [qty, setQty] = useState(1);
   const [imageIdx, setImageIdx] = useState(0);
   useEffect(() => {
     if (id) track('product_view', { product_id: id });
@@ -42,20 +43,6 @@ export function Product() {
   const images = p.media.filter((m) => m.type === 'image');
   const documents = p.media.filter((m) => m.type === 'document');
   const description = textOf(p, 'short_description', lang);
-  const max = Math.max(1, p.available_qty);
-
-  const addToCart = () =>
-    add.mutate(
-      { product_id: p.id, qty },
-      {
-        onSuccess: () => {
-          haptic('success');
-          track('add_to_cart', { product_id: p.id, qty });
-          toast.show(t('product.added'), <Link to="/cart" className="toast-action">{t('product.goToCart')}</Link>);
-        },
-        onError: (e) => toast.show(errorText(lang, e instanceof ApiError ? e.code : undefined)),
-      },
-    );
 
   return (
     <div className="page product">
@@ -83,21 +70,6 @@ export function Product() {
       <h1 className="product-title">{nameOf(p, lang)}</h1>
       <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" />
       <div className={`stock ${p.in_stock ? 'is-in' : 'is-out'}`}>{p.in_stock ? t('product.inStock') : t('product.outOfStock')}</div>
-
-      {p.in_stock && (
-        <div className="buy-box">
-          <Stepper value={qty} max={max} onChange={setQty} />
-          {qty >= max && <span className="hint small">{t('product.maxQty', { n: max })}</span>}
-          <div className="buy-actions">
-            <button className="btn btn-secondary" disabled={add.isPending} onClick={addToCart}>
-              {t('product.addToCart')}
-            </button>
-            <button className="btn" onClick={() => navigate(`/checkout?buy=${p.id}&qty=${qty}`)}>
-              {t('product.buyNow')}
-            </button>
-          </div>
-        </div>
-      )}
 
       {description && (
         <section className="card">
@@ -156,9 +128,66 @@ export function Product() {
 
       <ProductStrip title={t('product.similar')} products={p.similar} />
       <ProductStrip title={t('product.alsoBought')} products={p.also_bought} />
-      {toast.node}
-      {/* Mandatory note, always visible at the bottom; wording is edited in the admin panel (Настройки → Тексты). */}
-      {texts.data && <div className="disclaimer">{lang === 'uz' ? texts.data.product_disclaimer.uz : texts.data.product_disclaimer.ru}</div>}
+      {/* Mandatory note, once, as the last block (the fixed bottom belongs to the buy panel); edited in Настройки → Тексты. */}
+      {texts.data && <p className="disclaimer-block">{lang === 'uz' ? texts.data.product_disclaimer.uz : texts.data.product_disclaimer.ru}</p>}
+
+      <BuyPanel product={p} />
+    </div>
+  );
+}
+
+/**
+ * Always on screen (F2): price and «Купить сейчас» on top, the main action below — «В корзину», or once
+ * the product is in the cart: «− n +» and «Перейти в корзину · сумма». At most 88 px plus the iPhone safe area.
+ */
+function BuyPanel({ product: p }: { product: ProductCard }) {
+  const { t, lang } = useI18n();
+  const navigate = useNavigate();
+  const notify = useQuickNotify();
+  const toast = useToast();
+  const cart = useCart(null);
+  const { qty, set } = useQuickCart(p.id, notify);
+  const total = cart.data ? cart.data.goods_total_uzs - cart.data.discount_total_uzs : null;
+  const soldOut = !p.in_stock && qty === 0;
+
+  return (
+    <div className="buy-panel" role="region" aria-label={t('product.addToCart')}>
+      <div className="buy-panel-top">
+        <Price price={p.price_uzs} old={p.old_price_uzs} />
+        {!soldOut && (
+          <button type="button" className="buy-now" onClick={() => navigate(`/checkout?buy=${p.id}&qty=${Math.max(qty, 1)}`)}>
+            {t('product.buyNow')}
+          </button>
+        )}
+      </div>
+      <div className="buy-panel-main">
+        {soldOut ? (
+          <button type="button" className="btn btn-block is-out" disabled>
+            {t('product.outOfStock')}
+          </button>
+        ) : qty === 0 ? (
+          <button
+            type="button"
+            className="btn btn-block"
+            onClick={() => {
+              tapHaptic();
+              set(1);
+              track('add_to_cart', { product_id: p.id, source: 'product' });
+              toast(t('product.added'), <Link to="/cart" className="toast-action">{t('quick.cart')}</Link>);
+            }}
+          >
+            <CartIcon width={20} height={20} /> {t('product.addToCart')}
+          </button>
+        ) : (
+          <>
+            <QuickAdd productId={p.id} inStock={p.in_stock} variant="panel" />
+            <Link to="/cart" className="btn to-cart">
+              <span>{t('panel.toCart')}</span>
+              {total !== null && <small>{money(total, lang)}</small>}
+            </Link>
+          </>
+        )}
+      </div>
     </div>
   );
 }

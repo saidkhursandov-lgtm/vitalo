@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
 import { discountPercent, money, nameOf } from '../lib/format';
@@ -6,6 +6,7 @@ import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, Region } from '../lib/types';
 import { Picture } from './Picture';
+import { QuickAdd } from './QuickAdd';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
 
 // ---------------------------------------------------------------- loading skeletons (no spinners)
@@ -200,6 +201,7 @@ export function ProductTile({ product }: { product: ProductListItem }) {
         <div className="tile-brand">{product.brand}</div>
         <div className="tile-name">{nameOf(product, lang)}</div>
         <Price price={product.price_uzs} old={product.old_price_uzs} />
+        <QuickAdd productId={product.id} inStock={product.in_stock} />
       </div>
     </Link>
   );
@@ -287,24 +289,4 @@ export function RegionCitySelect({
       </label>
     </div>
   );
-}
-
-/** Short message at the bottom of the screen, optionally with an action link. */
-export function Toast({ message, action, onClose }: { message: string; action?: ReactNode; onClose: () => void }) {
-  useEffect(() => {
-    const id = setTimeout(onClose, 3500);
-    return () => clearTimeout(id);
-  }, [onClose]);
-  return (
-    <div className="toast" role="status">
-      <span>{message}</span>
-      {action}
-    </div>
-  );
-}
-
-export function useToast() {
-  const [toast, setToast] = useState<{ message: string; action?: ReactNode } | null>(null);
-  const node = toast ? <Toast message={toast.message} action={toast.action} onClose={() => setToast(null)} /> : null;
-  return { show: (message: string, action?: ReactNode) => setToast({ message, action }), node };
 }

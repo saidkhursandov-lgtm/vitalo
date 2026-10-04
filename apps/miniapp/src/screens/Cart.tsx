@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
@@ -57,15 +58,11 @@ export function Cart() {
   const selected: CityRef | null = city.region_id && city.city_id ? city : null;
   const cart = useCart(selected);
   const { setQty, remove } = useCartActions();
-  // The API reports each warning once (then stores the correction), and this screen may load the cart
-  // several times (e.g. again once the delivery city is known) — so keep every warning seen while it is open.
-  const [warnings, setWarnings] = useState<CartWarning[]>([]);
-  useEffect(() => {
-    const fresh = cart.data?.warnings ?? [];
-    if (fresh.length) {
-      setWarnings((prev) => [...prev.filter((p) => !fresh.some((f) => f.code === p.code && f.product_id === p.product_id)), ...fresh]);
-    }
-  }, [cart.data]);
+  // The API reports each warning once (then stores the correction). Any screen may have loaded the cart
+  // first (cards with quick add do), so warnings are kept in a shared store until seen here.
+  const client = useQueryClient();
+  const warnings = useQuery({ queryKey: ['cart-warnings'], queryFn: () => [] as CartWarning[], enabled: false, initialData: [] as CartWarning[] }).data;
+  useEffect(() => () => void client.setQueryData(['cart-warnings'], []), [client]);
 
   // Default delivery city = the primary saved address.
   useEffect(() => {

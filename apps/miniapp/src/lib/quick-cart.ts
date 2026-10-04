@@ -1,0 +1,126 @@
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
+import { api, ApiError } from './api';
+import { applyCart } from './cart-cache';
+import { useCart } from './queries';
+import type { Cart } from './types';
+
+/**
+ * Quick cart (F1): the quantity a customer wants for each product, shown at once on every card
+ * (optimistic), sent to the server after a short pause so fast taps become one request, rolled back on refusal.
+ * The server cart (query ['cart', null]) stays the source of truth; `desired` only holds unsent changes.
+ */
+export const QUICK_DEBOUNCE_MS = 300;
+export const MAX_LINE_QTY = 99;
+
+const desired = new Map<string, number>();
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const inFlight = new Set<string>();
+const listeners = new Set<() => void>();
+let version = 0;
+const emit = () => {
+  version++;
+  listeners.forEach((l) => l());
+};
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+};
+
+export type QuickNotice = { kind: 'left'; n: number } | { kind: 'error'; code?: string };
+type Notify = (n: QuickNotice) => void;
+
+const serverLine = (cart: Cart | undefined, productId: string) => cart?.items.find((i) => i.product_id === productId && i.status === 'available');
+
+// ---------------------------------------------------------------- changes
+
+/** Badge = what the server has + changes not sent yet (other products may still be waiting). */
+function syncCount(client: QueryClient) {
+  const cart = client.getQueryData<Cart>(['cart', null]);
+  if (!cart) return;
+  let pending = 0;
+  for (const [id, qty] of desired) pending += qty - (serverLine(cart, id)?.qty ?? 0);
+  client.setQueryData(['cart', 'count'], Math.max(0, cart.items_count + pending));
+}
+
+async function flush(client: QueryClient, productId: string, notify: Notify) {
+  timers.delete(productId);
+  if (inFlight.has(productId)) {
+    // one request per product at a time; the newest wish goes right after
+    timers.set(productId, setTimeout(() => void flush(client, productId, notify), QUICK_DEBOUNCE_MS));
+    return;
+  }
+  const target = desired.get(productId);
+  if (target === undefined) return;
+  const cart = client.getQueryData<Cart>(['cart', null]);
+  const server = serverLine(cart, productId)?.qty ?? 0;
+  if (target === server) {
+    desired.delete(productId);
+    emit();
+    return;
+  }
+  inFlight.add(productId);
+  try {
+    const res =
+      target === 0
+        ? await api<Cart>(`/cart/items/${productId}`, { method: 'DELETE' })
+        : server === 0
+          ? await api<Cart>('/cart/items', { method: 'POST', body: { product_id: productId, qty: target } })
+          : await api<Cart>(`/cart/items/${productId}`, { method: 'PATCH', body: { qty: target } });
+    // our own "qty reduced" is answered by the toast, not repeated on the cart screen
+    applyCart(client, res, (w) => w.code === 'qty_reduced' && w.product_id === productId);
+    if (desired.get(productId) === target) {
+      desired.delete(productId);
+      const got = serverLine(res, productId)?.qty ?? 0;
+      if (got < target) notify({ kind: 'left', n: got });
+    }
+    syncCount(client);
+  } catch (e) {
+    // refused: back to what the server has
+    desired.delete(productId);
+    void client.invalidateQueries({ queryKey: ['cart', 'count'] });
+    notify({ kind: 'error', code: e instanceof ApiError ? e.code : undefined });
+  } finally {
+    inFlight.delete(productId);
+    emit();
+  }
+}
+
+function change(client: QueryClient, productId: string, next: number, notify: Notify) {
+  const cart = client.getQueryData<Cart>(['cart', null]);
+  const prev = desired.get(productId) ?? serverLine(cart, productId)?.qty ?? 0;
+  if (next === prev) return;
+  desired.set(productId, next);
+  // badge = sum of quantities, updated at once
+  client.setQueryData<number>(['cart', 'count'], (c) => Math.max(0, (c ?? 0) + (next - prev)));
+  emit();
+  clearTimeout(timers.get(productId));
+  timers.set(productId, setTimeout(() => void flush(client, productId, notify), QUICK_DEBOUNCE_MS));
+}
+
+/** Quantity of one product in the cart, the same on every card, with a setter that answers instantly. */
+export function useQuickCart(productId: string, notify: Notify) {
+  const client = useQueryClient();
+  const cart = useCart(null);
+  useSyncExternalStore(subscribe, () => version);
+  const line = serverLine(cart.data, productId);
+  const qty = desired.get(productId) ?? line?.qty ?? 0;
+  const max = line ? Math.min(line.available_qty, MAX_LINE_QTY) : MAX_LINE_QTY;
+  return {
+    qty,
+    max,
+    ready: !cart.isPending,
+    set: (n: number) => change(client, productId, Math.max(0, Math.min(n, max)), notify),
+  };
+}
+
+/** Tests only. */
+export function resetQuickCart() {
+  for (const t of timers.values()) clearTimeout(t);
+  timers.clear();
+  desired.clear();
+  inFlight.clear();
+  emit();
+}

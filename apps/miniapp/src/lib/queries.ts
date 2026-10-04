@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from './api';
+import { applyCart, rememberWarnings } from './cart-cache';
 import type { Address, BankTransfer, Cart, CategoryTrees, CheckoutDefaults, DeliveryEta, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
@@ -76,7 +77,15 @@ export const useProduct = (id: string) => useQuery({ queryKey: ['product', id], 
 // ---------- cart ----------
 
 export function useCart(city?: CityRef | null) {
-  return useQuery({ queryKey: ['cart', city ?? null], queryFn: () => api<Cart>(`/cart${qs({ ...city })}`) });
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: ['cart', city ?? null],
+    queryFn: async () => {
+      const cart = await api<Cart>(`/cart${qs({ ...city })}`);
+      rememberWarnings(client, cart.warnings); // shown on the cart screen even if another screen loaded the cart first
+      return cart;
+    },
+  });
 }
 
 /** Badge in the top bar. Uses the read-only counter so it never "eats" the cart warnings. */
@@ -87,11 +96,7 @@ export function useCartCount() {
 /** Every cart mutation returns the fresh cart; we store it and refresh views that depend on a city. */
 export function useCartActions() {
   const client = useQueryClient();
-  const done = (cart: Cart) => {
-    client.setQueryData(['cart', null], cart);
-    client.setQueryData(['cart', 'count'], cart.items_count);
-    void client.invalidateQueries({ queryKey: ['cart'], predicate: (q) => q.queryKey[1] !== null });
-  };
+  const done = (cart: Cart) => applyCart(client, cart);
   return {
     add: useMutation({
       mutationFn: (v: { product_id: string; qty: number }) => api<Cart>('/cart/items', { method: 'POST', body: v }),

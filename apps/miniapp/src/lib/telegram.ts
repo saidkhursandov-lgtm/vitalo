@@ -13,7 +13,7 @@ interface TelegramWebApp {
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
-  HapticFeedback?: { notificationOccurred(type: 'error' | 'success' | 'warning'): void };
+  HapticFeedback?: { notificationOccurred(type: 'error' | 'success' | 'warning'): void; impactOccurred?(style: 'light' | 'medium' | 'heavy'): void };
 }
 
 declare global {
@@ -59,6 +59,11 @@ export function requestPhone(): Promise<string | null | undefined> {
 }
 
 export const canRequestPhone = () => !!telegram()?.requestContact && !!telegram()?.isVersionAtLeast('6.9');
+
+/** A light tap (quick add, quantity change). */
+export function tapHaptic() {
+  telegram()?.HapticFeedback?.impactOccurred?.('light');
+}
 
 export function haptic(type: 'error' | 'success' | 'warning') {
   telegram()?.HapticFeedback?.notificationOccurred(type);

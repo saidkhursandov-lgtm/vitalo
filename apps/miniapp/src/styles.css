@@ -405,7 +405,7 @@ details.card[open] summary { margin-bottom: 4px; }
 .cart-img { width: 72px; height: 72px; border-radius: 10px; overflow: hidden; background: var(--surface-2); }
 .cart-img img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
 .cart-info { min-width: 0; }
-.cart-name { display: block; font-weight: 500; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.cart-name { display: flex; align-items: center; min-height: var(--tap); font-weight: 500; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
 .cart-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .cart-row strong { white-space: nowrap; }
 .summary .sum-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; }
@@ -599,3 +599,72 @@ button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border)
 
 /* Optimized photos (picture = WebP + JPEG fallback) fill the same boxes as before */
 .tile-img picture, .gallery picture { display: block; width: 100%; height: 100%; }
+
+/* ---------- block F: quick add on cards, buy panel on the product page ---------- */
+.tile-body .quick-add, .tile-body .qty-control { margin-top: 10px; }
+.quick-add {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: var(--tap);
+  padding: 0 10px; border: 1px solid var(--primary); border-radius: var(--radius-sm); background: var(--surface);
+  color: var(--primary-text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background-color 0.15s, transform 0.15s;
+}
+.quick-add span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-add:active { background: var(--primary-soft); transform: scale(0.97); }
+.quick-add.is-out { border-color: var(--border); background: var(--neutral-soft); color: var(--muted); cursor: default; }
+.quick-add.is-out:active { transform: none; }
+
+/* «− 1 +»: appears with a short scale-in, so the button seems to turn into it */
+.qty-control {
+  position: relative; display: grid; grid-template-columns: var(--tap) minmax(0, 1fr) var(--tap); align-items: center; width: 100%;
+  min-height: var(--tap); border: 1px solid var(--primary); border-radius: var(--radius-sm); background: var(--primary-soft);
+  animation: qty-in 0.18s ease-out; cursor: default;
+}
+.qty-control button {
+  display: inline-flex; align-items: center; justify-content: center; width: var(--tap); height: var(--tap);
+  border: 0; padding: 0; background: none; color: var(--primary-text); cursor: pointer; border-radius: var(--radius-sm);
+}
+.qty-control button:active { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.qty-control button:disabled { color: var(--border-strong); cursor: default; }
+.qty-control > span:not(.qty-max) { text-align: center; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.qty-control.at-max { margin-bottom: 14px; }
+.qty-max { position: absolute; left: 0; right: 0; top: calc(100% + 2px); font-size: 10.5px; line-height: 1.2; text-align: center; color: var(--muted); }
+@keyframes qty-in { from { transform: scale(0.92); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .qty-control { animation: none; } }
+
+/* cart badge "jump" when something is added */
+.badge.is-bump { animation: badge-bump 0.45s ease-out; }
+@keyframes badge-bump { 0% { transform: scale(1); } 35% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+/* Product page: no bottom navigation, the buy panel is the fixed bottom (2 + 36 + 4 + 44 + 2 = 88 px + safe area). */
+.app.has-buy-panel .page.product { padding-bottom: calc(88px + var(--safe-b) + 20px); }
+.app.has-buy-panel .toast { bottom: calc(88px + var(--safe-b) + 12px); }
+.buy-panel {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  padding: 2px 12px calc(2px + var(--safe-b)); background: var(--surface); border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 10px rgb(32 37 40 / 0.06);
+}
+.buy-panel > div { max-width: 696px; margin: 0 auto; }
+.buy-panel-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 36px; }
+.buy-panel-top .price { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.buy-panel-top .price-now { font-size: 18px; }
+/* secondary: quiet text button; its tap area reaches 44 px using the gaps above and below */
+.buy-now {
+  position: relative; flex: none; height: 36px; padding: 0 2px; border: 0; background: none; cursor: pointer;
+  color: var(--primary-text); font: inherit; font-size: 14px; font-weight: 600; text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 45%, transparent); text-underline-offset: 4px; white-space: nowrap;
+}
+.buy-now::after { content: ''; position: absolute; inset: -4px 0; }
+.buy-panel-main { display: flex; gap: 8px; height: 44px; margin-top: 4px; }
+.buy-panel-main .btn { min-height: 44px; margin: 0; }
+.buy-panel-main .btn.is-out { background: var(--neutral-soft); color: var(--muted); border-color: var(--border); }
+.buy-panel-main .qty-control { flex: none; width: 132px; }
+.buy-panel-main .to-cart { flex: 1; min-width: 0; flex-direction: column; gap: 0; padding: 0 8px; line-height: 1.15; }
+.to-cart span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+@media (max-width: 340px) { .to-cart span { font-size: 13px; letter-spacing: -0.01em; } }
+.to-cart small { font-size: 12px; font-weight: 600; opacity: 0.92; white-space: nowrap; }
+
+/* «БАД. НЕ ЯВЛЯЕТСЯ ЛЕКАРСТВЕННЫМ СРЕДСТВОМ.» — once, as the last block of the page */
+.disclaimer-block {
+  margin: 20px 0 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  color: var(--text); font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em; line-height: 1.4; text-align: center; text-transform: uppercase;
+}
