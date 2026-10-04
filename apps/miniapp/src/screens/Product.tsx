@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { nameOf, textOf } from '../lib/format';
@@ -26,6 +27,9 @@ export function Product() {
   const toast = useToast();
   const [qty, setQty] = useState(1);
   const [imageIdx, setImageIdx] = useState(0);
+  useEffect(() => {
+    if (id) track('product_view', { product_id: id });
+  }, [id]);
 
   if (product.isPending) return <div className="page"><Loading variant="product" /></div>;
   if (product.isError) {
@@ -45,6 +49,7 @@ export function Product() {
       {
         onSuccess: () => {
           haptic('success');
+          track('add_to_cart', { product_id: p.id, qty });
           toast.show(t('product.added'), <Link to="/cart" className="toast-action">{t('product.goToCart')}</Link>);
         },
         onError: (e) => toast.show(errorText(lang, e instanceof ApiError ? e.code : undefined)),

@@ -292,6 +292,7 @@ model users {
   bonus_account     bonus_accounts?
   referrals         referrals[]
   referral_attr     referral_attributions?
+  analytics_events  analytics_events[]
   returns           returns[]
   legal_acceptances legal_acceptances[]
   promotion_usages  promotion_usages[]
@@ -1097,4 +1098,17 @@ model sales_daily {
   bonus_used_uzs       BigInt
   cost_uzs             BigInt?
   updated_at           DateTime @updatedAt
+}
+
+/// Internal funnel analytics (B3): app_open, product_view, add_to_cart, checkout_start, order_created, payment_marked, payment_confirmed.
+model analytics_events {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  event      String
+  props      Json?
+  created_at DateTime @default(now())
+  user       users    @relation(fields: [user_id], references: [id])
+
+  @@index([event, created_at])
+  @@index([user_id, created_at])
 }

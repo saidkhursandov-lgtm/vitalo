@@ -27,6 +27,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { auditJson, AuditService } from './audit.service';
 import { can, type Permission } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
+import { AnalyticsService } from '../analytics/analytics.module';
 
 const PAGE_SIZE = 50;
 const TX = { maxWait: 10_000, timeout: 20_000 };
@@ -95,6 +96,7 @@ export class AdminOrdersService {
     private readonly lifecycle: OrderLifecycleService,
     private readonly delivery: DeliveryService,
     private readonly audit: AuditService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   async list(q: StaffOrdersQuery) {
@@ -194,10 +196,13 @@ export class AdminOrdersService {
     };
   }
 
-  confirmPayment(staff: StaffContext, id: string, comment?: string) {
-    return this.inOrderTx(id, async (tx, order) => {
-      await this.lifecycle.confirmBankTransfer(tx, order, staff.staff.id, comment);
+  async confirmPayment(staff: StaffContext, id: string, comment?: string) {
+    let confirmedFor: string | null = null;
+    const view = await this.inOrderTx(id, async (tx, order) => {
+      if ((await this.lifecycle.confirmBankTransfer(tx, order, staff.staff.id, comment)) === 'paid') confirmedFor = order.user_id;
     });
+    if (confirmedFor) await this.analytics.track(confirmedFor, 'payment_confirmed', { order_id: id });
+    return view;
   }
 
   /** One step forward along the state machine; jumping or going back is refused. */

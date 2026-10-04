@@ -21,6 +21,8 @@ export interface StaffInfo {
 export interface ShopInfo {
   support_contact: string | null;
   support_url?: string | null;
+  /** Profile line "VITALO Bonus: скоро" (switched in the admin panel). */
+  bonus_teaser?: boolean;
   about_ru: string;
   about_uz: string;
 }
@@ -30,6 +32,8 @@ export interface VitaloApi {
   user(telegramId: number): Promise<UserSummary>;
   staff(telegramId: number): Promise<StaffInfo>;
   info(): Promise<ShopInfo>;
+  /** Phone the customer shared with the bot (only their own number is accepted). */
+  saveContact(telegramId: number, phone: string, contactUserId: number): Promise<{ saved: boolean }>;
 }
 
 /** Calls /api/internal/bot/* with the shared secret header. */
@@ -42,6 +46,19 @@ export class HttpVitaloApi implements VitaloApi {
   user = (id: number) => this.get<UserSummary>(`/internal/bot/users/${id}`);
   staff = (id: number) => this.get<StaffInfo>(`/internal/bot/staff/${id}`);
   info = () => this.get<ShopInfo>('/internal/bot/info');
+  saveContact = (id: number, phone: string, contactUserId: number) =>
+    this.post<{ saved: boolean }>(`/internal/bot/users/${id}/contact`, { phone, contact_user_id: contactUserId });
+
+  private async post<T>(path: string, body: object): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'x-bot-secret': this.secret, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`VITALO API ${path} -> HTTP ${res.status}`);
+    return (await res.json()) as T;
+  }
 
   private async get<T>(path: string): Promise<T> {
     const res = await fetch(`${this.baseUrl}${path}`, {

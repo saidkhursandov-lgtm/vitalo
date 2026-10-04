@@ -7,9 +7,10 @@ import { OrderLifecycleService } from './order-lifecycle.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { ReservationExpiryService } from './reservation-expiry.service';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
-  imports: [AuthModule, InventoryModule, DeliveryModule, LegalModule],
+  imports: [AuthModule, InventoryModule, DeliveryModule, LegalModule, AnalyticsModule],
   controllers: [OrdersController],
   providers: [OrdersService, OrderLifecycleService, ReservationExpiryService],
   exports: [OrderLifecycleService, ReservationExpiryService],

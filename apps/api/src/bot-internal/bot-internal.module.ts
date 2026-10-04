@@ -1,12 +1,15 @@
 import {
   BadRequestException,
+  Body,
   CanActivate,
   Controller,
   ExecutionContext,
   Get,
+  HttpCode,
   Injectable,
   Module,
   Param,
+  Post,
   ServiceUnavailableException,
   UnauthorizedException,
   UseGuards,
@@ -90,6 +93,22 @@ export class BotInternalController {
     };
   }
 
+  /**
+   * Phone shared with the bot ("Поделиться номером" in checkout -> Telegram sends the contact to the bot).
+   * Saved only when the contact is the sender's own number.
+   */
+  @Post('users/:telegramId/contact')
+  @HttpCode(200)
+  async contact(@Param('telegramId') raw: string, @Body() body: { phone?: unknown; contact_user_id?: unknown }) {
+    const id = telegramId(raw);
+    if (String(body.contact_user_id ?? '') !== id.toString()) throw new BadRequestException('Only your own contact can be saved');
+    const digits = String(body.phone ?? '').replace(/\D/g, '');
+    if (digits.length < 9 || digits.length > 15) throw new BadRequestException('phone: 9-15 digits');
+    const phone = digits.length === 9 ? `+998${digits}` : `+${digits}`;
+    const res = await this.prisma.users.updateMany({ where: { telegram_user_id: id, status: 'active' }, data: { phone } });
+    return { saved: res.count > 0, phone };
+  }
+
   /** For /admin: only active employees get the admin panel button. */
   @Get('staff/:telegramId')
   async staff(@Param('telegramId') raw: string) {
@@ -99,7 +118,7 @@ export class BotInternalController {
 
   @Get('info')
   async info() {
-    const rows = await this.prisma.settings.findMany({ where: { key: { in: Object.values(BOT_SETTING_KEYS) } } });
+    const rows = await this.prisma.settings.findMany({ where: { key: { in: [...Object.values(BOT_SETTING_KEYS), 'bonus_teaser'] } } });
     const get = (key: string) => {
       const v = rows.find((r) => r.key === key)?.value;
       return typeof v === 'string' && v.trim() ? v : null;
@@ -107,6 +126,7 @@ export class BotInternalController {
     return {
       support_contact: get(BOT_SETTING_KEYS.support) ?? SETTING_DEFAULTS.support_contact,
       support_url: supportLink(get(BOT_SETTING_KEYS.support) ?? SETTING_DEFAULTS.support_contact),
+      bonus_teaser: ((rows.find((r) => r.key === 'bonus_teaser')?.value as { enabled?: boolean } | undefined) ?? SETTING_DEFAULTS.bonus_teaser).enabled !== false,
       about_ru: get(BOT_SETTING_KEYS.aboutRu) ?? DEFAULT_ABOUT_RU,
       about_uz: get(BOT_SETTING_KEYS.aboutUz) ?? DEFAULT_ABOUT_UZ,
     };

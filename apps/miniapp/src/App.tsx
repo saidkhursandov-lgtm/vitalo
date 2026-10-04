@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
+import { trackAppOpen } from './lib/analytics';
 import { Layout } from './components/Layout';
 import { ConfirmProvider } from './components/Confirm';
 import { BackIcon } from './components/Icons';
@@ -74,6 +76,7 @@ function LegalStandalone() {
 }
 
 function Shop() {
+  useEffect(() => trackAppOpen(), []);
   return (
     <Routes>
       <Route element={<Layout />}>

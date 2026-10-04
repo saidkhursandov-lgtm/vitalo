@@ -17,7 +17,7 @@ import {
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags, PartialType } from '@nestjs/swagger';
 import { EntityStatus, Prisma, StaffRole, StaffStatus, TariffStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -115,6 +115,47 @@ export class ShopContactsDto {
 
 export class TariffPatch extends PartialType(TariffDto) {}
 
+/** Short texts (banner, tiles): up to 200 characters, both languages required. */
+export class ShortTextDto {
+  @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(200) ru!: string;
+  @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(200) uz!: string;
+}
+
+export class HomeBannerDto {
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) title!: ShortTextDto;
+  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) subtitle!: ShortTextDto;
+  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) button!: ShortTextDto;
+}
+
+export class TrustTileDto {
+  @ApiProperty({ enum: ['original', 'delivery', 'documents', 'payments'] }) @IsIn(['original', 'delivery', 'documents', 'payments']) key!: 'original' | 'delivery' | 'documents' | 'payments';
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) title!: ShortTextDto;
+  @ApiProperty({ type: ShortTextDto, description: '{delivery} — сроки доставки, {from}/{to} — часы проверки платежей' })
+  @ValidateNested()
+  @Type(() => ShortTextDto)
+  text!: ShortTextDto;
+}
+
+export class HomeStepsDto {
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+  @ApiProperty({ type: [ShortTextDto] }) @IsArray() @ArrayMinSize(3) @ArrayMaxSize(3) @ValidateNested({ each: true }) @Type(() => ShortTextDto) items!: ShortTextDto[];
+}
+
+/** Home page content (B1). */
+export class HomeContentDto {
+  @ApiProperty({ type: HomeBannerDto }) @ValidateNested() @Type(() => HomeBannerDto) banner!: HomeBannerDto;
+  @ApiProperty({ type: [TrustTileDto] }) @IsArray() @ArrayMinSize(4) @ArrayMaxSize(4) @ValidateNested({ each: true }) @Type(() => TrustTileDto) trust!: TrustTileDto[];
+  @ApiProperty({ type: HomeStepsDto }) @ValidateNested() @Type(() => HomeStepsDto) steps!: HomeStepsDto;
+}
+
+/** Profile card "VITALO Bonus — скоро" (B4). */
+export class BonusTeaserDto {
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+  @ApiProperty({ type: LocalizedTextDto }) @ValidateNested() @Type(() => LocalizedTextDto) text!: LocalizedTextDto;
+}
+
 export class StaffUserDto {
   @ApiProperty({ example: '123456789', description: 'Telegram ID сотрудника' })
   @Transform(({ value }) => String(value).trim())
@@ -196,6 +237,27 @@ export class AdminSettingsService {
     await this.saveSetting(staffId, SETTING_KEYS.paymentCheckHours, { from: dto.payment_check_from, to: dto.payment_check_to }, 'settings.contacts_updated');
     await this.saveSetting(staffId, SETTING_KEYS.deliveryDaysLabel, { ru: dto.delivery_days_label.ru, uz: dto.delivery_days_label.uz }, 'settings.contacts_updated');
     return this.shopContacts();
+  }
+
+  homeContent() {
+    return this.settings.getOrDefault('home_content');
+  }
+
+  async setHomeContent(staffId: string, dto: HomeContentDto) {
+    if (new Set(dto.trust.map((t) => t.key)).size !== dto.trust.length) {
+      throw new ConflictException({ code: 'INVALID_TILES', message: 'Each trust tile appears once' });
+    }
+    await this.saveSetting(staffId, SETTING_KEYS.homeContent, JSON.parse(JSON.stringify(dto)), 'settings.home_updated');
+    return this.homeContent();
+  }
+
+  bonusTeaser() {
+    return this.settings.getOrDefault('bonus_teaser');
+  }
+
+  async setBonusTeaser(staffId: string, dto: BonusTeaserDto) {
+    await this.saveSetting(staffId, SETTING_KEYS.bonusTeaser, { enabled: dto.enabled, text: { ru: dto.text.ru, uz: dto.text.uz } }, 'settings.texts_updated');
+    return this.bonusTeaser();
   }
 
   /** All regions and cities, inactive included (customers only see active ones). */
@@ -463,6 +525,26 @@ export class AdminSettingsController {
   @Put('contacts')
   setContacts(@CurrentStaff() me: StaffContext, @Body() dto: ShopContactsDto) {
     return this.settings.setShopContacts(me.staff.id, dto);
+  }
+
+  @Get('home')
+  home() {
+    return this.settings.homeContent();
+  }
+
+  @Put('home')
+  setHome(@CurrentStaff() me: StaffContext, @Body() dto: HomeContentDto) {
+    return this.settings.setHomeContent(me.staff.id, dto);
+  }
+
+  @Get('bonus-teaser')
+  bonusTeaser() {
+    return this.settings.bonusTeaser();
+  }
+
+  @Put('bonus-teaser')
+  setBonusTeaser(@CurrentStaff() me: StaffContext, @Body() dto: BonusTeaserDto) {
+    return this.settings.setBonusTeaser(me.staff.id, dto);
   }
 
   @Get('regions')

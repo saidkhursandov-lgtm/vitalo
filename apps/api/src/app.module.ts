@@ -15,6 +15,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { SettingsModule } from './settings/settings.service';
 import { StorageModule } from './storage/file-storage';
 import { StaffModule } from './staff/staff.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 // forRoot() loads .env into process.env synchronously, so JOBS_ENABLED from .env is visible below.
 const config = ConfigModule.forRoot({ isGlobal: true });
@@ -39,6 +40,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     AddressesModule,
     BotInternalModule,
     LegalModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

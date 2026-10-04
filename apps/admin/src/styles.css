@@ -232,3 +232,8 @@ textarea { resize: vertical; }
 .login-card { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px 24px; }
 .login-card .logo { margin-bottom: 12px; }
 .login-card h1 { justify-content: center; margin: 10px 0; }
+
+/* Funnel (dashboard) */
+.funnel td { vertical-align: middle; }
+.funnel-bar-cell { width: 40%; }
+.funnel-bar { display: block; height: 10px; min-width: 2px; border-radius: 5px; background: var(--primary); }

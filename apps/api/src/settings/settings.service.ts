@@ -1,5 +1,6 @@
 import { Global, Injectable, Module } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { BONUS_TEASER_DEFAULT, HOME_CONTENT_DEFAULT } from './home-content';
 
 /** Business settings editable by admins (table `settings`, JSON values). */
 export const SETTING_KEYS = {
@@ -10,6 +11,8 @@ export const SETTING_KEYS = {
   supportContact: 'support_contact',
   paymentCheckHours: 'payment_check_hours',
   deliveryDaysLabel: 'delivery_days_label',
+  homeContent: 'home_content',
+  bonusTeaser: 'bonus_teaser',
 } as const;
 
 export interface LocalizedText {
@@ -43,6 +46,8 @@ export const SETTING_DEFAULTS = {
   support_contact: '@VITALO_support' as string,
   payment_check_hours: { from: '08:00', to: '22:00' } as PaymentCheckHours,
   delivery_days_label: { ru: 'рабочих дней', uz: 'ish kuni' } as LocalizedText,
+  home_content: HOME_CONTENT_DEFAULT,
+  bonus_teaser: BONUS_TEASER_DEFAULT,
 };
 
 /** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */

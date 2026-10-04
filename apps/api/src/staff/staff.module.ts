@@ -12,10 +12,11 @@ import { AuditService } from './audit.service';
 import { DashboardController, DashboardService } from './dashboard';
 import { StaffAuthService, StaffGuard } from './staff-auth';
 import { StaffAuthController } from './staff.controllers';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 /** Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions. */
 @Module({
-  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule],
+  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule],
   controllers: [
     StaffAuthController,
     DashboardController,

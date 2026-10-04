@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronIcon, SupportIcon } from '../components/Icons';
 import { useSupportUrl } from '../components/Support';
 import { openSupport } from '../lib/shop';
+import { BonusTeaser } from '../components/BonusTeaser';
 import { api } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
@@ -34,6 +35,8 @@ export function Profile() {
           {user.username && <div className="hint">@{user.username}</div>}
         </div>
       </div>
+
+      <BonusTeaser />
 
       <section className="card">
         <h2>{t('profile.language')}</h2>

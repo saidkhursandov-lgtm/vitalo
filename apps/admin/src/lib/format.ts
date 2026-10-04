@@ -90,6 +90,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'settings.card_transfer_updated': 'Изменены данные карты',
   'settings.texts_updated': 'Изменены тексты магазина',
   'settings.contacts_updated': 'Изменены контакты и часы',
+  'settings.home_updated': 'Изменена главная страница',
   'city.created': 'Добавлен город',
   'city.updated': 'Изменён город',
   'legal.draft_created': 'Создан черновик документа',

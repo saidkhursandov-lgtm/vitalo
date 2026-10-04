@@ -10,7 +10,13 @@ import {
   CircleCheck,
   CircleX,
   ClipboardList,
+  BadgeCheck,
+  CalendarClock,
   Clock,
+  FileText,
+  Gift,
+  Phone,
+  ShieldCheck,
   Copy,
   Heart,
   Hourglass,
@@ -67,6 +73,17 @@ export const OfflineIcon = make(WifiOff);
 export const AlertIcon = make(CircleAlert);
 export const InfoIcon = make(Info);
 export const SupportIcon = make(MessageCircle);
+export const GiftIcon = make(Gift);
+export const PhoneIcon = make(Phone);
+export const BadgeIcon = make(BadgeCheck);
+
+/** Home trust tiles. */
+export const TRUST_ICONS: Record<'original' | 'delivery' | 'documents' | 'payments', Icon> = {
+  original: make(ShieldCheck),
+  delivery: make(Truck),
+  documents: make(FileText),
+  payments: make(CalendarClock),
+};
 
 export const HeartIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
   <Heart strokeWidth={STROKE} aria-hidden fill={filled ? 'currentColor' : 'none'} {...p} />

@@ -21,6 +21,7 @@ import { CUSTOMER_CANCELLABLE } from './order-state';
 import { OrderLifecycleService } from './order-lifecycle.service';
 import { orderViewInclude, OrderView, toOrderView } from './order-view';
 import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
+import { AnalyticsService } from '../analytics/analytics.module';
 
 type Tx = Prisma.TransactionClient;
 
@@ -65,6 +66,7 @@ export class OrdersService {
     private readonly settings: SettingsService,
     private readonly notifications: NotificationsService,
     private readonly legal: LegalService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
@@ -104,6 +106,7 @@ export class OrdersService {
         await tx.idempotency_keys.update({ where: { key }, data: { response_json: view as unknown as Prisma.InputJsonValue } });
         return view;
       }, TX_OPTIONS);
+      await this.analytics.track(userId, 'order_created', { order_id: order.id, total_uzs: order.totals.total_uzs });
       return { order, replayed: false };
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -214,7 +217,8 @@ export class OrdersService {
 
   /** "Я оплатил": records the claim and creates a manager task. Repeated clicks change nothing. */
   async reportBankTransferPaid(userId: string, orderId: string, receiptUrl?: string): Promise<OrderView> {
-    return this.prisma.$transaction(async (tx) => {
+    let marked = false;
+    const result = await this.prisma.$transaction(async (tx) => {
       const order = await this.lifecycle.lockOrder(tx, orderId);
       if (order.user_id !== userId) throw new NotFoundException('Order not found');
       const view = async () => toOrderView(await tx.orders.findUniqueOrThrow({ where: { id: orderId }, include: orderViewInclude }));
@@ -243,8 +247,11 @@ export class OrdersService {
         },
       });
       await this.notifications.toOrderStaff(tx, 'staff.customer_paid', orderId);
+      marked = true;
       return view();
     }, TX_OPTIONS);
+    if (marked) await this.analytics.track(userId, 'payment_marked', { order_id: orderId });
+    return result;
   }
 
   private async createInTx(tx: Tx, userId: string, dto: CreateOrderDto): Promise<OrderView> {

@@ -71,6 +71,8 @@ export class CatalogService {
       payment_check_hours: await this.settings.getOrDefault('payment_check_hours'),
       delivery_days_label: await this.settings.getOrDefault('delivery_days_label'),
       delivery_terms: await this.delivery.terms(),
+      home_content: await this.settings.getOrDefault('home_content'),
+      bonus_teaser: await this.settings.getOrDefault('bonus_teaser'),
     };
   }
 

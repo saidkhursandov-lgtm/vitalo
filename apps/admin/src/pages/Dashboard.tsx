@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { money, ORDER_STATUS } from '../lib/format';
 import { ForwardIcon } from '../components/Icons';
+import { FunnelCard } from './Funnel';
 
 interface DashboardData {
   revenue_uzs: number;
@@ -52,6 +53,8 @@ export function Dashboard() {
             <Kpi label="Создано заказов" value={String(q.data.orders_created)} />
             <Kpi label="Средний чек" value={money(q.data.average_check_uzs)} />
           </div>
+
+          <FunnelCard />
 
           <div className="grid-2">
             <section className="card">

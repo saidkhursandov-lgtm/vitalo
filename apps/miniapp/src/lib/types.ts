@@ -112,6 +112,17 @@ export interface ShopInfo {
   payment_check_hours: { from: string; to: string };
   delivery_days_label: LocalizedText;
   delivery_terms: { tashkent: DaysRange | null; regions: DaysRange | null };
+  home_content?: HomeContent;
+  bonus_teaser?: { enabled: boolean; text: LocalizedText };
+}
+
+export type TrustKey = 'original' | 'delivery' | 'documents' | 'payments';
+
+/** Home page blocks from the admin panel (Настройки → Главная). */
+export interface HomeContent {
+  banner: { enabled: boolean; title: LocalizedText; subtitle: LocalizedText; button: LocalizedText };
+  trust: { key: TrustKey; enabled: boolean; title: LocalizedText; text: LocalizedText }[];
+  steps: { enabled: boolean; items: LocalizedText[] };
 }
 
 export type LegalCode = 'offer' | 'privacy';

@@ -5,9 +5,21 @@ import { Type } from 'class-transformer';
 import { IsIn, IsOptional } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequirePermission, StaffGuard } from './staff-auth';
+import { AnalyticsService } from '../analytics/analytics.module';
 
 /** Orders that have been paid (revenue counts them by paid_at). */
 export const PAID_STATUSES: OrderStatus[] = ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'];
+
+export class FunnelQuery {
+  @ApiPropertyOptional({ enum: ['today', '7', '30'], default: '7' }) @IsOptional() @IsIn(['today', '7', '30']) period: 'today' | '7' | '30' = '7';
+}
+
+/** Start of "today" in Tashkent (UTC+5), or N days back. */
+export function periodStart(period: 'today' | '7' | '30', now = new Date()): Date {
+  if (period !== 'today') return new Date(now.getTime() - Number(period) * 86_400_000);
+  const t = new Date(now.getTime() + 5 * 3600_000);
+  return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()) - 5 * 3600_000);
+}
 
 export class DashboardQuery {
   @ApiPropertyOptional({ enum: [1, 7, 30, 90], default: 30 })
@@ -75,7 +87,18 @@ export class DashboardService {
 @UseGuards(StaffGuard)
 @Controller('staff/dashboard')
 export class DashboardController {
-  constructor(private readonly dashboard: DashboardService) {}
+  constructor(
+    private readonly dashboard: DashboardService,
+    private readonly analytics: AnalyticsService,
+  ) {}
+
+  /** Funnel for the period: unique customers per step and the share that reached it from the previous step. */
+  @Get('funnel')
+  @RequirePermission('dashboard.view')
+  async funnel(@Query() q: FunnelQuery) {
+    const from = periodStart(q.period);
+    return { period: q.period, from, steps: await this.analytics.funnel(from) };
+  }
 
   @Get()
   @RequirePermission('dashboard.view')

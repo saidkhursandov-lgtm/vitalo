@@ -8,6 +8,8 @@ interface TelegramWebApp {
   expand(): void;
   isVersionAtLeast(version: string): boolean;
   setHeaderColor?(color: string): void;
+  /** Bot API 6.9+: asks the user to share their phone with the bot. */
+  requestContact?(cb: (shared: boolean, res?: { responseUnsafe?: { contact?: { phone_number?: string } } }) => void): void;
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
@@ -45,6 +47,18 @@ export function initTelegram() {
   }
   document.documentElement.classList.add('in-telegram');
 }
+
+/**
+ * "Поделиться номером из Telegram": the phone goes to our bot (it saves it for the user); the answer may
+ * already carry the number. Returns the shared number, null if declined, undefined if not supported.
+ */
+export function requestPhone(): Promise<string | null | undefined> {
+  const app = telegram();
+  if (!app?.requestContact || !app.isVersionAtLeast('6.9')) return Promise.resolve(undefined);
+  return new Promise((resolve) => app.requestContact!((shared, res) => resolve(shared ? (res?.responseUnsafe?.contact?.phone_number ?? '') : null)));
+}
+
+export const canRequestPhone = () => !!telegram()?.requestContact && !!telegram()?.isVersionAtLeast('6.9');
 
 export function haptic(type: 'error' | 'success' | 'warning') {
   telegram()?.HapticFeedback?.notificationOccurred(type);

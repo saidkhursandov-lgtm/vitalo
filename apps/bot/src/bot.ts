@@ -112,13 +112,15 @@ export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
     if (!user.registered) return replyWithShop(ctx, lang, t(lang, 'notRegistered'));
     const text = t(lang, 'profile', {
       name: user.first_name ?? '',
-      bonus: money(user.bonus_balance_uzs ?? 0, lang),
       orders: user.orders_total ?? 0,
       favorites: user.favorites_count ?? 0,
       addresses: user.addresses_count ?? 0,
     });
+    // Bonuses are not launched yet: no balance, only "скоро" (if switched on in the admin panel).
+    const bonus = await api.info().then((i) => i.bonus_teaser !== false, () => true);
+    const withBonus = bonus ? text.replace('\n', `\n${t(lang, 'bonusSoon')}\n`) : text;
     const recent = (user.orders ?? []).slice(0, 3).map((o) => `• №${o.order_number} — ${statusLabel(lang, o)}`);
-    await replyWithShop(ctx, lang, recent.length ? `${text}\n\n${recent.join('\n')}` : text, 'openProfile', '/profile');
+    await replyWithShop(ctx, lang, recent.length ? `${withBonus}\n\n${recent.join('\n')}` : withBonus, 'openProfile', '/profile');
   };
 
   const showSupport = async (ctx: Context) => {
@@ -171,6 +173,19 @@ export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
     await ctx.reply(t(lang, 'adminOpen', { role: t(lang, `role.${staff.role}` as TextKey) }), {
       reply_markup: new InlineKeyboard().webApp(t(lang, 'adminButton'), `${url}/`),
     });
+  });
+
+  // "Поделиться номером из Telegram" in the Mini App: Telegram sends the contact to this chat.
+  bot.on('message:contact', async (ctx) => {
+    const { lang } = await context(ctx);
+    const c = ctx.message.contact;
+    if (!ctx.from || c.user_id !== ctx.from.id) return void (await ctx.reply(t(lang, 'contactNotOwn')));
+    try {
+      await api.saveContact(ctx.from.id, c.phone_number, c.user_id);
+      await ctx.reply(t(lang, 'contactSaved'));
+    } catch {
+      await ctx.reply(t(lang, 'apiDown'));
+    }
   });
 
   bot.on('message', async (ctx) => {

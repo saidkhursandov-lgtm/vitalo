@@ -8,7 +8,9 @@ import { money, normalizePhone, prettyPhone } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { createIdempotencyKeys } from '../lib/idempotency';
 import { useAddressActions, useAddresses, useCheckoutDefaults, useRegions, type CityRef } from '../lib/queries';
-import { haptic } from '../lib/telegram';
+import { canRequestPhone, haptic, requestPhone } from '../lib/telegram';
+import { track } from '../lib/analytics';
+import { PhoneIcon } from '../components/Icons';
 import type { Order, OrderPreview, PaymentMethodCode } from '../lib/types';
 import type { MessageKey } from '../lib/i18n';
 
@@ -50,6 +52,8 @@ export function Checkout() {
   const defaults = useCheckoutDefaults();
   const { create: saveAddress } = useAddressActions();
   const keys = useRef(createIdempotencyKeys()).current;
+  useEffect(() => track('checkout_start', { source: params.get('buy') ? 'buy_now' : 'cart' }), [params]);
+  const [sharing, setSharing] = useState(false);
 
   const buyId = params.get('buy');
   const source = useMemo(
@@ -70,7 +74,7 @@ export function Checkout() {
     const d = defaults.data;
     setForm({
       name: d?.recipient_name ?? [user.first_name, user.last_name].filter(Boolean).join(' '),
-      phone: d?.recipient_phone ? prettyPhone(d.recipient_phone) : '',
+      phone: d?.recipient_phone ? prettyPhone(d.recipient_phone) : user.phone ? prettyPhone(user.phone) : '',
       addressId: primary ? primary.id : 'new',
       region_id: fromCart?.region_id ?? d?.region_id ?? '',
       city_id: fromCart?.city_id ?? d?.city_id ?? '',
@@ -104,6 +108,21 @@ export function Checkout() {
     setForm({ ...form, [key]: value });
     setErrors({ ...errors, [key]: undefined });
   };
+
+  /** Telegram sends the contact to our bot, which saves it; we take it from the answer or from the profile. */
+  async function sharePhone() {
+    setSharing(true);
+    try {
+      let phone = await requestPhone();
+      for (let i = 0; phone === '' && i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        phone = (await api<{ phone: string | null }>('/auth/me')).phone ?? '';
+      }
+      if (phone) set('phone', prettyPhone(normalizePhone(phone) ?? phone));
+    } finally {
+      setSharing(false);
+    }
+  }
 
   function validate(f: Form) {
     const e: Partial<Record<keyof Form, string>> = {};
@@ -171,6 +190,11 @@ export function Checkout() {
           <input type="tel" inputMode="tel" autoComplete="tel" placeholder="+998 90 123 45 67" value={form.phone} onChange={(e) => set('phone', e.target.value)} aria-invalid={!!errors.phone} />
           {errors.phone && <small className="error-text">{errors.phone}</small>}
         </label>
+        {canRequestPhone() && (
+          <button type="button" className="btn btn-secondary btn-block" disabled={sharing} onClick={() => void sharePhone()}>
+            <PhoneIcon width={18} height={18} /> {sharing ? t('checkout.phoneWaiting') : t('checkout.sharePhone')}
+          </button>
+        )}
       </section>
 
       <section className="card">

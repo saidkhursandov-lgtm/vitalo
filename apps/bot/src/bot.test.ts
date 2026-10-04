@@ -17,6 +17,7 @@ interface Call {
 /** A bot wired to a fake Telegram (records outgoing calls) and a fake VITALO API. */
 function setup(opts: { user?: Partial<UserSummary> | 'down'; staff?: StaffInfo; info?: Partial<ShopInfo>; miniApp?: string | null } = {}) {
   const calls: Call[] = [];
+  const contacts: { id: number; phone: string; contactUserId: number }[] = [];
   const api: VitaloApi = {
     user: async () => {
       if (opts.user === 'down') throw new Error('API down');
@@ -24,6 +25,10 @@ function setup(opts: { user?: Partial<UserSummary> | 'down'; staff?: StaffInfo; 
     },
     staff: async () => opts.staff ?? { is_staff: false },
     info: async () => ({ support_contact: null, about_ru: 'О нас', about_uz: 'Biz haqimizda', ...opts.info }),
+    saveContact: async (id, phone, contactUserId) => {
+      contacts.push({ id, phone, contactUserId });
+      return { saved: true };
+    },
   };
   const bot = createBot({
     token: '1:TEST',
@@ -54,7 +59,23 @@ function setup(opts: { user?: Partial<UserSummary> | 'down'; staff?: StaffInfo; 
     await bot.handleUpdate(update);
     return calls.filter((c) => c.method === 'sendMessage').map((c) => c.payload);
   };
-  return { send };
+  /** The Mini App asked Telegram to share the phone: a contact message arrives in the chat. */
+  const sendContact = async (phone: string, contactUserId: number) => {
+    const update = {
+      update_id: ++updateId,
+      message: {
+        message_id: updateId,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: 42, type: 'private', first_name: 'Ali' },
+        from: { id: 42, is_bot: false, first_name: 'Ali', language_code: 'ru' },
+        contact: { phone_number: phone, first_name: 'Ali', user_id: contactUserId },
+      },
+    } as Update;
+    calls.length = 0;
+    await bot.handleUpdate(update);
+    return calls.filter((c) => c.method === 'sendMessage').map((c) => c.payload);
+  };
+  return { send, sendContact, contacts };
 }
 
 const inlineUrl = (msg: Record<string, any>) => msg.reply_markup?.inline_keyboard?.[0]?.[0]?.web_app?.url as string | undefined;
@@ -125,7 +146,8 @@ describe('menu items', () => {
     const [msg] = await setup({
       user: { registered: true, language: 'ru', first_name: 'Ali', bonus_balance_uzs: 15000, orders_total: 7, favorites_count: 2, addresses_count: 1, orders },
     }).send('👤 Мой профиль');
-    expect(msg.text).toContain('💰 Бонусы: 15 000 сум');
+    expect(msg.text).toContain('🎁 VITALO Bonus: скоро');
+    expect(msg.text).not.toMatch(/Бонусы|15 000|0 сум/);
     expect(msg.text).toContain('📦 Заказов: 7');
     expect(msg.text).toContain('• №VTL-20261003-0001 — ✅ Доставлен');
     expect(inlineUrl(msg)).toBe(`${MINI}/profile`);
@@ -141,6 +163,14 @@ describe('menu items', () => {
     expect((await s.send('ℹ️ О VITALO'))[0].text).toBe('О нас');
     // Nothing saved in the settings: the default contact, never "скоро появится".
     expect((await setup().send('💬 Поддержка'))[0].text).toBe('Поддержка VITALO: @VITALO_support');
+  });
+
+  it('a shared phone is saved only when it is the sender’s own number', async () => {
+    const s = setup();
+    expect((await s.sendContact('998901234567', 42))[0].text).toContain('Номер сохранён');
+    expect(s.contacts).toEqual([{ id: 42, phone: '998901234567', contactUserId: 42 }]);
+    expect((await s.sendContact('998907777777', 99))[0].text).toBe('Можно отправить только свой номер.');
+    expect(s.contacts).toHaveLength(1);
   });
 
   it('when the API is down the bot answers politely instead of failing', async () => {
