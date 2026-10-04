@@ -40,11 +40,13 @@ import { memoryStorage } from 'multer';
 import { PageQuery } from '../catalog/catalog.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { FILE_STORAGE, type FileStorage } from '../storage/file-storage';
+import { imageFiles, storeProductImage } from '../storage/image-processing';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 
 const PAGE_SIZE = 50;
-export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+/** Upload limit for the original (it is compressed right away and not kept). */
+export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 /** Optional texts: "" means "clear the field". */
 const textOrNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
@@ -178,7 +180,7 @@ export class AdminProductsService {
         price_uzs: Number(p.price_uzs),
         status: p.status,
         min_stock: p.min_stock,
-        image_url: p.media[0]?.url ?? null,
+        image_url: p.media[0]?.thumb_url ?? p.media[0]?.url ?? null,
         actual_qty: p.inventory.reduce((s, i) => s + i.actual_qty, 0),
         available_qty: p.inventory.reduce((s, i) => s + i.actual_qty - i.reserved_qty, 0),
       })),
@@ -243,13 +245,17 @@ export class AdminProductsService {
     const product = await this.prisma.products.findUnique({ where: { id }, include: { media: true } });
     if (!product) throw new NotFoundException('Product not found');
 
-    const url = await this.storage.save(`products/${id}/${randomUUID()}.${kind.ext}`, file.buffer, kind.mime);
+    // D2: main WebP up to 1200 px + 400 px thumbnail, JPEG fallbacks; the original is not stored.
+    const stored = await storeProductImage(this.storage, id, file.buffer).catch(() => {
+      throw new BadRequestException({ code: 'UNSUPPORTED_IMAGE', message: 'The image could not be read' });
+    });
+    const url = stored.url;
     const hasMain = product.media.some((m) => m.is_main && m.media_type === 'image');
     const media = await this.prisma.product_media.create({
       data: {
         product_id: id,
         media_type: 'image',
-        url,
+        ...stored,
         is_main: !hasMain,
         title: title ?? null,
         sort_order: product.media.reduce((m, x) => Math.max(m, x.sort_order), -1) + 1,
@@ -283,7 +289,7 @@ export class AdminProductsService {
       await this.audit.log({ staffId, action: 'product.photo_removed', entityType: 'product', entityId: id, before: { media_id: m.id, url: m.url } }, tx);
       return m;
     });
-    await this.storage.remove(media.url);
+    for (const file of imageFiles(media)) await this.storage.remove(file);
     return this.get(id);
   }
 

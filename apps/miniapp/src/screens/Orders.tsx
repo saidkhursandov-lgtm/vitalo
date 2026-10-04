@@ -10,6 +10,7 @@ import { daysText } from '../lib/shop';
 import { haptic } from '../lib/telegram';
 import { useConfirm } from '../components/Confirm';
 import { SupportButton } from '../components/Support';
+import { PayBy } from '../components/PayBy';
 import type { Order, OrderListItem } from '../lib/types';
 
 /** The same status twice in a row (e.g. "new" -> "awaiting_payment" shown as "Ожидает оплаты" twice) is shown once. */
@@ -104,7 +105,7 @@ export function OrderDetail() {
         <span className="hint small">{dateTime(o.created_at, lang)}</span>
       </div>
 
-      {unpaid && o.reserved_until && !reported && <p className="small">{t('orders.payUntil', { date: dateTime(o.reserved_until, lang) })}</p>}
+      {unpaid && o.reserved_until && !reported && <PayBy until={o.reserved_until} />}
       {unpaid && reported && <div className="notice notice-ok">{t('orders.payWaiting')}</div>}
 
       <section className="card summary">

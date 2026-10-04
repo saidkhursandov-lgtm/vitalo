@@ -13,6 +13,21 @@ export class ApiError extends Error {
   }
 }
 
+/** Every request gives up after this long: on a slow network no button stays "hanging". */
+export const REQUEST_TIMEOUT_MS = 15_000;
+/** No answer at all (timeout, connection lost): status 0 and one of these codes. */
+export const NETWORK_CODES = ['NETWORK_TIMEOUT', 'NETWORK_ERROR'] as const;
+export const isNetworkError = (e: unknown) => e instanceof ApiError && e.status === 0;
+
+/** The connection banner listens here: true = a request failed without an answer, false = an answer came. */
+type NetListener = (offline: boolean) => void;
+const netListeners = new Set<NetListener>();
+export function onNetworkChange(fn: NetListener): () => void {
+  netListeners.add(fn);
+  return () => netListeners.delete(fn);
+}
+const emitNet = (offline: boolean) => netListeners.forEach((fn) => fn(offline));
+
 let token: string | null = readStoredToken();
 let onUnauthorized: (() => void) | null = null;
 
@@ -44,23 +59,36 @@ export async function api<T>(
   path: string,
   init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: init.method ?? 'GET',
-    headers: {
-      ...(init.body !== undefined && { 'content-type': 'application/json' }),
-      ...(token && { authorization: `Bearer ${token}` }),
-      ...init.headers,
-    },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  let body: Record<string, unknown>;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: init.method ?? 'GET',
+      headers: {
+        ...(init.body !== undefined && { 'content-type': 'application/json' }),
+        ...(token && { authorization: `Bearer ${token}` }),
+        ...init.headers,
+      },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: controller.signal,
+    });
+    body = res.status === 204 ? {} : await res.json().catch(() => ({}));
+  } catch {
+    emitNet(true);
+    throw new ApiError(0, controller.signal.aborted ? 'NETWORK_TIMEOUT' : 'NETWORK_ERROR', {});
+  } finally {
+    clearTimeout(timer);
+  }
+  emitNet(false);
   if (res.status === 204) return undefined as T;
-  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && token) {
       setToken(null);
       onUnauthorized?.();
     }
-    throw new ApiError(res.status, body.code, body);
+    throw new ApiError(res.status, typeof body.code === 'string' ? body.code : undefined, body);
   }
   return body as T;
 }

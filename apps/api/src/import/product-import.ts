@@ -313,7 +313,7 @@ export async function planImport(prisma: PrismaService, opts: ImportOptions): Pr
       const path = join(opts.photosDir, file);
       const size = (await stat(path)).size;
       if (size > MAX_PHOTO_BYTES) {
-        warn(r, `фото «${name}» больше 5 МБ — пропущено (как и в админке)`, sku);
+        warn(r, `фото «${name}» больше ${MAX_PHOTO_BYTES / 1024 / 1024} МБ — пропущено (как и в админке)`, sku);
         photos.push({ name, path: null, attached });
         continue;
       }

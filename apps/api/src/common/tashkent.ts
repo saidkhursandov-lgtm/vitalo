@@ -10,3 +10,9 @@ export function tashkentDateString(at: Date): string {
 export function formatUzs(amount: number): string {
   return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
+
+/** "04.10.2026, 14:15" in Tashkent time (messages to customers). */
+export function tashkentDateTime(at: Date): string {
+  const t = new Date(at.getTime() + TASHKENT_UTC_OFFSET_MS).toISOString();
+  return `${t.slice(8, 10)}.${t.slice(5, 7)}.${t.slice(0, 4)}, ${t.slice(11, 16)}`;
+}

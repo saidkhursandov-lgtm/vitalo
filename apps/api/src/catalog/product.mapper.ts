@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { thumbSize } from '../storage/image-processing';
 
 export const listInclude = {
   media: { where: { media_type: 'image' }, orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }], take: 1 },
@@ -27,8 +28,26 @@ export interface ProductListItem {
   brand: string;
   price_uzs: number;
   old_price_uzs: number | null;
+  /** Thumbnail (400 px) for lists; the main photo for old, not yet optimized uploads. */
   image_url: string | null;
+  image: ListImage | null;
   in_stock: boolean;
+}
+
+/** WebP + JPEG fallback and the size, so the page does not jump while the picture loads. */
+export interface ListImage {
+  webp: string;
+  jpeg: string | null;
+  width: number | null;
+  height: number | null;
+}
+
+type MediaRow = { media_type: string; url: string; url_jpeg?: string | null; thumb_url?: string | null; thumb_url_jpeg?: string | null; width?: number | null; height?: number | null };
+
+export function listImage(m: MediaRow | undefined): ListImage | null {
+  if (!m) return null;
+  const size = thumbSize(m.width, m.height);
+  return { webp: m.thumb_url ?? m.url, jpeg: m.thumb_url_jpeg ?? m.url_jpeg ?? null, width: size?.width ?? null, height: size?.height ?? null };
 }
 
 /**
@@ -49,7 +68,8 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     brand: p.brand,
     price_uzs: Number(p.price_uzs),
     old_price_uzs: p.old_price_uzs == null ? null : Number(p.old_price_uzs),
-    image_url: p.media.find((m) => m.media_type === 'image')?.url ?? null,
+    image_url: listImage(p.media.find((m) => m.media_type === 'image'))?.webp ?? null,
+    image: listImage(p.media.find((m) => m.media_type === 'image')),
     in_stock: availableQty(p.inventory) > 0,
   };
 }
@@ -74,7 +94,7 @@ export function toProductCard(p: ProductForCard) {
     directions_uz: p.directions_uz,
     warnings_ru: p.warnings_ru,
     warnings_uz: p.warnings_uz,
-    media: p.media.map((m) => ({ type: m.media_type, url: m.url, title: m.title, is_main: m.is_main })),
+    media: p.media.map((m) => ({ type: m.media_type, url: m.url, url_jpeg: m.url_jpeg, thumb_url: m.thumb_url, width: m.width, height: m.height, title: m.title, is_main: m.is_main })),
     categories: p.categories
       .map((pc) => pc.category)
       .filter((c) => c.status === 'active')

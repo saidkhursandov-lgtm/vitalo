@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { NotificationsService } from '../notifications/notifications.service';
+import { SystemErrorsService } from '../notifications/system-errors';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { OrderLifecycleService } from './order-lifecycle.service';
 
 const BATCH = 100;
@@ -19,6 +22,9 @@ export class ReservationExpiryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly lifecycle: OrderLifecycleService,
+    private readonly notifications: NotificationsService,
+    private readonly settings: SettingsService,
+    private readonly errors: SystemErrorsService,
   ) {}
 
   @Interval('reservation-expiry', 60_000)
@@ -26,14 +32,58 @@ export class ReservationExpiryService {
     if (this.running) return;
     this.running = true;
     try {
+      const reminded = await this.remindOnce();
+      if (reminded) this.logger.log(`Payment reminder for ${reminded} order(s)`);
       const cancelled = await this.runOnce();
       if (cancelled) this.logger.log(`Cancelled ${cancelled} expired order(s)`);
       await this.prisma.idempotency_keys.deleteMany({ where: { expires_at: { lt: new Date() } } });
     } catch (e) {
       this.logger.error('Reservation expiry failed', e as Error);
+      await this.errors.record({ level: 'error', service: 'orders', message: `Reservation job failed: ${(e as Error).message}`, context: { job: 'reservation-expiry' } });
     } finally {
       this.running = false;
     }
+  }
+
+  /**
+   * D3: "Заказ №… ждёт оплаты до …" N hours (settings, default 3) before the automatic cancellation.
+   * Only unpaid orders without «Я оплатил(а)», at most once per order (payment_reminder_sent_at).
+   * Returns how many reminders were queued. Exposed for tests and manual runs.
+   */
+  async remindOnce(now = new Date()): Promise<number> {
+    const hours = Number(await this.settings.getOrDefault('payment_reminder_hours')) || 3;
+    const until = new Date(now.getTime() + hours * 3600_000);
+    const candidates = await this.prisma.orders.findMany({
+      where: {
+        status: { in: ['new', 'awaiting_payment'] },
+        payment_status: 'payment_pending',
+        payment_reminder_sent_at: null,
+        reserved_until: { gt: now, lte: until },
+        payments: { none: { manual: { some: { customer_confirmed_at: { not: null } } } } },
+      },
+      select: { id: true },
+      orderBy: { reserved_until: 'asc' },
+      take: BATCH,
+    });
+    let sent = 0;
+    for (const { id } of candidates) {
+      const queued = await this.prisma.$transaction(async (tx) => {
+        const order = await this.lifecycle.lockOrder(tx, id);
+        const reported = await tx.manual_payment_confirmations.count({ where: { payment: { order_id: id }, customer_confirmed_at: { not: null } } });
+        const fresh = await tx.orders.findUniqueOrThrow({ where: { id }, select: { payment_reminder_sent_at: true } });
+        const due =
+          (order.status === 'new' || order.status === 'awaiting_payment') &&
+          order.payment_status === 'payment_pending' &&
+          !fresh.payment_reminder_sent_at &&
+          reported === 0;
+        if (!due) return false;
+        await this.notifications.paymentReminder(tx, id);
+        await tx.orders.update({ where: { id }, data: { payment_reminder_sent_at: now } });
+        return true;
+      });
+      if (queued) sent++;
+    }
+    return sent;
   }
 
   /** Returns how many orders were cancelled. Exposed for tests and manual runs. */

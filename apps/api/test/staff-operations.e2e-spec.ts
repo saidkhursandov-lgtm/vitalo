@@ -15,7 +15,8 @@ import {
 } from './helpers';
 
 const STAFF_TG = { admin: 222_222_221, manager: 222_222_222, warehouse: 222_222_223, marketer: 222_222_224 } as const;
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+// A real 1x1 PNG: photos are decoded and converted to WebP now (D2).
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
 describe('Admin panel operations (e2e)', () => {
   let app: INestApplication;
@@ -228,8 +229,8 @@ describe('Admin panel operations (e2e)', () => {
       expect(up.body.media).toHaveLength(1);
       const first = up.body.media[0];
       expect(first).toMatchObject({ is_main: true });
-      expect(first.url).toMatch(/^\/uploads\/products\/.+\.png$/);
-      await http().get(first.url).expect(200).expect('content-type', /image\/png/);
+      expect(first.url).toMatch(/^\/uploads\/products\/.+\.webp$/);
+      await http().get(first.url).expect(200).expect('content-type', /image\/webp/);
 
       const second = (await http().post(`/api/staff/products/${id}/photos`).set(bearer(t.admin)).attach('file', PNG, 'b.png').expect(201)).body.media;
       const other = second.find((m: { id: string }) => m.id !== first.id);
@@ -242,10 +243,10 @@ describe('Admin panel operations (e2e)', () => {
       await http().get(first.url).expect(404);
     });
 
-    it('rejects non-images (even renamed to .png) and files over 5 MB', async () => {
+    it('rejects non-images (even renamed to .png) and files over 15 MB', async () => {
       const fake = await http().post(`/api/staff/products/${id}/photos`).set(bearer(t.admin)).attach('file', Buffer.from('not an image'), 'evil.png').expect(400);
       expect(fake.body.code).toBe('UNSUPPORTED_IMAGE');
-      const big = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024 + 1)]);
+      const big = Buffer.concat([PNG, Buffer.alloc(15 * 1024 * 1024 + 1)]);
       await http().post(`/api/staff/products/${id}/photos`).set(bearer(t.admin)).attach('file', big, 'big.png').expect(413);
     });
 

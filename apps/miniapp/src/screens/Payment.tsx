@@ -3,12 +3,13 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CopyIcon } from '../components/Icons';
 import { ErrorState, Loading } from '../components/ui';
-import { api, ApiError } from '../lib/api';
-import { dateTime, money } from '../lib/format';
+import { api, ApiError, isNetworkError } from '../lib/api';
+import { money } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
 import { useBankTransfer, useShopTexts } from '../lib/queries';
 import { copyText, daysText, paymentCheckWhen } from '../lib/shop';
 import { SupportButton } from '../components/Support';
+import { PayBy } from '../components/PayBy';
 import type { DeliveryEta } from '../lib/types';
 import { haptic } from '../lib/telegram';
 
@@ -143,8 +144,10 @@ export function Payment() {
       <section className="card amount-card">
         <div className="hint small">{t('pay.amount')}</div>
         <div className="amount">{money(d.amount_uzs, lang)}</div>
-        {!paid && !cancelled && !reported && d.pay_until && <p className="small">{t('pay.until', { date: dateTime(d.pay_until, lang) })}</p>}
+        
       </section>
+
+      {!paid && !cancelled && !reported && d.pay_until && <PayBy until={d.pay_until} />}
 
       {paid ? (
         <div className="notice notice-ok">{t('pay.paid')}</div>
@@ -163,7 +166,12 @@ export function Payment() {
 
           {(
             <div className="sticky-action">
-              {reportPaid.isError && <p className="error-text">{errorText(lang, reportPaid.error instanceof ApiError ? reportPaid.error.code : undefined)}</p>}
+              {reportPaid.isError && (
+                <p className="error-text" role="alert">
+                  {errorText(lang, reportPaid.error instanceof ApiError ? reportPaid.error.code : undefined)}
+                  {isNetworkError(reportPaid.error) && ` ${t('pay.retrySafe')}`}
+                </p>
+              )}
               <button className="btn btn-block" disabled={reportPaid.isPending} onClick={() => reportPaid.mutate()}>
                 {t('pay.iPaid')}
               </button>

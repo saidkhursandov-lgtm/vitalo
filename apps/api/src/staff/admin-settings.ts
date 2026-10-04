@@ -107,6 +107,13 @@ export class ShopContactsDto {
   @ApiProperty({ example: '08:00' }) @Matches(HHMM, { message: 'payment_check_from: HH:MM' }) payment_check_from!: string;
   @ApiProperty({ example: '22:00' }) @Matches(HHMM, { message: 'payment_check_to: HH:MM' }) payment_check_to!: string;
 
+  @ApiPropertyOptional({ example: 3, description: 'За сколько часов до автоотмены напомнить об оплате' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  payment_reminder_hours?: number;
+
   @ApiProperty({ type: LocalizedTextDto, description: 'Подпись срока доставки: «рабочих дней»' })
   @ValidateNested()
   @Type(() => LocalizedTextDto)
@@ -229,6 +236,7 @@ export class AdminSettingsService {
       payment_check_from: hours.from,
       payment_check_to: hours.to,
       delivery_days_label: await this.settings.getOrDefault('delivery_days_label'),
+      payment_reminder_hours: Number(await this.settings.getOrDefault('payment_reminder_hours')),
     };
   }
 
@@ -236,6 +244,9 @@ export class AdminSettingsService {
     await this.saveSetting(staffId, SETTING_KEYS.supportContact, dto.support_contact as unknown as object, 'settings.contacts_updated');
     await this.saveSetting(staffId, SETTING_KEYS.paymentCheckHours, { from: dto.payment_check_from, to: dto.payment_check_to }, 'settings.contacts_updated');
     await this.saveSetting(staffId, SETTING_KEYS.deliveryDaysLabel, { ru: dto.delivery_days_label.ru, uz: dto.delivery_days_label.uz }, 'settings.contacts_updated');
+    if (dto.payment_reminder_hours !== undefined) {
+      await this.saveSetting(staffId, SETTING_KEYS.paymentReminderHours, dto.payment_reminder_hours as unknown as object, 'settings.contacts_updated');
+    }
     return this.shopContacts();
   }
 

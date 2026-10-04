@@ -40,11 +40,11 @@ describe('Launch block B (e2e)', () => {
     });
 
     it('the app may send only its own steps, signed in; spam over the limit is dropped', async () => {
-      const token = await loginCustomer(app, 980_000_001);
+      const token = await loginCustomer(app, 986_000_001);
       await http().post('/api/analytics/events').send({ event: 'app_open' }).expect(401);
       await http().post('/api/analytics/events').set(bearer(token)).send({ event: 'order_created' }).expect(400);
       await http().post('/api/analytics/events').set(bearer(token)).send({ event: 'hack' }).expect(400);
-      const user = await prisma.users.findUniqueOrThrow({ where: { telegram_user_id: 980_000_001n } });
+      const user = await prisma.users.findUniqueOrThrow({ where: { telegram_user_id: 986_000_001n } });
 
       const answers = [];
       for (let i = 0; i < 32; i++) answers.push((await http().post('/api/analytics/events').set(bearer(token)).send({ event: 'product_view', props: { product_id: 'p' } }).expect(202)).body.accepted);
@@ -54,7 +54,7 @@ describe('Launch block B (e2e)', () => {
 
     it('order created, "Я оплатил(а)" and payment confirmed are recorded by the server; the dashboard shows the funnel', async () => {
       const p = await createTestProduct(prisma, { price: 10_000, stock: 5 });
-      const token = await loginCustomer(app, 980_000_002);
+      const token = await loginCustomer(app, 986_000_002);
       for (const event of ['app_open', 'product_view', 'add_to_cart', 'checkout_start']) {
         await http().post('/api/analytics/events').set(bearer(token)).send({ event }).expect(202);
       }
@@ -71,7 +71,7 @@ describe('Launch block B (e2e)', () => {
       await http().post(`/api/staff/orders/${order.id}/confirm-payment`).set(bearer(admin)).send({}).expect(200);
       await http().post(`/api/staff/orders/${order.id}/confirm-payment`).set(bearer(admin)).send({}).expect(200); // again: no new event
 
-      const user = await prisma.users.findUniqueOrThrow({ where: { telegram_user_id: 980_000_002n } });
+      const user = await prisma.users.findUniqueOrThrow({ where: { telegram_user_id: 986_000_002n } });
       const events = await prisma.analytics_events.findMany({ where: { user_id: user.id }, orderBy: { created_at: 'asc' } });
       expect(events.map((e) => e.event)).toEqual(['app_open', 'product_view', 'add_to_cart', 'checkout_start', 'order_created', 'payment_marked', 'payment_confirmed']);
 
@@ -127,12 +127,12 @@ describe('Launch block B (e2e)', () => {
   // ------------------------------------------------------------------ B2 phone from Telegram
   describe('B2: phone shared through the bot', () => {
     it('saves only the sender’s own number, normalised; the shop profile has it', async () => {
-      const token = await loginCustomer(app, 980_000_003);
-      const asBot = (body: object) => http().post('/api/internal/bot/users/980000003/contact').set('x-bot-secret', TEST_ENV.BOT_API_SECRET).send(body);
-      await http().post('/api/internal/bot/users/980000003/contact').send({ phone: '998901234567', contact_user_id: 980_000_003 }).expect(401);
+      const token = await loginCustomer(app, 986_000_003);
+      const asBot = (body: object) => http().post('/api/internal/bot/users/986000003/contact').set('x-bot-secret', TEST_ENV.BOT_API_SECRET).send(body);
+      await http().post('/api/internal/bot/users/986000003/contact').send({ phone: '998901234567', contact_user_id: 986_000_003 }).expect(401);
       await asBot({ phone: '998907777777', contact_user_id: 1 }).expect(400);
-      await asBot({ phone: '12', contact_user_id: 980_000_003 }).expect(400);
-      expect((await asBot({ phone: '998 90 123-45-67', contact_user_id: 980_000_003 }).expect(200)).body).toEqual({ saved: true, phone: '+998901234567' });
+      await asBot({ phone: '12', contact_user_id: 986_000_003 }).expect(400);
+      expect((await asBot({ phone: '998 90 123-45-67', contact_user_id: 986_000_003 }).expect(200)).body).toEqual({ saved: true, phone: '+998901234567' });
       expect((await http().get('/api/auth/me').set(bearer(token)).expect(200)).body.phone).toBe('+998901234567');
     });
   });

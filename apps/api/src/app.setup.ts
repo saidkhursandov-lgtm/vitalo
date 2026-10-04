@@ -1,5 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { HttpAdapterHost } from '@nestjs/core';
+import { SystemErrorsService, UnexpectedErrorFilter } from './notifications/system-errors';
 import { static as serveStatic } from 'express';
 import { uploadDir } from './storage/file-storage';
 
@@ -23,6 +25,8 @@ export function configureApp(app: INestApplication) {
   app.setGlobalPrefix('api');
   app.enableCors({ origin: corsOrigins(config) });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+  // Unexpected 500 errors -> system_errors + the tech chat (D5); normal 4xx answers are not reported.
+  app.useGlobalFilters(new UnexpectedErrorFilter(app.get(HttpAdapterHost).httpAdapter, app.get(SystemErrorsService)));
   // Uploaded product photos (LocalFileStorage). With S3 this line goes away.
   app.use('/uploads', serveStatic(uploadDir(config), { index: false, maxAge: '7d' }));
 }

@@ -13,6 +13,9 @@ import type { Plugin } from 'vite';
  * So replacing the temporary PNGs with the original SVGs = put logo.svg (etc.) in the folder and restart.
  * No file at all -> the apps fall back to the text logo "VITALO" and /favicon.svg.
  *
+ * Favicon and home-screen icons are the light icon-32/180/192/512.png made by `npm run brand:icons` (apps/api)
+ * from icon-square; the big source file itself is never linked from the pages.
+ *
  * The plugin exposes the chosen URLs to the code as __BRAND__, adds the favicon links to index.html and,
  * for the admin panel (which has its own public folder), serves and copies /brand/* from here.
  */
@@ -50,24 +53,46 @@ export function brandUrls(dir = BRAND_DIR): BrandUrls {
   return { logo: url(chosen.logo), icon: url(chosen.icon), iconSquare: url(chosen.iconSquare) };
 }
 
-const MIME: Record<string, string> = { svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp' };
+/** Generated light icons (npm run brand:icons): size -> file name, only those that exist. */
+export function generatedIcons(dir = BRAND_DIR): Record<number, string> {
+  const present = new Set(files(dir));
+  return Object.fromEntries([32, 180, 192, 512].filter((s) => present.has(`icon-${s}.png`)).map((s) => [s, `icon-${s}.png`]));
+}
+
+const MIME: Record<string, string> = { svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp', webmanifest: 'application/manifest+json' };
 const mimeOf = (f: string) => MIME[f.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream';
 
 export function brand({ shareFiles = false }: { shareFiles?: boolean } = {}): Plugin {
   const urls = brandUrls();
+  const icons = generatedIcons();
+  const iconUrl = (size: number) => (icons[size] ? `/brand/${icons[size]}?v=${Math.round(statSync(join(BRAND_DIR, icons[size])).mtimeMs)}` : null);
+  const manifest = JSON.stringify({
+    name: 'VITALO',
+    short_name: 'VITALO',
+    display: 'standalone',
+    background_color: '#f3f5f4',
+    theme_color: '#ffffff',
+    icons: [192, 512].filter((s) => icons[s]).map((s) => ({ src: iconUrl(s), sizes: `${s}x${s}`, type: 'image/png' })),
+  });
   return {
     name: 'vitalo-brand',
     config: () => ({ define: { __BRAND__: JSON.stringify(urls) } }),
     transformIndexHtml(html) {
-      if (!urls.iconSquare) return html;
-      const type = mimeOf(urls.iconSquare.split('?')[0]);
-      return html.replace(
-        /<link rel="icon"[^>]*>/,
-        `<link rel="icon" href="${urls.iconSquare}" type="${type}" />\n    <link rel="apple-touch-icon" href="${urls.iconSquare}" />`,
-      );
+      const favicon = iconUrl(32);
+      if (!favicon) return html; // run `npm run brand:icons` in apps/api; until then /favicon.svg stays
+      const links = [
+        `<link rel="icon" href="${favicon}" type="image/png" sizes="32x32" />`,
+        iconUrl(180) && `<link rel="apple-touch-icon" href="${iconUrl(180)}" sizes="180x180" />`,
+        icons[192] && '<link rel="manifest" href="/brand/manifest.webmanifest" />',
+      ].filter(Boolean);
+      return html.replace(/<link rel="icon"[^>]*>/, links.join('\n    '));
     },
     // Admin panel only: /brand/* comes from the Mini App folder, in dev and in the build.
     configureServer(server) {
+      server.middlewares.use('/brand/manifest.webmanifest', (_req, res) => {
+        res.setHeader('Content-Type', MIME.webmanifest);
+        res.end(manifest);
+      });
       if (!shareFiles) return;
       server.middlewares.use('/brand/', (req, res, next) => {
         const name = decodeURIComponent((req.url ?? '').split('?')[0].replace(/^\//, ''));
@@ -77,8 +102,11 @@ export function brand({ shareFiles = false }: { shareFiles?: boolean } = {}): Pl
       });
     },
     generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'brand/manifest.webmanifest', source: manifest });
       if (!shareFiles) return;
-      for (const f of Object.values(pickBrandFiles())) {
+      // The admin panel needs the logo and the light icons, not the big square source.
+      const { logo, icon } = pickBrandFiles();
+      for (const f of [logo, icon, ...Object.values(icons)]) {
         if (f) this.emitFile({ type: 'asset', fileName: `brand/${f}`, source: readFileSync(join(BRAND_DIR, f)) });
       }
     },

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState, Loading, RegionCitySelect } from '../components/ui';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, isNetworkError } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { money, normalizePhone, prettyPhone } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
@@ -163,7 +163,7 @@ export function Checkout() {
     } catch (err) {
       haptic('error');
       const code = err instanceof ApiError ? err.code : undefined;
-      setSubmitError(errorText(lang, code));
+      setSubmitError(isNetworkError(err) ? `${errorText(lang, code)} ${t('checkout.retrySafe')}` : errorText(lang, code));
       if (code === 'PRICE_CHANGED' || code === 'INSUFFICIENT_STOCK') {
         void preview.refetch();
         void client.invalidateQueries({ queryKey: ['cart'] });

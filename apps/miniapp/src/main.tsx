@@ -15,9 +15,11 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 30_000,
       refetchOnWindowFocus: false,
-      // 4xx answers are final (not found, validation...); retry only network/5xx problems once.
-      retry: (count, error) => count < 1 && !(error instanceof ApiError && error.status < 500),
+      // 4xx answers are final (not found, validation...); no answer (status 0) or 5xx: one more try.
+      retry: (count, error) => count < 1 && !(error instanceof ApiError && error.status >= 400 && error.status < 500),
     },
+    // Creating an order, «Я оплатил(а)», cart changes: never repeated silently.
+    mutations: { retry: false },
   },
 });
 

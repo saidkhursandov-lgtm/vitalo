@@ -9,5 +9,8 @@ export const TEST_ENV = {
   JOBS_ENABLED: 'false', // tests call ReservationExpiryService.runOnce() directly
   BOT_API_SECRET: 'e2e-bot-secret-0123456789abcdef0123456789',
   CORS_ORIGINS: 'http://localhost:5173,https://shop.example.com',
+  // Never message a real chat from tests; buttons only where a test sets MINIAPP_URL itself.
+  TECH_CHAT_ID: '',
+  MINIAPP_URL: '',
   UPLOAD_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
 };

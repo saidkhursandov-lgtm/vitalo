@@ -11,6 +11,7 @@ export const SETTING_KEYS = {
   supportContact: 'support_contact',
   paymentCheckHours: 'payment_check_hours',
   deliveryDaysLabel: 'delivery_days_label',
+  paymentReminderHours: 'payment_reminder_hours',
   homeContent: 'home_content',
   bonusTeaser: 'bonus_teaser',
 } as const;
@@ -47,6 +48,8 @@ export const SETTING_DEFAULTS = {
   payment_check_hours: { from: '08:00', to: '22:00' } as PaymentCheckHours,
   delivery_days_label: { ru: 'рабочих дней', uz: 'ish kuni' } as LocalizedText,
   home_content: HOME_CONTENT_DEFAULT,
+  /** D3: the bot reminds about an unpaid order this many hours before the automatic cancellation. */
+  payment_reminder_hours: 3 as number,
   bonus_teaser: BONUS_TEASER_DEFAULT,
 };
 

@@ -7,6 +7,7 @@ import { errorText, useI18n, type MessageKey } from '../lib/i18n';
 import { useCartActions, useProduct, useShopTexts } from '../lib/queries';
 import { haptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
+import { Picture } from '../components/Picture';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip, Stepper, useToast } from '../components/ui';
 
 const SECTIONS: [field: string, title: MessageKey][] = [
@@ -59,14 +60,20 @@ export function Product() {
   return (
     <div className="page product">
       <div className="gallery">
-        {images[imageIdx] && <img src={images[imageIdx].url} alt={nameOf(p, lang)} />}
+        {images[imageIdx] && (
+          <Picture
+            src={{ webp: images[imageIdx].url, jpeg: images[imageIdx].url_jpeg, width: images[imageIdx].width, height: images[imageIdx].height }}
+            alt={nameOf(p, lang)}
+            eager={imageIdx === 0}
+          />
+        )}
         <FavoriteButton productId={p.id} className="gallery-fav" />
       </div>
       {images.length > 1 && (
         <div className="thumbs">
           {images.map((m, i) => (
             <button key={m.url} className={i === imageIdx ? 'is-on' : ''} onClick={() => setImageIdx(i)}>
-              <img src={m.url} alt="" />
+              <img src={m.thumb_url ?? m.url} alt="" width={56} height={56} loading="lazy" decoding="async" />
             </button>
           ))}
         </div>
@@ -129,8 +136,10 @@ export function Product() {
         ) : null;
       })}
 
+      {/* Only when the product really has documents uploaded. */}
       {documents.length > 0 && (
-        <section className="card">
+        <section className="card docs">
+          <h2>{t('product.documents')}</h2>
           {documents.map((d) => (
             <a key={d.url} href={d.url} target="_blank" rel="noreferrer" className="link">
               {d.title ?? d.url}

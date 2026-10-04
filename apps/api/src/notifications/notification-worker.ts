@@ -2,8 +2,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { notifications } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { renderNotification, type TemplatePayload } from './notification-templates';
+import { renderNotification, type TemplatePayload, OPEN_BUTTON } from './notification-templates';
 import { TELEGRAM_SENDER, TelegramSendError, type TelegramSender } from './telegram-sender';
+import { ConfigService } from '@nestjs/config';
+import { miniAppUrl } from './mini-app-url';
+import { SystemErrorsService } from './system-errors';
 
 const BATCH = 20; // Telegram allows ~30 messages/second per bot
 export const MAX_ATTEMPTS = 5;
@@ -31,6 +34,8 @@ export class NotificationWorker {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(TELEGRAM_SENDER) private readonly sender: TelegramSender,
+    private readonly errors: SystemErrorsService,
+    private readonly config: ConfigService,
   ) {}
 
   @Interval('notifications', 3_000)
@@ -73,8 +78,11 @@ export class NotificationWorker {
         }
       }
       try {
-        const text = renderNotification(n.template, (n.payload ?? {}) as unknown as TemplatePayload);
-        await this.sender.sendMessage(n.chat_id, text);
+        const payload = (n.payload ?? {}) as unknown as TemplatePayload;
+        const text = renderNotification(n.template, payload);
+        const base = miniAppUrl(this.config);
+        const button = payload.open_path && base ? { text: OPEN_BUTTON[payload.lang === 'uz' ? 'uz' : 'ru'], url: `${base}${payload.open_path}` } : undefined;
+        await this.sender.sendMessage(n.chat_id, text, button ? { webApp: button } : {});
         await this.prisma.notifications.update({ where: { id: n.id }, data: { status: 'sent', sent_at: new Date(), attempts: n.attempts + 1, error: null } });
         result.sent++;
       } catch (e) {
@@ -97,13 +105,11 @@ export class NotificationWorker {
         ? { status: 'failed', attempts, error: err.message }
         : { status: 'queued', attempts, error: err.message, next_attempt_at: new Date(now.getTime() + delay * 1000) },
     });
-    await this.prisma.system_errors.create({
-      data: {
-        level: giveUp ? 'error' : 'warn',
-        service: 'notifications',
-        message: `${giveUp ? 'Notification failed' : 'Notification will be retried'}: ${err.message}`,
-        context_json: { notification_id: n.id, template: n.template, attempts, permanent: err.permanent, retry_in_seconds: giveUp ? null : delay },
-      },
+    await this.errors.record({
+      level: giveUp ? 'error' : 'warn',
+      service: 'notifications',
+      message: `${giveUp ? 'Notification failed' : 'Notification will be retried'}: ${err.message}`,
+      context: { notification_id: n.id, template: n.template, attempts, permanent: err.permanent, retry_in_seconds: giveUp ? null : delay },
     });
     return giveUp ? 'failed' : 'retried';
   }

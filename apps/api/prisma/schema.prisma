@@ -482,6 +482,12 @@ model product_media {
   sort_order Int       @default(0)
   is_main    Boolean   @default(false)
   title      String?
+  // Optimized versions (D2): url = main WebP up to 1200 px, thumb = 400 px; JPEG fallbacks; size of the main one
+  url_jpeg       String?
+  thumb_url      String?
+  thumb_url_jpeg String?
+  width          Int?
+  height         Int?
   product    products  @relation(fields: [product_id], references: [id])
 
   @@index([product_id])
@@ -626,6 +632,7 @@ model orders {
   created_at          DateTime      @default(now())
   paid_at             DateTime?
   reserved_until      DateTime?
+  payment_reminder_sent_at DateTime? // D3: "ждёт оплаты" reminder sent (once per order)
   delivered_at        DateTime?
   cancelled_at        DateTime?
 

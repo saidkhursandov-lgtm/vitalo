@@ -100,7 +100,7 @@ export function Cart() {
         {data.items.map((l) => (
           <li key={l.product_id} className={`cart-line ${l.status === 'unavailable' ? 'is-out' : ''}`}>
             <Link to={`/product/${l.product_id}`} className="cart-img">
-              {l.image_url && <img src={l.image_url} alt="" />}
+              {l.image_url && <img src={l.image_url} alt="" width={72} height={72} loading="lazy" decoding="async" />}
             </Link>
             <div className="cart-info">
               <Link to={`/product/${l.product_id}`} className="cart-name">

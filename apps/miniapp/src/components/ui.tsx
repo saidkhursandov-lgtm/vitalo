@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError } from '../lib/api';
+import { ApiError, isNetworkError } from '../lib/api';
 import { discountPercent, money, nameOf } from '../lib/format';
 import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, Region } from '../lib/types';
+import { Picture } from './Picture';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
 
 // ---------------------------------------------------------------- loading skeletons (no spinners)
@@ -113,12 +114,13 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   const { t, lang } = useI18n();
   const code = error instanceof ApiError ? error.code : undefined;
   const text = errorText(lang, code);
+  const offline = isNetworkError(error);
   return (
     <div className="empty-state is-error" role="alert">
       <span className="state-icon">
         <OfflineIcon width={28} height={28} />
       </span>
-      <h2>{t('common.error')}</h2>
+      <h2>{offline ? t('net.title') : t('common.error')}</h2>
       <p className="hint">{text === t('common.error') ? t('common.errorHint') : text}</p>
       {onRetry && (
         <button className="btn btn-secondary" onClick={onRetry}>
@@ -190,7 +192,7 @@ export function ProductTile({ product }: { product: ProductListItem }) {
   return (
     <Link to={`/product/${product.id}`} className={`tile ${product.in_stock ? '' : 'is-out'}`}>
       <div className="tile-img">
-        {product.image_url && <img src={product.image_url} alt="" loading="lazy" />}
+        {product.image ? <Picture src={product.image} /> : product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" />}
         <FavoriteButton productId={product.id} className="tile-fav" />
         {!product.in_stock && <span className="tile-out">{t('product.outOfStock')}</span>}
       </div>

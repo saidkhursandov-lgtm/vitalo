@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CUSTOMER_STATUS_TEMPLATES, type TemplateName } from './notification-templates';
+import { tashkentDateTime } from '../common/tashkent';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -29,6 +30,21 @@ export class NotificationsService {
         kind: 'service',
         template,
         payload: { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang: order.user.language },
+      },
+    });
+  }
+
+  /** "Заказ №… ждёт оплаты до …" with a button that opens the payment screen (D3). */
+  async paymentReminder(db: Db, orderId: string): Promise<void> {
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true } });
+    if (!order.reserved_until) return;
+    await db.notifications.create({
+      data: {
+        user_id: order.user_id,
+        chat_id: order.user.telegram_user_id,
+        kind: 'service',
+        template: 'order.payment_reminder',
+        payload: { order_number: order.order_number, until: tashkentDateTime(order.reserved_until), open_path: `/orders/${order.id}/pay`, lang: order.user.language },
       },
     });
   }

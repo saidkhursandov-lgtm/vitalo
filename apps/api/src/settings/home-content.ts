@@ -25,7 +25,8 @@ export const HOME_CONTENT_DEFAULT: HomeContent = {
   trust: [
     { key: 'original', enabled: true, title: { ru: 'Оригинальная продукция', uz: 'Original mahsulotlar' }, text: { ru: 'Только от проверенных производителей', uz: 'Faqat ishonchli ishlab chiqaruvchilardan' } },
     { key: 'delivery', enabled: true, title: { ru: 'Доставка по всему Узбекистану', uz: 'Butun O‘zbekiston bo‘ylab yetkazib berish' }, text: { ru: '{delivery}', uz: '{delivery}' } },
-    { key: 'documents', enabled: true, title: { ru: 'Документы на каждый товар', uz: 'Har bir mahsulotga hujjatlar' }, text: { ru: 'Состав и документы в карточке товара', uz: 'Tarkib va hujjatlar mahsulot sahifasida' } },
+    // Off until products really have documents attached (switch on in Настройки → Главная).
+    { key: 'documents', enabled: false, title: { ru: 'Документы на каждый товар', uz: 'Har bir mahsulotga hujjatlar' }, text: { ru: 'Состав и документы в карточке товара', uz: 'Tarkib va hujjatlar mahsulot sahifasida' } },
     {
       key: 'payments',
       enabled: true,

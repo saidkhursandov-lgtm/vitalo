@@ -15,7 +15,12 @@ export class TelegramSendError extends Error {
 }
 
 export interface TelegramSender {
-  sendMessage(chatId: bigint, text: string): Promise<void>;
+  sendMessage(chatId: bigint, text: string, opts?: SendOptions): Promise<void>;
+}
+
+/** A button under the message that opens a Mini App page (Telegram web_app button). */
+export interface SendOptions {
+  webApp?: { text: string; url: string };
 }
 
 export const TELEGRAM_SENDER = Symbol('TELEGRAM_SENDER');
@@ -28,7 +33,7 @@ export const TELEGRAM_SENDER = Symbol('TELEGRAM_SENDER');
 export class HttpTelegramSender implements TelegramSender {
   constructor(private readonly config: ConfigService) {}
 
-  async sendMessage(chatId: bigint, text: string): Promise<void> {
+  async sendMessage(chatId: bigint, text: string, opts: SendOptions = {}): Promise<void> {
     const token = this.config.get<string>('TELEGRAM_BOT_TOKEN');
     if (!token) throw new TelegramSendError('TELEGRAM_BOT_TOKEN is not configured', false);
 
@@ -37,7 +42,12 @@ export class HttpTelegramSender implements TelegramSender {
       res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId.toString(), text, link_preview_options: { is_disabled: true } }),
+        body: JSON.stringify({
+          chat_id: chatId.toString(),
+          text,
+          link_preview_options: { is_disabled: true },
+          ...(opts.webApp && { reply_markup: { inline_keyboard: [[{ text: opts.webApp.text, web_app: { url: opts.webApp.url } }]] } }),
+        }),
         signal: AbortSignal.timeout(15_000),
       });
     } catch (e) {

@@ -14,7 +14,8 @@ export const CUSTOMER_STATUS_TEMPLATES = {
 export type TemplateName =
   | (typeof CUSTOMER_STATUS_TEMPLATES)[keyof typeof CUSTOMER_STATUS_TEMPLATES]
   | 'staff.new_order'
-  | 'staff.customer_paid';
+  | 'staff.customer_paid'
+  | 'order.payment_reminder';
 
 export interface TemplatePayload {
   order_number: string;
@@ -23,7 +24,14 @@ export interface TemplatePayload {
   customer?: string;
   phone?: string;
   lang?: Lang;
+  /** payment deadline already formatted in Tashkent time, e.g. "04.10.2026, 14:15" */
+  until?: string;
+  /** Mini App page for the button under the message, e.g. "/orders/<id>/pay" */
+  open_path?: string;
 }
+
+/** Text of the button under a message that has open_path. */
+export const OPEN_BUTTON: Record<Lang, string> = { ru: 'Открыть заказ', uz: 'Buyurtmani ochish' };
 
 /** Stored instead of a text when the system cancelled an unpaid order; rendered in the customer's language. */
 export const EXPIRED_REASON_CODE = '@expired';
@@ -69,6 +77,10 @@ const head = (p: TemplatePayload, lang: Lang, status: string) =>
   lang === 'uz' ? `№${p.order_number} buyurtma: ${STATUS_LABELS.uz[status]}` : `Заказ №${p.order_number}: ${STATUS_LABELS.ru[status]}`;
 
 const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> = {
+  'order.payment_reminder': {
+    ru: (p) => `⏰ Заказ №${p.order_number} ждёт оплаты до ${p.until}.\nЕсли вы уже перевели деньги, нажмите «Я оплатил(а)».`,
+    uz: (p) => `⏰ №${p.order_number} buyurtma ${p.until} gacha to‘lovni kutmoqda.\nAgar pulni allaqachon o‘tkazgan bo‘lsangiz, «To‘ladim» tugmasini bosing.`,
+  },
   'order.paid': {
     ru: (p) => `${head(p, 'ru', 'paid')}\nНачинаем собирать ваш заказ.`,
     uz: (p) => `${head(p, 'uz', 'paid')}\nBuyurtmangizni yig‘ishni boshladik.`,

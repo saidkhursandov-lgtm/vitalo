@@ -5,6 +5,7 @@ import { useCartCount } from '../lib/queries';
 import { telegram } from '../lib/telegram';
 import { BackIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, UserIcon } from './Icons';
 import { Logo } from './Logo';
+import { NetworkBanner } from './NetworkBanner';
 
 const TABS = ['/', '/catalog', '/favorites', '/profile'];
 /** Focused flows hide the bottom navigation. */
@@ -58,6 +59,7 @@ export function Layout() {
         </Link>
       </header>
 
+      <NetworkBanner />
       <main className="content">
         <Outlet />
       </main>

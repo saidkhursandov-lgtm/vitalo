@@ -45,6 +45,8 @@ export interface ProductListItem extends Named {
   price_uzs: number;
   old_price_uzs: number | null;
   image_url: string | null;
+  /** Thumbnail with JPEG fallback and size (null for products without photos). */
+  image?: { webp: string; jpeg: string | null; width: number | null; height: number | null } | null;
   in_stock: boolean;
 }
 
@@ -63,7 +65,16 @@ export interface ProductCard extends ProductListItem {
   directions_uz: string | null;
   warnings_ru: string | null;
   warnings_uz: string | null;
-  media: { type: 'image' | 'document'; url: string; title: string | null; is_main: boolean }[];
+  media: {
+    type: 'image' | 'document';
+    url: string;
+    url_jpeg?: string | null;
+    thumb_url?: string | null;
+    width?: number | null;
+    height?: number | null;
+    title: string | null;
+    is_main: boolean;
+  }[];
   categories: { id: string; slug: string; tree_type: 'need' | 'product_type'; name_ru: string; name_uz: string }[];
   similar: ProductListItem[];
   also_bought: ProductListItem[];
