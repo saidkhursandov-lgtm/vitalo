@@ -67,13 +67,30 @@ Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub
 
 ## 2. Первый вход и защита сервера
 
-Войдите под `root` с паролем из панели hostmaster:
+**Как это было у hostmaster.** Выданные логины `root` и `admin` не подошли: в Cloud-Init ВМ не задан ни пароль,
+ни ключ, а менять Cloud-Init клиенту нельзя. Рабочий вход — пользователь с вашим именем (`saidkomolkhursandov`,
+у него есть `sudo`), и вход им работает только через экран сервера в браузере:
 
-```powershell
-ssh root@91.213.99.230
+1. https://vnc.hostmaster.uz → логин `vnc-…` из письма, Realm «Proxmox VE authentication server».
+2. ВМ 576 → **Консоль** (или «Консоль ▾ → noVNC» в отдельном окне). Щёлкните в чёрное поле, включите английскую раскладку.
+3. `vitalo login:` → имя пользователя, затем его пароль. Ввод пароля не виден.
+
+Затем на этом экране временно разрешите вход по паролю, чтобы один раз передать ключ:
+
+```bash
+sudo bash -c 'echo "PasswordAuthentication yes" > /etc/ssh/sshd_config.d/01-temp.conf && systemctl restart ssh'
 ```
 
-Дальше все команды выполняются **на сервере**.
+На компьютере, в PowerShell, передайте открытый ключ (спросит пароль пользователя) и проверьте вход по ключу:
+
+```powershell
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh saidkomolkhursandov@91.213.99.230 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+ssh saidkomolkhursandov@91.213.99.230
+```
+
+Дальше все команды выполняются **на сервере**, после `sudo -i` (строка `root@vitalo:~#`).
+Временный файл `01-temp.conf` удаляется в шаге 2.2. Если сервер выдан с рабочим `root`, вместо всего этого
+войдите `ssh root@91.213.99.230` и создайте пользователя по шагу 2.2.
 
 ### 2.1 Обновления, часовой пояс, подкачка
 
@@ -92,6 +109,9 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 ```
 
 ### 2.2 Ваш пользователь-администратор (вместо root)
+
+У hostmaster он уже есть (`saidkomolkhursandov`) — пропустите создание и сразу закройте вход по паролю
+(блок с `00-vitalo.conf` ниже, перед ним `rm -f /etc/ssh/sshd_config.d/01-temp.conf`). Если создаёте сами:
 
 ```bash
 adduser vadmin
@@ -116,6 +136,7 @@ ssh vadmin@91.213.99.230
 
 ```bash
 # имя 00-… важно: из файлов этой папки действует первое значение, а хостинг может положить свой 50-cloud-init.conf
+sudo rm -f /etc/ssh/sshd_config.d/01-temp.conf
 sudo tee /etc/ssh/sshd_config.d/00-vitalo.conf >/dev/null <<'EOF'
 PermitRootLogin no
 PasswordAuthentication no
@@ -152,7 +173,8 @@ node -v && npm -v && psql --version && nginx -v
 ## 4. Пользователь `vitalo`, папки, база
 
 ```bash
-sudo adduser --system --group --home /opt/vitalo --shell /bin/bash vitalo
+sudo useradd --system --create-home --home-dir /opt/vitalo --shell /bin/bash --user-group vitalo
+sudo usermod -p '*' vitalo   # без пароля, но вход по ключу разрешён
 sudo mkdir -p /var/lib/vitalo/uploads /var/backups/vitalo /opt/vitalo/import /opt/vitalo/.ssh /var/www/certbot
 sudo chown -R vitalo:vitalo /opt/vitalo /var/lib/vitalo /var/backups/vitalo
 sudo chmod 750 /opt/vitalo /var/lib/vitalo && sudo chmod 700 /var/backups/vitalo
@@ -160,11 +182,11 @@ sudo chmod 750 /opt/vitalo /var/lib/vitalo && sudo chmod 700 /var/backups/vitalo
 sudo usermod -aG vitalo www-data
 ```
 
-Ваш ключ для отправки кода — тот же открытый ключ из шага 1:
+Ваш ключ для отправки кода — тот же, что у вашего пользователя-администратора:
 
 ```bash
-sudo nano /opt/vitalo/.ssh/authorized_keys
-sudo chown -R vitalo:vitalo /opt/vitalo/.ssh && sudo chmod 700 /opt/vitalo/.ssh && sudo chmod 600 /opt/vitalo/.ssh/authorized_keys
+sudo install -o vitalo -g vitalo -m 600 /home/saidkomolkhursandov/.ssh/authorized_keys /opt/vitalo/.ssh/authorized_keys
+sudo chown vitalo:vitalo /opt/vitalo/.ssh && sudo chmod 700 /opt/vitalo/.ssh
 ```
 
 База данных (роль `vitalo` без пароля, вход только с этого сервера через сокет):
@@ -180,6 +202,8 @@ sudo -u postgres createdb -O vitalo vitalo
 
 ```bash
 sudo -iu vitalo git init --bare /opt/vitalo/repo.git
+# иначе хранилище ждёт ветку master и копия скачается пустой
+sudo -iu vitalo git -C /opt/vitalo/repo.git symbolic-ref HEAD refs/heads/main
 ```
 
 На вашем компьютере, в PowerShell, в папке проекта (git в PowerShell вызывается по полному пути):
@@ -200,30 +224,26 @@ sudo -iu vitalo git clone /opt/vitalo/repo.git /opt/vitalo/app
 
 ## 6. Файл настроек `.env`
 
-```bash
-sudo -iu vitalo
-cd /opt/vitalo/app/apps/api
-cp ../../deploy/api.env.example .env
-chmod 600 .env
-# секрет между ботом и API: создаётся и записывается сразу, на экран не выводится
-sed -i "s/^BOT_API_SECRET=.*/BOT_API_SECRET=$(openssl rand -hex 32)/" .env
-nano .env
-```
-
-В `nano` заполните:
-
-- `TELEGRAM_BOT_TOKEN=` — токен **рабочего** бота из @BotFather. Вставьте прямо в редактор на сервере.
-- `TECH_CHAT_ID=` — ID технического чата, если он уже есть (как создать — в разделе 11). Можно оставить пустым.
-
-Всё остальное в шаблоне уже под ваш сервер: адреса, папка фото, подключение к базе. Сохраните: Ctrl+O, Enter, Ctrl+X.
-Чтобы проверить, что ключи заполнены, и при этом не показать их на экране:
+Файл из шаблона и секрет между ботом и API (создаётся и записывается сразу, на экран не выводится):
 
 ```bash
-grep -E '^(TELEGRAM_BOT_TOKEN|BOT_API_SECRET)=.+' .env | cut -d= -f1
-exit
+sudo -iu vitalo bash -c 'cd /opt/vitalo/app/apps/api && cp ../../deploy/api.env.example .env && chmod 600 .env && sed -i "s/^BOT_API_SECRET=.*/BOT_API_SECRET=$(openssl rand -hex 32)/" .env && echo "ФАЙЛ СОЗДАН"'
 ```
 
-Должны вывестись два имени без значений.
+Токен **рабочего** бота (@BotFather → `/mybots` → бот → API Token; копировать на этом же компьютере).
+Команда ждёт вставку правой кнопкой мыши и Enter. Ввод не виден, пустую или неверную вставку команда пропускает
+и спрашивает снова (вопрос может появиться дважды — это лишний Enter от вставки самой команды):
+
+```bash
+F=/opt/vitalo/app/apps/api/.env; while :; do read -rsp "Paste token, then Enter: " T; echo; T="${T//[[:space:]]/}"; [[ "$T" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]] && break; [ -n "$T" ] && echo "Не похоже на токен (${#T} символов). Скопируйте ещё раз."; done; sed -i "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=$T|" $F; chown vitalo:vitalo $F; chmod 600 $F; unset T; echo "ТОКЕН ЗАПИСАН"
+```
+
+Всё остальное в шаблоне уже под ваш сервер: адреса, папка фото, подключение к базе. `TECH_CHAT_ID` — раздел 11.
+Проверка без показа значений (должны вывестись два имени):
+
+```bash
+grep -E '^(TELEGRAM_BOT_TOKEN|BOT_API_SECRET)=.+' /opt/vitalo/app/apps/api/.env | cut -d= -f1
+```
 
 ## 7. Службы
 
