@@ -115,7 +115,8 @@ ssh vadmin@91.213.99.230
 Работает? Тогда отключите вход по паролю и вход под root (команды выполняйте во втором окне):
 
 ```bash
-sudo tee /etc/ssh/sshd_config.d/99-vitalo.conf >/dev/null <<'EOF'
+# имя 00-… важно: из файлов этой папки действует первое значение, а хостинг может положить свой 50-cloud-init.conf
+sudo tee /etc/ssh/sshd_config.d/00-vitalo.conf >/dev/null <<'EOF'
 PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
