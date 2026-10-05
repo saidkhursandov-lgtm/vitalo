@@ -1,0 +1,26 @@
+# /etc/systemd/system/vitalo-api.service — VITALO API (NestJS), also runs the background jobs
+# (reservation expiry, payment reminders, Telegram notifications). Settings: /opt/vitalo/app/apps/api/.env
+[Unit]
+Description=VITALO API
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=vitalo
+Group=vitalo
+WorkingDirectory=/opt/vitalo/app/apps/api
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=5
+# Hardening: the service can write only to the photo folder
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/vitalo
+
+[Install]
+WantedBy=multi-user.target

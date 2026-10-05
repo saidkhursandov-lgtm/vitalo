@@ -12,6 +12,7 @@
     "dev:login": "ts-node scripts/dev-login.ts",
     "dev:order-demo": "ts-node scripts/dev-order-demo.ts",
     "staff:add": "ts-node scripts/add-staff.ts",
+    "bootstrap:prod": "ts-node scripts/bootstrap-production.ts",
     "import:products": "ts-node scripts/import-products.ts",
     "photos:optimize": "ts-node scripts/optimize-photos.ts",
     "brand:icons": "ts-node scripts/brand-icons.ts",

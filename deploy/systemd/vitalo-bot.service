@@ -1,0 +1,23 @@
+# /etc/systemd/system/vitalo-bot.service — VITALO Telegram bot (long polling).
+# Reads the same /opt/vitalo/app/apps/api/.env (token, MINIAPP_URL, ADMIN_URL) and calls the API on 127.0.0.1.
+[Unit]
+Description=VITALO Telegram bot
+After=network-online.target vitalo-api.service
+Wants=network-online.target vitalo-api.service
+
+[Service]
+Type=simple
+User=vitalo
+Group=vitalo
+WorkingDirectory=/opt/vitalo/app/apps/bot
+Environment=NODE_ENV=production
+ExecStart=/opt/vitalo/app/apps/bot/node_modules/.bin/tsx src/main.ts
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

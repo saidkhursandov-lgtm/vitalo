@@ -4,18 +4,18 @@
  * so admin edits, stock and reservations of real orders are left alone.
  * Run: npm run seed
  */
-import { createHash } from 'crypto';
+// .env first: on the server it says NODE_ENV=production, and then this demo seed refuses to run.
+import 'dotenv/config';
 import { Prisma, PrismaClient, TreeType } from '@prisma/client';
 import { SETTING_DEFAULTS } from '../src/settings/settings.service';
+import { BANK_TRANSFER_DETAILS, CATEGORIES, PAYMENT_METHODS, uid, type CategorySeed } from './reference-data';
+
+if (process.env.NODE_ENV === 'production') {
+  // Demo products, test employees and 3 extra regions must never reach the real shop.
+  throw new Error('prisma/seed.ts is the DEMO seed and refuses NODE_ENV=production. Use: npm run bootstrap:prod');
+}
 
 const prisma = new PrismaClient();
-
-/** Deterministic UUID (v5-shaped) from a stable key. */
-function uid(key: string): string {
-  const h = createHash('sha1').update(`vitalo-seed:${key}`).digest('hex');
-  const variant = ((parseInt(h[16], 16) & 0x3) | 0x8).toString(16);
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
-}
 
 const REGIONS = [
   { key: 'tashkent-city', ru: 'г. Ташкент', uz: 'Toshkent shahri', cities: [['Юнусабадский район', 'Yunusobod tumani'], ['Чиланзарский район', 'Chilonzor tumani']] },
@@ -23,41 +23,7 @@ const REGIONS = [
   { key: 'fergana', ru: 'Ферганская область', uz: 'Farg‘ona viloyati', cities: [['Фергана', 'Farg‘ona'], ['Коканд', 'Qo‘qon']] },
 ];
 
-interface CategorySeed { slug: string; ru: string; uz: string; children?: CategorySeed[] }
 
-const CATEGORIES: Record<TreeType, CategorySeed[]> = {
-  need: [
-    { slug: 'immunity', ru: 'Иммунитет', uz: 'Immunitet' },
-    { slug: 'beauty', ru: 'Красота', uz: 'Go‘zallik', children: [
-      { slug: 'beauty-skin', ru: 'Кожа', uz: 'Teri' },
-      { slug: 'beauty-hair', ru: 'Волосы и ногти', uz: 'Soch va tirnoqlar' },
-    ] },
-    { slug: 'joints', ru: 'Суставы и кости', uz: 'Bo‘g‘imlar va suyaklar' },
-    { slug: 'energy', ru: 'Энергия', uz: 'Energiya' },
-    { slug: 'sleep', ru: 'Сон и стресс', uz: 'Uyqu va stress' },
-    { slug: 'heart', ru: 'Сердце и сосуды', uz: 'Yurak va qon tomirlar' },
-    { slug: 'memory', ru: 'Память и концентрация', uz: 'Xotira va diqqat' },
-    { slug: 'women', ru: 'Женское здоровье', uz: 'Ayollar salomatligi' },
-    { slug: 'men', ru: 'Мужское здоровье', uz: 'Erkaklar salomatligi' },
-    { slug: 'sport', ru: 'Спорт и восстановление', uz: 'Sport va tiklanish' },
-  ],
-  product_type: [
-    { slug: 'vitamins', ru: 'Витамины', uz: 'Vitaminlar', children: [
-      { slug: 'vitamin-d', ru: 'Витамин D', uz: 'D vitamini' },
-      { slug: 'vitamin-c', ru: 'Витамин C', uz: 'C vitamini' },
-      { slug: 'vitamin-b', ru: 'Витамины группы B', uz: 'B guruhi vitaminlari' },
-      { slug: 'vitamin-k', ru: 'Витамин K', uz: 'K vitamini' },
-    ] },
-    { slug: 'minerals', ru: 'Минералы', uz: 'Minerallar', children: [
-      { slug: 'magnesium', ru: 'Магний', uz: 'Magniy' },
-      { slug: 'zinc', ru: 'Цинк', uz: 'Rux' },
-    ] },
-    { slug: 'omega', ru: 'Омега-3', uz: 'Omega-3' },
-    { slug: 'collagen', ru: 'Коллаген', uz: 'Kollagen' },
-    { slug: 'probiotics', ru: 'Пробиотики', uz: 'Probiotiklar' },
-    { slug: 'other', ru: 'Другие добавки', uz: 'Boshqa qo‘shimchalar' },
-  ],
-};
 
 interface ProductSeed {
   sku: string; ru: string; uz: string; brand: string; manufacturer: string; country: string; form: string;
@@ -118,24 +84,7 @@ const TARIFFS: { region: string; city?: string; tariff: number; threshold: numbe
   { region: 'fergana', tariff: 35_000, threshold: 500_000 },
 ];
 
-// Online providers stay disabled until the payments stage; timeouts per Master TZ §10.
-const PAYMENT_METHODS = [
-  { code: 'card_transfer', name_ru: 'Перевод на карту', name_uz: 'Kartaga o‘tkazma', status: 'enabled' as const, timeout_minutes: 12 * 60 },
-  { code: 'bank_transfer', name_ru: 'Банковский перевод', name_uz: 'Bank o‘tkazmasi', status: 'enabled' as const, timeout_minutes: 12 * 60 },
-  { code: 'payme', name_ru: 'Payme', name_uz: 'Payme', status: 'disabled' as const, timeout_minutes: 30 },
-  { code: 'click', name_ru: 'Click', name_uz: 'Click', status: 'disabled' as const, timeout_minutes: 30 },
-  { code: 'uzum', name_ru: 'Uzum', name_uz: 'Uzum', status: 'disabled' as const, timeout_minutes: 30 },
-];
 
-// Clearly fake requisites for dev/test; real ones are entered by the admin.
-const BANK_TRANSFER_DETAILS = {
-  recipient: 'ООО «VITALO» (ТЕСТОВЫЕ РЕКВИЗИТЫ)',
-  bank_name: 'Тестовый банк',
-  account: '20208000000000000001',
-  mfo: '00000',
-  inn: '000000000',
-  purpose_template: 'Оплата заказа {order_number}',
-};
 
 // Dev staff, one per role (fake Telegram ids, also used by e2e tests). The admin panel dev login offers them.
 const DEV_STAFF = [

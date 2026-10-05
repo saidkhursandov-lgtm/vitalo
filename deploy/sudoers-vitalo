@@ -1,0 +1,3 @@
+# /etc/sudoers.d/vitalo — the `vitalo` user may only restart and look at its own services (used by update.sh).
+# Install with: sudo install -m 440 deploy/sudoers-vitalo /etc/sudoers.d/vitalo && sudo visudo -c
+vitalo ALL=(root) NOPASSWD: /usr/bin/systemctl restart vitalo-api, /usr/bin/systemctl restart vitalo-bot, /usr/bin/systemctl restart vitalo-api vitalo-bot, /usr/bin/systemctl status vitalo-api, /usr/bin/systemctl status vitalo-bot

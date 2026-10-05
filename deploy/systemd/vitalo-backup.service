@@ -1,0 +1,10 @@
+# /etc/systemd/system/vitalo-backup.service — one backup run (started daily by vitalo-backup.timer)
+[Unit]
+Description=VITALO backup (database + product photos)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=vitalo
+Group=vitalo
+ExecStart=/opt/vitalo/app/deploy/scripts/backup.sh

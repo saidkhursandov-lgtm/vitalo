@@ -1,3 +1,7 @@
 # Windows batch files must keep CRLF line endings, otherwise cmd.exe can misread labels/goto.
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Server scripts and configs run on Linux: always LF
+*.sh text eol=lf
+deploy/** text eol=lf
