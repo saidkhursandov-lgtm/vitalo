@@ -7,6 +7,7 @@
  */
 import 'dotenv/config';
 import { ConfigService } from '@nestjs/config';
+import { printDbBanner } from '../src/common/db-target';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { LocalFileStorage, uploadDir } from '../src/storage/file-storage';
 import { applyPhotoOptimization, planPhotoOptimization } from '../src/storage/optimize-existing';
@@ -14,6 +15,7 @@ import { applyPhotoOptimization, planPhotoOptimization } from '../src/storage/op
 const kb = (n: number) => `${Math.round(n / 1024)} КБ`;
 
 async function main() {
+  printDbBanner('npm run photos:optimize');
   const confirm = process.argv.includes('--confirm');
   const config = new ConfigService();
   const dir = uploadDir(config);

@@ -15,6 +15,7 @@ export type TemplateName =
   | (typeof CUSTOMER_STATUS_TEMPLATES)[keyof typeof CUSTOMER_STATUS_TEMPLATES]
   | 'staff.new_order'
   | 'staff.customer_paid'
+  | 'staff.payment_check_overdue'
   | 'order.payment_reminder';
 
 export interface TemplatePayload {
@@ -28,10 +29,16 @@ export interface TemplatePayload {
   until?: string;
   /** Mini App page for the button under the message, e.g. "/orders/<id>/pay" */
   open_path?: string;
+  /** Admin panel page for the button under a staff message, e.g. "/orders/<id>" */
+  admin_path?: string;
+  /** Whole hours since the customer pressed «Я оплатил(а)» */
+  hours?: number;
 }
 
 /** Text of the button under a message that has open_path. */
 export const OPEN_BUTTON: Record<Lang, string> = { ru: 'Открыть заказ', uz: 'Buyurtmani ochish' };
+/** Text of the button under a staff message that has admin_path. */
+export const ADMIN_BUTTON = 'Открыть в админке';
 
 /** Stored instead of a text when the system cancelled an unpaid order; rendered in the customer's language. */
 export const EXPIRED_REASON_CODE = '@expired';
@@ -109,6 +116,13 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   'staff.customer_paid': {
     ru: (p) => `💳 Клиент сообщил об оплате заказа ${p.order_number} на ${sum(p.total_uzs, 'ru')}.\nПроверьте поступление и подтвердите оплату в админке.`,
     uz: (p) => `💳 Mijoz ${p.order_number} buyurtmasi uchun ${sum(p.total_uzs, 'uz')} to‘laganini bildirdi.\nTushumni tekshirib, admin panelda tasdiqlang.`,
+  },
+  // Stage 0.2: no customer name or phone here, only the order, the amount and the waiting time.
+  'staff.payment_check_overdue': {
+    ru: (p) =>
+      `⏳ Оплата заказа ${p.order_number} на ${sum(p.total_uzs, 'ru')} ждёт проверки уже ${p.hours ?? '?'} ч.\nКлиент нажал «Я оплатил(а)», платёж ещё не подтверждён. Заказ не отменяется, товар остаётся в резерве.`,
+    uz: (p) =>
+      `⏳ ${p.order_number} buyurtmasi uchun ${sum(p.total_uzs, 'uz')} to‘lov ${p.hours ?? '?'} soatdan beri tekshiruvni kutmoqda.\nMijoz «To‘ladim» tugmasini bosgan, to‘lov hali tasdiqlanmagan.`,
   },
 };
 

@@ -49,6 +49,25 @@ export class NotificationsService {
     });
   }
 
+  /**
+   * Stage 0.2: «Я оплатил(а)» is waiting for a manager too long. Every active admin and manager gets the order
+   * number, the amount, the hours waited and a button to the order in the admin panel; no customer data.
+   */
+  async paymentCheckOverdue(db: Db, orderId: string, hours: number): Promise<void> {
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId } });
+    const staff = await db.staff_users.findMany({ where: { status: 'active', role: { in: [...ORDER_STAFF_ROLES] } } });
+    if (!staff.length) return;
+    await db.notifications.createMany({
+      data: staff.map((s) => ({
+        staff_user_id: s.id,
+        chat_id: s.telegram_user_id,
+        kind: 'service',
+        template: 'staff.payment_check_overdue',
+        payload: { order_number: order.order_number, total_uzs: Number(order.total_uzs), hours, admin_path: `/orders/${order.id}`, lang: 'ru' },
+      })),
+    });
+  }
+
   /** Same message to every active admin and manager. */
   async toOrderStaff(db: Db, template: Extract<TemplateName, `staff.${string}`>, orderId: string): Promise<void> {
     const order = await db.orders.findUniqueOrThrow({ where: { id: orderId } });

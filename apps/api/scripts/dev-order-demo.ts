@@ -4,6 +4,7 @@
  * Usage: npm run start:dev (in one terminal), then npm run dev:order-demo
  */
 import { randomUUID } from 'crypto';
+import { assertDevOrTestDatabase } from '../src/common/db-target';
 import { API, DEV_CUSTOMER, DEV_MANAGER, devInitData } from './dev-login';
 
 const fmt = (n: number) => `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} сум`;
@@ -24,6 +25,8 @@ async function call(method: string, path: string, opts: { token?: string; body?:
 }
 
 async function main() {
+  // Creates a real order through the running API (same .env): only a *_dev / *_test database.
+  assertDevOrTestDatabase('npm run dev:order-demo');
   console.log('\n1) Покупатель входит через Telegram');
   const { token } = await call('POST', '/auth/telegram', { body: { initData: devInitData(DEV_CUSTOMER) } });
   console.log('   ✔ вход выполнен');

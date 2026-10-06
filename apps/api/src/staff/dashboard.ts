@@ -4,7 +4,8 @@ import { OrderStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsIn, IsOptional } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
-import { RequirePermission, StaffGuard } from './staff-auth';
+import { can } from './permissions';
+import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 import { AnalyticsService } from '../analytics/analytics.module';
 
 /** Orders that have been paid (revenue counts them by paid_at). */
@@ -33,7 +34,8 @@ export class DashboardQuery {
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async get(days: number) {
+  /** withRevenue = false (no dashboard.revenue, e.g. marketer): no revenue, average check or revenue per product. */
+  async get(days: number, withRevenue = true) {
     const from = new Date(Date.now() - days * 86_400_000);
     const paidInPeriod = { status: { in: PAID_STATUSES }, paid_at: { gte: from } };
 
@@ -68,14 +70,20 @@ export class DashboardService {
 
     return {
       days,
-      revenue_uzs: revenueUzs,
+      ...(withRevenue && { revenue_uzs: revenueUzs }),
       paid_orders: paidCount,
       orders_created: created,
-      average_check_uzs: paidCount ? Math.round(revenueUzs / paidCount) : 0,
+      ...(withRevenue && { average_check_uzs: paidCount ? Math.round(revenueUzs / paidCount) : 0 }),
       statuses: Object.fromEntries(byStatus.map((s) => [s.status, s._count._all])),
       top_products: top.map((t) => {
         const p = names.find((n) => n.id === t.product_id);
-        return { product_id: t.product_id, sku: p?.sku, name_ru: p?.name_ru, qty: t._sum.qty ?? 0, revenue_uzs: Number(t._sum.line_total_uzs ?? 0n) };
+        return {
+          product_id: t.product_id,
+          sku: p?.sku,
+          name_ru: p?.name_ru,
+          qty: t._sum.qty ?? 0,
+          ...(withRevenue && { revenue_uzs: Number(t._sum.line_total_uzs ?? 0n) }),
+        };
       }),
       low_stock: lowStock.map((r) => ({ ...r, available: Number(r.available) })),
     };
@@ -102,7 +110,7 @@ export class DashboardController {
 
   @Get()
   @RequirePermission('dashboard.view')
-  get(@Query() q: DashboardQuery) {
-    return this.dashboard.get(q.days);
+  get(@CurrentStaff() me: StaffContext, @Query() q: DashboardQuery) {
+    return this.dashboard.get(q.days, can(me.staff.role, 'dashboard.revenue'));
   }
 }

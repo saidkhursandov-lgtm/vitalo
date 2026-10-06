@@ -7,6 +7,7 @@
  */
 import 'dotenv/config';
 import { signInitData } from '../src/auth/sign-init-data';
+import { assertDevOrTestDatabase } from '../src/common/db-target';
 
 export const API = `http://localhost:${process.env.PORT ?? 3000}/api`;
 
@@ -20,6 +21,8 @@ export const DEV_CUSTOMER = { id: 111_111_111, first_name: 'Тест', last_name
 export const DEV_MANAGER = { id: 222_222_222, first_name: 'Менеджер' };
 
 async function main() {
+  // The API it talks to uses the same .env: only a *_dev / *_test database, never production.
+  assertDevOrTestDatabase('npm run dev:login');
   const staff = process.argv.includes('--staff');
   const initData = devInitData(staff ? DEV_MANAGER : DEV_CUSTOMER);
   const path = staff ? '/staff/auth/telegram' : '/auth/telegram';

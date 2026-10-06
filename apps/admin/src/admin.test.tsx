@@ -12,7 +12,7 @@ afterEach(cleanup);
 const PERMS: Record<string, Permission[]> = {
   warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit'],
   marketer: ['dashboard.view', 'products.view'],
-  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block'],
+  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue'],
 };
 
 describe('menu by role', () => {

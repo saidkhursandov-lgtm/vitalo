@@ -6,7 +6,7 @@ describe('staff permissions', () => {
   });
 
   it('only admin manages settings, staff and reads the audit log', () => {
-    for (const p of ['settings.manage', 'staff.manage', 'audit.view', 'products.edit'] as Permission[]) {
+    for (const p of ['settings.manage', 'staff.manage', 'audit.view', 'products.edit', 'costs.view'] as Permission[]) {
       expect(['manager', 'warehouse', 'marketer'].filter((r) => can(r as never, p))).toEqual([]);
     }
   });
@@ -26,7 +26,12 @@ describe('staff permissions', () => {
     expect(can('manager', 'products.edit')).toBe(false);
   });
 
-  it('marketer: read-only catalog and dashboard', () => {
+  it('marketer: read-only catalog and dashboard, without revenue', () => {
     expect(permissionsOf('marketer')).toEqual(['dashboard.view', 'products.view']);
+  });
+
+  it('stage 0: cost price only for admin, revenue for admin and manager', () => {
+    expect((['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, 'costs.view'))).toEqual(['admin']);
+    expect((['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, 'dashboard.revenue'))).toEqual(['admin', 'manager']);
   });
 });

@@ -2,10 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { notifications } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { renderNotification, type TemplatePayload, OPEN_BUTTON } from './notification-templates';
+import { ADMIN_BUTTON, OPEN_BUTTON, renderNotification, type TemplatePayload } from './notification-templates';
 import { TELEGRAM_SENDER, TelegramSendError, type TelegramSender } from './telegram-sender';
 import { ConfigService } from '@nestjs/config';
-import { miniAppUrl } from './mini-app-url';
+import { adminUrl, miniAppUrl } from './mini-app-url';
 import { SystemErrorsService } from './system-errors';
 
 const BATCH = 20; // Telegram allows ~30 messages/second per bot
@@ -81,7 +81,13 @@ export class NotificationWorker {
         const payload = (n.payload ?? {}) as unknown as TemplatePayload;
         const text = renderNotification(n.template, payload);
         const base = miniAppUrl(this.config);
-        const button = payload.open_path && base ? { text: OPEN_BUTTON[payload.lang === 'uz' ? 'uz' : 'ru'], url: `${base}${payload.open_path}` } : undefined;
+        const admin = payload.admin_path ? adminUrl(this.config) : null;
+        const button =
+          payload.open_path && base
+            ? { text: OPEN_BUTTON[payload.lang === 'uz' ? 'uz' : 'ru'], url: `${base}${payload.open_path}` }
+            : payload.admin_path && admin
+              ? { text: ADMIN_BUTTON, url: `${admin}${payload.admin_path}` }
+              : undefined;
         await this.sender.sendMessage(n.chat_id, text, button ? { webApp: button } : {});
         await this.prisma.notifications.update({ where: { id: n.id }, data: { status: 'sent', sent_at: new Date(), attempts: n.attempts + 1, error: null } });
         result.sent++;

@@ -11,6 +11,7 @@
 import 'dotenv/config';
 import { ConfigService } from '@nestjs/config';
 import { resolve } from 'path';
+import { printDbBanner } from '../src/common/db-target';
 import { applyImport, formatPlan, formatResult, planImport } from '../src/import/product-import';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AdminInventoryService } from '../src/staff/admin-inventory';
@@ -26,6 +27,7 @@ function arg(name: string): string | undefined {
 }
 
 async function main() {
+  printDbBanner('npm run import:products');
   const confirm = process.argv.includes('--confirm');
   const file = resolve(arg('file') ?? resolve(ROOT, 'VITALO_товары.xlsx'));
   const photosDir = resolve(arg('photos') ?? resolve(ROOT, 'photos'));

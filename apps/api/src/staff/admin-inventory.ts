@@ -1,4 +1,4 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { MovementType, Prisma, ReturnCondition } from '@prisma/client';
 import { Transform } from 'class-transformer';
@@ -6,6 +6,7 @@ import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, 
 import { PageQuery } from '../catalog/catalog.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
+import { can } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 
 const PAGE_SIZE = 50;
@@ -19,7 +20,7 @@ class StockTarget {
 
 export class ReceiptDto extends StockTarget {
   @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) qty!: number;
-  @ApiPropertyOptional({ description: 'Закупочная цена за единицу, сум' }) @IsOptional() @IsInt() @Min(0) cost_uzs?: number;
+  @ApiPropertyOptional({ description: 'Закупочная цена за единицу, сум (только с правом costs.view)' }) @IsOptional() @IsInt() @Min(0) cost_uzs?: number;
   @ApiPropertyOptional() @IsOptional() @Transform(trim) @IsString() @MaxLength(100) batch_no?: string;
   @ApiPropertyOptional({ example: '2028-06-30' }) @IsOptional() @IsDateString() expiry_date?: string;
 }
@@ -284,6 +285,10 @@ export class AdminInventoryController {
   @Post('receipt')
   @RequirePermission('inventory.edit')
   receipt(@CurrentStaff() me: StaffContext, @Body() dto: ReceiptDto) {
+    // Stage 0: the purchase price is finance; the warehouse receives goods without it (the batch is stored without a price).
+    if (dto.cost_uzs != null && !can(me.staff.role, 'costs.view')) {
+      throw new ForbiddenException({ code: 'COST_FORBIDDEN', message: `Role ${me.staff.role} cannot enter the purchase price` });
+    }
     return this.inventory.receipt(me.staff.id, dto);
   }
 

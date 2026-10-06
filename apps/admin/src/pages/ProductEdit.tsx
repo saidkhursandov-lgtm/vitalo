@@ -77,7 +77,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       for (const [k] of TEXTS) for (const l of ['ru', 'uz']) body[`${k}_${l}`] = f[`${k}_${l}`];
       body.price_uzs = toInt(f.price_uzs);
       body.old_price_uzs = toInt(f.old_price_uzs) ?? null;
-      body.cost_uzs = toInt(f.cost_uzs) ?? null;
+      if (can('costs.view')) body.cost_uzs = toInt(f.cost_uzs) ?? null; // the server refuses it from other roles
       body.min_stock = toInt(f.min_stock) ?? 0;
       return product
         ? api<AdminProduct>(`/staff/products/${product.id}`, { method: 'PATCH', body })
@@ -177,9 +177,11 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             <Field label="Старая цена, сум" hint="Для показа скидки">
               {input('old_price_uzs', { inputMode: 'numeric' })}
             </Field>
-            <Field label="Себестоимость, сум" hint="Видна только в админке">
-              {input('cost_uzs', { inputMode: 'numeric' })}
-            </Field>
+            {can('costs.view') && (
+              <Field label="Себестоимость, сум" hint="Видна только администратору">
+                {input('cost_uzs', { inputMode: 'numeric' })}
+              </Field>
+            )}
             <Field label="Минимальный остаток" hint="Ниже — в «Низких остатках»">
               {input('min_stock', { inputMode: 'numeric' })}
             </Field>

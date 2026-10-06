@@ -7,13 +7,13 @@
 // .env first: on the server it says NODE_ENV=production, and then this demo seed refuses to run.
 import 'dotenv/config';
 import { Prisma, PrismaClient, TreeType } from '@prisma/client';
+import { assertDevOrTestDatabase } from '../src/common/db-target';
 import { SETTING_DEFAULTS } from '../src/settings/settings.service';
 import { BANK_TRANSFER_DETAILS, CATEGORIES, PAYMENT_METHODS, uid, type CategorySeed } from './reference-data';
 
-if (process.env.NODE_ENV === 'production') {
-  // Demo products, test employees and 3 extra regions must never reach the real shop.
-  throw new Error('prisma/seed.ts is the DEMO seed and refuses NODE_ENV=production. Use: npm run bootstrap:prod');
-}
+// Demo products, test employees and 3 extra regions must never reach the real shop: only vitalo_dev / vitalo_test
+// (any *_dev / *_test database), never NODE_ENV=production. Checked before any connection is made.
+assertDevOrTestDatabase('prisma/seed.ts (DEMO seed)');
 
 const prisma = new PrismaClient();
 

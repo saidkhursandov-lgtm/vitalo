@@ -34,6 +34,8 @@ export class ReservationExpiryService {
     try {
       const reminded = await this.remindOnce();
       if (reminded) this.logger.log(`Payment reminder for ${reminded} order(s)`);
+      const overdue = await this.remindStaffOnce();
+      if (overdue) this.logger.log(`Payment check overdue: staff reminded about ${overdue} order(s)`);
       const cancelled = await this.runOnce();
       if (cancelled) this.logger.log(`Cancelled ${cancelled} expired order(s)`);
       await this.prisma.idempotency_keys.deleteMany({ where: { expires_at: { lt: new Date() } } });
@@ -79,6 +81,54 @@ export class ReservationExpiryService {
         if (!due) return false;
         await this.notifications.paymentReminder(tx, id);
         await tx.orders.update({ where: { id }, data: { payment_reminder_sent_at: now } });
+        return true;
+      });
+      if (queued) sent++;
+    }
+    return sent;
+  }
+
+  /**
+   * Stage 0.2: the customer pressed «Я оплатил(а)», and the payment is still unconfirmed after N hours
+   * (settings, default 3) -> one message to admins and managers. The order is not cancelled and its
+   * reservation is not touched. At most once per order (payment_check_reminder_sent_at), re-checked under the
+   * order row lock, so repeated runs and several API instances never queue it twice.
+   * Returns how many orders got a reminder. Exposed for tests and manual runs.
+   */
+  async remindStaffOnce(now = new Date()): Promise<number> {
+    const hours = Number(await this.settings.getOrDefault('payment_check_reminder_hours')) || 3;
+    const reportedBefore = new Date(now.getTime() - hours * 3600_000);
+    const candidates = await this.prisma.orders.findMany({
+      where: {
+        status: { in: ['new', 'awaiting_payment'] },
+        payment_status: 'payment_pending',
+        payment_check_reminder_sent_at: null,
+        payments: { some: { status: 'payment_pending', manual: { some: { customer_confirmed_at: { lte: reportedBefore } } } } },
+      },
+      select: { id: true },
+      orderBy: { created_at: 'asc' },
+      take: BATCH,
+    });
+    let sent = 0;
+    for (const { id } of candidates) {
+      const queued = await this.prisma.$transaction(async (tx) => {
+        const order = await this.lifecycle.lockOrder(tx, id);
+        const fresh = await tx.orders.findUniqueOrThrow({ where: { id }, select: { payment_check_reminder_sent_at: true } });
+        const first = await tx.manual_payment_confirmations.findFirst({
+          where: { payment: { order_id: id, status: 'payment_pending' }, customer_confirmed_at: { not: null } },
+          orderBy: { customer_confirmed_at: 'asc' },
+          select: { customer_confirmed_at: true },
+        });
+        const reportedAt = first?.customer_confirmed_at ?? null;
+        const due =
+          (order.status === 'new' || order.status === 'awaiting_payment') &&
+          order.payment_status === 'payment_pending' &&
+          !fresh.payment_check_reminder_sent_at &&
+          reportedAt !== null &&
+          reportedAt <= reportedBefore;
+        if (!due) return false;
+        await this.notifications.paymentCheckOverdue(tx, id, Math.floor((now.getTime() - reportedAt.getTime()) / 3600_000));
+        await tx.orders.update({ where: { id }, data: { payment_check_reminder_sent_at: now } });
         return true;
       });
       if (queued) sent++;

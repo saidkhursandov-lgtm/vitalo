@@ -5,6 +5,7 @@
  */
 import 'dotenv/config';
 import { PrismaClient, StaffRole } from '@prisma/client';
+import { printDbBanner } from '../src/common/db-target';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -12,6 +13,7 @@ function arg(name: string): string | undefined {
 }
 
 async function main() {
+  printDbBanner('npm run staff:add');
   const telegramId = arg('telegram-id') ?? '';
   const name = arg('name')?.trim() ?? '';
   const role = (arg('role') ?? 'manager') as StaffRole;

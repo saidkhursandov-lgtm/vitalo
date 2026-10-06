@@ -59,7 +59,7 @@ if errorlevel 1 (
 
 set /a "_left=60"
 :wait_pg
-docker compose exec -T postgres pg_isready -U vitalo -d vitalo >nul 2>&1
+docker compose exec -T postgres pg_isready -U vitalo -d vitalo_dev >nul 2>&1
 if not errorlevel 1 goto pg_ready
 if %_left% LEQ 0 (
   echo [ERROR] PostgreSQL did not become ready in 60 seconds.

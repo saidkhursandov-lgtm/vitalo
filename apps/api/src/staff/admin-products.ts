@@ -4,6 +4,7 @@ import {
   ConflictException,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Inject,
@@ -20,7 +21,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiProperty, ApiPropertyOptional, ApiTags, PartialType } from '@nestjs/swagger';
-import { Prisma, ProductStatus } from '@prisma/client';
+import { Prisma, ProductStatus, StaffRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -42,6 +43,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FILE_STORAGE, type FileStorage } from '../storage/file-storage';
 import { imageFiles, storeProductImage } from '../storage/image-processing';
 import { AuditService } from './audit.service';
+import { can } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 
 const PAGE_SIZE = 50;
@@ -122,6 +124,20 @@ const productInclude = {
 } satisfies Prisma.productsInclude;
 
 type ProductRow = Prisma.productsGetPayload<{ include: typeof productInclude }>;
+
+/** Stage 0: the cost price is shown only to employees with costs.view (admin); for everyone else the field is absent. */
+export function withCostFor<T extends { cost_uzs?: unknown }>(role: StaffRole, product: T): T | Omit<T, 'cost_uzs'> {
+  if (can(role, 'costs.view')) return product;
+  const { cost_uzs: _hidden, ...rest } = product;
+  return rest;
+}
+
+/** Writing the cost price needs costs.view too (products.edit alone is not enough). */
+function assertCostWrite(role: StaffRole, dto: { cost_uzs?: unknown }) {
+  if (dto.cost_uzs !== undefined && !can(role, 'costs.view')) {
+    throw new ForbiddenException({ code: 'COST_FORBIDDEN', message: `Role ${role} cannot see or change the cost price` });
+  }
+}
 
 function toAdminProduct(p: ProductRow) {
   const { categories, media, inventory, price_uzs, old_price_uzs, cost_uzs, ...rest } = p;
@@ -335,27 +351,29 @@ export class AdminProductsController {
 
   @Get(':id')
   @RequirePermission('products.view')
-  get(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.products.get(id);
+  async get(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return withCostFor(me.staff.role, await this.products.get(id));
   }
 
   @Post()
   @RequirePermission('products.edit')
-  create(@CurrentStaff() me: StaffContext, @Body() dto: ProductInput) {
-    return this.products.create(me.staff.id, dto);
+  async create(@CurrentStaff() me: StaffContext, @Body() dto: ProductInput) {
+    assertCostWrite(me.staff.role, dto);
+    return withCostFor(me.staff.role, await this.products.create(me.staff.id, dto));
   }
 
   @Patch(':id')
   @RequirePermission('products.edit')
-  update(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ProductPatch) {
-    return this.products.update(me.staff.id, id, dto);
+  async update(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ProductPatch) {
+    assertCostWrite(me.staff.role, dto);
+    return withCostFor(me.staff.role, await this.products.update(me.staff.id, id, dto));
   }
 
   @Post(':id/archive')
   @HttpCode(200)
   @RequirePermission('products.edit')
-  archive(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
-    return this.products.update(me.staff.id, id, { status: 'archived' });
+  async archive(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return withCostFor(me.staff.role, await this.products.update(me.staff.id, id, { status: 'archived' }));
   }
 
   @Post(':id/photos')
@@ -363,20 +381,20 @@ export class AdminProductsController {
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1 } }))
-  addPhoto(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @UploadedFile() file?: Express.Multer.File) {
-    return this.products.addPhoto(me.staff.id, id, file);
+  async addPhoto(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @UploadedFile() file?: Express.Multer.File) {
+    return withCostFor(me.staff.role, await this.products.addPhoto(me.staff.id, id, file));
   }
 
   @Post(':id/photos/:mediaId/main')
   @HttpCode(200)
   @RequirePermission('products.edit')
-  setMain(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
-    return this.products.setMainPhoto(me.staff.id, id, mediaId);
+  async setMain(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
+    return withCostFor(me.staff.role, await this.products.setMainPhoto(me.staff.id, id, mediaId));
   }
 
   @Delete(':id/photos/:mediaId')
   @RequirePermission('products.edit')
-  removePhoto(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
-    return this.products.removePhoto(me.staff.id, id, mediaId);
+  async removePhoto(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
+    return withCostFor(me.staff.role, await this.products.removePhoto(me.staff.id, id, mediaId));
   }
 }

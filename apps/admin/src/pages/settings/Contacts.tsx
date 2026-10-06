@@ -9,6 +9,7 @@ interface Contacts {
   payment_check_to: string;
   delivery_days_label: { ru: string; uz: string };
   payment_reminder_hours: number;
+  payment_check_reminder_hours: number;
 }
 
 /** Support contact (bot and Mini App), payment check hours (screen after «Я оплатил(а)»), «рабочих дней» label. */
@@ -55,6 +56,9 @@ export function ContactsForm() {
         </Field>
         <Field label="Напомнить об оплате за, часов" hint="Бот напишет клиенту, что заказ ждёт оплаты, за столько часов до автоотмены (1–24)">
           <input type="number" min={1} max={24} value={f.payment_reminder_hours} onChange={(e) => set({ payment_reminder_hours: Number(e.target.value) })} required />
+        </Field>
+        <Field label="Напомнить менеджерам о проверке через, часов" hint="Клиент нажал «Я оплатил(а)», а оплата не подтверждена столько часов — админам и менеджерам придёт одно напоминание (1–48)">
+          <input type="number" min={1} max={48} step={1} value={f.payment_check_reminder_hours} onChange={(e) => set({ payment_check_reminder_hours: Number(e.target.value) })} required />
         </Field>
       </div>
       <div className="form-grid">

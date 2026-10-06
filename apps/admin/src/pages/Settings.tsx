@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, ROLE } from '../lib/format';
 import { ContactsForm } from './settings/Contacts';
+import { PaymentTimeouts } from './settings/PaymentTimeouts';
 import { DeliverySettings } from './settings/Delivery';
 import { BonusTeaserForm, HomeSettings } from './settings/Home';
 import { LegalSettings } from './settings/Legal';
@@ -29,6 +30,7 @@ export function Settings() {
       </PageHead>
       {tab === 'bank' && (
         <>
+          <PaymentTimeouts />
           <CardTransfer />
           <TextsForm fields={['payment_hint']} />
           <h2 className="section-title">Перевод по реквизитам</h2>

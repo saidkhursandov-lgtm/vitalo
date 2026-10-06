@@ -12,6 +12,7 @@ export const SETTING_KEYS = {
   paymentCheckHours: 'payment_check_hours',
   deliveryDaysLabel: 'delivery_days_label',
   paymentReminderHours: 'payment_reminder_hours',
+  paymentCheckReminderHours: 'payment_check_reminder_hours',
   homeContent: 'home_content',
   bonusTeaser: 'bonus_teaser',
 } as const;
@@ -50,6 +51,8 @@ export const SETTING_DEFAULTS = {
   home_content: HOME_CONTENT_DEFAULT,
   /** D3: the bot reminds about an unpaid order this many hours before the automatic cancellation. */
   payment_reminder_hours: 3 as number,
+  /** Stage 0.2: admins/managers are reminded once when «Я оплатил(а)» stays unconfirmed this many hours (1–48). */
+  payment_check_reminder_hours: 3 as number,
   bonus_teaser: BONUS_TEASER_DEFAULT,
 };
 

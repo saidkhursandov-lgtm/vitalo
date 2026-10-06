@@ -8,13 +8,14 @@ import { money, ORDER_STATUS } from '../lib/format';
 import { ForwardIcon } from '../components/Icons';
 import { FunnelCard } from './Funnel';
 
+/** revenue_uzs / average_check_uzs / top_products[].revenue_uzs come only with dashboard.revenue (not for marketer). */
 interface DashboardData {
-  revenue_uzs: number;
+  revenue_uzs?: number;
   paid_orders: number;
   orders_created: number;
-  average_check_uzs: number;
+  average_check_uzs?: number;
   statuses: Record<string, number>;
-  top_products: { product_id: string; sku: string; name_ru: string; qty: number; revenue_uzs: number }[];
+  top_products: { product_id: string; sku: string; name_ru: string; qty: number; revenue_uzs?: number }[];
   low_stock: { id: string; sku: string; name_ru: string; min_stock: number; available: number }[];
 }
 
@@ -27,6 +28,7 @@ const PERIODS = [
 
 export function Dashboard() {
   const { can } = useSession();
+  const revenue = can('dashboard.revenue');
   const [days, setDays] = useState(30);
   const q = useQuery({ queryKey: ['dashboard', days], queryFn: () => api<DashboardData>(`/staff/dashboard?days=${days}`) });
 
@@ -48,10 +50,10 @@ export function Dashboard() {
       ) : (
         <>
           <div className="kpis">
-            <Kpi label="Выручка" value={money(q.data.revenue_uzs)} hint="оплаченные заказы за период" />
+            {revenue && <Kpi label="Выручка" value={money(q.data.revenue_uzs ?? 0)} hint="оплаченные заказы за период" />}
             <Kpi label="Оплачено заказов" value={String(q.data.paid_orders)} />
             <Kpi label="Создано заказов" value={String(q.data.orders_created)} />
-            <Kpi label="Средний чек" value={money(q.data.average_check_uzs)} />
+            {revenue && <Kpi label="Средний чек" value={money(q.data.average_check_uzs ?? 0)} />}
           </div>
 
           <FunnelCard />
@@ -89,7 +91,7 @@ export function Dashboard() {
                     <tr>
                       <th>Товар</th>
                       <th className="num">Продано, шт.</th>
-                      <th className="num">Выручка</th>
+                      {revenue && <th className="num">Выручка</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -100,7 +102,7 @@ export function Dashboard() {
                           <div className="muted small">{p.sku}</div>
                         </td>
                         <td className="num">{p.qty}</td>
-                        <td className="num">{money(p.revenue_uzs)}</td>
+                        {revenue && <td className="num">{money(p.revenue_uzs ?? 0)}</td>}
                       </tr>
                     ))}
                   </tbody>

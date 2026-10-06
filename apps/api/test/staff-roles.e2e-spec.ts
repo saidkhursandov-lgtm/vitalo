@@ -63,6 +63,8 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'change bank transfer settings', method: 'put', path: () => '/api/staff/settings/bank-transfer', body: {}, allowed: ['admin'] },
     { label: 'see card transfer settings', method: 'get', path: () => '/api/staff/settings/card-transfer', allowed: ['admin'] },
     { label: 'change card transfer settings', method: 'put', path: () => '/api/staff/settings/card-transfer', body: {}, allowed: ['admin'] },
+    { label: 'see reservation times', method: 'get', path: () => '/api/staff/settings/payment-methods', allowed: ['admin'] },
+    { label: 'change a reservation time', method: 'put', path: () => '/api/staff/settings/payment-methods/card_transfer', body: {}, allowed: ['admin'] },
     { label: 'see shop texts', method: 'get', path: () => '/api/staff/settings/texts', allowed: ['admin'] },
     { label: 'change shop texts', method: 'put', path: () => '/api/staff/settings/texts', body: {}, allowed: ['admin'] },
     { label: 'see delivery tariffs', method: 'get', path: () => '/api/staff/settings/tariffs', allowed: ['admin'] },
@@ -117,7 +119,9 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
     expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view']);
     expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit']);
-    expect((await me('admin')).permissions).toContain('audit.view');
+    expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
+    expect((await me('manager')).permissions).toContain('dashboard.revenue');
+    expect((await me('manager')).permissions).not.toContain('costs.view');
     expect((await me('manager')).staff).toMatchObject({ role: 'manager', name: 'Менеджер (тест)' });
   });
 

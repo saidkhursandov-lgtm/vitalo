@@ -20,7 +20,9 @@ export type Permission =
   | 'customers.block'
   | 'settings.manage'
   | 'staff.manage'
-  | 'audit.view';
+  | 'audit.view'
+  | 'costs.view'
+  | 'dashboard.revenue';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };

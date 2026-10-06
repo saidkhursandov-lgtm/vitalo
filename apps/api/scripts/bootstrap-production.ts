@@ -6,9 +6,11 @@
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { printDbBanner } from '../src/common/db-target';
 import { bootstrapReferenceData } from '../prisma/bootstrap';
 
 async function main() {
+  printDbBanner('npm run bootstrap:prod');
   const prisma = new PrismaClient();
   try {
     const db = new URL(process.env.DATABASE_URL ?? 'postgresql://x/unknown').pathname.slice(1);

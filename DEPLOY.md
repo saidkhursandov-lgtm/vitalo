@@ -42,7 +42,7 @@ Telegram ──► https://vitalo.uz ─┐
 | `deploy/systemd/*.service`, `*.timer` | `/etc/systemd/system/` |
 | `deploy/sudoers-vitalo` | `/etc/sudoers.d/vitalo` |
 | `deploy/api.env.example` | шаблон для `/opt/vitalo/app/apps/api/.env` |
-| `deploy/scripts/update.sh` | обновление сайта одной командой |
+| `deploy/scripts/update.sh` | обновление сайта; миграции базы — только с `--migrate` (раздел 13) |
 | `deploy/scripts/backup.sh` | резервная копия |
 
 ---
@@ -261,8 +261,10 @@ sudo systemctl enable --now vitalo-backup.timer
 ## 8. Первая сборка и начальные данные
 
 ```bash
-sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh
+sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh --migrate
 ```
+
+На пустой базе нужен флаг `--migrate`: без него скрипт покажет список миграций и остановится (раздел 13).
 
 Скрипт:
 1. делает копию базы;
@@ -389,11 +391,30 @@ sudo -iu vitalo bash -c 'cd /opt/vitalo/app/apps/api && npm run import:products 
 & "C:\Program Files\Git\cmd\git.exe" push server main
 ```
 
-На сервере:
+На сервере сначала посмотрите, что придёт (ничего не меняется):
+
+```bash
+sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh --check
+```
+
+Затем обновите:
 
 ```bash
 sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh
 ```
+
+**Миграции базы сами больше не применяются.**
+- Если в новом коде нет новых миграций, скрипт обновляет код, собирает и перезапускает службы, как раньше.
+- Если новые миграции есть, скрипт делает копию базы, показывает их список и **останавливается**: код и службы не меняются, магазин работает как раньше.
+- Если вы запустили его сами в окне терминала, он спросит «Применить эти миграции?». Только ответ `yes` продолжит обновление.
+
+Применить миграции осознанно (копия базы делается перед этим автоматически):
+
+```bash
+sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh --migrate
+```
+
+Перед `--migrate` спросите разработчика, что делают эти миграции. В проекте миграции только добавляют колонки и данные, но проверять нужно каждый раз.
 
 Магазин продолжает работать во время сборки, служба перезапускается за несколько секунд.
 Если среди изменений были файлы из `deploy/nginx` или `deploy/systemd`, их нужно скопировать заново
@@ -454,7 +475,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://api.vitalo.uz/api/internal/bot
 | «Нет связи» в магазине, 502 | `journalctl -u vitalo-api -n 100 --no-pager` |
 | Бот молчит | `journalctl -u vitalo-bot -n 100 --no-pager`; токен в `.env` именно рабочего бота? |
 | Вход в админку не пускает | сотрудник добавлен командой `staff:add` с вашим Telegram ID? |
-| Ошибка миграции при обновлении | вывод `update.sh`. Копия базы до обновления лежит в `/var/backups/vitalo` |
+| Ошибка миграции при обновлении | вывод `update.sh --migrate`. Копия базы до обновления лежит в `/var/backups/vitalo` |
+| `update.sh` остановился со словом «ОСТАНОВЛЕНО» | Это не ошибка: в новом коде есть миграции базы. Магазин работает по-старому; применить — `update.sh --migrate` |
 
 Откат кода на предыдущую версию: на компьютере отмените последний коммит, отправьте и обновите как обычно
 (раздел 13). База при этом не откатывается — миграции в проекте только добавляют, старый код с ними работает.
@@ -463,6 +485,17 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://api.vitalo.uz/api/internal/bot
 & "C:\Program Files\Git\cmd\git.exe" revert --no-edit HEAD
 & "C:\Program Files\Git\cmd\git.exe" push server main
 ```
+
+## Базы данных: где какая
+
+| Где | База | Для чего |
+| --- | --- | --- |
+| Сервер | `vitalo` | Настоящий магазин. Seed, тесты и dev-скрипты здесь не запускаются никогда. |
+| Компьютер разработчика | `vitalo_dev` | Рабочая база для разработки (раньше называлась `vitalo`; переименование — `scripts/rename-local-db.ps1`) |
+| Компьютер разработчика | `vitalo_test` | Автотесты: каждый запуск очищает её и заполняет заново |
+
+Demo-seed и скрипты `dev:*` работают только с базой, чьё имя оканчивается на `_dev` или `_test`, и отказываются при `NODE_ENV=production`.
+Скрипты `staff:add`, `import:products`, `photos:optimize`, `bootstrap:prod` в начале печатают, к какой базе подключаются (без пароля).
 
 ## Чего на сервере не делать
 

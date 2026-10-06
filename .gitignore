@@ -30,3 +30,6 @@ apps/api/uploads/
 # Product import inputs: business data (cost prices) and original photos stay on this computer
 /photos/
 /VITALO_*.xlsx
+
+# Local database dumps (scripts/rename-local-db.ps1)
+/backups/

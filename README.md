@@ -16,6 +16,9 @@ stop.bat — закрывает эти окна, освобождает порт
 docker compose up -d postgres redis   # образ minio/minio больше не публикуется на Docker Hub
 cd apps/api && cp ../../.env.example .env && npm i && npx prisma migrate dev
 npm run seed          # 3 региона x 2 города, 2 дерева категорий, 10 БАДов с остатками
+# Базы: vitalo_dev — рабочая база этого компьютера, vitalo_test — автотесты, vitalo — только на сервере.
+# seed и dev:* работают только с базами *_dev / *_test (иначе отказываются); старую локальную vitalo
+# переименовать: powershell -ExecutionPolicy Bypass -File scriptsename-local-db.ps1
 npm run start:dev     # API: http://localhost:3000/api, Swagger: http://localhost:3000/api/docs
 npm run dev:login     # имитация входа из Telegram (нужен любой TELEGRAM_BOT_TOKEN в .env); -- --staff = менеджер
 npm run dev:order-demo  # весь путь: корзина -> заказ -> реквизиты -> «Я оплатил» -> менеджер подтверждает

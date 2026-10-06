@@ -65,6 +65,8 @@ export function qs(params: Record<string, string | number | boolean | undefined 
 
 const ERRORS: Record<string, string> = {
   FORBIDDEN_FOR_ROLE: 'У вашей роли нет прав на это действие',
+  COST_FORBIDDEN: 'Себестоимость и закупочную цену видит и вводит только администратор',
+  TIMEOUT_SHORTER_THAN_REMINDER: 'Срок резерва не может быть короче времени напоминания клиенту об оплате (Тексты и контакты)',
   ORDER_LOCKED: 'Заказ передан в доставку — изменять и отменять его здесь нельзя',
   INVALID_STATUS_TRANSITION: 'Такой переход статуса недопустим',
   PAID_ORDER_CITY_LOCKED: 'Город доставки оплаченного заказа менять нельзя',

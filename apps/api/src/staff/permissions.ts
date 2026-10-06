@@ -6,7 +6,8 @@ import type { StaffRole } from '@prisma/client';
  * - admin: everything (implicit, not listed below);
  * - manager: orders, payments, delivery, customers;
  * - warehouse: stock, picking (Paid -> Picking -> Handed to delivery);
- * - marketer: read-only catalog and dashboard (promotions/newsletters come in later stages).
+ * - marketer: read-only catalog and dashboard funnel (promotions/newsletters come in later stages).
+ * Money that is not for everyone: purchase cost (costs.view, admin only) and revenue (dashboard.revenue).
  */
 export const PERMISSIONS = {
   'dashboard.view': ['manager', 'marketer'],
@@ -25,6 +26,8 @@ export const PERMISSIONS = {
   'settings.manage': [],
   'staff.manage': [],
   'audit.view': [],
+  'costs.view': [], // cost price and purchase price: GET /staff/products/:id, receipt cost_uzs
+  'dashboard.revenue': ['manager'], // revenue, average check and revenue per product on the dashboard
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

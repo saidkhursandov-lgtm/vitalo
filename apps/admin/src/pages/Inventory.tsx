@@ -135,6 +135,8 @@ function Stock({ editable }: { editable: boolean }) {
 
 function OperationModal({ kind, row, onClose }: { kind: Op; row: StockRow; onClose: () => void }) {
   const client = useQueryClient();
+  const { can } = useSession();
+  const showCost = can('costs.view'); // purchase price: admin only
   const warehouses = useQuery({ queryKey: ['warehouses'], queryFn: () => api<{ id: string; name: string }[]>('/staff/inventory/warehouses') });
   const [f, setF] = useState({ warehouse_id: '', qty: '', actual_qty: '', reason: '', comment: '', cost_uzs: '', batch_no: '', expiry_date: '', condition: 'resellable' });
   const warehouseId = f.warehouse_id || warehouses.data?.[0]?.id || '';
@@ -145,7 +147,7 @@ function OperationModal({ kind, row, onClose }: { kind: Op; row: StockRow; onClo
       const base = { product_id: row.product_id, warehouse_id: warehouseId, comment: f.comment || undefined };
       const body =
         kind === 'receipt'
-          ? { ...base, qty: toInt(f.qty), cost_uzs: toInt(f.cost_uzs), batch_no: f.batch_no || undefined, expiry_date: f.expiry_date || undefined }
+          ? { ...base, qty: toInt(f.qty), cost_uzs: showCost ? toInt(f.cost_uzs) : undefined, batch_no: f.batch_no || undefined, expiry_date: f.expiry_date || undefined }
           : kind === 'writeoff'
             ? { ...base, qty: toInt(f.qty), reason: f.reason }
             : kind === 'adjustment'
@@ -192,9 +194,11 @@ function OperationModal({ kind, row, onClose }: { kind: Op; row: StockRow; onClo
         )}
         {kind === 'receipt' && (
           <div className="form-grid">
-            <Field label="Закупочная цена за шт., сум">
-              <input inputMode="numeric" value={f.cost_uzs} onChange={(e) => set('cost_uzs', e.target.value)} />
-            </Field>
+            {showCost && (
+              <Field label="Закупочная цена за шт., сум">
+                <input inputMode="numeric" value={f.cost_uzs} onChange={(e) => set('cost_uzs', e.target.value)} />
+              </Field>
+            )}
             <Field label="Номер партии">
               <input value={f.batch_no} onChange={(e) => set('batch_no', e.target.value)} />
             </Field>

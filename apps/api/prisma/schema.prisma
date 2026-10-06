@@ -633,6 +633,7 @@ model orders {
   paid_at             DateTime?
   reserved_until      DateTime?
   payment_reminder_sent_at DateTime? // D3: "ждёт оплаты" reminder sent (once per order)
+  payment_check_reminder_sent_at DateTime? // Stage 0.2: "payment not checked for N hours" sent to admins/managers (once per order)
   delivered_at        DateTime?
   cancelled_at        DateTime?
 

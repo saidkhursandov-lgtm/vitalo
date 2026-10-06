@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -21,7 +22,7 @@ import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, I
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BankTransferDetails, SETTING_KEYS, SettingsService } from '../settings/settings.service';
+import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService } from '../settings/settings.service';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
 
@@ -114,6 +115,13 @@ export class ShopContactsDto {
   @Max(24)
   payment_reminder_hours?: number;
 
+  @ApiPropertyOptional({ example: 3, description: 'Через сколько часов после «Я оплатил(а)» напомнить менеджерам о непроверенной оплате (1–48)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  payment_check_reminder_hours?: number;
+
   @ApiProperty({ type: LocalizedTextDto, description: 'Подпись срока доставки: «рабочих дней»' })
   @ValidateNested()
   @Type(() => LocalizedTextDto)
@@ -121,6 +129,15 @@ export class ShopContactsDto {
 }
 
 export class TariffPatch extends PartialType(TariffDto) {}
+
+/** Stage 0.3: how long an unpaid order holds its reservation (card / bank transfer), minutes. */
+export class PaymentTimeoutDto {
+  @ApiProperty({ example: 720, minimum: 30, maximum: 1440, description: 'Срок резерва неоплаченного заказа, минут (30–1440)' })
+  @IsInt()
+  @Min(30)
+  @Max(1440)
+  timeout_minutes!: number;
+}
 
 /** Short texts (banner, tiles): up to 200 characters, both languages required. */
 export class ShortTextDto {
@@ -237,6 +254,7 @@ export class AdminSettingsService {
       payment_check_to: hours.to,
       delivery_days_label: await this.settings.getOrDefault('delivery_days_label'),
       payment_reminder_hours: Number(await this.settings.getOrDefault('payment_reminder_hours')),
+      payment_check_reminder_hours: Number(await this.settings.getOrDefault('payment_check_reminder_hours')),
     };
   }
 
@@ -247,7 +265,51 @@ export class AdminSettingsService {
     if (dto.payment_reminder_hours !== undefined) {
       await this.saveSetting(staffId, SETTING_KEYS.paymentReminderHours, dto.payment_reminder_hours as unknown as object, 'settings.contacts_updated');
     }
+    if (dto.payment_check_reminder_hours !== undefined) {
+      await this.saveSetting(staffId, SETTING_KEYS.paymentCheckReminderHours, dto.payment_check_reminder_hours as unknown as object, 'settings.contacts_updated');
+    }
     return this.shopContacts();
+  }
+
+  /** Stage 0.3: reservation time of the manual payment methods (card / bank transfer). */
+  paymentTimeouts() {
+    return this.prisma.payment_methods.findMany({
+      where: { code: { in: [...MANUAL_PAYMENT_METHODS] } },
+      select: { code: true, name_ru: true, status: true, timeout_minutes: true },
+      orderBy: { code: 'asc' },
+    });
+  }
+
+  /**
+   * Only new orders get the new time: reserved_until of existing orders was fixed when they were created.
+   * Must not be shorter than the customer's payment reminder (it comes N hours before the cancellation).
+   */
+  async setPaymentTimeout(staffId: string, code: string, dto: PaymentTimeoutDto) {
+    if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(code)) throw new NotFoundException('Unknown payment method');
+    const reminderHours = Number(await this.settings.getOrDefault('payment_reminder_hours'));
+    if (dto.timeout_minutes < reminderHours * 60) {
+      throw new BadRequestException({
+        code: 'TIMEOUT_SHORTER_THAN_REMINDER',
+        message: `The reservation must last at least ${reminderHours * 60} minutes: the payment reminder is sent ${reminderHours} h before the cancellation`,
+      });
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const before = await tx.payment_methods.findUnique({ where: { code } });
+      if (!before) throw new NotFoundException('Unknown payment method');
+      await tx.payment_methods.update({ where: { code }, data: { timeout_minutes: dto.timeout_minutes } });
+      await this.audit.log(
+        {
+          staffId,
+          action: 'settings.payment_timeout_updated',
+          entityType: 'payment_method',
+          entityId: before.id,
+          before: { code, timeout_minutes: before.timeout_minutes },
+          after: { code, timeout_minutes: dto.timeout_minutes },
+        },
+        tx,
+      );
+    });
+    return this.paymentTimeouts();
   }
 
   homeContent() {
@@ -516,6 +578,16 @@ export class AdminSettingsController {
   @Put('card-transfer')
   setCardTransfer(@CurrentStaff() me: StaffContext, @Body() dto: CardTransferDto) {
     return this.settings.setCardTransfer(me.staff.id, dto);
+  }
+
+  @Get('payment-methods')
+  paymentTimeouts() {
+    return this.settings.paymentTimeouts();
+  }
+
+  @Put('payment-methods/:code')
+  setPaymentTimeout(@CurrentStaff() me: StaffContext, @Param('code') code: string, @Body() dto: PaymentTimeoutDto) {
+    return this.settings.setPaymentTimeout(me.staff.id, code, dto);
   }
 
   @Get('texts')

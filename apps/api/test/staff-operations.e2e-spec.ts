@@ -266,9 +266,10 @@ describe('Admin panel operations (e2e)', () => {
 
     it('receipt adds stock, creates a batch, a movement and an audit entry', async () => {
       const p = await createTestProduct(prisma, { price: 1_000, stock: 5 });
-      const { body } = await as(t.warehouse).post('/staff/inventory/receipt', { product_id: p.id, warehouse_id: wh, qty: 20, cost_uzs: 500, batch_no: 'B-1', expiry_date: '2028-01-31' }).expect(201);
+      const { body } = await as(t.warehouse).post('/staff/inventory/receipt', { product_id: p.id, warehouse_id: wh, qty: 20, batch_no: 'B-1', expiry_date: '2028-01-31' }).expect(201);
       expect(body.actual_qty).toBe(25);
-      expect(await prisma.inventory_batches.count({ where: { product_id: p.id, batch_no: 'B-1' } })).toBe(1);
+      // Stage 0: the warehouse receives without the purchase price (only admin may enter it, see stage0.e2e-spec.ts)
+      expect(await prisma.inventory_batches.findMany({ where: { product_id: p.id, batch_no: 'B-1' }, select: { cost_uzs: true } })).toEqual([{ cost_uzs: null }]);
       const moves = (await as(t.warehouse).get(`/staff/inventory/movements?product_id=${p.id}`).expect(200)).body.items;
       expect(moves[0]).toMatchObject({ type: 'receipt', qty: 20, staff_name: 'Склад (тест)' });
       expect(await audits(p.id, 'inventory.receipt')).toHaveLength(1);
