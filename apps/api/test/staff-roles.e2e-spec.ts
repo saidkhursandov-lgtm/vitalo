@@ -49,6 +49,10 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'list products', method: 'get', path: () => '/api/staff/products', allowed: ['admin', 'manager', 'warehouse', 'marketer'] },
     { label: 'create a product', method: 'post', path: () => '/api/staff/products', body: {}, allowed: ['admin'] },
     { label: 'edit a product', method: 'patch', path: () => `/api/staff/products/${productId}`, body: { price_uzs: -1 }, allowed: ['admin'] },
+    { label: 'see dictionary values', method: 'get', path: () => '/api/staff/dictionaries/brands', allowed: ['admin', 'manager', 'warehouse', 'marketer'] },
+    { label: 'add a dictionary value', method: 'post', path: () => '/api/staff/dictionaries/brands', body: {}, allowed: ['admin'] },
+    { label: 'rename a dictionary value', method: 'patch', path: () => `/api/staff/dictionaries/brands/${MISSING}`, body: {}, allowed: ['admin'] },
+    { label: 'mark the Yandex price synchronized', method: 'post', path: () => `/api/staff/products/${MISSING}/yandex-price-synced`, allowed: ['admin', 'manager'] },
     { label: 'archive a product', method: 'post', path: () => `/api/staff/products/${MISSING}/archive`, allowed: ['admin'] },
     { label: 'upload a product photo', method: 'post', path: () => `/api/staff/products/${productId}/photos`, allowed: ['admin'] },
     { label: 'see stock', method: 'get', path: () => '/api/staff/inventory', allowed: ['admin', 'manager', 'warehouse'] },
@@ -117,7 +121,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
 
   it('GET /staff/auth/me lists exactly the permissions of the role', async () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
-    expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view']);
+    expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'yandex.price.view']);
     expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit']);
     expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
     expect((await me('manager')).permissions).toContain('dashboard.revenue');

@@ -65,6 +65,8 @@ export function qs(params: Record<string, string | number | boolean | undefined 
 
 const ERRORS: Record<string, string> = {
   FORBIDDEN_FOR_ROLE: 'У вашей роли нет прав на это действие',
+  UNKNOWN_DICTIONARY_VALUE: 'Значение справочника не найдено — обновите страницу',
+  YANDEX_SYNC_ANSWER_REQUIRED: 'Цена Яндекса изменилась — ответьте, изменили ли вы её в Яндекс Маркете',
   COST_FORBIDDEN: 'Себестоимость и закупочную цену видит и вводит только администратор',
   TIMEOUT_SHORTER_THAN_REMINDER: 'Срок резерва не может быть короче времени напоминания клиенту об оплате (Тексты и контакты)',
   ORDER_LOCKED: 'Заказ передан в доставку — изменять и отменять его здесь нельзя',

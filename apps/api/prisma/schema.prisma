@@ -447,6 +447,26 @@ model products {
   created_at           DateTime      @default(now())
   updated_at           DateTime      @updatedAt
 
+  // Stage 1: dictionaries. The text columns brand / manufacturer / country / form stay and keep feeding the
+  // Mini App; when a dictionary value is chosen, its name is copied into them (and on rename).
+  brand_id        String? @db.Uuid
+  manufacturer_id String? @db.Uuid
+  country_id      String? @db.Uuid
+  form_id         String? @db.Uuid
+
+  // Stage 1: Yandex Market. price_uzs stays the VITALO price (applied in the Mini App at once).
+  yandex_price_uzs             BigInt? // seen by admin, manager, marketer
+  yandex_commission_percent    Decimal?  @db.Decimal(5, 2) // admin only (costs.view)
+  yandex_payment_fee_percent   Decimal?  @db.Decimal(5, 2) // «поручение на перевод платежа», admin only
+  yandex_logistics_uzs         BigInt? // fixed logistics per order, admin only
+  yandex_price_sync_needed     Boolean   @default(false) // the price was changed here but not on Yandex Market yet
+  yandex_price_sync_changed_at DateTime?
+
+  brand_entry        brands?        @relation(fields: [brand_id], references: [id])
+  manufacturer_entry manufacturers? @relation(fields: [manufacturer_id], references: [id])
+  country_entry      countries?     @relation(fields: [country_id], references: [id])
+  form_entry         forms?         @relation(fields: [form_id], references: [id])
+
   categories    product_categories[]
   media         product_media[]
   relations     product_relations[]   @relation("RelMain")
@@ -463,6 +483,52 @@ model products {
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
   @@index([brand])
+  @@index([brand_id])
+  @@index([manufacturer_id])
+  @@index([country_id])
+  @@index([form_id])
+}
+
+/// Stage 1 dictionaries: unique name_ru ignoring case and extra spaces (expression index in the migration).
+/// Never deleted (trigger), only archived; an archived value is not offered for new choices.
+model brands {
+  id         String       @id @default(uuid()) @db.Uuid
+  name_ru    String
+  name_uz    String?
+  status     EntityStatus @default(active)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  products   products[]
+}
+
+model manufacturers {
+  id         String       @id @default(uuid()) @db.Uuid
+  name_ru    String
+  name_uz    String?
+  status     EntityStatus @default(active)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  products   products[]
+}
+
+model countries {
+  id         String       @id @default(uuid()) @db.Uuid
+  name_ru    String
+  name_uz    String?
+  status     EntityStatus @default(active)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  products   products[]
+}
+
+model forms {
+  id         String       @id @default(uuid()) @db.Uuid
+  name_ru    String
+  name_uz    String?
+  status     EntityStatus @default(active)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  products   products[]
 }
 
 model product_categories {
@@ -475,20 +541,20 @@ model product_categories {
 }
 
 model product_media {
-  id         String    @id @default(uuid()) @db.Uuid
-  product_id String    @db.Uuid
-  media_type MediaType
-  url        String
-  sort_order Int       @default(0)
-  is_main    Boolean   @default(false)
-  title      String?
+  id             String    @id @default(uuid()) @db.Uuid
+  product_id     String    @db.Uuid
+  media_type     MediaType
+  url            String
+  sort_order     Int       @default(0)
+  is_main        Boolean   @default(false)
+  title          String?
   // Optimized versions (D2): url = main WebP up to 1200 px, thumb = 400 px; JPEG fallbacks; size of the main one
   url_jpeg       String?
   thumb_url      String?
   thumb_url_jpeg String?
   width          Int?
   height         Int?
-  product    products  @relation(fields: [product_id], references: [id])
+  product        products  @relation(fields: [product_id], references: [id])
 
   @@index([product_id])
 }
@@ -606,36 +672,36 @@ model order_number_counters {
 }
 
 model orders {
-  id                  String        @id @default(uuid()) @db.Uuid
-  order_number        String        @unique
-  user_id             String        @db.Uuid
-  status              OrderStatus   @default(new)
-  payment_status      PaymentStatus @default(payment_pending)
-  shipment_id         String?       @db.Uuid
-  recipient_name      String
-  recipient_phone     String
-  region_id           String        @db.Uuid
-  city_id             String        @db.Uuid
-  address_text        String
-  latitude            Decimal?      @db.Decimal(9, 6)
-  longitude           Decimal?      @db.Decimal(9, 6)
-  customer_comment    String?
-  delivery_method     String
-  delivery_cost_uzs   BigInt
-  goods_total_uzs     BigInt // before discounts
-  discount_total_uzs  BigInt        @default(0)
-  bonus_used_uzs      BigInt        @default(0)
-  goods_paid_uzs      BigInt // goods after discounts, minus bonuses = real money part of goods
-  total_uzs           BigInt // money to pay = goods_paid + delivery
-  promo_id            String?       @db.Uuid
-  bonus_rate_snapshot Decimal?      @db.Decimal(6, 4)
-  created_at          DateTime      @default(now())
-  paid_at             DateTime?
-  reserved_until      DateTime?
-  payment_reminder_sent_at DateTime? // D3: "ждёт оплаты" reminder sent (once per order)
+  id                             String        @id @default(uuid()) @db.Uuid
+  order_number                   String        @unique
+  user_id                        String        @db.Uuid
+  status                         OrderStatus   @default(new)
+  payment_status                 PaymentStatus @default(payment_pending)
+  shipment_id                    String?       @db.Uuid
+  recipient_name                 String
+  recipient_phone                String
+  region_id                      String        @db.Uuid
+  city_id                        String        @db.Uuid
+  address_text                   String
+  latitude                       Decimal?      @db.Decimal(9, 6)
+  longitude                      Decimal?      @db.Decimal(9, 6)
+  customer_comment               String?
+  delivery_method                String
+  delivery_cost_uzs              BigInt
+  goods_total_uzs                BigInt // before discounts
+  discount_total_uzs             BigInt        @default(0)
+  bonus_used_uzs                 BigInt        @default(0)
+  goods_paid_uzs                 BigInt // goods after discounts, minus bonuses = real money part of goods
+  total_uzs                      BigInt // money to pay = goods_paid + delivery
+  promo_id                       String?       @db.Uuid
+  bonus_rate_snapshot            Decimal?      @db.Decimal(6, 4)
+  created_at                     DateTime      @default(now())
+  paid_at                        DateTime?
+  reserved_until                 DateTime?
+  payment_reminder_sent_at       DateTime? // D3: "ждёт оплаты" reminder sent (once per order)
   payment_check_reminder_sent_at DateTime? // Stage 0.2: "payment not checked for N hours" sent to admins/managers (once per order)
-  delivered_at        DateTime?
-  cancelled_at        DateTime?
+  delivered_at                   DateTime?
+  cancelled_at                   DateTime?
 
   user            users                  @relation(fields: [user_id], references: [id])
   region          regions                @relation(fields: [region_id], references: [id])

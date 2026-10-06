@@ -28,6 +28,9 @@ export const PERMISSIONS = {
   'audit.view': [],
   'costs.view': [], // cost price and purchase price: GET /staff/products/:id, receipt cost_uzs
   'dashboard.revenue': ['manager'], // revenue, average check and revenue per product on the dashboard
+  'settings.dictionaries': [], // add / rename / archive brands, manufacturers, countries, forms
+  'yandex.price.view': ['manager', 'marketer'], // Yandex Market price and its sync status (not warehouse)
+  'yandex.price.sync': ['manager'], // «Отметить синхронизированной»
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

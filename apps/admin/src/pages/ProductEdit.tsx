@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Badge, ErrorBox, Field, Loading, PageHead, toInt } from '../components/ui';
+import { DictionarySelect, type DictionaryKind } from '../components/DictionarySelect';
+import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
-import { PRODUCT_STATUS } from '../lib/format';
+import { dateTime, PRODUCT_STATUS } from '../lib/format';
 import { BackIcon } from '../components/Icons';
 
 interface CategoryNode {
@@ -19,8 +20,15 @@ interface AdminProduct {
   status: string;
   price_uzs: number;
   old_price_uzs: number | null;
-  cost_uzs: number | null;
+  cost_uzs?: number | null;
   min_stock: number;
+  // Yandex Market: price for admin / manager / marketer; commission, fee, logistics for admin only (absent otherwise)
+  yandex_price_uzs?: number | null;
+  yandex_price_sync_needed?: boolean;
+  yandex_price_sync_changed_at?: string | null;
+  yandex_commission_percent?: number | null;
+  yandex_payment_fee_percent?: number | null;
+  yandex_logistics_uzs?: number | null;
   category_ids: string[];
   media: { id: string; url: string; is_main: boolean; type: string }[];
   stock: { warehouse: { name: string }; actual_qty: number; reserved_qty: number; available_qty: number }[];
@@ -35,7 +43,21 @@ const TEXTS = [
   ['warnings', 'Противопоказания и предупреждения', 3],
 ] as const;
 
-const PLAIN = ['sku', 'name_ru', 'name_uz', 'brand', 'manufacturer', 'country', 'form', 'search_keywords'] as const;
+const PLAIN = ['sku', 'name_ru', 'name_uz', 'search_keywords'] as const;
+/** Dictionary fields: the text column the shop shows + the dictionary link. */
+const DICTS: [DictionaryKind, string, string, boolean][] = [
+  ['brands', 'brand', 'Бренд', true],
+  ['manufacturers', 'manufacturer', 'Производитель', true],
+  ['countries', 'country', 'Страна', false],
+  ['forms', 'form', 'Форма выпуска', false],
+];
+const YANDEX_COSTS = [
+  ['yandex_commission_percent', 'Комиссия Яндекса, %'],
+  ['yandex_payment_fee_percent', 'Платёжный сбор Яндекса, %'],
+  ['yandex_logistics_uzs', 'Логистика Яндекса за заказ, сум'],
+] as const;
+/** "18,5" / "18.5" / "" -> number / null */
+const toNum = (v: string): number | null => (v.trim() === '' ? null : Number(v.replace(/\s/g, '').replace(',', '.')));
 type Form = Record<string, string> & { status: string };
 
 function toForm(p?: AdminProduct): Form {
@@ -46,6 +68,12 @@ function toForm(p?: AdminProduct): Form {
   f.old_price_uzs = p?.old_price_uzs == null ? '' : String(p.old_price_uzs);
   f.cost_uzs = p?.cost_uzs == null ? '' : String(p.cost_uzs);
   f.min_stock = p ? String(p.min_stock) : '0';
+  for (const [, text] of DICTS) {
+    f[text] = (p?.[text] as string | null) ?? '';
+    f[`${text}_id`] = (p?.[`${text}_id`] as string | null) ?? '';
+  }
+  f.yandex_price_uzs = p?.yandex_price_uzs == null ? '' : String(p.yandex_price_uzs);
+  for (const [k] of YANDEX_COSTS) f[k] = p?.[k] == null ? '' : String(p[k]);
   return f;
 }
 
@@ -69,11 +97,24 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const [cats, setCats] = useState<Set<string>>(new Set(product?.category_ids ?? []));
   const [lang, setLang] = useState<'ru' | 'uz'>('ru');
   const [saved, setSaved] = useState(false);
+  const [askSync, setAskSync] = useState(false);
+  const yandexView = can('yandex.price.view');
+  const costsView = can('costs.view');
 
   const save = useMutation({
-    mutationFn: () => {
+    /** alreadyChanged: answer to «Вы уже изменили цену в Яндекс Маркете?» (only when the Yandex price changes) */
+    mutationFn: (alreadyChanged?: boolean) => {
       const body: Record<string, unknown> = { status: f.status, category_ids: [...cats] };
       for (const k of PLAIN) body[k] = f[k].trim();
+      for (const [, text, , required] of DICTS) {
+        body[text] = f[text].trim() || (required ? f[text] : null);
+        body[`${text}_id`] = f[`${text}_id`] || null;
+      }
+      if (yandexView) {
+        body.yandex_price_uzs = toInt(f.yandex_price_uzs) ?? null;
+        if (alreadyChanged !== undefined) body.yandex_price_already_changed = alreadyChanged;
+      }
+      if (costsView) for (const [k] of YANDEX_COSTS) body[k] = k === 'yandex_logistics_uzs' ? (toInt(f[k]) ?? null) : toNum(f[k]);
       for (const [k] of TEXTS) for (const l of ['ru', 'uz']) body[`${k}_${l}`] = f[`${k}_${l}`];
       body.price_uzs = toInt(f.price_uzs);
       body.old_price_uzs = toInt(f.old_price_uzs) ?? null;
@@ -87,7 +128,16 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       client.setQueryData(['product', p.id], p);
       void client.invalidateQueries({ queryKey: ['products'] });
       setSaved(true);
+      setF((x) => ({ ...x, yandex_price_uzs: p.yandex_price_uzs == null ? '' : String(p.yandex_price_uzs) }));
       if (!product) navigate(`/products/${p.id}`, { replace: true });
+    },
+  });
+
+  const markSynced = useMutation({
+    mutationFn: () => api<AdminProduct>(`/staff/products/${product!.id}/yandex-price-synced`, { method: 'POST' }),
+    onSuccess: (p) => {
+      client.setQueryData(['product', p.id], p);
+      void client.invalidateQueries({ queryKey: ['products'] });
     },
   });
 
@@ -105,9 +155,16 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     setF({ ...f, [k]: v });
     setSaved(false);
   };
+  /** The VITALO price is applied in the shop at once; only a changed Yandex price asks about Yandex Market. */
+  const yandexPriceChanged = yandexView && (toInt(f.yandex_price_uzs) ?? null) !== (product?.yandex_price_uzs ?? null);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate();
+    if (yandexPriceChanged) setAskSync(true);
+    else save.mutate(undefined);
+  };
+  const answer = (alreadyChanged: boolean) => {
+    setAskSync(false);
+    save.mutate(alreadyChanged);
   };
   const input = (k: string, props: Record<string, unknown> = {}) => (
     <input value={f[k]} disabled={!editable} onChange={(e) => set(k, e.target.value)} {...props} />
@@ -138,7 +195,24 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       {!editable && <div className="alert alert-info">Только просмотр: менять товары может администратор.</div>}
       {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине. Удалять товары нельзя — только архивировать.</div>}
       {saved && <div className="alert alert-ok">Сохранено</div>}
-      <ErrorBox error={save.error ?? archive.error} />
+      <ErrorBox error={save.error ?? archive.error ?? markSynced.error} />
+      {askSync && (
+        <Modal title="Цена на Яндекс Маркете" onClose={() => setAskSync(false)}>
+          <p>
+            Цена Яндекса меняется: {product?.yandex_price_uzs ?? '—'} → {f.yandex_price_uzs || '—'} сум.
+            <br />
+            <strong>Вы уже изменили цену в Яндекс Маркете?</strong>
+          </p>
+          <div className="page-actions">
+            <button type="button" className="btn" onClick={() => answer(true)}>
+              Да, уже изменил(а)
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => answer(false)}>
+              Нет — отметить «требует синхронизации»
+            </button>
+          </div>
+        </Modal>
+      )}
 
       <div className="grid-2">
         <section className="card">
@@ -158,12 +232,21 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             <Field label="Название (UZ)" hint="Если пусто — в магазине покажется русское">
               {input('name_uz')}
             </Field>
-            <Field label="Бренд">{input('brand', { required: true })}</Field>
-            <Field label="Производитель">{input('manufacturer', { required: true })}</Field>
-            <Field label="Страна">{input('country')}</Field>
-            <Field label="Форма выпуска" hint="Капсулы, Таблетки, Порошок…">
-              {input('form')}
-            </Field>
+            {DICTS.map(([kind, text, label, required]) => (
+              <Field key={kind} label={label}>
+                <DictionarySelect
+                  kind={kind}
+                  valueId={f[`${text}_id`]}
+                  text={f[text]}
+                  required={required}
+                  disabled={!editable}
+                  onChange={(v) => {
+                    setF((x) => ({ ...x, [text]: v.name, [`${text}_id`]: v.id }));
+                    setSaved(false);
+                  }}
+                />
+              </Field>
+            ))}
           </div>
           <Field label="Ключевые слова для поиска" hint="Через пробел, можно латиницей: collagen, omega">
             {input('search_keywords')}
@@ -217,6 +300,36 @@ function ProductForm({ product }: { product?: AdminProduct }) {
           )}
         </section>
       </div>
+
+      {yandexView && (
+        <section className="card">
+          <div className="section-head">
+            <h2>Яндекс Маркет</h2>
+            {product?.yandex_price_sync_needed ? (
+              <Badge tone="warn">Цена Яндекса требует синхронизации</Badge>
+            ) : product?.yandex_price_uzs != null ? (
+              <Badge tone="ok">Синхронизирована</Badge>
+            ) : null}
+          </div>
+          <div className="form-grid">
+            <Field label="Цена на Яндексе, сум" hint="Цена VITALO (выше) применяется в магазине сразу; про цену Яндекса спросим при сохранении">
+              {input('yandex_price_uzs', { inputMode: 'numeric' })}
+            </Field>
+            {costsView &&
+              YANDEX_COSTS.map(([k, label]) => (
+                <Field key={k} label={label} hint="Видно только администратору">
+                  {input(k, { inputMode: 'decimal' })}
+                </Field>
+              ))}
+          </div>
+          {product?.yandex_price_sync_changed_at && <p className="muted small">Цена Яндекса менялась: {dateTime(product.yandex_price_sync_changed_at)}</p>}
+          {product?.yandex_price_sync_needed && can('yandex.price.sync') && (
+            <button type="button" className="btn btn-ghost" disabled={markSynced.isPending} onClick={() => markSynced.mutate()}>
+              Отметить синхронизированной
+            </button>
+          )}
+        </section>
+      )}
 
       <section className="card">
         <h2>Категории</h2>

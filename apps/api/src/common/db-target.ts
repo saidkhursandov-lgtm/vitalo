@@ -55,3 +55,40 @@ export function printDbBanner(script: string, env: NodeJS.ProcessEnv = process.e
   console.log(`=== ${script}: база ${describeDb(t)}${env.NODE_ENV ? `, NODE_ENV=${env.NODE_ENV}` : ''} ===`);
   return t;
 }
+
+/** One answer typed in the terminal. */
+export async function askLine(question: string): Promise<string> {
+  const { createInterface } = await import('readline/promises');
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Data scripts that may one day run on the real shop (backfill:dictionaries, import:yandex): prints the banner;
+ * a *_dev / *_test database is fine; any other one (the server's «vitalo», the old local «vitalo») needs
+ * --allow-production AND the database name typed in a terminal. Checked before any connection is made.
+ */
+export async function assertDataScriptTarget(
+  script: string,
+  argv: string[] = process.argv,
+  env: NodeJS.ProcessEnv = process.env,
+  ask: (q: string) => Promise<string> = askLine,
+  interactive = !!process.stdin.isTTY,
+): Promise<DbTarget> {
+  const t = printDbBanner(script, env);
+  if (DEV_OR_TEST_DB.test(t.database)) return t;
+  if (!argv.includes('--allow-production')) {
+    throw new Error(
+      `${script} отказывается работать с базой ${describeDb(t)}: без отдельного разрешения — только базы *_dev и *_test. ` +
+        'Если это действительно база магазина и запуск согласован, добавьте --allow-production и подтвердите имя базы.',
+    );
+  }
+  if (!interactive) throw new Error(`${script}: для базы ${describeDb(t)} нужно подтверждение в окне терминала — запустите команду вручную.`);
+  const answer = await ask(`Это база ${describeDb(t)}. Чтобы продолжить, введите её имя: `);
+  if (answer.trim() !== t.database) throw new Error('Имя базы не совпало — остановлено, ничего не сделано.');
+  return t;
+}

@@ -22,7 +22,10 @@ export type Permission =
   | 'staff.manage'
   | 'audit.view'
   | 'costs.view'
-  | 'dashboard.revenue';
+  | 'dashboard.revenue'
+  | 'settings.dictionaries'
+  | 'yandex.price.view'
+  | 'yandex.price.sync';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };

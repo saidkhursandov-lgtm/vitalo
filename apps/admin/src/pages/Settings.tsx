@@ -8,10 +8,11 @@ import { dateTime, ROLE } from '../lib/format';
 import { ContactsForm } from './settings/Contacts';
 import { PaymentTimeouts } from './settings/PaymentTimeouts';
 import { DeliverySettings } from './settings/Delivery';
+import { DictionariesSettings } from './settings/Dictionaries';
 import { BonusTeaserForm, HomeSettings } from './settings/Home';
 import { LegalSettings } from './settings/Legal';
 
-const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', home: 'Главная', tariffs: 'Доставка', docs: 'Документы', staff: 'Сотрудники' } as const;
+const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', home: 'Главная', tariffs: 'Доставка', dicts: 'Справочники', docs: 'Документы', staff: 'Сотрудники' } as const;
 type Tab = keyof typeof TABS;
 
 export function Settings() {
@@ -46,6 +47,7 @@ export function Settings() {
       )}
       {tab === 'home' && <HomeSettings />}
       {tab === 'tariffs' && <DeliverySettings />}
+      {tab === 'dicts' && <DictionariesSettings />}
       {tab === 'docs' && <LegalSettings />}
       {tab === 'staff' && <Staff />}
     </>

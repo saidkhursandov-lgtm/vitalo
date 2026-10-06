@@ -6,7 +6,7 @@ describe('staff permissions', () => {
   });
 
   it('only admin manages settings, staff and reads the audit log', () => {
-    for (const p of ['settings.manage', 'staff.manage', 'audit.view', 'products.edit', 'costs.view'] as Permission[]) {
+    for (const p of ['settings.manage', 'staff.manage', 'audit.view', 'products.edit', 'costs.view', 'settings.dictionaries'] as Permission[]) {
       expect(['manager', 'warehouse', 'marketer'].filter((r) => can(r as never, p))).toEqual([]);
     }
   });
@@ -27,7 +27,12 @@ describe('staff permissions', () => {
   });
 
   it('marketer: read-only catalog and dashboard, without revenue', () => {
-    expect(permissionsOf('marketer')).toEqual(['dashboard.view', 'products.view']);
+    expect(permissionsOf('marketer')).toEqual(['dashboard.view', 'products.view', 'yandex.price.view']);
+  });
+
+  it('stage 1: Yandex price seen by admin, manager, marketer (not warehouse); synced by admin and manager', () => {
+    expect((['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, 'yandex.price.view'))).toEqual(['admin', 'manager', 'marketer']);
+    expect((['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, 'yandex.price.sync'))).toEqual(['admin', 'manager']);
   });
 
   it('stage 0: cost price only for admin, revenue for admin and manager', () => {

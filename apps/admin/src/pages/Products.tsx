@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Badge, ErrorBox, Loading, PageHead, Pagination } from '../components/ui';
@@ -17,6 +17,9 @@ interface ProductRow {
   image_url: string | null;
   actual_qty: number;
   available_qty: number;
+  /** absent for roles without yandex.price.view (warehouse) */
+  yandex_price_uzs?: number | null;
+  yandex_price_sync_needed?: boolean;
 }
 
 export function Products() {
@@ -25,9 +28,19 @@ export function Products() {
   const [text, setText] = useState(params.get('q') ?? '');
   const status = params.get('status') ?? '';
   const page = Number(params.get('page')) || 1;
+  const yandex = can('yandex.price.view');
+  const syncOnly = params.get('yandex_sync') === '1';
+  const client = useQueryClient();
   const q = useQuery({
     queryKey: ['products', params.toString()],
-    queryFn: () => api<{ items: ProductRow[]; total: number; total_pages: number }>(`/staff/products${qs({ q: params.get('q'), status, page })}`),
+    queryFn: () =>
+      api<{ items: ProductRow[]; total: number; total_pages: number }>(
+        `/staff/products${qs({ q: params.get('q'), status, page, yandex_sync_needed: syncOnly ? 'true' : undefined })}`,
+      ),
+  });
+  const synced = useMutation({
+    mutationFn: (id: string) => api(`/staff/products/${id}/yandex-price-synced`, { method: 'POST' }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['products'] }),
   });
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
@@ -62,7 +75,14 @@ export function Products() {
             </option>
           ))}
         </select>
+        {yandex && (
+          <label className="check">
+            <input type="checkbox" checked={syncOnly} onChange={(e) => set('yandex_sync', e.target.checked ? '1' : '')} />
+            Цена Яндекса требует синхронизации
+          </label>
+        )}
       </form>
+      <ErrorBox error={synced.error} />
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (
@@ -76,6 +96,7 @@ export function Products() {
                 <th>Товар</th>
                 <th>Бренд</th>
                 <th className="num">Цена</th>
+                {yandex && <th className="num">Яндекс</th>}
                 <th className="num">Доступно / всего</th>
                 <th>Статус</th>
               </tr>
@@ -92,6 +113,21 @@ export function Products() {
                   </td>
                   <td>{p.brand}</td>
                   <td className="num">{money(p.price_uzs)}</td>
+                  {yandex && (
+                    <td className="num">
+                      {p.yandex_price_uzs != null ? money(p.yandex_price_uzs) : <span className="muted">—</span>}
+                      {p.yandex_price_sync_needed && (
+                        <div>
+                          <Badge tone="warn">Цена Яндекса требует синхронизации</Badge>
+                          {can('yandex.price.sync') && (
+                            <button type="button" className="btn btn-sm btn-ghost" disabled={synced.isPending} onClick={() => synced.mutate(p.id)}>
+                              Отметить синхронизированной
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   <td className={`num ${p.available_qty <= p.min_stock ? 'text-warn' : ''}`}>
                     {p.available_qty} / {p.actual_qty}
                   </td>

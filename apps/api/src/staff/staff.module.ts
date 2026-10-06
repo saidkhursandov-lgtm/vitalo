@@ -4,6 +4,7 @@ import { DeliveryModule } from '../delivery/delivery.module';
 import { AdminLegalController, LegalModule } from '../legal/legal.module';
 import { OrdersModule } from '../orders/orders.module';
 import { AdminCustomersController, AdminCustomersService } from './admin-customers';
+import { AdminDictionariesController, AdminDictionariesService } from './admin-dictionaries';
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
 import { AdminOrdersController, AdminOrdersService } from './admin-orders';
 import { AdminProductsController, AdminProductsService } from './admin-products';
@@ -24,6 +25,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     AdminProductsController,
     AdminInventoryController,
     AdminCustomersController,
+    AdminDictionariesController,
     AdminSettingsController,
     StaffUsersController,
     AuditController,
@@ -38,6 +40,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     AdminProductsService,
     AdminInventoryService,
     AdminCustomersService,
+    AdminDictionariesService,
     AdminSettingsService,
   ],
 })

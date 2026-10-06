@@ -26,19 +26,24 @@ import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { randomUUID } from 'crypto';
 import { memoryStorage } from 'multer';
 import { PageQuery } from '../catalog/catalog.dto';
+import { DICTIONARY_COLUMNS, DICTIONARY_KINDS, matchKey } from '../dictionaries/dictionary-names';
+import { dictionaryTable } from './admin-dictionaries';
 import { PrismaService } from '../prisma/prisma.service';
 import { FILE_STORAGE, type FileStorage } from '../storage/file-storage';
 import { imageFiles, storeProductImage } from '../storage/image-processing';
@@ -100,6 +105,36 @@ export class ProductInput {
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(5000) warnings_ru?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(5000) warnings_uz?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) search_keywords?: string | null;
+
+  // Stage 1.1: dictionary values. Their names are copied into brand / manufacturer / country / form.
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() brand_id?: string | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() manufacturer_id?: string | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() country_id?: string | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() form_id?: string | null;
+
+  // Stage 1.4: Yandex Market. Commission, payment fee and logistics need costs.view (admin).
+  @ApiPropertyOptional({ nullable: true, description: 'Цена на Яндекс Маркете, сум' }) @IsOptional() @IsInt() @Min(0) yandex_price_uzs?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Комиссия Яндекса, % (0–100)' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false })
+  @Min(0)
+  @Max(100)
+  yandex_commission_percent?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Платёжный сбор Яндекса (поручение на перевод платежа), % (0–100)' })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false })
+  @Min(0)
+  @Max(100)
+  yandex_payment_fee_percent?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Логистика Яндекса за заказ, сум' }) @IsOptional() @IsInt() @Min(0) yandex_logistics_uzs?: number | null;
+  /**
+   * Required when yandex_price_uzs changes: «Вы уже изменили цену в Яндекс Маркете?».
+   * true -> synchronized; false -> «требует синхронизации». Not stored itself.
+   */
+  @ApiPropertyOptional({ description: 'Ответ на «Вы уже изменили цену в Яндекс Маркете?» (обязателен, если цена Яндекса меняется)' })
+  @IsOptional()
+  @IsBoolean()
+  yandex_price_already_changed?: boolean;
 }
 
 export class ProductPatch extends PartialType(ProductInput) {}
@@ -107,6 +142,10 @@ export class ProductPatch extends PartialType(ProductInput) {}
 export class StaffProductsQuery extends PageQuery {
   @ApiPropertyOptional({ description: 'SKU, название или бренд' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100) q?: string;
   @ApiPropertyOptional({ enum: ProductStatus }) @IsOptional() @IsEnum(ProductStatus) status?: ProductStatus;
+  @ApiPropertyOptional({ description: 'true — только товары, у которых цена Яндекса требует синхронизации' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  yandex_sync_needed?: boolean;
 }
 
 /** Real image type from the first bytes (the browser-provided mimetype can lie). */
@@ -125,27 +164,52 @@ const productInclude = {
 
 type ProductRow = Prisma.productsGetPayload<{ include: typeof productInclude }>;
 
-/** Stage 0: the cost price is shown only to employees with costs.view (admin); for everyone else the field is absent. */
-export function withCostFor<T extends { cost_uzs?: unknown }>(role: StaffRole, product: T): T | Omit<T, 'cost_uzs'> {
-  if (can(role, 'costs.view')) return product;
-  const { cost_uzs: _hidden, ...rest } = product;
-  return rest;
+/** Finance of a product: purchase cost (stage 0) and Yandex commission, payment fee, logistics (stage 1). Admin only. */
+export const COST_FIELDS = ['cost_uzs', 'yandex_commission_percent', 'yandex_payment_fee_percent', 'yandex_logistics_uzs'] as const;
+/** Yandex price and its sync status: admin, manager, marketer (not warehouse). */
+export const YANDEX_PRICE_FIELDS = ['yandex_price_uzs', 'yandex_price_sync_needed', 'yandex_price_sync_changed_at'] as const;
+
+/** What an employee may see of a product: fields their role may not see are absent from the answer. */
+export function forViewer<T extends object>(role: StaffRole, product: T): Partial<T> {
+  const out = { ...product } as Record<string, unknown>;
+  if (!can(role, 'costs.view')) for (const k of COST_FIELDS) delete out[k];
+  if (!can(role, 'yandex.price.view')) for (const k of YANDEX_PRICE_FIELDS) delete out[k];
+  return out as Partial<T>;
 }
 
-/** Writing the cost price needs costs.view too (products.edit alone is not enough). */
-function assertCostWrite(role: StaffRole, dto: { cost_uzs?: unknown }) {
-  if (dto.cost_uzs !== undefined && !can(role, 'costs.view')) {
-    throw new ForbiddenException({ code: 'COST_FORBIDDEN', message: `Role ${role} cannot see or change the cost price` });
+/** Writing finance fields needs costs.view too (products.edit alone is not enough). */
+function assertCostWrite(role: StaffRole, dto: object) {
+  const sent = COST_FIELDS.filter((k) => (dto as Record<string, unknown>)[k] !== undefined);
+  if (sent.length && !can(role, 'costs.view')) {
+    throw new ForbiddenException({ code: 'COST_FORBIDDEN', message: `Role ${role} cannot see or change: ${sent.join(', ')}` });
   }
 }
 
+const num = (v: bigint | Prisma.Decimal | null) => (v == null ? null : Number(v));
+
 function toAdminProduct(p: ProductRow) {
-  const { categories, media, inventory, price_uzs, old_price_uzs, cost_uzs, ...rest } = p;
+  const {
+    categories,
+    media,
+    inventory,
+    price_uzs,
+    old_price_uzs,
+    cost_uzs,
+    yandex_price_uzs,
+    yandex_commission_percent,
+    yandex_payment_fee_percent,
+    yandex_logistics_uzs,
+    ...rest
+  } = p;
   return {
     ...rest,
     price_uzs: Number(price_uzs),
-    old_price_uzs: old_price_uzs == null ? null : Number(old_price_uzs),
-    cost_uzs: cost_uzs == null ? null : Number(cost_uzs),
+    old_price_uzs: num(old_price_uzs),
+    cost_uzs: num(cost_uzs),
+    yandex_price_uzs: num(yandex_price_uzs),
+    yandex_commission_percent: num(yandex_commission_percent),
+    yandex_payment_fee_percent: num(yandex_payment_fee_percent),
+    yandex_logistics_uzs: num(yandex_logistics_uzs),
     category_ids: categories.map((c) => c.category_id),
     media: media.map((m) => ({ id: m.id, url: m.url, is_main: m.is_main, type: m.media_type, title: m.title })),
     stock: inventory.map((i) => ({
@@ -168,6 +232,7 @@ export class AdminProductsService {
   async list(q: StaffProductsQuery) {
     const where: Prisma.productsWhereInput = {
       ...(q.status && { status: q.status }),
+      ...(q.yandex_sync_needed && { yandex_price_sync_needed: true }),
       ...(q.q && {
         OR: [
           { sku: { contains: q.q, mode: 'insensitive' } },
@@ -199,6 +264,8 @@ export class AdminProductsService {
         image_url: p.media[0]?.thumb_url ?? p.media[0]?.url ?? null,
         actual_qty: p.inventory.reduce((s, i) => s + i.actual_qty, 0),
         available_qty: p.inventory.reduce((s, i) => s + i.actual_qty - i.reserved_qty, 0),
+        yandex_price_uzs: num(p.yandex_price_uzs),
+        yandex_price_sync_needed: p.yandex_price_sync_needed,
       })),
       page: q.page,
       page_size: PAGE_SIZE,
@@ -217,7 +284,8 @@ export class AdminProductsService {
     const id = await this.write(async (tx) => {
       const { category_ids, ...data } = dto;
       await this.assertCategories(tx, category_ids);
-      const p = await tx.products.create({ data: this.toData(data) as Prisma.productsUncheckedCreateInput });
+      await this.applyDictionaries(tx, null, data as Record<string, unknown>);
+      const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, data as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
       if (category_ids?.length) await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: p.id, category_id: c })) });
       await this.audit.log({ staffId, action: 'product.created', entityType: 'product', entityId: p.id, after: { ...p, category_ids } }, tx);
       return p.id;
@@ -232,7 +300,8 @@ export class AdminProductsService {
       if (!before) throw new NotFoundException('Product not found');
       const { category_ids, ...data } = dto;
       await this.assertCategories(tx, category_ids);
-      const after = await tx.products.update({ where: { id }, data: this.toData(data) });
+      await this.applyDictionaries(tx, before, data as Record<string, unknown>);
+      const after = await tx.products.update({ where: { id }, data: this.toData(this.applyYandexSync(before, data as Record<string, unknown>)) });
       if (category_ids) {
         await tx.product_categories.deleteMany({ where: { product_id: id } });
         await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: id, category_id: c })) });
@@ -309,12 +378,79 @@ export class AdminProductsService {
     return this.get(id);
   }
 
-  private toData(d: Omit<ProductPatch, 'category_ids'>): Prisma.productsUncheckedUpdateInput {
+  /** «Отметить синхронизированной»: the Yandex price is already the same on Yandex Market. */
+  async markYandexSynced(staffId: string, id: string) {
+    await this.write(async (tx) => {
+      const before = await tx.products.findUnique({ where: { id } });
+      if (!before) throw new NotFoundException('Product not found');
+      if (!before.yandex_price_sync_needed) return;
+      await tx.products.update({ where: { id }, data: { yandex_price_sync_needed: false } });
+      await this.audit.log(
+        {
+          staffId,
+          action: 'product.yandex_price_synced',
+          entityType: 'product',
+          entityId: id,
+          before: { yandex_price_uzs: before.yandex_price_uzs, yandex_price_sync_needed: true },
+          after: { yandex_price_uzs: before.yandex_price_uzs, yandex_price_sync_needed: false },
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
+  /**
+   * Stage 1.1: a chosen dictionary value overwrites the product's text column with its name (the Mini App
+   * reads the text). An archived value may stay on a product but cannot be chosen anew. A text changed without
+   * a dictionary choice keeps the link only while it still names the same value.
+   */
+  private async applyDictionaries(tx: Prisma.TransactionClient, before: object | null, data: Record<string, unknown>) {
+    const prev = (before ?? {}) as Record<string, unknown>;
+    for (const kind of DICTIONARY_KINDS) {
+      const cols = DICTIONARY_COLUMNS[kind];
+      const chosen = data[cols.id];
+      if (typeof chosen === 'string') {
+        const entry = await dictionaryTable(tx, kind).findUnique({ where: { id: chosen } });
+        if (!entry) throw new BadRequestException({ code: 'UNKNOWN_DICTIONARY_VALUE', message: `Unknown ${cols.label}` });
+        if (entry.status === 'archived' && prev[cols.id] !== entry.id) {
+          throw new ConflictException({ code: 'DICTIONARY_ARCHIVED', message: `«${entry.name_ru}» в архиве — выберите другое значение` });
+        }
+        data[cols.text] = entry.name_ru;
+      } else if (chosen === undefined && data[cols.text] !== undefined && typeof prev[cols.id] === 'string') {
+        const linked = await dictionaryTable(tx, kind).findUnique({ where: { id: prev[cols.id] as string } });
+        const text = data[cols.text];
+        if (!linked || typeof text !== 'string' || matchKey(linked.name_ru) !== matchKey(text)) data[cols.id] = null;
+      }
+    }
+  }
+
+  /**
+   * Stage 1.4: when the Yandex price changes, the answer to «Вы уже изменили цену в Яндекс Маркете?» is required:
+   * yes -> synchronized, no -> «требует синхронизации». The VITALO price (price_uzs) needs no such question.
+   */
+  private applyYandexSync(before: { yandex_price_uzs?: bigint | null } | null, d: Record<string, unknown>) {
+    const { yandex_price_already_changed: answer, ...data } = d;
+    if (data.yandex_price_uzs === undefined) return data;
+    const next = data.yandex_price_uzs == null ? null : BigInt(data.yandex_price_uzs as number);
+    const prev = before?.yandex_price_uzs ?? null;
+    if (next === prev) return data;
+    if (answer === undefined) {
+      throw new BadRequestException({
+        code: 'YANDEX_SYNC_ANSWER_REQUIRED',
+        message: 'The Yandex price changes: send yandex_price_already_changed (true / false)',
+      });
+    }
+    return { ...data, yandex_price_sync_needed: next !== null && answer === false, yandex_price_sync_changed_at: new Date() };
+  }
+
+  private toData(d: Record<string, unknown>): Prisma.productsUncheckedUpdateInput {
     const data: Record<string, unknown> = { ...d };
-    for (const k of ['price_uzs', 'old_price_uzs', 'cost_uzs'] as const) {
-      if (d[k] !== undefined) data[k] = d[k] === null ? null : BigInt(d[k]!);
+    for (const k of ['price_uzs', 'old_price_uzs', 'cost_uzs', 'yandex_price_uzs', 'yandex_logistics_uzs'] as const) {
+      if (d[k] !== undefined) data[k] = d[k] === null ? null : BigInt(d[k] as number);
     }
     for (const k of TEXT_FIELDS) if (d[k] === '') data[k] = null;
+    delete data.yandex_price_already_changed;
     return data;
   }
 
@@ -345,35 +481,44 @@ export class AdminProductsController {
 
   @Get()
   @RequirePermission('products.view')
-  list(@Query() q: StaffProductsQuery) {
-    return this.products.list(q);
+  async list(@CurrentStaff() me: StaffContext, @Query() q: StaffProductsQuery) {
+    if (q.yandex_sync_needed && !can(me.staff.role, 'yandex.price.view')) q.yandex_sync_needed = undefined;
+    const page = await this.products.list(q);
+    return { ...page, items: page.items.map((i) => forViewer(me.staff.role, i)) };
   }
 
   @Get(':id')
   @RequirePermission('products.view')
   async get(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
-    return withCostFor(me.staff.role, await this.products.get(id));
+    return forViewer(me.staff.role, await this.products.get(id));
   }
 
   @Post()
   @RequirePermission('products.edit')
   async create(@CurrentStaff() me: StaffContext, @Body() dto: ProductInput) {
     assertCostWrite(me.staff.role, dto);
-    return withCostFor(me.staff.role, await this.products.create(me.staff.id, dto));
+    return forViewer(me.staff.role, await this.products.create(me.staff.id, dto));
   }
 
   @Patch(':id')
   @RequirePermission('products.edit')
   async update(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ProductPatch) {
     assertCostWrite(me.staff.role, dto);
-    return withCostFor(me.staff.role, await this.products.update(me.staff.id, id, dto));
+    return forViewer(me.staff.role, await this.products.update(me.staff.id, id, dto));
+  }
+
+  @Post(':id/yandex-price-synced')
+  @HttpCode(200)
+  @RequirePermission('yandex.price.sync')
+  async markYandexSynced(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return forViewer(me.staff.role, await this.products.markYandexSynced(me.staff.id, id));
   }
 
   @Post(':id/archive')
   @HttpCode(200)
   @RequirePermission('products.edit')
   async archive(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
-    return withCostFor(me.staff.role, await this.products.update(me.staff.id, id, { status: 'archived' }));
+    return forViewer(me.staff.role, await this.products.update(me.staff.id, id, { status: 'archived' }));
   }
 
   @Post(':id/photos')
@@ -382,19 +527,19 @@ export class AdminProductsController {
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1 } }))
   async addPhoto(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @UploadedFile() file?: Express.Multer.File) {
-    return withCostFor(me.staff.role, await this.products.addPhoto(me.staff.id, id, file));
+    return forViewer(me.staff.role, await this.products.addPhoto(me.staff.id, id, file));
   }
 
   @Post(':id/photos/:mediaId/main')
   @HttpCode(200)
   @RequirePermission('products.edit')
   async setMain(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
-    return withCostFor(me.staff.role, await this.products.setMainPhoto(me.staff.id, id, mediaId));
+    return forViewer(me.staff.role, await this.products.setMainPhoto(me.staff.id, id, mediaId));
   }
 
   @Delete(':id/photos/:mediaId')
   @RequirePermission('products.edit')
   async removePhoto(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
-    return withCostFor(me.staff.role, await this.products.removePhoto(me.staff.id, id, mediaId));
+    return forViewer(me.staff.role, await this.products.removePhoto(me.staff.id, id, mediaId));
   }
 }

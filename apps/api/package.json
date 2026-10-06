@@ -14,6 +14,8 @@
     "staff:add": "ts-node scripts/add-staff.ts",
     "bootstrap:prod": "ts-node scripts/bootstrap-production.ts",
     "import:products": "ts-node scripts/import-products.ts",
+    "import:yandex": "ts-node scripts/import-yandex.ts",
+    "backfill:dictionaries": "ts-node scripts/backfill-dictionaries.ts",
     "photos:optimize": "ts-node scripts/optimize-photos.ts",
     "brand:icons": "ts-node scripts/brand-icons.ts",
     "prisma:generate": "prisma generate",
