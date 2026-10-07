@@ -31,6 +31,9 @@ export const PERMISSIONS = {
   'settings.dictionaries': [], // add / rename / archive brands, manufacturers, countries, forms
   'yandex.price.view': ['manager', 'marketer'], // Yandex Market price and its sync status (not warehouse)
   'yandex.price.sync': ['manager'], // «Отметить синхронизированной»
+  'purchases.view': ['manager'], // Stage 2A: list and cards of purchases (quantities only)
+  'purchases.manage': [], // create, edit, Ozon cancellation
+  'purchases.view_costs': [], // unit prices, totals, final actual total, allocated costs
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

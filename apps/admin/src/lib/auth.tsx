@@ -25,7 +25,10 @@ export type Permission =
   | 'dashboard.revenue'
   | 'settings.dictionaries'
   | 'yandex.price.view'
-  | 'yandex.price.sync';
+  | 'yandex.price.sync'
+  | 'purchases.view'
+  | 'purchases.manage'
+  | 'purchases.view_costs';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };

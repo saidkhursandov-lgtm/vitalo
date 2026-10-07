@@ -12,6 +12,7 @@ export const NAV: NavItem[] = [
   { to: '/orders', label: 'Заказы', permission: 'orders.view' },
   { to: '/products', label: 'Товары', permission: 'products.view' },
   { to: '/inventory', label: 'Склад', permission: 'inventory.view' },
+  { to: '/purchases', label: 'Закупки', permission: 'purchases.view' },
   { to: '/customers', label: 'Клиенты', permission: 'customers.view' },
   { to: '/settings', label: 'Настройки', permission: 'settings.manage' },
   { to: '/audit', label: 'Журнал аудита', permission: 'audit.view' },

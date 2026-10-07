@@ -8,6 +8,7 @@ import { AdminDictionariesController, AdminDictionariesService } from './admin-d
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
 import { AdminOrdersController, AdminOrdersService } from './admin-orders';
 import { AdminProductsController, AdminProductsService } from './admin-products';
+import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
 import { AdminSettingsController, AdminSettingsService, AuditController, StaffUsersController } from './admin-settings';
 import { AuditService } from './audit.service';
 import { DashboardController, DashboardService } from './dashboard';
@@ -26,6 +27,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     AdminInventoryController,
     AdminCustomersController,
     AdminDictionariesController,
+    AdminPurchasesController,
     AdminSettingsController,
     StaffUsersController,
     AuditController,
@@ -41,6 +43,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     AdminInventoryService,
     AdminCustomersService,
     AdminDictionariesService,
+    AdminPurchasesService,
     AdminSettingsService,
   ],
 })

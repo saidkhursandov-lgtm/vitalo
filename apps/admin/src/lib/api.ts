@@ -35,12 +35,13 @@ export function setToken(value: string | null) {
 export const hasToken = () => token !== null;
 export const setUnauthorizedHandler = (fn: () => void) => (onUnauthorized = fn);
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
+export async function api<T>(path: string, init: { method?: string; body?: unknown; form?: FormData; headers?: Record<string, string> } = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: init.method ?? 'GET',
     headers: {
       ...(init.body !== undefined && { 'content-type': 'application/json' }),
       ...(token && { authorization: `Bearer ${token}` }),
+      ...init.headers,
     },
     body: init.form ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
   });
@@ -65,6 +66,9 @@ export function qs(params: Record<string, string | number | boolean | undefined 
 
 const ERRORS: Record<string, string> = {
   FORBIDDEN_FOR_ROLE: 'У вашей роли нет прав на это действие',
+  PURCHASE_NOT_FOUND: 'Закупка с таким номером Ozon в этом аккаунте не найдена',
+  LINE_NOT_FOUND: 'Этой позиции нет в закупке',
+  IDEMPOTENCY_KEY_REUSED: 'Запрос уже отправлялся с другими данными — обновите страницу и попробуйте снова',
   UNKNOWN_DICTIONARY_VALUE: 'Значение справочника не найдено — обновите страницу',
   YANDEX_SYNC_ANSWER_REQUIRED: 'Цена Яндекса изменилась — ответьте, изменили ли вы её в Яндекс Маркете',
   COST_FORBIDDEN: 'Себестоимость и закупочную цену видит и вводит только администратор',

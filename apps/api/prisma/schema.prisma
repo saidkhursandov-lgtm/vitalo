@@ -269,6 +269,18 @@ enum TaskType {
   other
 }
 
+/// Stage 2A: where a purchase comes from.
+enum PurchaseSourceType {
+  OZON
+  SUPPLIER
+}
+
+/// Stage 2A: only two statuses; «отменена полностью» is computed from the lines, not stored.
+enum PurchaseStatus {
+  EXPECTED
+  RECEIVED
+}
+
 // ───────────── IDENTITY ─────────────
 model users {
   id               String     @id @default(uuid()) @db.Uuid
@@ -381,6 +393,8 @@ model staff_users {
   tasks            manager_tasks[]
   cancel_decisions cancel_requests[]
   notifications    notifications[]
+  purchases        purchases[]
+  purchase_events  purchase_events[]
 }
 
 model staff_sessions {
@@ -476,6 +490,7 @@ model products {
   movements     inventory_movements[]
   cart_items    cart_items[]
   order_items   order_items[]
+  purchase_lines purchase_lines[]
   favorites     favorites[]
   promo_targets promotion_targets[]
   block_items   content_block_items[]
@@ -529,6 +544,94 @@ model forms {
   created_at DateTime     @default(now())
   updated_at DateTime     @updatedAt
   products   products[]
+}
+
+// ───────────── PURCHASES (Stage 2A) ─────────────
+/// Suppliers (e.g. Glorious Health Nutrition). Unique name ignoring case and spaces; never deleted, only archived.
+model suppliers {
+  id         String       @id @default(uuid()) @db.Uuid
+  name       String
+  status     EntityStatus @default(active)
+  note       String?
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  purchases  purchases[]
+}
+
+/// Ozon accounts the goods are bought from. Same rules as suppliers.
+model ozon_accounts {
+  id         String       @id @default(uuid()) @db.Uuid
+  name       String
+  status     EntityStatus @default(active)
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+  purchases  purchases[]
+}
+
+/// A purchase is never deleted. OZON: ozon_account_id + ozon_order_number required (unique pair);
+/// SUPPLIER: supplier_id required (CHECK in the migration). Money: whole UZS.
+model purchases {
+  id                     String             @id @default(uuid()) @db.Uuid
+  source_type            PurchaseSourceType
+  ozon_account_id        String?            @db.Uuid
+  supplier_id            String?            @db.Uuid
+  ozon_order_number      String?
+  purchase_date          DateTime           @db.Date
+  final_actual_total_uzs BigInt? // what was really paid; null = the line prices are used
+  status                 PurchaseStatus     @default(EXPECTED)
+  comment                String?
+  created_by             String?            @db.Uuid
+  created_at             DateTime           @default(now())
+  updated_at             DateTime           @updatedAt
+
+  ozon_account ozon_accounts?    @relation(fields: [ozon_account_id], references: [id])
+  supplier     suppliers?        @relation(fields: [supplier_id], references: [id])
+  staff        staff_users?      @relation(fields: [created_by], references: [id])
+  lines        purchase_lines[]
+  events       purchase_events[]
+
+  @@index([source_type, purchase_date])
+  @@index([ozon_account_id, ozon_order_number])
+  @@index([supplier_id])
+}
+
+/// Remaining to receive = max(0, ordered - cancelled - received): computed, never stored.
+model purchase_lines {
+  id                      String   @id @default(uuid()) @db.Uuid
+  purchase_id             String   @db.Uuid
+  product_id              String   @db.Uuid
+  ordered_qty             Int
+  cancelled_qty           Int      @default(0)
+  received_qty            Int      @default(0) // may exceed ordered (more arrived than expected)
+  unit_price_original_uzs BigInt
+  allocated_total_uzs     BigInt? // line total after spreading the final actual total (see purchase-cost.ts)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  purchase purchases @relation(fields: [purchase_id], references: [id])
+  product  products  @relation(fields: [product_id], references: [id])
+
+  @@unique([purchase_id, product_id])
+  @@index([product_id])
+}
+
+/// Append-only history of a purchase (a trigger forbids UPDATE and DELETE).
+model purchase_events {
+  id               String          @id @default(uuid()) @db.Uuid
+  purchase_id      String          @db.Uuid
+  purchase_line_id String?         @db.Uuid // no foreign key on purpose: a removed line keeps its history
+  type             String // CREATED | EDITED | FINAL_TOTAL_SET | LINE_ADDED | LINE_EDITED | LINE_REMOVED | CANCELLED | RECALCULATED
+  qty              Int?
+  before_json      Json?
+  after_json       Json?
+  note             String?
+  created_by       String?         @db.Uuid
+  created_at       DateTime        @default(now())
+
+  purchase purchases    @relation(fields: [purchase_id], references: [id])
+  staff    staff_users? @relation(fields: [created_by], references: [id])
+
+  @@index([purchase_id, created_at])
 }
 
 model product_categories {

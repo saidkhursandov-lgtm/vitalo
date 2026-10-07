@@ -4,18 +4,31 @@ import { useSession } from '../lib/auth';
 import { ErrorBox } from './ui';
 
 export type DictionaryKind = 'brands' | 'manufacturers' | 'countries' | 'forms';
-export const DICTIONARY_LABELS: Record<DictionaryKind, string> = { brands: 'Бренды', manufacturers: 'Производители', countries: 'Страны', forms: 'Формы' };
+/** Stage 2A: dictionaries of purchases (no UZ name; `products` = number of purchases). */
+export type PurchaseDictionaryKind = 'suppliers' | 'ozon_accounts';
+export type AnyDictionaryKind = DictionaryKind | PurchaseDictionaryKind;
+export const DICTIONARY_LABELS: Record<AnyDictionaryKind, string> = {
+  brands: 'Бренды',
+  manufacturers: 'Производители',
+  countries: 'Страны',
+  forms: 'Формы',
+  suppliers: 'Поставщики',
+  ozon_accounts: 'Ozon-аккаунты',
+};
+export const isPurchaseDictionary = (k: AnyDictionaryKind): k is PurchaseDictionaryKind => k === 'suppliers' || k === 'ozon_accounts';
 
 export interface DictionaryValue {
   id: string;
   name_ru: string;
   name_uz: string | null;
   status: 'active' | 'archived';
+  /** how many products (or, for suppliers and Ozon accounts, purchases) use the value */
   products: number;
+  note?: string | null;
 }
 
-export const dictionaryKey = (kind: DictionaryKind) => ['dictionary', kind] as const;
-export const useDictionary = (kind: DictionaryKind) =>
+export const dictionaryKey = (kind: AnyDictionaryKind) => ['dictionary', kind] as const;
+export const useDictionary = (kind: AnyDictionaryKind) =>
   useQuery({ queryKey: dictionaryKey(kind), queryFn: () => api<DictionaryValue[]>(`/staff/dictionaries/${kind}?include_archived=true`) });
 
 const ADD = '__add__';
