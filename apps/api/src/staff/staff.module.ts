@@ -15,10 +15,13 @@ import { DashboardController, DashboardService } from './dashboard';
 import { StaffAuthService, StaffGuard } from './staff-auth';
 import { StaffAuthController } from './staff.controllers';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { InventoryModule } from '../inventory/inventory.module';
+import { AdminReceivingController, AdminReceivingService } from '../receiving/admin-receiving';
+import { AdminUnitsController, AdminUnitsService } from '../receiving/admin-units';
 
 /** Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions. */
 @Module({
-  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule],
+  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule],
   controllers: [
     StaffAuthController,
     DashboardController,
@@ -28,6 +31,8 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     AdminCustomersController,
     AdminDictionariesController,
     AdminPurchasesController,
+    AdminReceivingController,
+    AdminUnitsController,
     AdminSettingsController,
     StaffUsersController,
     AuditController,
@@ -44,6 +49,8 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     AdminCustomersService,
     AdminDictionariesService,
     AdminPurchasesService,
+    AdminReceivingService,
+    AdminUnitsService,
     AdminSettingsService,
   ],
 })

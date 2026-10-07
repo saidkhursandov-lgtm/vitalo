@@ -8,6 +8,7 @@ import type { StaffRole } from '@prisma/client';
  * - warehouse: stock, picking (Paid -> Picking -> Handed to delivery);
  * - marketer: read-only catalog and dashboard funnel (promotions/newsletters come in later stages).
  * Money that is not for everyone: purchase cost (costs.view, admin only) and revenue (dashboard.revenue).
+ * Stage 2B: receiving and units for admin, manager, warehouse — without unit costs, purchase prices and Ozon order numbers.
  */
 export const PERMISSIONS = {
   'dashboard.view': ['manager', 'marketer'],
@@ -33,7 +34,12 @@ export const PERMISSIONS = {
   'yandex.price.sync': ['manager'], // «Отметить синхронизированной»
   'purchases.view': ['manager'], // Stage 2A: list and cards of purchases (quantities only)
   'purchases.manage': [], // create, edit, Ozon cancellation
-  'purchases.view_costs': [], // unit prices, totals, final actual total, allocated costs
+  'purchases.view_costs': [], // unit prices, totals, final actual total, allocated costs; unit cost and purchase of a unit
+  'receiving.perform': ['manager', 'warehouse'], // Stage 2B: «Приёмка» by purchase (no prices, no Ozon order numbers)
+  'units.view': ['manager', 'warehouse'], // Stage 2B: «Единицы», «Сверка», label printing
+  'receiving.opening': [], // opening balance: complete / cancel its session (the import itself is a CLI script)
+  'inventory.unit_override': [], // old quantity operations on a unit-tracked product (with a reason)
+  'products.label': ['manager'], // short composition RU/UZ for the label
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

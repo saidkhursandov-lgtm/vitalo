@@ -32,6 +32,10 @@ interface AdminProduct {
   category_ids: string[];
   media: { id: string; url: string; is_main: boolean; type: string }[];
   stock: { warehouse: { name: string }; actual_qty: number; reserved_qty: number; available_qty: number }[];
+  // Stage 2B
+  unit_tracking?: boolean;
+  label_composition_ru?: string | null;
+  label_composition_uz?: string | null;
   [text: string]: unknown;
 }
 
@@ -370,6 +374,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         ))}
       </section>
 
+      {product && <LabelCard product={product} />}
       {product ? <Photos product={product} editable={editable} /> : <p className="muted">Фото можно добавить после первого сохранения.</p>}
     </form>
   );
@@ -388,6 +393,59 @@ function CategoryChecks({ nodes, selected, disabled, onToggle, depth = 0 }: { no
         </div>
       ))}
     </>
+  );
+}
+
+/** Stage 2B: short composition RU / UZ printed on the 75×120 label (admin and manager); unit tracking is shown only. */
+function LabelCard({ product }: { product: AdminProduct }) {
+  const { can } = useSession();
+  const editable = can('products.label');
+  const client = useQueryClient();
+  const [ru, setRu] = useState(product.label_composition_ru ?? '');
+  const [uz, setUz] = useState(product.label_composition_uz ?? '');
+  const [saved, setSaved] = useState(false);
+  const m = useMutation({
+    mutationFn: () => api<AdminProduct>(`/staff/products/${product.id}/label`, { method: 'PATCH', body: { label_composition_ru: ru, label_composition_uz: uz } }),
+    onSuccess: (p) => {
+      client.setQueryData(['product', p.id], p);
+      setSaved(true);
+    },
+  });
+  return (
+    <section className="card">
+      <div className="section-head">
+        <h2>Этикетка 75×120</h2>
+        <span>
+          Учёт по единицам: {product.unit_tracking ? <Badge tone="info">да</Badge> : <Badge>нет</Badge>}
+        </span>
+      </div>
+      {!product.label_composition_ru || !product.label_composition_uz ? (
+        <div className="alert alert-warn">Короткий состав не заполнен — этикетка напечатается без него.</div>
+      ) : null}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setSaved(false);
+          m.mutate();
+        }}
+      >
+        <div className="form-grid">
+          <Field label="Короткий состав для этикетки (RU)" hint={`До 300 символов, сейчас ${ru.length}. Полный состав — в «Тексты карточки».`}>
+            <textarea rows={3} maxLength={300} value={ru} disabled={!editable} onChange={(e) => setRu(e.target.value)} />
+          </Field>
+          <Field label="Короткий состав для этикетки (UZ)" hint={`Tarkibi, до 300 символов, сейчас ${uz.length}. Буквы o‘ и g‘ печатаются.`}>
+            <textarea rows={3} maxLength={300} value={uz} disabled={!editable} onChange={(e) => setUz(e.target.value)} />
+          </Field>
+        </div>
+        <ErrorBox error={m.error} />
+        {saved && <div className="alert alert-ok">Состав для этикетки сохранён</div>}
+        {editable && (
+          <button className="btn" disabled={m.isPending}>
+            Сохранить состав для этикетки
+          </button>
+        )}
+      </form>
+    </section>
   );
 }
 

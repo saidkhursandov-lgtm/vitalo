@@ -68,6 +68,15 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'write off stock', method: 'post', path: () => '/api/staff/inventory/writeoff', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'adjust stock', method: 'post', path: () => '/api/staff/inventory/adjustment', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'return to stock', method: 'post', path: () => '/api/staff/inventory/return', body: {}, allowed: ['admin', 'warehouse'] },
+    { label: 'see receiving sources', method: 'get', path: () => '/api/staff/receiving/sources', allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'start a receiving', method: 'post', path: () => '/api/staff/receiving/sessions', body: {}, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'open a receiving', method: 'get', path: () => `/api/staff/receiving/sessions/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'accept units', method: 'post', path: () => `/api/staff/receiving/sessions/${MISSING}/accept`, body: {}, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'list units', method: 'get', path: () => '/api/staff/units', allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'open a unit', method: 'get', path: () => `/api/staff/units/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'reconcile units', method: 'get', path: () => '/api/staff/units/reconcile', allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'print labels', method: 'post', path: () => '/api/staff/units/labels', body: {}, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'edit the label composition', method: 'patch', path: () => `/api/staff/products/${MISSING}/label`, body: { label_composition_ru: 5 }, allowed: ['admin', 'manager'] },
     { label: 'list customers', method: 'get', path: () => '/api/staff/customers', allowed: ['admin', 'manager'] },
     { label: 'block a customer', method: 'post', path: () => `/api/staff/customers/${customerId}/block`, body: {}, allowed: ['admin', 'manager'] },
     { label: 'see bank transfer settings', method: 'get', path: () => '/api/staff/settings/bank-transfer', allowed: ['admin'] },
@@ -129,7 +138,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
   it('GET /staff/auth/me lists exactly the permissions of the role', async () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
     expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'yandex.price.view']);
-    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit']);
+    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view']);
     expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
     expect((await me('manager')).permissions).toContain('dashboard.revenue');
     expect((await me('manager')).permissions).not.toContain('costs.view');

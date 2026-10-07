@@ -28,7 +28,12 @@ export type Permission =
   | 'yandex.price.sync'
   | 'purchases.view'
   | 'purchases.manage'
-  | 'purchases.view_costs';
+  | 'purchases.view_costs'
+  | 'receiving.perform'
+  | 'units.view'
+  | 'receiving.opening'
+  | 'inventory.unit_override'
+  | 'products.label';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };

@@ -139,6 +139,12 @@ export class ProductInput {
 
 export class ProductPatch extends PartialType(ProductInput) {}
 
+/** Stage 2B: short composition for the 75×120 label (admin and manager). Empty = not filled. */
+export class ProductLabelDto {
+  @ApiPropertyOptional({ nullable: true, maxLength: 300 }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) label_composition_ru?: string | null;
+  @ApiPropertyOptional({ nullable: true, maxLength: 300 }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) label_composition_uz?: string | null;
+}
+
 export class StaffProductsQuery extends PageQuery {
   @ApiPropertyOptional({ description: 'SKU, название или бренд' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100) q?: string;
   @ApiPropertyOptional({ enum: ProductStatus }) @IsOptional() @IsEnum(ProductStatus) status?: ProductStatus;
@@ -400,6 +406,30 @@ export class AdminProductsService {
     return this.get(id);
   }
 
+  /** Stage 2B: «Короткий состав для этикетки» RU / UZ. */
+  async updateLabel(staffId: string, id: string, dto: ProductLabelDto) {
+    await this.write(async (tx) => {
+      const before = await tx.products.findUnique({ where: { id } });
+      if (!before) throw new NotFoundException('Product not found');
+      const data: Prisma.productsUpdateInput = {};
+      if (dto.label_composition_ru !== undefined) data.label_composition_ru = dto.label_composition_ru;
+      if (dto.label_composition_uz !== undefined) data.label_composition_uz = dto.label_composition_uz;
+      await tx.products.update({ where: { id }, data });
+      await this.audit.log(
+        {
+          staffId,
+          action: 'product.label_updated',
+          entityType: 'product',
+          entityId: id,
+          before: { label_composition_ru: before.label_composition_ru, label_composition_uz: before.label_composition_uz },
+          after: data,
+        },
+        tx,
+      );
+    });
+    return this.get(id);
+  }
+
   /**
    * Stage 1.1: a chosen dictionary value overwrites the product's text column with its name (the Mini App
    * reads the text). An archived value may stay on a product but cannot be chosen anew. A text changed without
@@ -512,6 +542,12 @@ export class AdminProductsController {
   @RequirePermission('yandex.price.sync')
   async markYandexSynced(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
     return forViewer(me.staff.role, await this.products.markYandexSynced(me.staff.id, id));
+  }
+
+  @Patch(':id/label')
+  @RequirePermission('products.label')
+  async updateLabel(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ProductLabelDto) {
+    return forViewer(me.staff.role, await this.products.updateLabel(me.staff.id, id, dto));
   }
 
   @Post(':id/archive')

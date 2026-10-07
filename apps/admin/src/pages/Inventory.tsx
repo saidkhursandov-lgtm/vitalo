@@ -1,17 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { CONDITION, dateTime, MOVEMENT } from '../lib/format';
 import { CloseIcon } from '../components/Icons';
+import { Receiving, Reconcile, Units } from './Receiving';
 
 interface StockRow {
   product_id: string;
   sku: string;
   name_ru: string;
   min_stock: number;
+  unit_tracking: boolean;
   actual_qty: number;
   reserved_qty: number;
   available_qty: number;
@@ -22,30 +24,50 @@ interface StockRow {
 type Op = 'receipt' | 'writeoff' | 'adjustment' | 'return';
 const OP_TITLE: Record<Op, string> = { receipt: 'Приход', writeoff: 'Списание', adjustment: 'Корректировка (пересчёт)', return: 'Возврат на склад' };
 
+/** «Склад» tabs; Приёмка / Единицы / Сверка (stage 2B) only with their permissions. */
+const TABS = [
+  ['stock', 'Остатки', null],
+  ['movements', 'История движений', null],
+  ['receiving', 'Приёмка', 'receiving.perform'],
+  ['units', 'Единицы', 'units.view'],
+  ['reconcile', 'Сверка', 'units.view'],
+] as const;
+
 export function Inventory() {
   const { can } = useSession();
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'movements' ? 'movements' : 'stock';
-  const setTab = (t: string) => setParams(t === 'movements' ? { tab: t } : {}, { replace: true });
+  const tabs = TABS.filter(([, , perm]) => !perm || can(perm));
+  const tab = tabs.find(([t]) => t === params.get('tab'))?.[0] ?? 'stock';
+  const setTab = (t: string) => setParams(t === 'stock' ? {} : { tab: t }, { replace: true });
 
   return (
     <>
       <PageHead title="Склад">
         <div className="segmented">
-          <button className={tab === 'stock' ? 'is-on' : ''} onClick={() => setTab('stock')}>
-            Остатки
-          </button>
-          <button className={tab === 'movements' ? 'is-on' : ''} onClick={() => setTab('movements')}>
-            История движений
-          </button>
+          {tabs.map(([t, label]) => (
+            <button key={t} className={tab === t ? 'is-on' : ''} onClick={() => setTab(t)}>
+              {label}
+            </button>
+          ))}
         </div>
       </PageHead>
-      {tab === 'stock' ? <Stock editable={can('inventory.edit')} /> : <Movements />}
+      {tab === 'stock' ? (
+        <Stock editable={can('inventory.edit')} />
+      ) : tab === 'movements' ? (
+        <Movements />
+      ) : tab === 'receiving' ? (
+        <Receiving />
+      ) : tab === 'units' ? (
+        <Units />
+      ) : (
+        <Reconcile />
+      )}
     </>
   );
 }
 
 function Stock({ editable }: { editable: boolean }) {
+  const overrideAllowed = useSession().can('inventory.unit_override');
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState(params.get('q') ?? '');
   const lowOnly = params.get('low_only') === 'true';
@@ -101,14 +123,18 @@ function Stock({ editable }: { editable: boolean }) {
                 <tr key={r.product_id} className={r.low ? 'row-warn' : ''}>
                   <td>
                     <Link to={`/products/${r.product_id}`}>{r.name_ru}</Link>
-                    <div className="muted small">{r.sku}</div>
+                    <div className="muted small">
+                      {r.sku} {r.unit_tracking && <Badge tone="info">по единицам</Badge>}
+                    </div>
                   </td>
                   <td className="num">{r.actual_qty}</td>
                   <td className="num">{r.reserved_qty}</td>
                   <td className={`num strong ${r.available_qty <= 0 ? 'text-bad' : r.low ? 'text-warn' : ''}`}>{r.available_qty}</td>
                   <td className="num">{r.min_stock}</td>
                   <td className="ops">
+                    {editable && r.unit_tracking && !overrideAllowed && <span className="muted small">Приход — через «Приёмка» </span>}
                     {editable &&
+                      (!r.unit_tracking || overrideAllowed) &&
                       (Object.keys(OP_TITLE) as Op[]).map((k) => (
                         <button key={k} className="btn btn-sm btn-ghost" onClick={() => setOp({ kind: k, row: r })}>
                           {OP_TITLE[k].split(' ')[0]}
@@ -138,13 +164,19 @@ function OperationModal({ kind, row, onClose }: { kind: Op; row: StockRow; onClo
   const { can } = useSession();
   const showCost = can('costs.view'); // purchase price: admin only
   const warehouses = useQuery({ queryKey: ['warehouses'], queryFn: () => api<{ id: string; name: string }[]>('/staff/inventory/warehouses') });
-  const [f, setF] = useState({ warehouse_id: '', qty: '', actual_qty: '', reason: '', comment: '', cost_uzs: '', batch_no: '', expiry_date: '', condition: 'resellable' });
+  const [f, setF] = useState({ warehouse_id: '', qty: '', actual_qty: '', reason: '', comment: '', cost_uzs: '', batch_no: '', expiry_date: '', condition: 'resellable', override_reason: '' });
+  const [override, setOverride] = useState(false);
   const warehouseId = f.warehouse_id || warehouses.data?.[0]?.id || '';
   const current = row.warehouses.find((w) => w.warehouse.id === warehouseId);
 
   const m = useMutation({
     mutationFn: () => {
-      const base = { product_id: row.product_id, warehouse_id: warehouseId, comment: f.comment || undefined };
+      const base = {
+        product_id: row.product_id,
+        warehouse_id: warehouseId,
+        comment: f.comment || undefined,
+        ...(row.unit_tracking && { override_unit_tracking: override, override_reason: f.override_reason.trim() || undefined }),
+      };
       const body =
         kind === 'receipt'
           ? { ...base, qty: toInt(f.qty), cost_uzs: showCost ? toInt(f.cost_uzs) : undefined, batch_no: f.batch_no || undefined, expiry_date: f.expiry_date || undefined }
@@ -226,12 +258,23 @@ function OperationModal({ kind, row, onClose }: { kind: Op; row: StockRow; onClo
         <Field label="Комментарий">
           <input value={f.comment} onChange={(e) => set('comment', e.target.value)} />
         </Field>
+        {row.unit_tracking && (
+          <div className="alert alert-warn" style={{ display: 'block' }}>
+            <p>Товар учитывается по единицам: обычно остаток меняется только через «Приёмка». Операция в обход учёта может развести единицы и остаток (это покажет «Сверка»).</p>
+            <label className="check">
+              <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> Понимаю, провести в обход учёта по единицам
+            </label>
+            <Field label="Причина обхода (обязательно)">
+              <input value={f.override_reason} onChange={(e) => set('override_reason', e.target.value)} required={override} />
+            </Field>
+          </div>
+        )}
         <ErrorBox error={m.error} />
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Отмена
           </button>
-          <button type="submit" className="btn" disabled={m.isPending || !warehouseId}>
+          <button type="submit" className="btn" disabled={m.isPending || !warehouseId || (row.unit_tracking && !override)}>
             Провести
           </button>
         </div>

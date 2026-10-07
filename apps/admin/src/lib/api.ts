@@ -57,6 +57,9 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return body as T;
 }
 
+/** Idempotency-Key for one attempt (randomUUID needs https or localhost; the fallback is unique enough). */
+export const newKey = () => (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
 export function qs(params: Record<string, string | number | boolean | undefined | null>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '' && v !== false) sp.set(k, String(v));
@@ -91,6 +94,23 @@ const ERRORS: Record<string, string> = {
   DELIVERY_UNAVAILABLE: 'Нет тарифа доставки для этого города',
   STAFF_EXISTS: 'Сотрудник с таким Telegram ID уже есть',
   CANNOT_CHANGE_SELF: 'Нельзя менять свою роль или блокировать себя',
+  UNIT_TRACKED: 'Товар учитывается по единицам: используйте «Приёмка»',
+  OVERRIDE_REASON_REQUIRED: 'Укажите причину: операция в обход учёта по единицам',
+  SESSION_NOT_OPEN: 'Эта приёмка уже завершена или отменена — обновите страницу',
+  SESSION_CANCELLED: 'Эта приёмка отменена',
+  SESSION_EMPTY: 'В приёмке нет принятых единиц — сначала создайте Physical ID',
+  SESSION_NOT_FOUND: 'Приёмка не найдена',
+  NOT_EXPECTED: 'Этого товара нет в ожидаемых закупках выбранного источника',
+  EXPIRY_IN_PAST: 'Срок годности уже прошёл — такой товар не принимаем',
+  EXPIRY_INVALID: 'Срок годности: введите дату как ДД.ММ.ГГГГ',
+  EXPIRY_QTY_MISMATCH: 'Сумма количеств по срокам годности должна быть равна принятому количеству',
+  BAD_PHYSICAL_ID: 'Это не Physical ID: введите, например, V-000184 или 184',
+  UNIT_NOT_FOUND: 'Единица с таким Physical ID не найдена',
+  UNIT_VOIDED: 'Отменённые единицы не печатаются',
+  LINE_HAS_UNITS: 'По этой строке идёт приёмка (созданы Physical ID) — убрать её нельзя',
+  NO_MAIN_WAREHOUSE: 'Не удалось определить основной склад (Ташкент)',
+  SOURCE_REQUIRED: 'Выберите один источник: Ozon-аккаунт или поставщика',
+  UNKNOWN_SOURCE: 'Источник не найден или в архиве',
 };
 
 /** Russian text for an API error (validation messages are shown as they come). */

@@ -281,6 +281,39 @@ enum PurchaseStatus {
   RECEIVED
 }
 
+/// Stage 2B: life of one physical jar. 2B uses RECEIVED, IN_STOCK, VOIDED; the rest are for the next stages.
+enum PhysicalUnitStatus {
+  RECEIVED
+  IN_STOCK
+  ASSIGNED
+  YANDEX_DELIVERY
+  YANDEX_SOLD
+  VITALO_DELIVERY
+  VITALO_SOLD
+  RETURNED
+  MISSING
+  WRITTEN_OFF
+  VOIDED
+
+  @@map("physical_unit_status")
+}
+
+/// Stage 2B: receiving by purchase (Ozon account / supplier) or the opening balance (stock count sheet).
+enum ReceivingSessionType {
+  PURCHASE
+  OPENING_BALANCE
+
+  @@map("receiving_session_type")
+}
+
+enum ReceivingSessionStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+
+  @@map("receiving_session_status")
+}
+
 // ───────────── IDENTITY ─────────────
 model users {
   id               String     @id @default(uuid()) @db.Uuid
@@ -395,6 +428,8 @@ model staff_users {
   notifications    notifications[]
   purchases        purchases[]
   purchase_events  purchase_events[]
+  receiving        receiving_sessions[]
+  unit_events      physical_unit_events[]
 }
 
 model staff_sessions {
@@ -476,24 +511,32 @@ model products {
   yandex_price_sync_needed     Boolean   @default(false) // the price was changed here but not on Yandex Market yet
   yandex_price_sync_changed_at DateTime?
 
+  // Stage 2B: physical units. unit_tracking is set when the opening balance session is completed; after that the
+  // old quantity operations (receipt, write-off, adjustment, return) are closed for the product.
+  unit_tracking        Boolean @default(false)
+  label_composition_ru String? // short composition for the 75×120 label (not the full one from the card)
+  label_composition_uz String?
+
   brand_entry        brands?        @relation(fields: [brand_id], references: [id])
   manufacturer_entry manufacturers? @relation(fields: [manufacturer_id], references: [id])
   country_entry      countries?     @relation(fields: [country_id], references: [id])
   form_entry         forms?         @relation(fields: [form_id], references: [id])
 
-  categories    product_categories[]
-  media         product_media[]
-  relations     product_relations[]   @relation("RelMain")
-  related_to    product_relations[]   @relation("RelOther")
-  inventory     inventory[]
-  batches       inventory_batches[]
-  movements     inventory_movements[]
-  cart_items    cart_items[]
-  order_items   order_items[]
-  purchase_lines purchase_lines[]
-  favorites     favorites[]
-  promo_targets promotion_targets[]
-  block_items   content_block_items[]
+  categories      product_categories[]
+  media           product_media[]
+  relations       product_relations[]       @relation("RelMain")
+  related_to      product_relations[]       @relation("RelOther")
+  inventory       inventory[]
+  batches         inventory_batches[]
+  movements       inventory_movements[]
+  cart_items      cart_items[]
+  order_items     order_items[]
+  purchase_lines  purchase_lines[]
+  physical_units  physical_units[]
+  receiving_lines receiving_session_lines[]
+  favorites       favorites[]
+  promo_targets   promotion_targets[]
+  block_items     content_block_items[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -549,23 +592,25 @@ model forms {
 // ───────────── PURCHASES (Stage 2A) ─────────────
 /// Suppliers (e.g. Glorious Health Nutrition). Unique name ignoring case and spaces; never deleted, only archived.
 model suppliers {
-  id         String       @id @default(uuid()) @db.Uuid
+  id         String               @id @default(uuid()) @db.Uuid
   name       String
-  status     EntityStatus @default(active)
+  status     EntityStatus         @default(active)
   note       String?
-  created_at DateTime     @default(now())
-  updated_at DateTime     @updatedAt
+  created_at DateTime             @default(now())
+  updated_at DateTime             @updatedAt
   purchases  purchases[]
+  receiving  receiving_sessions[]
 }
 
 /// Ozon accounts the goods are bought from. Same rules as suppliers.
 model ozon_accounts {
-  id         String       @id @default(uuid()) @db.Uuid
+  id         String               @id @default(uuid()) @db.Uuid
   name       String
-  status     EntityStatus @default(active)
-  created_at DateTime     @default(now())
-  updated_at DateTime     @updatedAt
+  status     EntityStatus         @default(active)
+  created_at DateTime             @default(now())
+  updated_at DateTime             @updatedAt
   purchases  purchases[]
+  receiving  receiving_sessions[]
 }
 
 /// A purchase is never deleted. OZON: ozon_account_id + ozon_order_number required (unique pair);
@@ -584,11 +629,13 @@ model purchases {
   created_at             DateTime           @default(now())
   updated_at             DateTime           @updatedAt
 
-  ozon_account ozon_accounts?    @relation(fields: [ozon_account_id], references: [id])
-  supplier     suppliers?        @relation(fields: [supplier_id], references: [id])
-  staff        staff_users?      @relation(fields: [created_by], references: [id])
+  ozon_account ozon_accounts?       @relation(fields: [ozon_account_id], references: [id])
+  supplier     suppliers?           @relation(fields: [supplier_id], references: [id])
+  staff        staff_users?         @relation(fields: [created_by], references: [id])
   lines        purchase_lines[]
   events       purchase_events[]
+  units        physical_units[]
+  receiving    receiving_sessions[]
 
   @@index([source_type, purchase_date])
   @@index([ozon_account_id, ozon_order_number])
@@ -605,28 +652,126 @@ model purchase_lines {
   received_qty            Int      @default(0) // may exceed ordered (more arrived than expected)
   unit_price_original_uzs BigInt
   allocated_total_uzs     BigInt? // line total after spreading the final actual total (see purchase-cost.ts)
+  position                Int // order of input (1, 2, …): the order of lines everywhere and the rounding tie-break
   created_at              DateTime @default(now())
   updated_at              DateTime @updatedAt
 
-  purchase purchases @relation(fields: [purchase_id], references: [id])
-  product  products  @relation(fields: [product_id], references: [id])
+  purchase        purchases                 @relation(fields: [purchase_id], references: [id])
+  product         products                  @relation(fields: [product_id], references: [id])
+  physical_units  physical_units[]
+  receiving_lines receiving_session_lines[]
 
   @@unique([purchase_id, product_id])
+  @@unique([purchase_id, position])
   @@index([product_id])
+}
+
+// ───────────── PHYSICAL UNITS AND RECEIVING (Stage 2B) ─────────────
+/// One physical jar with its own label. physical_id = «V-» + seq with zeros to 6 digits (V-000184); seq comes from
+/// the Postgres sequence physical_unit_seq (gaps after a rollback are fine, a number is never reused).
+/// Never deleted (trigger); physical_id and seq never change (trigger).
+model physical_units {
+  id                   String             @id @default(uuid()) @db.Uuid
+  physical_id          String             @unique
+  seq                  Int                @unique
+  product_id           String             @db.Uuid
+  purchase_id          String?            @db.Uuid
+  purchase_line_id     String?            @db.Uuid
+  receiving_session_id String             @db.Uuid
+  actual_cost_uzs      BigInt
+  expiry_date          DateTime           @db.Date
+  status               PhysicalUnitStatus @default(RECEIVED)
+  label_print_count    Int                @default(0)
+  last_printed_at      DateTime?
+  created_at           DateTime           @default(now())
+  updated_at           DateTime           @updatedAt
+
+  product           products               @relation(fields: [product_id], references: [id])
+  purchase          purchases?             @relation(fields: [purchase_id], references: [id])
+  purchase_line     purchase_lines?        @relation(fields: [purchase_line_id], references: [id])
+  receiving_session receiving_sessions     @relation(fields: [receiving_session_id], references: [id])
+  events            physical_unit_events[]
+
+  @@index([product_id, status, expiry_date, seq]) // FEFO later: the earliest expiry first
+  @@index([status])
+  @@index([receiving_session_id])
+  @@index([purchase_line_id])
+}
+
+/// Append-only history of a unit (a trigger forbids UPDATE and DELETE).
+model physical_unit_events {
+  id               String              @id @default(uuid()) @db.Uuid
+  physical_unit_id String              @db.Uuid
+  type             String // CREATED | IN_STOCK | LABEL_PRINTED | VOIDED | COST_CHANGED
+  from_status      PhysicalUnitStatus?
+  to_status        PhysicalUnitStatus?
+  reference_type   String? // receiving_session
+  reference_id     String?             @db.Uuid
+  note             String?
+  created_by       String?             @db.Uuid
+  created_at       DateTime            @default(now())
+
+  unit  physical_units @relation(fields: [physical_unit_id], references: [id])
+  staff staff_users?   @relation(fields: [created_by], references: [id])
+
+  @@index([physical_unit_id, created_at])
+}
+
+/// One receiving: PURCHASE (by Ozon account or supplier) or OPENING_BALANCE (the stock count sheet).
+/// At most one OPEN session per source and one OPEN opening balance: partial unique indexes in the migration.
+model receiving_sessions {
+  id              String                 @id @default(uuid()) @db.Uuid
+  type            ReceivingSessionType
+  purchase_id     String?                @db.Uuid
+  ozon_account_id String?                @db.Uuid
+  supplier_id     String?                @db.Uuid
+  status          ReceivingSessionStatus @default(OPEN)
+  created_by      String?                @db.Uuid
+  created_at      DateTime               @default(now())
+  completed_at    DateTime?
+  completion_key  String?                @unique
+
+  purchase     purchases?                @relation(fields: [purchase_id], references: [id])
+  ozon_account ozon_accounts?            @relation(fields: [ozon_account_id], references: [id])
+  supplier     suppliers?                @relation(fields: [supplier_id], references: [id])
+  staff        staff_users?              @relation(fields: [created_by], references: [id])
+  lines        receiving_session_lines[]
+  units        physical_units[]
+
+  @@index([status, created_at])
+}
+
+/// What was accepted in a session: per purchase line (or per product for the opening balance).
+model receiving_session_lines {
+  id                 String   @id @default(uuid()) @db.Uuid
+  session_id         String   @db.Uuid
+  product_id         String   @db.Uuid
+  purchase_line_id   String?  @db.Uuid
+  qty                Int
+  expiry_date_groups Json // [{ "expiry": "YYYY-MM-DD", "qty": n }]
+  discrepancy_qty    Int? // accepted above what was still expected
+  created_at         DateTime @default(now())
+
+  session       receiving_sessions @relation(fields: [session_id], references: [id])
+  product       products           @relation(fields: [product_id], references: [id])
+  purchase_line purchase_lines?    @relation(fields: [purchase_line_id], references: [id])
+
+  @@index([session_id])
+  @@index([purchase_line_id])
 }
 
 /// Append-only history of a purchase (a trigger forbids UPDATE and DELETE).
 model purchase_events {
-  id               String          @id @default(uuid()) @db.Uuid
-  purchase_id      String          @db.Uuid
-  purchase_line_id String?         @db.Uuid // no foreign key on purpose: a removed line keeps its history
+  id               String   @id @default(uuid()) @db.Uuid
+  purchase_id      String   @db.Uuid
+  purchase_line_id String?  @db.Uuid // no foreign key on purpose: a removed line keeps its history
   type             String // CREATED | EDITED | FINAL_TOTAL_SET | LINE_ADDED | LINE_EDITED | LINE_REMOVED | CANCELLED | RECALCULATED
   qty              Int?
   before_json      Json?
   after_json       Json?
   note             String?
-  created_by       String?         @db.Uuid
-  created_at       DateTime        @default(now())
+  created_by       String?  @db.Uuid
+  created_at       DateTime @default(now())
 
   purchase purchases    @relation(fields: [purchase_id], references: [id])
   staff    staff_users? @relation(fields: [created_by], references: [id])

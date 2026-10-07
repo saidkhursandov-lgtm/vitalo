@@ -101,6 +101,13 @@ export const AUDIT_ACTION: Record<string, string> = {
   'staff.created': 'Добавлен сотрудник',
   'staff.updated': 'Изменён сотрудник',
   'staff.sessions_revoked': 'Сессии сотрудника отозваны',
+  'product.label_updated': 'Изменён состав для этикетки',
+  'receiving.started': 'Начата приёмка',
+  'receiving.accepted': 'Приняты единицы (Physical ID)',
+  'receiving.completed': 'Приёмка завершена',
+  'receiving.cancelled': 'Приёмка отменена',
+  'receiving.opening_imported': 'Загружен начальный остаток (единицы)',
+  'inventory.unit_tracking_override': 'Операция в обход учёта по единицам',
 };
 
 export const PAYMENT_METHOD: Record<string, string> = {
@@ -110,3 +117,29 @@ export const PAYMENT_METHOD: Record<string, string> = {
   click: 'Click',
   uzum: 'Uzum',
 };
+
+/** Stage 2B: statuses of a physical unit. */
+export const UNIT_STATUS: Record<string, string> = {
+  RECEIVED: 'Принята (не завершена)',
+  IN_STOCK: 'На складе',
+  ASSIGNED: 'Назначена заказу',
+  YANDEX_DELIVERY: 'Доставка Яндекс',
+  YANDEX_SOLD: 'Продана (Яндекс)',
+  VITALO_DELIVERY: 'Доставка VITALO',
+  VITALO_SOLD: 'Продана (VITALO)',
+  RETURNED: 'Возвращена',
+  MISSING: 'Не найдена',
+  WRITTEN_OFF: 'Списана',
+  VOIDED: 'Отменена',
+};
+
+export const UNIT_EVENT: Record<string, string> = {
+  CREATED: 'Создана (Physical ID)',
+  IN_STOCK: 'Поставлена на склад',
+  LABEL_PRINTED: 'Напечатана этикетка',
+  VOIDED: 'Отменена',
+  COST_CHANGED: 'Пересчитана себестоимость',
+};
+
+/** «2027-12-31» -> «31.12.2027» (expiry dates are typed and shown like this). */
+export const ruDate = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '—');

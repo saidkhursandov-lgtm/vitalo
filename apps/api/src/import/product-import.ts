@@ -334,6 +334,9 @@ export async function planImport(prisma: PrismaService, opts: ImportOptions): Pr
     const stockTarget = nums.stock;
     if (stockTarget === undefined && !existing) warn(r, 'остаток не указан — товар будет без остатка (не в наличии)', sku);
     if (stockTarget !== undefined && stockTarget < reserved) error(r, `остаток ${stockTarget} меньше, чем уже зарезервировано заказами (${reserved})`, sku);
+    if (existing?.unit_tracking && stockTarget !== undefined && stockTarget !== stockNow) {
+      error(r, `товар учитывается по единицам — остаток (${stockNow}) меняется только через «Приёмка», уберите его из колонки остатка`, sku);
+    }
 
     // What changes
     const changes: string[] = [];

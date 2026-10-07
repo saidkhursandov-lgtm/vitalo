@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useDictionary } from '../components/DictionarySelect';
 import { BackIcon } from '../components/Icons';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '../components/ui';
-import { api, qs } from '../lib/api';
+import { api, newKey, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money } from '../lib/format';
 
@@ -60,11 +60,11 @@ const EVENT: Record<string, string> = {
   LINE_REMOVED: 'Убрана строка',
   CANCELLED: 'Отмена Ozon',
   RECALCULATED: 'Пересчёт себестоимости',
+  RECEIVED: 'Получено (приёмка)',
+  DISCREPANCY: 'Расхождение при приёмке',
 };
 const ruDate = (d: string) => d.split('-').reverse().join('.');
 const today = () => new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10); // Tashkent
-/** Idempotency-Key for one attempt (randomUUID needs https or localhost; the fallback is unique enough). */
-const newKey = () => (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 const unitCost = (u: { min: number; max: number } | null | undefined) => (!u ? '—' : u.min === u.max ? money(u.min) : `${money(u.min)} – ${money(u.max)}`);
 
 function StatusBadge({ p }: { p: Pick<Purchase, 'status' | 'progress'> }) {
@@ -630,6 +630,11 @@ export function PurchaseDetail() {
             Получено / заказано: <strong>{progressText(p.progress)}</strong>
             {p.progress.cancelled > 0 && <span className="muted"> · отменено {p.progress.cancelled} из {p.progress.ordered}</span>}
           </p>
+          {costs && p.progress.received + p.progress.remaining > 0 && (
+            <p>
+              <Link to={`/inventory?tab=units&purchase_id=${p.id}`}>Единицы (Physical ID) этой закупки →</Link>
+            </p>
+          )}
           <p className="muted small">
             Создал(а): {p.created_by_name ?? '—'}, {dateTime(p.created_at)}
           </p>

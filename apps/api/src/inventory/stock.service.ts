@@ -16,7 +16,8 @@ export interface Shortage {
 }
 
 /**
- * All stock changes for orders. Every change is an inventory_movements row with
+ * All stock changes for orders (and, since stage 2B, for receiving: receiveUnits / setActualQty, whose
+ * movements point to the receiving session). Every order change is an inventory_movements row with
  * reference_type='order', so what an order still holds is always derivable:
  * held = reserve - release - deduct (per warehouse and product).
  */
@@ -113,6 +114,96 @@ export class StockService {
         },
       });
     }
+  }
+
+  /**
+   * Stage 2B: the warehouse that receives units — the only active one, or the only Tashkent one among several
+   * (the same rule as the product import).
+   */
+  async mainWarehouseId(db: Db = this.prisma): Promise<string> {
+    const active = await db.warehouses.findMany({ where: { status: 'active' }, orderBy: { name: 'asc' } });
+    const tashkent = active.filter((w) => /ташкент|toshkent|tashkent/i.test(`${w.name} ${w.address ?? ''}`));
+    const pick = active.length === 1 ? active[0] : tashkent.length === 1 ? tashkent[0] : null;
+    if (!pick) throw new ConflictException({ code: 'NO_MAIN_WAREHOUSE', message: 'Не удалось определить основной склад (Ташкент)' });
+    return pick.id;
+  }
+
+  /**
+   * Stage 2B: received units go on stock (actual_qty += qty) with a receipt movement that points to the
+   * receiving session. Call inside the transaction that moves the units to IN_STOCK.
+   */
+  async receiveUnits(
+    tx: Prisma.TransactionClient,
+    m: { warehouseId: string; productId: string; qty: number; referenceType: string; referenceId: string; reason: string; staffId: string | null },
+  ): Promise<void> {
+    if (m.qty <= 0) return;
+    await tx.inventory.upsert({
+      where: { product_id_warehouse_id: { product_id: m.productId, warehouse_id: m.warehouseId } },
+      create: { product_id: m.productId, warehouse_id: m.warehouseId },
+      update: {},
+    });
+    await tx.$executeRaw`
+      UPDATE inventory SET actual_qty = actual_qty + ${m.qty}, updated_at = now()
+      WHERE product_id = ${m.productId}::uuid AND warehouse_id = ${m.warehouseId}::uuid`;
+    await tx.inventory_movements.create({
+      data: {
+        warehouse_id: m.warehouseId,
+        product_id: m.productId,
+        movement_type: 'receipt',
+        qty: m.qty,
+        reference_type: m.referenceType,
+        reference_id: m.referenceId,
+        reason: m.reason,
+        created_by: m.staffId,
+      },
+    });
+  }
+
+  /**
+   * Stage 2B opening balance: actual_qty becomes `target` with one adjustment movement (signed difference).
+   * Refuses (409 STOCK_RESERVED) when orders hold more than that. Returns the quantities before and after.
+   */
+  async setActualQty(
+    tx: Prisma.TransactionClient,
+    m: { warehouseId: string; productId: string; target: number; referenceType: string; referenceId: string; reason: string; staffId: string | null },
+  ): Promise<{ before: number; after: number; reserved: number; delta: number }> {
+    await tx.inventory.upsert({
+      where: { product_id_warehouse_id: { product_id: m.productId, warehouse_id: m.warehouseId } },
+      create: { product_id: m.productId, warehouse_id: m.warehouseId },
+      update: {},
+    });
+    const [row] = await tx.$queryRaw<{ actual_qty: number; reserved_qty: number }[]>`
+      SELECT actual_qty, reserved_qty FROM inventory
+      WHERE product_id = ${m.productId}::uuid AND warehouse_id = ${m.warehouseId}::uuid
+      FOR UPDATE`;
+    if (m.target < row.reserved_qty) {
+      throw new ConflictException({
+        code: 'STOCK_RESERVED',
+        message: `Заказы держат в резерве ${row.reserved_qty} шт., а единиц ${m.target}: остаток нельзя сделать меньше резерва`,
+        reserved_qty: row.reserved_qty,
+        target: m.target,
+        product_id: m.productId,
+      });
+    }
+    const delta = m.target - row.actual_qty;
+    if (delta !== 0) {
+      await tx.$executeRaw`
+        UPDATE inventory SET actual_qty = ${m.target}, updated_at = now()
+        WHERE product_id = ${m.productId}::uuid AND warehouse_id = ${m.warehouseId}::uuid`;
+      await tx.inventory_movements.create({
+        data: {
+          warehouse_id: m.warehouseId,
+          product_id: m.productId,
+          movement_type: 'adjustment',
+          qty: delta,
+          reference_type: m.referenceType,
+          reference_id: m.referenceId,
+          reason: m.reason,
+          created_by: m.staffId,
+        },
+      });
+    }
+    return { before: row.actual_qty, after: m.target, reserved: row.reserved_qty, delta };
   }
 
   private async reserveLine(tx: Prisma.TransactionClient, { product_id, qty }: StockLine): Promise<string | null> {

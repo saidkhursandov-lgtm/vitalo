@@ -41,6 +41,15 @@ describe('staff permissions', () => {
     expect((['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, 'purchases.view_costs'))).toEqual(['admin']);
   });
 
+  it('stage 2B: receiving and units for admin, manager, warehouse; opening balance and overrides for admin only', () => {
+    const who = (p: Permission) => (['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, p));
+    expect(who('receiving.perform')).toEqual(['admin', 'manager', 'warehouse']);
+    expect(who('units.view')).toEqual(['admin', 'manager', 'warehouse']);
+    expect(who('receiving.opening')).toEqual(['admin']);
+    expect(who('inventory.unit_override')).toEqual(['admin']);
+    expect(who('products.label')).toEqual(['admin', 'manager']);
+  });
+
   it('stage 0: cost price only for admin, revenue for admin and manager', () => {
     expect((['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, 'costs.view'))).toEqual(['admin']);
     expect((['admin', 'manager', 'warehouse', 'marketer'] as const).filter((r) => can(r, 'dashboard.revenue'))).toEqual(['admin', 'manager']);

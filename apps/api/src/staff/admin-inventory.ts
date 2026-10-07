@@ -2,7 +2,7 @@ import { BadRequestException, Body, ConflictException, Controller, ForbiddenExce
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { MovementType, Prisma, ReturnCondition } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
@@ -16,7 +16,19 @@ class StockTarget {
   @ApiProperty() @IsUUID() product_id!: string;
   @ApiProperty() @IsUUID() warehouse_id!: string;
   @ApiPropertyOptional() @IsOptional() @Transform(trim) @IsString() @MaxLength(500) comment?: string;
+  @ApiPropertyOptional({ description: 'Только администратор: операция над товаром с учётом по единицам (учёт может разойтись)' })
+  @IsOptional()
+  @IsBoolean()
+  override_unit_tracking?: boolean;
+  @ApiPropertyOptional({ description: 'Причина обхода учёта по единицам (обязательно вместе с override_unit_tracking)' })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(500)
+  override_reason?: string;
 }
+
+export const UNIT_TRACKED_MESSAGE = 'Товар учитывается по единицам: используйте «Приёмка»';
 
 export class ReceiptDto extends StockTarget {
   @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) qty!: number;
@@ -105,6 +117,7 @@ export class AdminInventoryService {
           name_ru: p.name_ru,
           status: p.status,
           min_stock: p.min_stock,
+          unit_tracking: p.unit_tracking,
           actual_qty: actual,
           reserved_qty: reserved,
           available_qty: actual - reserved,
@@ -229,6 +242,11 @@ export class AdminInventoryService {
       const product = await tx.products.findUnique({ where: { id: dto.product_id } });
       const warehouse = await tx.warehouses.findUnique({ where: { id: dto.warehouse_id } });
       if (!product || !warehouse) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT_OR_WAREHOUSE', message: 'Unknown product or warehouse' });
+      // Stage 2B: a unit-tracked product changes only through receiving; admin may override with a reason.
+      if (product.unit_tracking) {
+        if (!dto.override_unit_tracking) throw new ConflictException({ code: 'UNIT_TRACKED', message: UNIT_TRACKED_MESSAGE });
+        if (!dto.override_reason) throw new BadRequestException({ code: 'OVERRIDE_REASON_REQUIRED', message: 'Укажите причину: операция в обход учёта по единицам' });
+      }
       if (createIfMissing) {
         await tx.inventory.upsert({
           where: { product_id_warehouse_id: { product_id: dto.product_id, warehouse_id: dto.warehouse_id } },
@@ -246,6 +264,19 @@ export class AdminInventoryService {
         { staffId, action, entityType: 'product', entityId: dto.product_id, before: { actual_qty: row.actual_qty, reserved_qty: row.reserved_qty }, after: { ...dto, ...result } },
         tx,
       );
+      if (product.unit_tracking) {
+        await this.audit.log(
+          {
+            staffId,
+            action: 'inventory.unit_tracking_override',
+            entityType: 'product',
+            entityId: dto.product_id,
+            before: { actual_qty: row.actual_qty },
+            after: { operation: action, reason: dto.override_reason, ...result, warning: 'Остаток изменён в обход учёта по единицам: единицы и остаток могли разойтись (см. Склад → Сверка)' },
+          },
+          tx,
+        );
+      }
       return { product_id: dto.product_id, warehouse_id: dto.warehouse_id, reserved_qty: row.reserved_qty, ...result };
     });
   }
@@ -255,6 +286,11 @@ export class AdminInventoryService {
       data: { product_id: t.product_id, warehouse_id: t.warehouse_id, movement_type: type, qty, reason, created_by: staffId },
     });
   }
+}
+
+/** Only admin may bypass unit tracking: for other roles the flag is ignored, so they get 409 UNIT_TRACKED. */
+function overrideFor<T extends StockTarget>(me: StaffContext, dto: T): T {
+  return can(me.staff.role, 'inventory.unit_override') ? dto : { ...dto, override_unit_tracking: undefined, override_reason: undefined };
 }
 
 @ApiTags('staff: inventory')
@@ -289,24 +325,24 @@ export class AdminInventoryController {
     if (dto.cost_uzs != null && !can(me.staff.role, 'costs.view')) {
       throw new ForbiddenException({ code: 'COST_FORBIDDEN', message: `Role ${me.staff.role} cannot enter the purchase price` });
     }
-    return this.inventory.receipt(me.staff.id, dto);
+    return this.inventory.receipt(me.staff.id, overrideFor(me, dto));
   }
 
   @Post('writeoff')
   @RequirePermission('inventory.edit')
   writeoff(@CurrentStaff() me: StaffContext, @Body() dto: WriteoffDto) {
-    return this.inventory.writeoff(me.staff.id, dto);
+    return this.inventory.writeoff(me.staff.id, overrideFor(me, dto));
   }
 
   @Post('adjustment')
   @RequirePermission('inventory.edit')
   adjustment(@CurrentStaff() me: StaffContext, @Body() dto: AdjustmentDto) {
-    return this.inventory.adjustment(me.staff.id, dto);
+    return this.inventory.adjustment(me.staff.id, overrideFor(me, dto));
   }
 
   @Post('return')
   @RequirePermission('inventory.edit')
   returnToStock(@CurrentStaff() me: StaffContext, @Body() dto: ReturnToStockDto) {
-    return this.inventory.returnToStock(me.staff.id, dto);
+    return this.inventory.returnToStock(me.staff.id, overrideFor(me, dto));
   }
 }

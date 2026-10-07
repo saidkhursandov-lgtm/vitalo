@@ -14,7 +14,6 @@ import {
   Patch,
   Post,
   Query,
-  UnprocessableEntityException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
@@ -35,11 +34,11 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { createHash } from 'crypto';
 import { PageQuery } from '../catalog/catalog.dto';
-import { stableStringify } from '../common/stable-json';
+import { requireIdempotencyKey, runIdempotent } from '../common/idempotency';
 import { PrismaService } from '../prisma/prisma.service';
 import { allocateLineTotals, costQty, derivePurchaseStatus, lineBase, purchaseProgress, remainingQty, unitCostRange } from '../purchases/purchase-cost';
+import { liveUnitsOfLine, reassignLineUnitCosts } from '../receiving/units';
 import { auditJson, AuditService } from './audit.service';
 import { can } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
@@ -47,8 +46,6 @@ import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './sta
 type Tx = Prisma.TransactionClient;
 const PAGE_SIZE = 50;
 const TX = { maxWait: 10_000, timeout: 20_000 };
-const IDEMPOTENCY_TTL_MS = 24 * 3600_000;
-const IDEMPOTENCY_KEY = /^[A-Za-z0-9_.:-]{8,128}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const textOrNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
@@ -133,7 +130,7 @@ const purchaseInclude = {
   ozon_account: { select: { id: true, name: true } },
   supplier: { select: { id: true, name: true } },
   staff: { select: { name: true } },
-  lines: { orderBy: [{ created_at: 'asc' }, { id: 'asc' }], include: { product: { select: { id: true, sku: true, name_ru: true } } } },
+  lines: { orderBy: { position: 'asc' }, include: { product: { select: { id: true, sku: true, name_ru: true } } } },
 } satisfies Prisma.purchasesInclude;
 type PurchaseRow = Prisma.purchasesGetPayload<{ include: typeof purchaseInclude }>;
 type LineRow = PurchaseRow['lines'][number];
@@ -202,7 +199,7 @@ function purchaseView(p: PurchaseRow, costs: boolean) {
 /**
  * Stage 2A purchases (Ozon and suppliers). A purchase is never deleted; every change is a purchase_events row
  * (append-only) plus an audit_logs entry; the allocated cost of the lines is recalculated after each change.
- * Stock is not touched here (receiving comes in stage 2B).
+ * Stock is not touched here: receiving (stage 2B) is src/receiving/admin-receiving.ts.
  */
 @Injectable()
 export class AdminPurchasesService {
@@ -301,9 +298,6 @@ export class AdminPurchasesService {
         throw new BadRequestException({ code: 'DUPLICATE_PRODUCT', message: 'Один товар — одна строка закупки' });
       }
       await this.assertProducts(tx, productIds);
-      // Lines are ordered by created_at, and now() is the same for the whole transaction: 1 ms apart keeps
-      // the input order (it decides the rounding tie-break, S2A-4).
-      const t0 = Date.now();
       const purchase = await tx.purchases.create({
         data: {
           source_type: dto.source_type,
@@ -319,7 +313,7 @@ export class AdminPurchasesService {
               product_id: l.product_id,
               ordered_qty: l.ordered_qty,
               unit_price_original_uzs: BigInt(l.unit_price_original_uzs),
-              created_at: new Date(t0 + i),
+              position: i + 1, // input order: the order of lines and the rounding tie-break (S2A-4)
             })),
           },
         },
@@ -369,8 +363,9 @@ export class AdminPurchasesService {
         throw new ConflictException({ code: 'LINE_EXISTS', message: 'Этот товар уже есть в закупке — измените его строку' });
       }
       await this.assertProducts(tx, [dto.product_id]);
+      const position = Math.max(0, ...before.lines.map((l) => l.position)) + 1; // after the last one (removed lines leave gaps)
       const line = await tx.purchase_lines.create({
-        data: { purchase_id: id, product_id: dto.product_id, ordered_qty: dto.ordered_qty, unit_price_original_uzs: BigInt(dto.unit_price_original_uzs) },
+        data: { purchase_id: id, product_id: dto.product_id, ordered_qty: dto.ordered_qty, unit_price_original_uzs: BigInt(dto.unit_price_original_uzs), position },
       });
       await this.event(tx, id, 'LINE_ADDED', staffId, { lineId: line.id, qty: dto.ordered_qty, after: { product_id: dto.product_id, ordered_qty: dto.ordered_qty, unit_price_original_uzs: dto.unit_price_original_uzs } });
       await this.recalc(tx, id, staffId);
@@ -415,6 +410,9 @@ export class AdminPurchasesService {
       const line = before.lines.find((l) => l.id === lineId);
       if (!line) throw new NotFoundException({ code: 'LINE_NOT_FOUND', message: 'Строка закупки не найдена' });
       if (line.received_qty > 0) throw new ConflictException({ code: 'LINE_HAS_RECEIVED', message: 'По этой строке уже получен товар — убрать её нельзя' });
+      if (await liveUnitsOfLine(tx, lineId)) {
+        throw new ConflictException({ code: 'LINE_HAS_UNITS', message: 'По этой строке идёт приёмка (созданы Physical ID) — убрать её нельзя' });
+      }
       if (before.lines.length === 1) {
         throw new ConflictException({ code: 'LAST_LINE', message: 'В закупке должна остаться хотя бы одна строка; чтобы закупки не было, отмените её количество' });
       }
@@ -441,7 +439,9 @@ export class AdminPurchasesService {
       const before = await this.lockPurchase(tx, found.id);
       const line = before.lines.find((l) => l.product_id === dto.product_id);
       if (!line) throw new NotFoundException({ code: 'LINE_NOT_FOUND', message: 'Этого товара нет в закупке' });
-      const available = remainingQty(line);
+      // Stage 2B: jars already accepted in an open receiving (status RECEIVED) cannot be cancelled any more.
+      const accepted = await tx.physical_units.count({ where: { purchase_line_id: line.id, status: 'RECEIVED' } });
+      const available = Math.max(0, remainingQty(line) - accepted);
       if (dto.cancelled_qty > available) {
         throw new ConflictException({ code: 'CANCEL_TOO_MUCH', message: `Можно отменить не больше ${available} шт.`, available });
       }
@@ -469,10 +469,13 @@ export class AdminPurchasesService {
     const before: Record<string, number | null> = {};
     const after: Record<string, number> = {};
     for (const [i, l] of p.lines.entries()) {
-      if (l.allocated_total_uzs === allocated[i]) continue;
-      await tx.purchase_lines.update({ where: { id: l.id }, data: { allocated_total_uzs: allocated[i] } });
-      before[l.product.sku] = num(l.allocated_total_uzs);
-      after[l.product.sku] = Number(allocated[i]);
+      if (l.allocated_total_uzs !== allocated[i]) {
+        await tx.purchase_lines.update({ where: { id: l.id }, data: { allocated_total_uzs: allocated[i] } });
+        before[l.product.sku] = num(l.allocated_total_uzs);
+        after[l.product.sku] = Number(allocated[i]);
+      }
+      // Stage 2B: the units of the line follow its cost (also when only ordered − cancelled changed).
+      await reassignLineUnitCosts(tx, l.id, staffId);
     }
     if (Object.keys(after).length) await this.event(tx, id, 'RECALCULATED', staffId, { before: { allocated_total_uzs: before }, after: { allocated_total_uzs: after } });
     const status = derivePurchaseStatus(p.lines);
@@ -551,39 +554,18 @@ export class AdminPurchasesService {
     if (archived.length) throw new ConflictException({ code: 'PRODUCT_ARCHIVED', message: `Товар в архиве: ${archived.map((p) => p.sku).join(', ')}` });
   }
 
-  /**
-   * The same exactly-once mechanism as order creation: the key row is inserted first in the transaction, a
-   * parallel duplicate waits on the unique index and then gets the stored answer; a failed attempt frees the key.
-   */
-  private async idempotent(scope: string, staffId: string, idempotencyKey: string, dto: object, fn: (tx: Tx) => Promise<{ id: string }>) {
-    const key = `staff:${staffId}:${scope}:${idempotencyKey}`;
-    const requestHash = createHash('sha256').update(stableStringify(dto)).digest('hex');
-    const replay = (row: { request_hash: string; response_json: Prisma.JsonValue }) => {
-      if (row.request_hash !== requestHash) {
-        throw new UnprocessableEntityException({ code: 'IDEMPOTENCY_KEY_REUSED', message: 'This Idempotency-Key was already used with a different request' });
-      }
-      if (!row.response_json) throw new ConflictException({ code: 'REQUEST_IN_PROGRESS', message: 'The same request is still being processed' });
-      return { id: (row.response_json as { id: string }).id, replayed: true };
-    };
-    const existing = await this.prisma.idempotency_keys.findUnique({ where: { key } });
-    if (existing) return replay(existing);
-    try {
-      const result = await this.prisma.$transaction(async (tx) => {
-        await tx.idempotency_keys.create({ data: { key, scope, request_hash: requestHash, expires_at: new Date(Date.now() + IDEMPOTENCY_TTL_MS) } });
-        const res = await fn(tx);
-        await tx.idempotency_keys.update({ where: { key }, data: { response_json: res } });
-        return res;
-      }, TX);
-      return { ...result, replayed: false };
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        const row = await this.prisma.idempotency_keys.findUnique({ where: { key } });
-        if (row) return replay(row);
-        // Not the key: the unique Ozon order number of the account (two different requests at once).
+  /** Exactly once per Idempotency-Key (see common/idempotency.ts). */
+  private idempotent(scope: string, staffId: string, key: string, dto: object, fn: (tx: Tx) => Promise<{ id: string }>) {
+    return runIdempotent(this.prisma, {
+      scope,
+      staffId,
+      key,
+      request: dto,
+      // Not the key: the unique Ozon order number of the account (two different requests at once).
+      onUniqueConflict: () => {
         throw new ConflictException({ code: 'OZON_ORDER_EXISTS', message: 'Такой заказ Ozon уже есть в этом аккаунте' });
-      }
-      throw e;
-    }
+      },
+    }, fn);
   }
 }
 
@@ -591,12 +573,7 @@ export class AdminPurchasesService {
 
 const costsFor = (role: StaffRole) => can(role, 'purchases.view_costs');
 
-function requireKey(key: string | undefined) {
-  if (!key || !IDEMPOTENCY_KEY.test(key)) {
-    throw new BadRequestException({ code: 'IDEMPOTENCY_KEY_REQUIRED', message: 'Header Idempotency-Key (8-128 chars) is required' });
-  }
-  return key;
-}
+const requireKey = requireIdempotencyKey;
 
 @ApiTags('staff: purchases')
 @ApiBearerAuth()

@@ -371,6 +371,10 @@ describe('Admin panel operations (e2e)', () => {
       expect(before.product_disclaimer.ru).toBe('БАД. НЕ ЯВЛЯЕТСЯ ЛЕКАРСТВЕННЫМ СРЕДСТВОМ.');
       try {
         await as(t.admin).put('/staff/settings/texts', { ...before, product_disclaimer: { ru: 'только RU' } }).expect(400);
+        // 2B.0: a missing or non-object block is a 400, not a 500
+        await as(t.admin).put('/staff/settings/texts', {}).expect(400);
+        await as(t.admin).put('/staff/settings/texts', { product_disclaimer: 'x', payment_hint: null }).expect(400);
+        await as(t.admin).put('/staff/settings/home', { banner: null }).expect(400);
         const next = { product_disclaimer: { ru: 'БАД (тест)', uz: 'BFQ (test)' }, payment_hint: { ru: 'Подсказка', uz: 'Maslahat' } };
         await as(t.admin).put('/staff/settings/texts', next).expect(200);
 

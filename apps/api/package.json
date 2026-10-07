@@ -16,6 +16,8 @@
     "import:products": "ts-node scripts/import-products.ts",
     "import:yandex": "ts-node scripts/import-yandex.ts",
     "backfill:dictionaries": "ts-node scripts/backfill-dictionaries.ts",
+    "import:opening-stock": "ts-node scripts/import-opening-stock.ts",
+    "reconcile:units": "ts-node scripts/reconcile-units.ts",
     "photos:optimize": "ts-node scripts/optimize-photos.ts",
     "brand:icons": "ts-node scripts/brand-icons.ts",
     "prisma:generate": "prisma generate",

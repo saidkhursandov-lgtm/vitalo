@@ -18,7 +18,7 @@ import {
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags, PartialType } from '@nestjs/swagger';
 import { EntityStatus, Prisma, StaffRole, StaffStatus, TariffStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -63,11 +63,13 @@ export class CardTransferDto {
 /** Customer-facing texts editable by the admin. */
 export class ShopTextsDto {
   @ApiProperty({ type: LocalizedTextDto, description: 'Пометка внизу карточки товара' })
+  @IsObject()
   @ValidateNested()
   @Type(() => LocalizedTextDto)
   product_disclaimer!: LocalizedTextDto;
 
   @ApiProperty({ type: LocalizedTextDto, description: 'Подсказка на экране оплаты переводом' })
+  @IsObject()
   @ValidateNested()
   @Type(() => LocalizedTextDto)
   payment_hint!: LocalizedTextDto;
@@ -123,6 +125,7 @@ export class ShopContactsDto {
   payment_check_reminder_hours?: number;
 
   @ApiProperty({ type: LocalizedTextDto, description: 'Подпись срока доставки: «рабочих дней»' })
+  @IsObject()
   @ValidateNested()
   @Type(() => LocalizedTextDto)
   delivery_days_label!: LocalizedTextDto;
@@ -147,16 +150,17 @@ export class ShortTextDto {
 
 export class HomeBannerDto {
   @ApiProperty() @IsBoolean() enabled!: boolean;
-  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) title!: ShortTextDto;
-  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) subtitle!: ShortTextDto;
-  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) button!: ShortTextDto;
+  @ApiProperty({ type: ShortTextDto }) @IsObject() @ValidateNested() @Type(() => ShortTextDto) title!: ShortTextDto;
+  @ApiProperty({ type: ShortTextDto }) @IsObject() @ValidateNested() @Type(() => ShortTextDto) subtitle!: ShortTextDto;
+  @ApiProperty({ type: ShortTextDto }) @IsObject() @ValidateNested() @Type(() => ShortTextDto) button!: ShortTextDto;
 }
 
 export class TrustTileDto {
   @ApiProperty({ enum: ['original', 'delivery', 'documents', 'payments'] }) @IsIn(['original', 'delivery', 'documents', 'payments']) key!: 'original' | 'delivery' | 'documents' | 'payments';
   @ApiProperty() @IsBoolean() enabled!: boolean;
-  @ApiProperty({ type: ShortTextDto }) @ValidateNested() @Type(() => ShortTextDto) title!: ShortTextDto;
+  @ApiProperty({ type: ShortTextDto }) @IsObject() @ValidateNested() @Type(() => ShortTextDto) title!: ShortTextDto;
   @ApiProperty({ type: ShortTextDto, description: '{delivery} — сроки доставки, {from}/{to} — часы проверки платежей' })
+  @IsObject()
   @ValidateNested()
   @Type(() => ShortTextDto)
   text!: ShortTextDto;
@@ -169,15 +173,15 @@ export class HomeStepsDto {
 
 /** Home page content (B1). */
 export class HomeContentDto {
-  @ApiProperty({ type: HomeBannerDto }) @ValidateNested() @Type(() => HomeBannerDto) banner!: HomeBannerDto;
+  @ApiProperty({ type: HomeBannerDto }) @IsObject() @ValidateNested() @Type(() => HomeBannerDto) banner!: HomeBannerDto;
   @ApiProperty({ type: [TrustTileDto] }) @IsArray() @ArrayMinSize(4) @ArrayMaxSize(4) @ValidateNested({ each: true }) @Type(() => TrustTileDto) trust!: TrustTileDto[];
-  @ApiProperty({ type: HomeStepsDto }) @ValidateNested() @Type(() => HomeStepsDto) steps!: HomeStepsDto;
+  @ApiProperty({ type: HomeStepsDto }) @IsObject() @ValidateNested() @Type(() => HomeStepsDto) steps!: HomeStepsDto;
 }
 
 /** Profile card "VITALO Bonus — скоро" (B4). */
 export class BonusTeaserDto {
   @ApiProperty() @IsBoolean() enabled!: boolean;
-  @ApiProperty({ type: LocalizedTextDto }) @ValidateNested() @Type(() => LocalizedTextDto) text!: LocalizedTextDto;
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) text!: LocalizedTextDto;
 }
 
 export class StaffUserDto {

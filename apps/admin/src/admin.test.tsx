@@ -10,9 +10,9 @@ afterEach(cleanup);
 
 /** Same lists as apps/api/src/staff/permissions.ts permissionsOf(role). */
 const PERMS: Record<string, Permission[]> = {
-  warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit'],
+  warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view'],
   marketer: ['dashboard.view', 'products.view', 'yandex.price.view'],
-  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view'],
+  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label'],
 };
 
 describe('menu by role', () => {

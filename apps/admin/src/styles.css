@@ -237,3 +237,49 @@ textarea { resize: vertical; }
 .funnel td { vertical-align: middle; }
 .funnel-bar-cell { width: 40%; }
 .funnel-bar { display: block; height: 10px; min-width: 2px; border-radius: 5px; background: var(--primary); }
+
+/* ---------- Stage 2B: labels 75×120 mm (XP-365B, 203 DPI) and the receiving screen ---------- */
+.print-page { background: var(--bg); min-height: 100vh; padding: 16px; }
+.print-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.labels { display: flex; flex-wrap: wrap; gap: 8mm; }
+.label {
+  width: 75mm; height: 120mm; padding: 2mm; box-sizing: border-box; overflow: hidden; background: #fff; color: #000;
+  display: flex; flex-direction: column; align-items: center; gap: 1.5mm; font-family: var(--font); outline: 1px dashed var(--border-strong);
+}
+.label-id { font-size: 11mm; line-height: 1; font-weight: 700; letter-spacing: 0.02em; margin-top: 1mm; white-space: nowrap; }
+.label-barcode { display: block; flex: none; }
+.label-sku { font-size: 3.6mm; font-weight: 600; align-self: stretch; text-align: center; overflow-wrap: anywhere; }
+.label-comp { flex: 1; min-height: 0; align-self: stretch; overflow: hidden; font-size: 2.8mm; line-height: 1.22; }
+.label-comp p { margin: 0 0 1.2mm; overflow-wrap: anywhere; }
+.label-exp { align-self: stretch; border-top: 0.3mm solid #000; padding-top: 1.2mm; text-align: center; }
+.label-exp span { display: block; font-size: 2.9mm; }
+.label-exp strong { display: block; font-size: 7mm; line-height: 1.1; }
+.calib { position: relative; }
+.calib-marks { position: absolute; inset: 0; pointer-events: none; outline: 0.3mm solid #000; outline-offset: -0.15mm; }
+.calib-safe { position: absolute; inset: 2mm; border: 0.2mm dashed #000; }
+.calib-tick { position: absolute; background: #000; }
+.calib-tick-x { top: 0; width: 0.2mm; height: 2mm; }
+.calib-tick-y { left: 0; height: 0.2mm; width: 2mm; }
+@media print {
+  .no-print { display: none !important; }
+  html, body, .print-page { background: #fff; margin: 0; padding: 0; min-height: 0; }
+  .labels { display: block; }
+  .label { outline: none; break-after: page; page-break-after: always; }
+  .calib { break-after: page; }
+  .calib .label { break-after: auto; page-break-after: auto; }
+}
+
+.steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.step { padding: 6px 12px; border-radius: 999px; background: var(--neutral-soft); color: var(--muted); font-weight: 600; font-size: 13px; }
+.step.is-on { background: var(--primary-soft); color: var(--primary-text); }
+.step.is-done { background: var(--ok-soft); color: var(--ok); }
+.btn-lg { min-height: 48px; padding: 0 22px; font-size: 15px; }
+.source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.source-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px 16px; min-height: 64px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--panel); cursor: pointer; text-align: left; }
+.source-btn:hover { border-color: var(--primary); background: var(--primary-soft); }
+.scan-input { font-size: 20px !important; min-height: 52px !important; letter-spacing: 0.04em; }
+.expiry-row { display: grid; grid-template-columns: 1fr 110px 40px; gap: 8px; align-items: end; }
+.id-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.id-chip { font-family: ui-monospace, Consolas, monospace; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: var(--neutral-soft); }
+.row-bad td:first-child { box-shadow: inset 3px 0 var(--bad); }
+.row-bad td { color: var(--bad); }
