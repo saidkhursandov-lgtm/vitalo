@@ -11,6 +11,7 @@ import {
   ATTENTION_RU,
   CREATE_STATUS,
   LATE_STATUSES,
+  minimizeYandexOrder,
   parseYandexOrder,
   RETURN_STATUSES,
   WAIT_STATUSES,
@@ -179,7 +180,7 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
       }
       counters.found = rawOrders.length;
       for (const raw of rawOrders) {
-        if (mode === 'DRY_RUN' && raws.length < 200) raws.push(raw);
+        if (mode === 'DRY_RUN' && raws.length < 200) raws.push(minimizeYandexOrder(raw)); // no personal data in the log
         try {
           const r = mode === 'LIVE' ? await this.processLive(raw, cfg) : await this.processDry(raw, cfg);
           if (r.created) counters.created++;
@@ -263,7 +264,7 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
       async (tx): Promise<Outcome> => {
         // One order at a time: a poll and a notification for the same number queue here.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`yandex-order:${number}`}))`;
-        const json = raw as Prisma.InputJsonValue;
+        const json = minimizeYandexOrder(raw) as Prisma.InputJsonValue; // white list: no buyer, address, notes
         const order = parsed.ok ? parsed.order : null;
         const ext = await tx.marketplace_external_orders.upsert({
           where: { marketplace_external_number: { marketplace: 'yandex', external_number: number } },

@@ -18,6 +18,8 @@ const CAMPAIGN = 149165806;
 /** Looks like a real API key; must never show up in runs, errors, notifications or answers. */
 const KEY = `ACMA:e2eSecretKey${RUN}abcdef:87654321`;
 const WEBHOOK_SECRET = `whsec-${RUN}-0123456789abcdef`;
+/** Personal data put into every fake Yandex order. */
+const PII = { firstName: 'Дилноза', lastName: 'Юсупова', phone: '+998971112233', email: 'dilnoza.e2e@example.com', city: 'Самарканд', street: 'Регистан-кўчаси' };
 const ENV_KEYS = ['YANDEX_API_KEY', 'YANDEX_SYNC_DRY_RUN', 'YANDEX_WEBHOOK_ENABLED', 'YANDEX_WEBHOOK_SECRET', 'YANDEX_CAMPAIGN_IDS', 'YANDEX_BUSINESS_ID'];
 
 // ---------------------------------------------------------------- fake Yandex
@@ -55,7 +57,10 @@ function yOrder(items: { sku: string; count: number; unit?: number; currency?: s
     fake: false,
     paymentType: 'PREPAID',
     paymentMethod: 'YANDEX',
-    delivery: {},
+    // personal data of the customer: must never be stored, logged or sent (see PII below)
+    notes: `Позвоните ${PII.phone}, спросить ${PII.firstName}`,
+    buyer: { firstName: PII.firstName, lastName: PII.lastName, phone: PII.phone, email: PII.email },
+    delivery: { type: 'DELIVERY', address: { city: PII.city, street: PII.street, house: '7', recipient: { name: `${PII.firstName} ${PII.lastName}` }, phone: PII.phone } },
     items: items.map((i, k) => {
       const total = (i.unit ?? 150_000) * i.count;
       const cur = i.currency ?? 'UZS';
@@ -338,6 +343,37 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
     yandex.queue = [{ status: 200, body: { nothing: true } }];
     expect((await runSync()).error).toContain('без списка orders');
     expect(await prisma.marketplace_orders.count({ where: { external_number: String(o.orderId) } })).toBe(1);
+  });
+
+  it('personal data of the customer never reaches the database, the run log or Telegram (DRY_RUN and LIVE)', async () => {
+    const p = await stocked(['2028-01-01']);
+    const made = yOrder([{ sku: p.sku, count: 1 }]);
+    const late = yOrder([{ sku: p.sku, count: 1 }], { status: 'DELIVERED', substatus: null });
+    const unknown = yOrder([{ sku: `NONE-${RUN}`, count: 1 }]);
+    process.env.YANDEX_SYNC_DRY_RUN = 'true';
+    const dry = await runSync();
+    process.env.YANDEX_SYNC_DRY_RUN = 'false';
+    const live = await runSync();
+    expect(live).toMatchObject({ created: 1, attention: 2, errors: 0 });
+    const ids = [made, late, unknown].map((o) => String(o.orderId));
+    const stored = JSON.stringify(
+      [
+        await prisma.yandex_sync_runs.findMany({ where: { id: { in: [dry.id, live.id] } } }),
+        await prisma.marketplace_external_orders.findMany({ where: { external_number: { in: ids } } }),
+        await prisma.marketplace_orders.findMany({ where: { external_number: { in: ids } }, include: { lines: true } }),
+        await prisma.notifications.findMany({ where: { template: { startsWith: 'staff.yandex' } } }),
+        await prisma.audit_logs.findMany({ where: { action: { startsWith: 'yandex' } } }),
+        await prisma.system_errors.findMany({ where: { service: 'yandex-sync' } }),
+        (await as('admin').get('/staff/yandex-sync').expect(200)).body,
+        (await as('admin').get(`/staff/yandex-sync/runs/${dry.id}`).expect(200)).body,
+      ],
+      (_k, v) => (typeof v === 'bigint' ? Number(v) : v),
+    );
+    for (const value of Object.values(PII)) expect(stored).not.toContain(value);
+    for (const field of ['"buyer"', '"delivery"', '"notes"', '"address"', '"phone"', '"email"']) expect(stored).not.toContain(field);
+    // what is needed for the work is still there
+    const ext = await external(made);
+    expect(ext!.raw).toMatchObject({ orderId: made.orderId, status: 'PROCESSING', items: [{ offerId: p.sku, count: 1, prices: { payment: { currencyId: 'UZS' } } }] });
   });
 
   it('the token never leaks: not in runs, details, system errors or answers — even when Yandex echoes it', async () => {

@@ -1,5 +1,5 @@
 import { YandexApiError, YandexMarketClient, type FetchLike } from './yandex-client';
-import { parseYandexOrder } from './yandex-order';
+import { minimizeYandexOrder, parseYandexOrder } from './yandex-order';
 import { ipInNetworks } from './yandex-sync.controller';
 import { scrubSecrets } from './yandex-sync';
 
@@ -109,6 +109,53 @@ describe('parse a Yandex order', () => {
     expect(parseYandexOrder(order({ items: [{ count: 1 }] }))).toMatchObject({ ok: false, reason: expect.stringContaining('offerId') });
     // no prices: allowed here, the card price is used later (or «Требует внимания»)
     expect(parseYandexOrder(order({ items: [{ offerId: 'OZN-A001', count: 1 }] }))).toMatchObject({ ok: true, order: { items: [{ unitPrice: null }] } });
+  });
+});
+
+describe('personal data never stored (white list)', () => {
+  it('keeps number, statuses, dates, flags, items with amounts and currency; drops buyer, delivery, notes and anything new', () => {
+    const raw = {
+      orderId: 5,
+      campaignId: 149165806,
+      programType: 'FBS',
+      externalOrderId: 'ext-1',
+      status: 'PROCESSING',
+      substatus: 'STARTED',
+      creationDate: '2026-10-10T09:00:00+03:00',
+      updateDate: '2026-10-10T09:05:00+03:00',
+      fake: false,
+      cancelRequested: false,
+      paymentType: 'PREPAID',
+      paymentMethod: 'YANDEX',
+      notes: 'Позвоните +998 90 123 45 67, Анвар',
+      buyer: { firstName: 'Анвар', lastName: 'Каримов', phone: '+998901234567', email: 'anvar@example.com' },
+      buyerType: 'PERSON',
+      delivery: { address: { city: 'Ташкент', street: 'Амира Темура', house: '1', recipient: { name: 'Анвар' }, phone: '+998901234567' }, type: 'DELIVERY' },
+      prices: { payment: { value: 300000, currencyId: 'UZS' }, delivery: { payment: { value: 1 } } },
+      somethingNew: { phone: '+998' },
+      items: [{ id: 1, offerId: 'OZN-A001', offerName: 'Омега', count: 2, prices: { payment: { value: 300000, currencyId: 'UZS' }, subsidy: { value: 1, currencyId: 'UZS' }, vat: 'NO_VAT' }, instances: [{ cis: 'x' }], tags: ['A'] }],
+    };
+    const min = minimizeYandexOrder(raw);
+    expect(min).toEqual({
+      orderId: 5,
+      campaignId: 149165806,
+      programType: 'FBS',
+      status: 'PROCESSING',
+      substatus: 'STARTED',
+      creationDate: '2026-10-10T09:00:00+03:00',
+      updateDate: '2026-10-10T09:05:00+03:00',
+      fake: false,
+      cancelRequested: false,
+      paymentType: 'PREPAID',
+      paymentMethod: 'YANDEX',
+      prices: { payment: { value: 300000, currencyId: 'UZS' } },
+      items: [{ id: 1, offerId: 'OZN-A001', offerName: 'Омега', count: 2, prices: { payment: { value: 300000, currencyId: 'UZS' }, subsidy: { value: 1, currencyId: 'UZS' }, vat: 'NO_VAT' } }],
+    });
+    const text = JSON.stringify(min);
+    for (const pii of ['Анвар', 'Каримов', '998', 'example.com', 'Ташкент', 'Темура', 'buyer', 'delivery', 'notes', 'externalOrderId']) expect(text).not.toContain(pii);
+    // the stored copy still parses to the same order
+    expect(parseYandexOrder(min)).toMatchObject({ ok: true, order: { externalNumber: '5', items: [{ unitPrice: 150001 }] } });
+    expect(minimizeYandexOrder('x')).toEqual({ invalid: true });
   });
 });
 

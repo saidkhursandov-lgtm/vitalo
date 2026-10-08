@@ -138,3 +138,32 @@ export const ATTENTION_RU: Record<AttentionKind, string> = {
   BAD_DATA: 'Битый ответ Яндекса',
   CURRENCY: 'Цена не в сумах',
 };
+
+/**
+ * What of a Yandex order is ever stored (snapshot, run log): a WHITE LIST — the number, campaign, statuses, dates,
+ * flags and the items with their amounts and currency. Everything else is dropped BEFORE saving, above all the
+ * customer: `buyer`, `delivery` (address, recipient, phones), `notes` (free text of the buyer) and any field
+ * Yandex may add later. Personal data never reaches the database, the run log or Telegram.
+ */
+export function minimizeYandexOrder(raw: unknown): Record<string, unknown> {
+  if (!isObj(raw)) return { invalid: true };
+  const pick = (src: Record<string, unknown>, keys: string[]) =>
+    Object.fromEntries(keys.filter((k) => src[k] !== undefined).map((k) => [k, src[k]]));
+  const amount = (v: unknown) => (isObj(v) ? pick(v, ['value', 'currencyId']) : undefined);
+  const prices = (v: unknown) => {
+    if (!isObj(v)) return undefined;
+    const out: Record<string, unknown> = {};
+    for (const k of ['payment', 'subsidy', 'cashback']) if (amount(v[k])) out[k] = amount(v[k]);
+    if (typeof v.vat === 'string') out.vat = v.vat;
+    return out;
+  };
+  return {
+    ...pick(raw, ['orderId', 'campaignId', 'programType', 'status', 'substatus', 'creationDate', 'updateDate', 'fake', 'cancelRequested', 'paymentType', 'paymentMethod', 'sourcePlatform']),
+    ...(isObj(raw.prices) && { prices: prices(raw.prices) }),
+    items: Array.isArray(raw.items)
+      ? raw.items.map((it) => (isObj(it) ? { ...pick(it, ['id', 'offerId', 'offerName', 'count']), ...(isObj(it.prices) && { prices: prices(it.prices) }) } : { invalid: true }))
+      : raw.items === undefined
+        ? undefined
+        : { invalid: true },
+  };
+}
