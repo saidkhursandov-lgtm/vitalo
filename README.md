@@ -49,6 +49,9 @@ Seed только добавляет недостающее и никогда н
 Маркетинговые сообщения уходят только при users.marketing_opt_in (переключатель в профиле Mini App).
 Туннель для телефона: winget install --id Cloudflare.cloudflared, затем npm run tunnel (или start.bat) —
 два адреса https://*.trycloudflare.com (Mini App и админка), кнопка меню бота обновляется автоматически.
+start.bat ждёт адреса до 90 с и печатает их в своём окне. Если адреса сменились (сравнение с
+.runtime/notified-urls.json), активные admin и manager получают в боте «Новые адреса VITALO» с кнопками
+«Открыть админку» и «Открыть магазин»; клиентам такое сообщение не уходит никогда.
 Сотрудник: npm run staff:add -- --telegram-id <id> --name "Имя" --role admin (apps/api).
 DEV-вход: только NODE_ENV=development, только с localhost (через туннель — 404), в рабочей сборке отсутствует (тест).
 CORS: CORS_ORIGINS (через запятую); пусто — localhost-серверы разработки, в production — никто.

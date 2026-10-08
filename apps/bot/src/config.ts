@@ -10,6 +10,8 @@ export const API_ENV_FILE = `${ROOT}apps/api/.env`;
 export const RUNTIME_DIR = `${ROOT}.runtime/`;
 export const MINIAPP_URL_FILE = `${RUNTIME_DIR}miniapp-url.txt`;
 export const ADMIN_URL_FILE = `${RUNTIME_DIR}admin-url.txt`;
+/** The addresses last announced to staff with «Новые адреса VITALO» (so the same pair is never sent twice). */
+export const NOTIFIED_URLS_FILE = `${RUNTIME_DIR}notified-urls.json`;
 
 export interface BotConfig {
   token: string;
@@ -44,4 +46,16 @@ export function currentUrl(kind: 'miniapp' | 'admin'): string | null {
 export function saveUrl(kind: 'miniapp' | 'admin', url: string) {
   mkdirSync(RUNTIME_DIR, { recursive: true });
   writeFileSync(kind === 'miniapp' ? MINIAPP_URL_FILE : ADMIN_URL_FILE, `${url}\n`);
+}
+
+export function readNotifiedUrls(): { miniapp: string | null; admin: string | null } | null {
+  if (!existsSync(NOTIFIED_URLS_FILE)) return null;
+  const v = JSON.parse(readFileSync(NOTIFIED_URLS_FILE, 'utf8')) as { miniapp?: unknown; admin?: unknown };
+  const str = (x: unknown) => (typeof x === 'string' ? x : null);
+  return { miniapp: str(v.miniapp), admin: str(v.admin) };
+}
+
+export function writeNotifiedUrls(urls: { miniapp: string | null; admin: string | null }) {
+  mkdirSync(RUNTIME_DIR, { recursive: true });
+  writeFileSync(NOTIFIED_URLS_FILE, `${JSON.stringify({ ...urls, notified_at: new Date().toISOString() }, null, 2)}\n`);
 }

@@ -116,6 +116,20 @@ export class BotInternalController {
     return s && s.status === 'active' ? { is_staff: true, role: s.role, name: s.name } : { is_staff: false };
   }
 
+  /**
+   * Dev tunnel: who gets «Новые адреса VITALO» when the tunnel addresses change. Only active admins and
+   * managers (they open the admin panel) — never customers, warehouse or marketer accounts.
+   */
+  @Get('staff-notify')
+  async staffNotify() {
+    const rows = await this.prisma.staff_users.findMany({
+      where: { status: 'active', role: { in: ['admin', 'manager'] } },
+      select: { telegram_user_id: true, role: true },
+      orderBy: { created_at: 'asc' },
+    });
+    return { recipients: rows.map((r) => ({ telegram_id: r.telegram_user_id.toString(), role: r.role })) };
+  }
+
   @Get('info')
   async info() {
     const rows = await this.prisma.settings.findMany({ where: { key: { in: [...Object.values(BOT_SETTING_KEYS), 'bonus_teaser'] } } });

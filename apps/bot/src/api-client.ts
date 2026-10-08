@@ -46,6 +46,8 @@ export class HttpVitaloApi implements VitaloApi {
   user = (id: number) => this.get<UserSummary>(`/internal/bot/users/${id}`);
   staff = (id: number) => this.get<StaffInfo>(`/internal/bot/staff/${id}`);
   info = () => this.get<ShopInfo>('/internal/bot/info');
+  /** Active admins and managers for «Новые адреса VITALO» (dev tunnel). */
+  staffNotify = () => this.get<{ recipients: { telegram_id: string; role: string }[] }>('/internal/bot/staff-notify');
   saveContact = (id: number, phone: string, contactUserId: number) =>
     this.post<{ saved: boolean }>(`/internal/bot/users/${id}/contact`, { phone, contact_user_id: contactUserId });
 

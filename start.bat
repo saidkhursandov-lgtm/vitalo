@@ -83,6 +83,10 @@ call :start_app "VITALO Bot" "apps\bot" "npm run dev" 0
 rem ---------- 3b. Public HTTPS tunnel for testing from a phone (optional) ----------
 call :find_cloudflared
 if defined CLOUDFLARED_FOUND (
+  rem Addresses written after this moment are the fresh ones; 0 = tunnel already running, its addresses are current.
+  set "TUNNEL_SINCE=0"
+  call :window_running "VITALO Tunnel"
+  if errorlevel 1 for /f %%T in ('powershell -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()"') do set "TUNNEL_SINCE=%%T"
   call :start_app "VITALO Tunnel" "apps\bot" "npm run tunnel" 0
 ) else (
   echo [INFO] cloudflared is not installed, so there is no public address for the phone.
@@ -96,17 +100,27 @@ echo Waiting 15 seconds for the servers to start
 call :sleep 15
 start "" "http://localhost:5173"
 
+rem ---------- 5. Wait for the public addresses and show them ----------
+set "TUNNEL_FAILED="
+set "ADMIN_FLAG="
+if exist "%ROOT%apps\admin\package.json" set "ADMIN_FLAG=-WithAdmin"
+if defined CLOUDFLARED_FOUND (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\wait-tunnel.ps1" -Since %TUNNEL_SINCE% %ADMIN_FLAG% -TimeoutSec 90
+  if errorlevel 1 set "TUNNEL_FAILED=1"
+)
+
 echo.
 echo === Ready ===
 echo   Mini App : http://localhost:5173
 echo   API docs : http://localhost:3000/api/docs
 if exist "%ROOT%apps\admin\package.json" echo   Admin    : http://localhost:5174
 echo   Bot      : https://t.me/vitalo_store_bot
-if defined CLOUDFLARED_FOUND echo   Phone    : the public https address is shown in the "VITALO Tunnel" window
+if defined CLOUDFLARED_FOUND echo   Phone    : the public https addresses are shown above (and in the "VITALO Tunnel" window)
 echo.
 echo To stop everything, run stop.bat
-echo This window will close in 10 seconds.
-call :sleep 10
+if defined TUNNEL_FAILED goto fail
+echo This window will close in 60 seconds.
+call :sleep 60
 endlocal
 exit /b 0
 

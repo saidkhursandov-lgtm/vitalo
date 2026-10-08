@@ -51,6 +51,26 @@ describe('Internal API for the bot, start_param, CORS (e2e)', () => {
     expect((await asBot('/staff/960000009').expect(200)).body).toEqual({ is_staff: false });
   });
 
+  it('«Новые адреса» recipients: only active admins and managers, never customers or other roles', async () => {
+    await http().get('/api/internal/bot/staff-notify').expect(401);
+    await prisma.staff_users.upsert({
+      where: { telegram_user_id: 960_000_010n },
+      create: { telegram_user_id: 960_000_010n, name: 'Ушедший админ', role: 'admin', status: 'blocked' },
+      update: { status: 'blocked' },
+    });
+    const { recipients } = (await asBot('/staff-notify').expect(200)).body as { recipients: { telegram_id: string; role: string }[] };
+    const ids = recipients.map((r) => r.telegram_id);
+    expect(ids).toEqual(expect.arrayContaining(['222222221', '222222222'])); // seeded admin and manager
+    expect(ids).not.toContain('222222223'); // warehouse
+    expect(ids).not.toContain('222222224'); // marketer
+    expect(ids).not.toContain('960000010'); // blocked admin
+    expect(ids).not.toContain('960000002'); // a customer
+    expect(new Set(recipients.map((r) => r.role))).toEqual(new Set(['admin', 'manager']));
+    const customers = await prisma.users.findMany({ select: { telegram_user_id: true } });
+    const staffIds = new Set((await prisma.staff_users.findMany({ select: { telegram_user_id: true } })).map((s) => s.telegram_user_id.toString()));
+    for (const c of customers) if (!staffIds.has(c.telegram_user_id.toString())) expect(ids).not.toContain(c.telegram_user_id.toString());
+  });
+
   it('info: defaults, overridable through settings', async () => {
     const before = (await asBot('/info').expect(200)).body;
     expect(before).toMatchObject({ support_contact: '@VITALO_support', support_url: 'https://t.me/VITALO_support' });
