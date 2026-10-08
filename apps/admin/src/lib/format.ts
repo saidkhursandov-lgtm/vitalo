@@ -70,6 +70,17 @@ export const CONDITION: Record<string, string> = {
 
 /** Human names for audit actions; unknown actions are shown as is. */
 export const AUDIT_ACTION: Record<string, string> = {
+  'yandex_order.created': 'Создан заказ Яндекса (банки зарезервированы)',
+  'yandex_order.updated': 'Изменён заказ Яндекса',
+  'yandex_order.picked': 'Банка собрана в заказ Яндекса',
+  'yandex_order.unit_replaced': 'Банка заменена при сборке',
+  'yandex_order.status': 'Статус заказа Яндекса',
+  'unit.missing': 'Банка отмечена потерянной',
+  'unit.found': 'Банка найдена',
+  'unit.written_off': 'Банка списана',
+  'unit.return_accepted': 'Возврат принят на склад',
+  'unit.return_written_off': 'Возврат списан',
+  'unit.corrected': 'Корректировка банки',
   'order.bank_transfer_confirmed': 'Подтверждена оплата',
   'order.status_changed': 'Изменён статус заказа',
   'order.cancelled': 'Заказ отменён',
@@ -123,13 +134,13 @@ export const PAYMENT_METHOD: Record<string, string> = {
 export const UNIT_STATUS: Record<string, string> = {
   RECEIVED: 'Принята (не завершена)',
   IN_STOCK: 'На складе',
-  ASSIGNED: 'Назначена заказу',
-  YANDEX_DELIVERY: 'Доставка Яндекс',
+  ASSIGNED: 'Зарезервирована',
+  YANDEX_DELIVERY: 'В доставке (Яндекс)',
   YANDEX_SOLD: 'Продана (Яндекс)',
-  VITALO_DELIVERY: 'Доставка VITALO',
+  VITALO_DELIVERY: 'В доставке (VITALO)',
   VITALO_SOLD: 'Продана (VITALO)',
-  RETURNED: 'Возвращена',
-  MISSING: 'Не найдена',
+  RETURNED: 'Возврат на проверке',
+  MISSING: 'Потеряна',
   WRITTEN_OFF: 'Списана',
   VOIDED: 'Отменена',
 };
@@ -140,6 +151,29 @@ export const UNIT_EVENT: Record<string, string> = {
   LABEL_PRINTED: 'Напечатана этикетка',
   VOIDED: 'Отменена',
   COST_CHANGED: 'Пересчитана себестоимость',
+  ASSIGNED: 'Зарезервирована под заказ Яндекса',
+  PICKED: 'Собрана в заказ Яндекса',
+  RELEASED: 'Снята с заказа, на склад',
+  HANDED_TO_DELIVERY: 'Передана в доставку',
+  SOLD: 'Продана (доставлена)',
+  RETURNED: 'Возврат: ждёт проверки',
+  RETURN_ACCEPTED: 'Возврат принят на склад',
+  RETURN_WRITTEN_OFF: 'Возврат списан',
+  MISSING: 'Отмечена потерянной',
+  FOUND: 'Найдена, на складе',
+  WRITTEN_OFF: 'Списана',
+  STATUS_CORRECTED: 'Корректировка статуса',
+  EXPIRY_CORRECTED: 'Корректировка срока годности',
+};
+
+/** Stage 2C: Yandex order statuses. */
+export const YANDEX_STATUS: Record<string, [string, 'neutral' | 'ok' | 'warn' | 'bad' | 'info']> = {
+  NEW: ['Новый', 'warn'],
+  ASSEMBLED: ['Собран', 'info'],
+  HANDED_TO_DELIVERY: ['Передан в доставку', 'info'],
+  DELIVERED: ['Доставлен', 'ok'],
+  CANCELLED: ['Отменён', 'neutral'],
+  RETURNED: ['Возврат', 'bad'],
 };
 
 /** «2027-12-31» -> «31.12.2027» (expiry dates are typed and shown like this). */

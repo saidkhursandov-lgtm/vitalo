@@ -33,7 +33,13 @@ export type Permission =
   | 'units.view'
   | 'receiving.opening'
   | 'inventory.unit_override'
-  | 'products.label';
+  | 'products.label'
+  | 'yandex.orders'
+  | 'yandex.orders.money'
+  | 'units.missing'
+  | 'units.return_decision'
+  | 'units.writeoff'
+  | 'units.correct';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };

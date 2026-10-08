@@ -526,7 +526,7 @@ export function PurchaseNew() {
 }
 
 /** Search a product by SKU or name (archived ones are not offered). */
-function ProductPicker({ exclude, onPick }: { exclude: string[]; onPick: (p: { id: string; sku: string; name_ru: string }) => void }) {
+export function ProductPicker({ exclude, onPick }: { exclude: string[]; onPick: (p: { id: string; sku: string; name_ru: string }) => void }) {
   const [text, setText] = useState('');
   const [term, setTerm] = useState('');
   useEffect(() => {

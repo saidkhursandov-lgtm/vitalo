@@ -5,12 +5,14 @@ import type { Permission } from './lib/auth';
 import { dateTime, money } from './lib/format';
 import { homeFor, navFor } from './lib/nav';
 import { Diff } from './pages/Audit';
+import { ReasonPicker } from './components/Reason';
+import { fireEvent } from '@testing-library/react';
 
 afterEach(cleanup);
 
 /** Same lists as apps/api/src/staff/permissions.ts permissionsOf(role). */
 const PERMS: Record<string, Permission[]> = {
-  warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view'],
+  warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders', 'units.missing', 'units.return_decision'],
   marketer: ['dashboard.view', 'products.view', 'yandex.price.view'],
   manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label'],
 };
@@ -18,8 +20,8 @@ const PERMS: Record<string, Permission[]> = {
 describe('menu by role', () => {
   const labels = (role: string) => navFor(PERMS[role]).map((n) => n.label);
 
-  it('warehouse: orders, products, stock — no settings, customers, audit', () => {
-    expect(labels('warehouse')).toEqual(['Заказы', 'Товары', 'Склад']);
+  it('warehouse: orders, Yandex orders, products, stock — no settings, customers, audit', () => {
+    expect(labels('warehouse')).toEqual(['Заказы', 'Заказы Яндекса', 'Товары', 'Склад']);
     expect(homeFor(PERMS.warehouse)).toBe('/orders');
   });
 
@@ -27,7 +29,7 @@ describe('menu by role', () => {
     expect(labels('marketer')).toEqual(['Дашборд', 'Товары']);
   });
 
-  it('manager: everything except settings and audit', () => {
+  it('manager: everything except settings, audit and Yandex orders (stage 2C)', () => {
     expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Товары', 'Склад', 'Закупки', 'Клиенты']);
   });
 });
@@ -58,5 +60,19 @@ describe('audit diff', () => {
     expect(rows.map((r) => r.textContent)).toEqual(['price_uzs9900095000', 'skuAA']);
     expect(rows[0].className).toBe('changed');
     expect(rows[1].className).toBe('');
+  });
+});
+
+describe('reason picker', () => {
+  it('a ready answer or «Другое» with own text', () => {
+    let reason = '';
+    render(<ReasonPicker options={['Истёк срок годности']} onChange={(r) => (reason = r)} />);
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'Истёк срок годности' } });
+    expect(reason).toBe('Истёк срок годности');
+    fireEvent.change(select, { target: { value: '__other' } });
+    expect(reason).toBe('');
+    fireEvent.change(screen.getByLabelText(/Ваша причина/), { target: { value: '  Уронили банку  ' } });
+    expect(reason).toBe('Уронили банку');
   });
 });

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BackIcon } from '../components/Icons';
+import { REASONS, ReasonPicker } from '../components/Reason';
 import { Badge, ErrorBox, Field, Loading, Modal, Pagination } from '../components/ui';
 import { api, ApiError, newKey, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
@@ -679,6 +680,7 @@ export function Units() {
 
   return (
     <>
+      <PendingReturns onOpen={setCard} />
       <section className="card">
         <form
           onSubmit={(e) => {
@@ -736,6 +738,7 @@ export function Units() {
 function UnitCardModal({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useQuery({ queryKey: ['unit', id], queryFn: () => api<UnitCard>(`/staff/units/${id}`) });
   const u = q.data;
+  const [action, setAction] = useState<UnitAction | null>(null);
   return (
     <Modal title={u ? `Единица ${u.physical_id}` : 'Единица'} onClose={onClose} wide>
       {q.isPending ? (
@@ -779,6 +782,14 @@ function UnitCardModal({ id, onClose }: { id: string; onClose: () => void }) {
               <li key={e.id}>
                 <strong>{UNIT_EVENT[e.type] ?? e.type}</strong>
                 {e.to_status && <span className="muted"> → {UNIT_STATUS[e.to_status] ?? e.to_status}</span>}
+                {e.reference?.type === 'marketplace_order' && (
+                  <>
+                    {' '}
+                    <Link className="small" to={'/yandex-orders/' + e.reference.id}>
+                      заказ Яндекса
+                    </Link>
+                  </>
+                )}
                 <div className="muted small">
                   {dateTime(e.created_at)} · {e.staff_name ?? 'система'}
                   {e.note ? ` · ${e.note}` : ''}
@@ -786,6 +797,8 @@ function UnitCardModal({ id, onClose }: { id: string; onClose: () => void }) {
               </li>
             ))}
           </ul>
+          <UnitActions unit={u} onPick={setAction} />
+          {action && <UnitActionModal unit={u} action={action} onClose={() => setAction(null)} />}
           <div className="modal-actions">
             {u.status !== 'VOIDED' && (
               <PrintLink scope={{ unit_ids: [u.id] }}>Напечатать этикетку</PrintLink>
@@ -807,11 +820,14 @@ interface ReconcileRow {
   sku: string;
   name_ru: string;
   units_in_stock: number;
+  units_reserved_yandex: number;
   actual_qty: number;
   reserved_qty: number;
+  reserved_vitalo: number;
   difference: number;
   sold_by_orders: number;
   explained: boolean;
+  state: 'ok' | 'vitalo_orders' | 'unexplained';
 }
 
 export function Reconcile() {
@@ -831,11 +847,12 @@ export function Reconcile() {
             <thead>
               <tr>
                 <th>Товар</th>
-                <th className="num">Единиц на складе</th>
+                <th className="num">Банок на полке</th>
+                <th className="num">из них резерв Яндекса</th>
                 <th className="num">Остаток</th>
-                <th className="num">В резерве</th>
+                <th className="num">Резерв VITALO</th>
                 <th className="num">Разница</th>
-                <th className="num">Продано заказами</th>
+                <th className="num">Продано заказами VITALO</th>
                 <th>Итог</th>
               </tr>
             </thead>
@@ -847,11 +864,20 @@ export function Reconcile() {
                     <div className="muted small">{r.name_ru}</div>
                   </td>
                   <td className="num">{r.units_in_stock}</td>
+                  <td className="num">{r.units_reserved_yandex}</td>
                   <td className="num">{r.actual_qty}</td>
-                  <td className="num">{r.reserved_qty}</td>
+                  <td className="num">{r.reserved_vitalo}</td>
                   <td className="num strong">{r.difference}</td>
                   <td className="num">{r.sold_by_orders}</td>
-                  <td>{r.explained ? <Badge tone="ok">сходится</Badge> : <Badge tone="bad">не объясняется</Badge>}</td>
+                  <td>
+                    {r.state === 'ok' ? (
+                      <Badge tone="ok">сходится</Badge>
+                    ) : r.state === 'vitalo_orders' ? (
+                      <Badge tone="info">только заказы VITALO (до 2E)</Badge>
+                    ) : (
+                      <Badge tone="bad">не объясняется</Badge>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -860,5 +886,162 @@ export function Reconcile() {
       )}
       <p className="muted small">То же в терминале: npm run reconcile:units (только чтение).</p>
     </>
+  );
+}
+
+// ====================================================================== Stage 2C: actions on a unit
+
+type UnitAction = 'missing' | 'found' | 'write-off' | 'accept' | 'return-write-off' | 'correct';
+
+const ACTION_INFO: Record<UnitAction, { title: string; button: string; reasons: readonly string[]; note: string }> = {
+  missing: { title: 'Отметить потерянной', button: 'Отметить «Потеряна»', reasons: REASONS.missing, note: 'Банка уйдёт из остатка. Если найдётся — «Банка найдена».' },
+  found: { title: 'Банка найдена', button: 'Вернуть на склад', reasons: REASONS.found, note: 'Банка снова будет «На складе», остаток +1.' },
+  'write-off': { title: 'Списать банку', button: 'Списать', reasons: REASONS.writeoff, note: 'Только администратор. Банка не удаляется: статус «Списана», история сохраняется.' },
+  accept: { title: 'Возврат: вернуть на склад', button: 'Вернуть на склад', reasons: REASONS.accept, note: 'Проверьте срок годности и целостность банки.' },
+  'return-write-off': { title: 'Возврат: списать', button: 'Списать', reasons: REASONS.returnWriteoff, note: 'Банка из возврата списывается.' },
+  correct: { title: 'Корректировка (явная ошибка)', button: 'Сохранить корректировку', reasons: REASONS.correct, note: 'Только администратор. Всё пишется в историю банки и журнал аудита.' },
+};
+
+/** Buttons for the actions this employee may do with this unit in its status. */
+function UnitActions({ unit, onPick }: { unit: UnitCard; onPick: (a: UnitAction) => void }) {
+  const { can } = useSession();
+  const list: UnitAction[] = [];
+  if (unit.status === 'IN_STOCK' && can('units.missing')) list.push('missing');
+  if (unit.status === 'MISSING' && can('units.missing')) list.push('found');
+  if (unit.status === 'RETURNED' && can('units.return_decision')) list.push('accept', 'return-write-off');
+  if (['IN_STOCK', 'MISSING'].includes(unit.status) && can('units.writeoff')) list.push('write-off');
+  if (unit.status !== 'VOIDED' && can('units.correct')) list.push('correct');
+  if (!list.length) return null;
+  return (
+    <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+      {list.map((a) => (
+        <button key={a} className="btn btn-ghost" onClick={() => onPick(a)}>
+          {ACTION_INFO[a].title}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const CORRECT_STATUSES = ['IN_STOCK', 'MISSING', 'WRITTEN_OFF'];
+
+/** «31.12.2027» -> «2027-12-31» (anything else stays as typed, the server answers 400). */
+const isoOf = (ru: string) => (/^\d{2}\.\d{2}\.\d{4}$/.test(ru) ? `${ru.slice(6)}-${ru.slice(3, 5)}-${ru.slice(0, 2)}` : ru);
+
+function UnitActionModal({ unit, action, onClose }: { unit: UnitCard; action: UnitAction; onClose: () => void }) {
+  const client = useQueryClient();
+  const info = ACTION_INFO[action];
+  const [reason, setReason] = useState('');
+  const [checked, setChecked] = useState(false);
+  const [expiry, setExpiry] = useState(ruDate(unit.expiry_date));
+  const [status, setStatus] = useState('');
+  const m = useMutation({
+    mutationFn: () => {
+      const path = action === 'accept' || action === 'return-write-off' ? 'return-decision' : action;
+      const body =
+        action === 'accept'
+          ? { decision: 'ACCEPT', reason, checked }
+          : action === 'return-write-off'
+            ? { decision: 'WRITE_OFF', reason }
+            : action === 'correct'
+              ? { reason, ...(isoOf(expiry) !== unit.expiry_date && { expiry_date: isoOf(expiry) }), ...(status && { status }) }
+              : { reason };
+      return api(`/staff/units/${unit.id}/${path}`, { method: 'POST', body });
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['unit', unit.id] });
+      void client.invalidateQueries({ queryKey: ['units'] });
+      void client.invalidateQueries({ queryKey: ['units-returns'] });
+      void client.invalidateQueries({ queryKey: ['units-reconcile'] });
+      onClose();
+    },
+  });
+  const ready = reason.length >= 3 && (action !== 'accept' || checked) && (action !== 'correct' || status !== '' || isoOf(expiry) !== unit.expiry_date);
+  return (
+    <Modal title={`${info.title}: ${unit.physical_id}`} onClose={onClose}>
+      <p className="muted">{info.note}</p>
+      {action === 'correct' && (
+        <div className="form-grid">
+          <Field label="Срок годности" hint="ДД.ММ.ГГГГ">
+            <input value={expiry} onChange={(e) => setExpiry(maskDate(e.target.value))} inputMode="numeric" />
+          </Field>
+          <Field label="Статус">
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">не менять ({UNIT_STATUS[unit.status] ?? unit.status})</option>
+              {CORRECT_STATUSES.filter((x) => x !== unit.status).map((x) => (
+                <option key={x} value={x}>
+                  {UNIT_STATUS[x]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      )}
+      <ReasonPicker options={info.reasons} onChange={setReason} />
+      {action === 'accept' && (
+        <label className="check">
+          <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} /> Срок годности ({ruDate(unit.expiry_date)}) и целостность банки проверены
+        </label>
+      )}
+      <ErrorBox error={m.error} />
+      <div className="modal-actions">
+        <button className="btn" disabled={!ready || m.isPending} onClick={() => m.mutate()}>
+          {info.button}
+        </button>
+        <button className="btn btn-ghost" onClick={onClose}>
+          Отмена
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+interface PendingReturn {
+  id: string;
+  physical_id: string;
+  product: { sku: string; name_ru: string };
+  expiry_date: string;
+  expired: boolean;
+  order: { id: string; external_number: string; cancel_reason: string | null } | null;
+}
+
+/** «Возвраты на проверке»: returned units waiting for the warehouse decision. */
+function PendingReturns({ onOpen }: { onOpen: (id: string) => void }) {
+  const q = useQuery({ queryKey: ['units-returns'], queryFn: () => api<PendingReturn[]>('/staff/units/returns/pending') });
+  if (!q.data?.length) return null;
+  return (
+    <section className="card">
+      <h2>Возвраты на проверке: {q.data.length}</h2>
+      <p className="muted small">Откройте банку и примите решение: вернуть на склад (срок и целостность проверены) или списать.</p>
+      <table className="table table-hover">
+        <tbody>
+          {q.data.map((r) => (
+            <tr key={r.id} onClick={() => onOpen(r.id)} style={{ cursor: 'pointer' }}>
+              <td>
+                <span className="id-chip">{r.physical_id}</span>
+              </td>
+              <td>
+                <strong>{r.product.sku}</strong>
+                <div className="muted small">{r.product.name_ru}</div>
+              </td>
+              <td>
+                {ruDate(r.expiry_date)}
+                {r.expired && <div className="small text-warn">срок истёк — только списать</div>}
+              </td>
+              <td className="small">
+                {r.order ? (
+                  <>
+                    Яндекс № {r.order.external_number}
+                    {r.order.cancel_reason && <div className="muted">{r.order.cancel_reason}</div>}
+                  </>
+                ) : (
+                  '—'
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
