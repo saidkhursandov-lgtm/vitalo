@@ -51,6 +51,9 @@ interface Order {
   lines: { id: string; product: { id: string; sku: string; name_ru: string }; qty: number; unit_price_uzs: number; units: OrderUnit[]; picked: number }[];
   released: { physical_id: string; status: string; released_at: string; reason: string | null; return_decision: string | null }[];
   history: { action: string; at: string; staff_name: string | null; details: Record<string, unknown> | null }[];
+  source?: 'manual' | 'yandex_api';
+  stock_shortage?: boolean;
+  yandex?: { status: string; substatus: string | null; campaign_id: number | null; updated_at: string | null } | null;
   commission_percent?: number;
   money?: { revenue_uzs: number; commission_uzs: number; cost_uzs: number; profit_uzs: number } | null;
   message?: string;
@@ -290,7 +293,22 @@ export function YandexOrderNew() {
 
 // ====================================================================== card
 
-type Action = 'assemble' | 'hand-over' | 'deliver' | 'cancel';
+type Action = 'assemble' | 'hand-over' | 'deliver' | 'cancel' | 'reserve';
+
+/** Yandex order statuses (shown only). */
+const YANDEX_STATUS_RU: Record<string, string> = {
+  PLACING: 'Оформляется',
+  RESERVED: 'Зарезервирован',
+  UNPAID: 'Не оплачен',
+  PENDING: 'Ожидает',
+  PROCESSING: 'В обработке',
+  DELIVERY: 'Передан в доставку',
+  PICKUP: 'В пункте выдачи',
+  DELIVERED: 'Доставлен',
+  CANCELLED: 'Отменён',
+  RETURNED: 'Возвращён',
+  PARTIALLY_RETURNED: 'Частично возвращён',
+};
 
 export function YandexOrderDetail() {
   const { id } = useParams();
@@ -339,7 +357,7 @@ export function YandexOrderDetail() {
           <dd>{money(o.total_uzs)}</dd>
           <dt>Создал</dt>
           <dd>
-            {o.created_by_name ?? '—'}, {dateTime(o.created_at)}
+            {o.created_by_name ?? (o.source === 'yandex_api' ? 'синхронизация Яндекса' : '—')}, {dateTime(o.created_at)}
           </dd>
           {o.note && (
             <>
@@ -356,7 +374,38 @@ export function YandexOrderDetail() {
         </dl>
       </section>
 
-      {acts && o.status === 'NEW' && <PickBox order={o} onDone={done} />}
+      {o.yandex && (
+        <section className="card">
+          <dl className="props">
+            <dt>Статус Яндекса</dt>
+            <dd>
+              {YANDEX_STATUS_RU[o.yandex.status] ?? o.yandex.status}
+              {o.yandex.substatus ? ` · ${o.yandex.substatus}` : ''}
+              {o.yandex.updated_at && <span className="muted small"> · обновлён в Яндексе {dateTime(o.yandex.updated_at)}</span>}
+            </dd>
+            <dt>Заказ в Яндексе</dt>
+            <dd>
+              № {o.external_number}
+              {o.yandex.campaign_id ? <span className="muted small"> · кампания {o.yandex.campaign_id}</span> : null}
+              {o.source === 'yandex_api' && <span className="muted small"> · создан автоматически синхронизацией</span>}
+            </dd>
+          </dl>
+          <p className="muted small">Статус Яндекса только показывается: наши статусы меняют сотрудники (отмену в Яндексе система переносит сама).</p>
+        </section>
+      )}
+      {o.stock_shortage && o.status === 'NEW' && (
+        <div className="alert alert-warn">
+          Не хватает остатка: банки этого заказа не зарезервированы. Когда остаток появится — «Зарезервировать банки».
+          {acts && (
+            <div style={{ marginTop: 8 }}>
+              <ActionButton id={o.id} action="reserve" onDone={done}>
+                Зарезервировать банки
+              </ActionButton>
+            </div>
+          )}
+        </div>
+      )}
+      {acts && o.status === 'NEW' && !o.stock_shortage && <PickBox order={o} onDone={done} />}
 
       <section className="card flush">
         <table className="table">

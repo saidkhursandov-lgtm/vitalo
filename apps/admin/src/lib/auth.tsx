@@ -40,7 +40,8 @@ export type Permission =
   | 'units.missing'
   | 'units.return_decision'
   | 'units.writeoff'
-  | 'units.correct';
+  | 'units.correct'
+  | 'yandex.sync';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };

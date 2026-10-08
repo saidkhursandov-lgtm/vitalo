@@ -299,3 +299,6 @@ textarea { resize: vertical; }
 .id-chip { font-family: ui-monospace, Consolas, monospace; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: var(--neutral-soft); }
 .row-bad td:first-child { box-shadow: inset 3px 0 var(--bad); }
 .row-bad td { color: var(--bad); }
+
+/* Stage 2D: raw answers of Yandex on the sync screen */
+.raw-json { max-height: 420px; overflow: auto; background: var(--neutral-soft); border-radius: 8px; padding: 12px; font-size: 12px; white-space: pre-wrap; word-break: break-word; }

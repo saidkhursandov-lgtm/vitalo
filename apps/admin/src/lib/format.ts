@@ -75,6 +75,8 @@ export const AUDIT_ACTION: Record<string, string> = {
   'yandex_order.picked': 'Банка собрана в заказ Яндекса',
   'yandex_order.unit_replaced': 'Банка заменена при сборке',
   'yandex_order.status': 'Статус заказа Яндекса',
+  'yandex_order.reserved': 'Зарезервированы банки заказа Яндекса',
+  'yandex_sync.closed': 'Заказ Яндекса закрыт как неактуальный',
   'unit.missing': 'Банка отмечена потерянной',
   'unit.found': 'Банка найдена',
   'unit.written_off': 'Банка списана',

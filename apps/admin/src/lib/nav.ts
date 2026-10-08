@@ -11,6 +11,7 @@ export const NAV: NavItem[] = [
   { to: '/', label: 'Дашборд', permission: 'dashboard.view' },
   { to: '/orders', label: 'Заказы', permission: 'orders.view' },
   { to: '/yandex-orders', label: 'Заказы Яндекса', permission: 'yandex.orders.view' },
+  { to: '/yandex-sync', label: 'Синхронизация Яндекса', permission: 'yandex.sync' },
   { to: '/products', label: 'Товары', permission: 'products.view' },
   { to: '/inventory', label: 'Склад', permission: 'inventory.view' },
   { to: '/purchases', label: 'Закупки', permission: 'purchases.view' },
