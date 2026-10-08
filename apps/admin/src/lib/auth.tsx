@@ -147,6 +147,6 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
 
 declare global {
   interface Window {
-    Telegram?: { WebApp?: { initData: string; ready(): void; expand(): void } };
+    Telegram?: { WebApp?: { initData: string; ready(): void; expand(): void; openLink?(url: string): void } };
   }
 }

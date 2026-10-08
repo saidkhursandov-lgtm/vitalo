@@ -147,14 +147,14 @@ export class AdminReceivingService {
     const lines = await this.sourceLines(this.prisma, src);
     const pending = await this.pendingByLine(this.prisma, lines.map((l) => l.id));
     const items = new Map<string, {
-      product: { id: string; sku: string; name_ru: string; label_ready: boolean };
+      product: { id: string; sku: string; name_ru: string };
       remaining_qty: number;
       accepted_qty: number;
       purchases: { id: string; ozon_order_number: string | null; purchase_date: string; remaining_qty: number }[];
     }>();
     for (const l of lines) {
       const it = items.get(l.product_id) ?? {
-        product: { id: l.product.id, sku: l.product.sku, name_ru: l.product.name_ru, label_ready: !!(l.product.label_composition_ru && l.product.label_composition_uz) },
+        product: { id: l.product.id, sku: l.product.sku, name_ru: l.product.name_ru },
         remaining_qty: 0,
         accepted_qty: 0,
         purchases: [],
@@ -227,7 +227,6 @@ export class AdminReceivingService {
       this.prisma.physical_units.findMany({ where: { receiving_session_id: id }, orderBy: { seq: 'asc' }, include: unitInclude }),
     ]);
     const live = units.filter((u) => u.status !== 'VOIDED');
-    const noComposition = [...new Map(live.filter((u) => !u.product.label_composition_ru || !u.product.label_composition_uz).map((u) => [u.product.id, u.product.sku])).values()];
     return {
       id: s.id,
       type: s.type,
@@ -254,7 +253,7 @@ export class AdminReceivingService {
         printed: live.filter((u) => u.label_print_count > 0).length,
         discrepancy_qty: lines.reduce((sum, l) => sum + (l.discrepancy_qty ?? 0), 0),
       },
-      label_warnings: noComposition.map((sku) => `${sku}: не заполнен короткий состав для этикетки`),
+      label_warnings: [] as string[], // the 58×40 label has no composition: nothing blocks the «Этикетки» step
     };
   }
 
@@ -348,7 +347,6 @@ export class AdminReceivingService {
         physical_ids: created.map((c) => c.physical_id),
         warnings: [
           ...(over ? [`Расхождение: принято на ${over} шт. больше ожидаемого`] : []),
-          ...(!product.label_composition_ru || !product.label_composition_uz ? [`${product.sku}: не заполнен короткий состав для этикетки`] : []),
         ],
       };
     });
@@ -464,7 +462,7 @@ export class AdminReceivingService {
   private sourceLines(db: Tx | PrismaService, src: { ozon_account_id?: string | null; supplier_id?: string | null }) {
     return db.purchase_lines.findMany({
       where: { purchase: { status: 'EXPECTED', ...sourceWhere(src) } },
-      include: { purchase: true, product: { select: { id: true, sku: true, name_ru: true, label_composition_ru: true, label_composition_uz: true } } },
+      include: { purchase: true, product: { select: { id: true, sku: true, name_ru: true } } },
       orderBy: [{ purchase: { purchase_date: 'asc' } }, { purchase: { created_at: 'asc' } }, { position: 'asc' }],
     });
   }

@@ -119,7 +119,7 @@ export const liveUnitsOfLine = (tx: Tx, lineId: string) => tx.physical_units.cou
 // ---------------------------------------------------------------- views
 
 export const unitInclude = {
-  product: { select: { id: true, sku: true, name_ru: true, label_composition_ru: true, label_composition_uz: true, unit_tracking: true } },
+  product: { select: { id: true, sku: true, name_ru: true, unit_tracking: true } },
   purchase: { select: { id: true, source_type: true, ozon_order_number: true, purchase_date: true } },
 } satisfies Prisma.physical_unitsInclude;
 export type UnitRow = Prisma.physical_unitsGetPayload<{ include: typeof unitInclude }>;
@@ -153,14 +153,15 @@ export function unitView(u: UnitRow, full: boolean) {
   };
 }
 
-/** What a label carries: no product name, no order or purchase numbers (S2B-2). */
+/**
+ * What the 58×40 label carries: Physical ID (also in the QR code), SKU and the expiry date. No product name, no
+ * composition, no order or purchase numbers, no price or cost (S2B-2).
+ */
 export function labelView(u: UnitRow) {
   return {
     id: u.id,
     physical_id: u.physical_id,
     sku: u.product.sku,
-    composition_ru: u.product.label_composition_ru,
-    composition_uz: u.product.label_composition_uz,
     expiry_date: day(u.expiry_date),
   };
 }

@@ -17,9 +17,12 @@ import { StaffAuthController } from './staff.controllers';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { AdminReceivingController, AdminReceivingService } from '../receiving/admin-receiving';
-import { AdminUnitsController, AdminUnitsService } from '../receiving/admin-units';
+import { AdminUnitsController, AdminUnitsService, PrintLabelsController } from '../receiving/admin-units';
 
-/** Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions. */
+/**
+ * Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions, except
+ * PrintLabelsController (/api/print/labels): it accepts only a signed print ticket issued by a signed-in employee.
+ */
 @Module({
   imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule],
   controllers: [
@@ -33,6 +36,7 @@ import { AdminUnitsController, AdminUnitsService } from '../receiving/admin-unit
     AdminPurchasesController,
     AdminReceivingController,
     AdminUnitsController,
+    PrintLabelsController,
     AdminSettingsController,
     StaffUsersController,
     AuditController,

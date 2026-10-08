@@ -142,6 +142,12 @@ export class PaymentTimeoutDto {
   timeout_minutes!: number;
 }
 
+/** Physical ID label paper, mm. XP-365B prints up to 76 mm wide. Default 58×40. */
+export class LabelSizeDto {
+  @ApiProperty({ example: 58, minimum: 30, maximum: 76 }) @IsInt() @Min(30) @Max(76) width_mm!: number;
+  @ApiProperty({ example: 40, minimum: 20, maximum: 120 }) @IsInt() @Min(20) @Max(120) height_mm!: number;
+}
+
 /** Short texts (banner, tiles): up to 200 characters, both languages required. */
 export class ShortTextDto {
   @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(200) ru!: string;
@@ -338,6 +344,15 @@ export class AdminSettingsService {
   }
 
   /** All regions and cities, inactive included (customers only see active ones). */
+  labelSize() {
+    return this.settings.getOrDefault('label_size');
+  }
+
+  async setLabelSize(staffId: string, dto: LabelSizeDto) {
+    await this.saveSetting(staffId, SETTING_KEYS.labelSize, { width_mm: dto.width_mm, height_mm: dto.height_mm }, 'settings.label_size_updated');
+    return this.labelSize();
+  }
+
   async regions() {
     const regions = await this.prisma.regions.findMany({ orderBy: { name_ru: 'asc' }, include: { cities: { orderBy: { name_ru: 'asc' } } } });
     return regions.map((r) => ({
@@ -632,6 +647,16 @@ export class AdminSettingsController {
   @Put('bonus-teaser')
   setBonusTeaser(@CurrentStaff() me: StaffContext, @Body() dto: BonusTeaserDto) {
     return this.settings.setBonusTeaser(me.staff.id, dto);
+  }
+
+  @Get('label-size')
+  labelSize() {
+    return this.settings.labelSize();
+  }
+
+  @Put('label-size')
+  setLabelSize(@CurrentStaff() me: StaffContext, @Body() dto: LabelSizeDto) {
+    return this.settings.setLabelSize(me.staff.id, dto);
   }
 
   @Get('regions')

@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { spawnSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import ExcelJS from 'exceljs';
@@ -10,6 +11,7 @@ import { tashkentDateString } from '../src/common/tashkent';
 import { applyOpeningStock, planOpeningStock } from '../src/import/opening-stock';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { OPENING_REASON } from '../src/receiving/admin-receiving';
+import { printTicketKey, signPrintTicket } from '../src/receiving/print-ticket';
 import { createUnits } from '../src/receiving/units';
 import { AuditService } from '../src/staff/audit.service';
 import { archiveTestProducts, bearer, createTestApp, createTestProduct, loginStaff, stockOf } from './helpers';
@@ -128,7 +130,7 @@ describe('Stage 2B: Physical ID, receiving, labels (e2e)', () => {
     expect(sources.ozon_accounts.find((a: { id: string }) => a.id === account.id)).toMatchObject({ expected_qty: 10, open_session_id: null });
     const expected = (await as('warehouse').get(`/staff/receiving/expected?ozon_account_id=${account.id}`).expect(200)).body;
     expect(expected.items.map((i: { product: { sku: string }; remaining_qty: number }) => [i.product.sku, i.remaining_qty])).toEqual([[p1.sku, 8], [p2.sku, 2]]);
-    expect(expected.items[0].product).toMatchObject({ name_ru: p1.name_ru, label_ready: true });
+    expect(expected.items[0].product).toEqual({ id: p1.id, sku: p1.sku, name_ru: p1.name_ru });
     for (const body of [sources, expected]) {
       expect(keysOf(body).filter((k) => LEAK.test(k))).toEqual([]);
       expect(JSON.stringify(body)).not.toContain(OZON_OLD);
@@ -240,20 +242,20 @@ describe('Stage 2B: Physical ID, receiving, labels (e2e)', () => {
     expect(wh.events.map((e: { type: string }) => e.type)).not.toContain('COST_CHANGED');
   });
 
-  it('labels: Physical ID, SKU, composition RU/UZ, expiry — no product name; every print is counted', async () => {
+  it('labels 58×40: Physical ID, SKU, expiry — no product name, no composition; every print is counted', async () => {
     const res = (await as('warehouse').post('/staff/units/labels', { session_id: sessionId }).expect(200)).body;
     expect(res.labels).toHaveLength(11);
     expect(res.labels[0]).toEqual({
       id: expect.any(String),
       physical_id: expect.stringMatching(PHYSICAL_ID),
       sku: p1.sku,
-      composition_ru: 'Рыбий жир, желатин',
-      composition_uz: 'Baliq yog‘i, jelatin',
       expiry_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
+    expect(res.label_size).toEqual({ width_mm: 58, height_mm: 40 });
     expect(JSON.stringify(res)).not.toContain(p1.name_ru);
+    expect(JSON.stringify(res)).not.toContain('Рыбий жир');
     expect(JSON.stringify(res)).not.toMatch(/OZ2B/);
-    expect(res.warnings.join(' ')).toContain(`${p2.sku}: не заполнен короткий состав`);
+    expect(res.warnings).toEqual([]); // p2 has no short composition: no longer a warning
     const again = (await as('warehouse').post('/staff/units/labels', { unit_ids: [res.labels[0].id] }).expect(200)).body;
     expect(again.labels).toHaveLength(1);
     const unit = await prisma.physical_units.findUniqueOrThrow({ where: { id: res.labels[0].id } });
@@ -261,6 +263,63 @@ describe('Stage 2B: Physical ID, receiving, labels (e2e)', () => {
     expect(unit.last_printed_at).not.toBeNull();
     expect(await prisma.physical_unit_events.count({ where: { physical_unit_id: unit.id, type: 'LABEL_PRINTED' } })).toBe(2);
     await as('warehouse').post('/staff/units/labels', {}).expect(400);
+  });
+
+  it('print ticket: the label page opens in a normal browser without the staff token, only for its labels, 15 minutes, while the session lives', async () => {
+    const anon = () => http().post('/api/print/labels');
+    const ownToken = await loginStaff(app, STAFF_TG.warehouse); // a separate session: logged out at the end
+    const own = (p: string, body: object) => http().post(`/api${p}`).set(bearer(ownToken)).send(body);
+
+    const issued = (await own('/staff/units/labels/ticket', { session_id: sessionId }).expect(200)).body;
+    expect(issued.ticket).not.toContain(ownToken);
+    expect(new Date(issued.expires_at).getTime() - Date.now()).toBeLessThanOrEqual(15 * 60_000);
+    const before = await prisma.physical_units.findMany({ where: { receiving_session_id: sessionId, status: { not: 'VOIDED' } }, select: { id: true, label_print_count: true } });
+
+    // no Authorization header at all: the ticket alone prints this receiving and counts the print
+    const res = (await anon().send({ ticket: issued.ticket }).expect(200)).body;
+    expect(res.labels).toHaveLength(before.length);
+    expect(res.label_size).toEqual({ width_mm: 58, height_mm: 40 });
+    const after = await prisma.physical_units.findMany({ where: { id: { in: before.map((u) => u.id) } }, select: { id: true, label_print_count: true } });
+    for (const u of after) expect(u.label_print_count).toBe(before.find((b) => b.id === u.id)!.label_print_count + 1);
+    const printedBy = await prisma.physical_unit_events.findFirstOrThrow({ where: { physical_unit_id: after[0].id, type: 'LABEL_PRINTED' }, orderBy: { created_at: 'desc' }, include: { staff: true } });
+    expect(Number(printedBy.staff!.telegram_user_id)).toBe(STAFF_TG.warehouse);
+
+    // the ticket is no staff token: nothing else opens with it
+    await http().get('/api/staff/units').set(bearer(issued.ticket)).expect(401);
+    await http().get(`/api/staff/receiving/sessions/${sessionId}`).set(bearer(issued.ticket)).expect(401);
+    await anon().send({}).expect(400);
+    await anon().send({ ticket: 'garbage' }).expect(401);
+
+    // the scope cannot be changed: a forged payload with the same signature is rejected
+    const [, sig] = issued.ticket.split('.');
+    const forged = Buffer.from(JSON.stringify({ v: 1, ss: 'x', exp: 9_999_999_999, unit_ids: [before[0].id] })).toString('base64url');
+    expect((await anon().send({ ticket: `${forged}.${sig}` }).expect(401)).body.code).toBe('PRINT_TICKET_INVALID');
+
+    // expired
+    const key = printTicketKey(app.get(ConfigService).get<string>('TELEGRAM_BOT_TOKEN')!);
+    const ownSession = await prisma.staff_sessions.findFirstOrThrow({ where: { staff_user: { telegram_user_id: BigInt(STAFF_TG.warehouse) }, revoked_at: null }, orderBy: { created_at: 'desc' } });
+    const old = signPrintTicket(key, { v: 1, ss: ownSession.id, exp: Math.floor(Date.now() / 1000) - 1, session_id: sessionId });
+    expect((await anon().send({ ticket: old }).expect(401)).body.code).toBe('PRINT_TICKET_EXPIRED');
+
+    // a single unit (reprint from the unit card)
+    const one = (await own('/staff/units/labels/ticket', { unit_ids: [before[0].id] }).expect(200)).body;
+    expect((await anon().send({ ticket: one.ticket }).expect(200)).body.labels).toHaveLength(1);
+    await own('/staff/units/labels/ticket', { unit_ids: Array.from({ length: 51 }, () => randomUUID()) }).expect(400);
+    await own('/staff/units/labels/ticket', {}).expect(400);
+
+    // logout ends the ticket at once
+    await http().post('/api/staff/auth/logout').set(bearer(ownToken)).expect((r) => expect(r.status).toBeLessThan(300));
+    expect((await anon().send({ ticket: issued.ticket }).expect(401)).body.code).toBe('PRINT_TICKET_INVALID');
+
+    // the receiving screen shows no composition warnings any more
+    expect((await as('warehouse').get(`/staff/receiving/sessions/${sessionId}`).expect(200)).body.label_warnings).toEqual([]);
+  });
+
+  it('label size: a setting (admin), 58×40 by default; print roles can read it', async () => {
+    expect((await as('warehouse').get('/staff/units/labels/size').expect(200)).body).toEqual({ width_mm: 58, height_mm: 40 });
+    await as('admin').get('/staff/settings/label-size').expect(200);
+    await http().put('/api/staff/settings/label-size').set(bearer(tokens.admin)).send({ width_mm: 80, height_mm: 40 }).expect(400); // wider than the printer
+    await http().put('/api/staff/settings/label-size').set(bearer(tokens.warehouse)).send({ width_mm: 58, height_mm: 40 }).expect(403);
   });
 
   it('«Завершить»: one transaction — IN_STOCK, received quantities, purchase status, stock with a receipt; repeat changes nothing', async () => {

@@ -1,13 +1,33 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Injectable, NotFoundException, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { PhysicalUnitStatus, Prisma, StaffRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { can } from '../staff/permissions';
+import { SettingsService } from '../settings/settings.service';
+import { can, type Permission } from '../staff/permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
 import { normalizePhysicalId } from './physical-id';
+import { PrintScope, printTicketKey, PrintTicketError, signPrintTicket, TICKET_MAX_UNITS, TICKET_TTL_SECONDS, verifyPrintTicket } from './print-ticket';
 import { RECONCILE_HINT, reconcileUnits } from './reconcile';
 import { labelView, unitInclude, unitView } from './units';
 
@@ -31,10 +51,21 @@ export class PrintLabelsDto {
   @ApiPropertyOptional({ description: 'Все единицы приёмки (кроме отменённых)' }) @IsOptional() @IsUUID() session_id?: string;
 }
 
+export class PrintTicketDto {
+  @ApiProperty({ description: 'Билет печати из POST /staff/units/labels/ticket' }) @IsString() @IsNotEmpty() @MaxLength(4000) ticket!: string;
+}
+
+/** Who may print labels (also checked again when a print ticket is used). */
+const PRINT_PERMISSIONS: Permission[] = ['units.view', 'receiving.perform'];
+
 /** Stage 2B «Единицы»: list, lookup by a typed / scanned Physical ID, card with history, label printing. */
 @Injectable()
 export class AdminUnitsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
+    private readonly config: ConfigService,
+  ) {}
 
   async list(q: UnitsQuery, full: boolean) {
     const and: Prisma.physical_unitsWhereInput[] = [];
@@ -94,7 +125,7 @@ export class AdminUnitsService {
    */
   async printLabels(staffId: string, dto: PrintLabelsDto) {
     if (!dto.unit_ids?.length && !dto.session_id) throw new BadRequestException({ code: 'NOTHING_TO_PRINT', message: 'Выберите единицы или приёмку' });
-    return this.prisma.$transaction(async (tx) => {
+    const labels = await this.prisma.$transaction(async (tx) => {
       const units = await tx.physical_units.findMany({
         where: dto.session_id ? { receiving_session_id: dto.session_id, status: { not: 'VOIDED' } } : { id: { in: dto.unit_ids } },
         orderBy: { seq: 'asc' },
@@ -110,12 +141,57 @@ export class AdminUnitsService {
       await tx.physical_unit_events.createMany({
         data: units.map((u) => ({ physical_unit_id: u.id, type: 'LABEL_PRINTED', note: `Печать этикетки №${u.label_print_count + 1}`, created_by: staffId })),
       });
-      const missing = [...new Set(units.filter((u) => !u.product.label_composition_ru || !u.product.label_composition_uz).map((u) => u.product.sku))];
-      return {
-        labels: units.map(labelView),
-        warnings: missing.map((sku) => `${sku}: не заполнен короткий состав для этикетки — этикетка напечатается без него`),
-      };
+      return units.map(labelView);
     });
+    // The 58×40 label has no short composition, so a missing one is no warning any more.
+    return { labels, label_size: await this.settings.getOrDefault('label_size'), warnings: [] as string[] };
+  }
+
+  /** Paper size of the label for the test print (the setting itself is edited in Настройки → Печать). */
+  labelSize() {
+    return this.settings.getOrDefault('label_size');
+  }
+
+  private ticketKey() {
+    const secret = this.config.get<string>('TELEGRAM_BOT_TOKEN');
+    if (!secret) throw new InternalServerErrorException('TELEGRAM_BOT_TOKEN is not configured');
+    return printTicketKey(secret);
+  }
+
+  /**
+   * «Напечатать этикетки» in the admin panel: a short-lived ticket for the print page, so that it opens in a normal
+   * browser too. Only the labels of this receiving / these units, only while the employee's session is valid.
+   */
+  issueTicket(me: StaffContext, dto: PrintLabelsDto) {
+    const scope = scopeOf(dto);
+    if (scope.unit_ids && scope.unit_ids.length > TICKET_MAX_UNITS) {
+      throw new BadRequestException({ code: 'TOO_MANY_UNITS', message: `Не больше ${TICKET_MAX_UNITS} единиц: всю приёмку печатайте по приёмке` });
+    }
+    const exp = Math.floor(Date.now() / 1000) + TICKET_TTL_SECONDS;
+    return { ticket: signPrintTicket(this.ticketKey(), { v: 1, ss: me.sessionId, exp, ...scope }), expires_at: new Date(exp * 1000).toISOString() };
+  }
+
+  /** The print page with a ticket: the same as POST /staff/units/labels, on behalf of the employee who asked for it. */
+  async printByTicket(ticket: string) {
+    let p;
+    try {
+      p = verifyPrintTicket(this.ticketKey(), ticket);
+    } catch (e) {
+      if (!(e instanceof PrintTicketError)) throw e;
+      throw new UnauthorizedException({
+        code: e.message === 'expired' ? 'PRINT_TICKET_EXPIRED' : 'PRINT_TICKET_INVALID',
+        message: 'Ссылка на печать устарела или неверна',
+      });
+    }
+    // Logout, block or an expired staff session end the ticket at once.
+    const session = await this.prisma.staff_sessions.findUnique({ where: { id: p.ss }, include: { staff_user: true } });
+    if (!session || session.revoked_at || session.expires_at <= new Date() || session.staff_user.status !== 'active') {
+      throw new UnauthorizedException({ code: 'PRINT_TICKET_INVALID', message: 'Сессия сотрудника закончилась' });
+    }
+    if (!PRINT_PERMISSIONS.some((perm) => can(session.staff_user.role, perm))) {
+      throw new ForbiddenException({ code: 'FORBIDDEN_FOR_ROLE', message: `Role ${session.staff_user.role} cannot do this` });
+    }
+    return this.printLabels(session.staff_user.id, scopeOf(p));
   }
 
   async reconcile() {
@@ -124,6 +200,13 @@ export class AdminUnitsService {
 }
 
 const fullFor = (role: StaffRole) => can(role, 'purchases.view_costs');
+
+/** Exactly one scope: a receiving session or a list of units. */
+function scopeOf(dto: PrintScope): PrintScope {
+  if (dto.session_id) return { session_id: dto.session_id };
+  if (dto.unit_ids?.length) return { unit_ids: [...new Set(dto.unit_ids)] };
+  throw new BadRequestException({ code: 'NOTHING_TO_PRINT', message: 'Выберите единицы или приёмку' });
+}
 
 @ApiTags('staff: units')
 @ApiBearerAuth()
@@ -152,14 +235,43 @@ export class AdminUnitsController {
 
   @Post('labels')
   @HttpCode(200)
-  @RequirePermission('units.view', 'receiving.perform')
+  @RequirePermission(...PRINT_PERMISSIONS)
   labels(@CurrentStaff() me: StaffContext, @Body() dto: PrintLabelsDto) {
     return this.units.printLabels(me.staff.id, dto);
+  }
+
+  @Get('labels/size')
+  @RequirePermission(...PRINT_PERMISSIONS)
+  labelSize() {
+    return this.units.labelSize();
+  }
+
+  @Post('labels/ticket')
+  @HttpCode(200)
+  @RequirePermission(...PRINT_PERMISSIONS)
+  ticket(@CurrentStaff() me: StaffContext, @Body() dto: PrintLabelsDto) {
+    return this.units.issueTicket(me, dto);
   }
 
   @Get(':id')
   @RequirePermission('units.view')
   get(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
     return this.units.get(id, fullFor(me.staff.role));
+  }
+}
+
+/**
+ * The label page opened in a normal browser: no staff token, only the print ticket (see print-ticket.ts).
+ * It can do exactly one thing — print the labels the ticket names — and nothing else.
+ */
+@ApiTags('staff: units')
+@Controller('print/labels')
+export class PrintLabelsController {
+  constructor(private readonly units: AdminUnitsService) {}
+
+  @Post()
+  @HttpCode(200)
+  print(@Body() dto: PrintTicketDto) {
+    return this.units.printByTicket(dto.ticket);
   }
 }

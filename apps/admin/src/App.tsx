@@ -8,7 +8,6 @@ import { Audit } from './pages/Audit';
 import { CustomerDetail, Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
-import { PrintLabels, TestPrint } from './pages/Labels';
 import { OrderDetail } from './pages/OrderDetail';
 import { Orders } from './pages/Orders';
 import { ProductEdit } from './pages/ProductEdit';
@@ -30,9 +29,6 @@ function Home() {
 export function App() {
   return (
     <Routes>
-      {/* Label printing: full page without the menu (75×120 mm per page) */}
-      <Route path="print/labels" element={<Guard perm="receiving.perform"><PrintLabels /></Guard>} />
-      <Route path="print/test" element={<Guard perm="units.view"><TestPrint /></Guard>} />
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="orders" element={<Guard perm="orders.view"><Orders /></Guard>} />

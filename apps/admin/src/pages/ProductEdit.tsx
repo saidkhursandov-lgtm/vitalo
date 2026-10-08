@@ -396,7 +396,10 @@ function CategoryChecks({ nodes, selected, disabled, onToggle, depth = 0 }: { no
   );
 }
 
-/** Stage 2B: short composition RU / UZ printed on the 75×120 label (admin and manager); unit tracking is shown only. */
+/**
+ * Stage 2B: short composition RU / UZ (admin and manager); unit tracking is shown only. The Physical ID label 58×40
+ * does not print it: the field stays for the 75×120 template (a future courier-bag label).
+ */
 function LabelCard({ product }: { product: AdminProduct }) {
   const { can } = useSession();
   const editable = can('products.label');
@@ -414,14 +417,12 @@ function LabelCard({ product }: { product: AdminProduct }) {
   return (
     <section className="card">
       <div className="section-head">
-        <h2>Этикетка 75×120</h2>
+        <h2>Короткий состав</h2>
         <span>
           Учёт по единицам: {product.unit_tracking ? <Badge tone="info">да</Badge> : <Badge>нет</Badge>}
         </span>
       </div>
-      {!product.label_composition_ru || !product.label_composition_uz ? (
-        <div className="alert alert-warn">Короткий состав не заполнен — этикетка напечатается без него.</div>
-      ) : null}
+      <p className="muted small">На этикетку Physical ID (58×40) состав не печатается. Заполнять не обязательно.</p>
       <form
         onSubmit={(e) => {
           e.preventDefault();

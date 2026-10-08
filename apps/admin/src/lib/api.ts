@@ -35,12 +35,17 @@ export function setToken(value: string | null) {
 export const hasToken = () => token !== null;
 export const setUnauthorizedHandler = (fn: () => void) => (onUnauthorized = fn);
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown; form?: FormData; headers?: Record<string, string> } = {}): Promise<T> {
+/** `anonymous`: no staff token and no sign-out on 401 (the label page authorises with a print ticket instead). */
+export async function api<T>(
+  path: string,
+  init: { method?: string; body?: unknown; form?: FormData; headers?: Record<string, string>; anonymous?: boolean } = {},
+): Promise<T> {
+  const auth = init.anonymous ? null : token;
   const res = await fetch(`${BASE}${path}`, {
     method: init.method ?? 'GET',
     headers: {
       ...(init.body !== undefined && { 'content-type': 'application/json' }),
-      ...(token && { authorization: `Bearer ${token}` }),
+      ...(auth && { authorization: `Bearer ${auth}` }),
       ...init.headers,
     },
     body: init.form ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
@@ -48,7 +53,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (res.status === 401 && token) {
+    if (res.status === 401 && auth) {
       setToken(null);
       onUnauthorized?.();
     }
@@ -111,6 +116,10 @@ const ERRORS: Record<string, string> = {
   NO_MAIN_WAREHOUSE: 'Не удалось определить основной склад (Ташкент)',
   SOURCE_REQUIRED: 'Выберите один источник: Ozon-аккаунт или поставщика',
   UNKNOWN_SOURCE: 'Источник не найден или в архиве',
+  NOTHING_TO_PRINT: 'Выберите единицы или приёмку',
+  TOO_MANY_UNITS: 'Слишком много единиц сразу — печатайте всю приёмку кнопкой «Напечатать этикетки»',
+  PRINT_TICKET_EXPIRED: 'Ссылка на печать устарела (действует 15 минут) — нажмите «Напечатать этикетки» в админке ещё раз',
+  PRINT_TICKET_INVALID: 'Ссылка на печать недействительна (или вы вышли из админки) — откройте печать из админки заново',
 };
 
 /** Russian text for an API error (validation messages are shown as they come). */

@@ -146,6 +146,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   cursor: pointer; white-space: nowrap; transition: background-color 0.15s;
 }
 .btn:hover { background: var(--primary-press); text-decoration: none; }
+.btn[aria-disabled="true"] { pointer-events: none; opacity: 0.6; }
 .btn:disabled { background: var(--neutral-soft); color: var(--muted); border-color: var(--border); cursor: default; }
 .btn-ghost { background: var(--panel); color: var(--text); border-color: var(--border-strong); }
 .btn-ghost:hover { background: var(--neutral-soft); }
@@ -238,10 +239,24 @@ textarea { resize: vertical; }
 .funnel-bar-cell { width: 40%; }
 .funnel-bar { display: block; height: 10px; min-width: 2px; border-radius: 5px; background: var(--primary); }
 
-/* ---------- Stage 2B: labels 75×120 mm (XP-365B, 203 DPI) and the receiving screen ---------- */
+/* ---------- Stage 2B: Physical ID labels (XP-365B, 203 DPI) and the receiving screen ---------- */
 .print-page { background: var(--bg); min-height: 100vh; padding: 16px; }
 .print-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.labels { display: flex; flex-wrap: wrap; gap: 8mm; }
+.labels { display: flex; flex-wrap: wrap; gap: 8mm; align-items: flex-start; }
+/* 58×40 mm by default; --k scales the layout for another paper size from the settings. */
+.idlabel {
+  --k: 1; padding: 2mm; box-sizing: border-box; overflow: hidden; background: #fff; color: #000;
+  display: flex; flex-direction: column; gap: calc(var(--k) * 1mm); outline: 1px dashed var(--border-strong);
+  font-family: Consolas, 'Cascadia Mono', 'DejaVu Sans Mono', 'Courier New', monospace;
+}
+.idlabel-id { font-size: calc(var(--k) * 9.5mm); line-height: 1; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; }
+.idlabel-row { flex: 1; min-height: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: calc(var(--k) * 1.5mm); }
+.idlabel-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; align-self: stretch; padding-bottom: calc(var(--k) * 0.5mm); }
+.idlabel-sku { font-size: calc(var(--k) * 4.6mm); line-height: 1.1; font-weight: 700; overflow-wrap: anywhere; }
+.idlabel-exp span { display: block; font-family: var(--font); font-size: calc(var(--k) * 2.6mm); line-height: 1.2; }
+.idlabel-exp strong { display: block; font-size: calc(var(--k) * 5mm); line-height: 1.1; white-space: nowrap; }
+.idlabel-qr { display: block; flex: none; margin-right: calc(var(--k) * -0.7mm); margin-bottom: calc(var(--k) * -0.7mm); }
+/* 75×120 template (former Physical ID label, kept for a future courier-bag label; not used now) */
 .label {
   width: 75mm; height: 120mm; padding: 2mm; box-sizing: border-box; overflow: hidden; background: #fff; color: #000;
   display: flex; flex-direction: column; align-items: center; gap: 1.5mm; font-family: var(--font); outline: 1px dashed var(--border-strong);
@@ -264,9 +279,10 @@ textarea { resize: vertical; }
   .no-print { display: none !important; }
   html, body, .print-page { background: #fff; margin: 0; padding: 0; min-height: 0; }
   .labels { display: block; }
-  .label { outline: none; break-after: page; page-break-after: always; }
+  .label, .idlabel { outline: none; break-after: page; page-break-after: always; }
+  .calib-off { display: contents; }
   .calib { break-after: page; }
-  .calib .label { break-after: auto; page-break-after: auto; }
+  .calib .label, .calib .idlabel { break-after: auto; page-break-after: auto; }
 }
 
 .steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }

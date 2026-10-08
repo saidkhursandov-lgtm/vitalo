@@ -15,7 +15,14 @@ export const SETTING_KEYS = {
   paymentCheckReminderHours: 'payment_check_reminder_hours',
   homeContent: 'home_content',
   bonusTeaser: 'bonus_teaser',
+  labelSize: 'label_size',
 } as const;
+
+/** Physical ID label paper (XP-365B: print width up to 76 mm). */
+export interface LabelSize {
+  width_mm: number;
+  height_mm: number;
+}
 
 export interface LocalizedText {
   ru: string;
@@ -54,6 +61,8 @@ export const SETTING_DEFAULTS = {
   /** Stage 0.2: admins/managers are reminded once when «Я оплатил(а)» stays unconfirmed this many hours (1–48). */
   payment_check_reminder_hours: 3 as number,
   bonus_teaser: BONUS_TEASER_DEFAULT,
+  /** Physical ID label 58×40 mm. Not inserted by a migration: the default is used until an admin saves one. */
+  label_size: { width_mm: 58, height_mm: 40 } as LabelSize,
 };
 
 /** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */

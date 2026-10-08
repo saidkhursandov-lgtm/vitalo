@@ -139,7 +139,7 @@ export class ProductInput {
 
 export class ProductPatch extends PartialType(ProductInput) {}
 
-/** Stage 2B: short composition for the 75×120 label (admin and manager). Empty = not filled. */
+/** Stage 2B: short composition (admin and manager). Empty = not filled. Not printed on the 58×40 Physical ID label (S2B-8). */
 export class ProductLabelDto {
   @ApiPropertyOptional({ nullable: true, maxLength: 300 }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) label_composition_ru?: string | null;
   @ApiPropertyOptional({ nullable: true, maxLength: 300 }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) label_composition_uz?: string | null;

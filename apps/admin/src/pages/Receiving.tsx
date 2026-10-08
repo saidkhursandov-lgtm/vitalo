@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BackIcon } from '../components/Icons';
 import { Badge, ErrorBox, Field, Loading, Modal, Pagination } from '../components/ui';
@@ -43,14 +43,13 @@ interface Session {
   lines: { id: string; product: { sku: string; name_ru: string }; qty: number; discrepancy_qty: number | null }[];
   units: Unit[];
   summary: { units: number; printed: number; discrepancy_qty: number };
-  label_warnings: string[];
   created?: string[];
   warnings?: string[];
   replayed?: boolean;
 }
 
 interface Expected {
-  product: { id: string; sku: string; name_ru: string; label_ready: boolean };
+  product: { id: string; sku: string; name_ru: string };
   remaining_qty: number;
   accepted_qty: number;
   open_qty: number;
@@ -63,7 +62,57 @@ const SESSION_STATUS: Record<string, [string, 'warn' | 'ok' | 'neutral']> = {
   CANCELLED: ['Отменена', 'neutral'],
 };
 const sourceTitle = (s: Source) => (s.type === 'OZON' ? `Ozon · ${s.name}` : s.type === 'SUPPLIER' ? `Поставщик · ${s.name}` : 'Начальный остаток');
-const openPrint = (query: string) => window.open(`/print/labels?${query}`, '_blank');
+
+type PrintScope = { session_id: string } | { unit_ids: string[] };
+
+/**
+ * «Напечатать этикетки»: a link to the label page with a print ticket in the #fragment (never the staff token).
+ * The ticket allows only these labels for 15 minutes; it is renewed every 5 minutes, so the link always has time
+ * left. In Telegram the page opens in the external browser (Chrome): it does not need the Telegram sign-in.
+ */
+function PrintLink({ scope, className = 'btn', onOpen, children }: { scope: PrintScope; className?: string; onOpen?: () => void; children: ReactNode }) {
+  const q = useQuery({
+    queryKey: ['print-ticket', scope],
+    queryFn: () => api<{ ticket: string; expires_at: string }>('/staff/units/labels/ticket', { method: 'POST', body: scope }),
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+  const url = q.data ? `/print/labels#t=${encodeURIComponent(q.data.ticket)}` : undefined;
+  return (
+    <>
+      <a
+        className={className}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-disabled={!url}
+        onClick={(e) => {
+          if (!url) return e.preventDefault();
+          const tg = window.Telegram?.WebApp;
+          if (tg?.initData && tg.openLink) {
+            e.preventDefault();
+            tg.openLink(new URL(url, window.location.href).href);
+          }
+          onOpen?.();
+        }}
+      >
+        {children}
+      </a>
+      {q.error && <ErrorBox error={q.error} onRetry={() => void q.refetch()} />}
+    </>
+  );
+}
+
+/** Test print with the label size from the settings (the page itself needs no sign-in: fake data only). */
+function TestPrintLink() {
+  const size = useQuery({ queryKey: ['label-size'], queryFn: () => api<{ width_mm: number; height_mm: number }>('/staff/units/labels/size'), staleTime: 60_000 });
+  const href = size.data ? `/print/test?w=${size.data.width_mm}&h=${size.data.height_mm}` : '/print/test';
+  return (
+    <a className="btn btn-sm btn-ghost" href={href} target="_blank" rel="noopener noreferrer">
+      Тестовая печать этикетки
+    </a>
+  );
+}
 
 /** «31122027» / «31.12.2027» while typing -> «31.12.2027». */
 export function maskDate(v: string): string {
@@ -103,9 +152,7 @@ function ReceivingStart({ onOpen }: { onOpen: (id: string) => void }) {
       <section className="card">
         <div className="section-head">
           <h2>Новая приёмка: откуда пришёл товар?</h2>
-          <a className="btn btn-sm btn-ghost" href="/print/test" target="_blank" rel="noreferrer">
-            Тестовая печать этикетки
-          </a>
+          <TestPrintLink />
         </div>
         <ErrorBox error={start.error} />
         {sources.isPending ? (
@@ -149,7 +196,7 @@ function SourceButtons({ rows, busy, onPick }: { rows: SourceRow[]; busy: boolea
 
 function Unfinished({ onOpen }: { onOpen: (id: string) => void }) {
   const { can } = useSession();
-  const q = useQuery({ queryKey: ['receiving-sessions', 'OPEN'], queryFn: () => api<(Omit<Session, 'units' | 'lines' | 'summary' | 'label_warnings'> & { units_count: number })[]>('/staff/receiving/sessions') });
+  const q = useQuery({ queryKey: ['receiving-sessions', 'OPEN'], queryFn: () => api<(Omit<Session, 'units' | 'lines' | 'summary'> & { units_count: number })[]>('/staff/receiving/sessions') });
   const [cancel, setCancel] = useState<string | null>(null);
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
@@ -292,11 +339,6 @@ function SessionScreen({ id, onExit }: { id: string; onExit: () => void }) {
         </div>
       )}
       {s.status === 'CANCELLED' && <div className="alert alert-info">Приёмка отменена: её единицы получили статус «Отменена».</div>}
-      {s.label_warnings.map((w) => (
-        <div key={w} className="alert alert-warn">
-          {w}
-        </div>
-      ))}
 
       {s.status === 'OPEN' && s.type === 'PURCHASE' && (
         <section className="card flush">
@@ -327,7 +369,6 @@ function SessionScreen({ id, onExit }: { id: string; onExit: () => void }) {
                   <tr key={it.product.id}>
                     <td>
                       <strong>{it.product.sku}</strong> · {it.product.name_ru}
-                      {!it.product.label_ready && <div className="small text-warn">нет короткого состава для этикетки</div>}
                       {it.purchases && (
                         <div className="muted small">
                           {it.purchases.map((p) => `${ruDate(p.purchase_date)}${p.ozon_order_number ? ` (${p.ozon_order_number})` : ''}: ${p.remaining_qty}`).join(' · ')}
@@ -353,16 +394,16 @@ function SessionScreen({ id, onExit }: { id: string; onExit: () => void }) {
         <div className="section-head">
           <h2>Созданные Physical ID: {live.length}</h2>
           {s.status !== 'CANCELLED' && live.length > 0 && (
-            <button
+            <PrintLink
               className="btn btn-lg"
-              onClick={() => {
-                openPrint(`session=${s.id}`);
+              scope={{ session_id: s.id }}
+              onOpen={() => {
                 setPrinted('asked');
                 window.setTimeout(() => void q.refetch(), 1500);
               }}
             >
               Напечатать этикетки
-            </button>
+            </PrintLink>
           )}
         </div>
         {!live.length ? (
@@ -747,9 +788,7 @@ function UnitCardModal({ id, onClose }: { id: string; onClose: () => void }) {
           </ul>
           <div className="modal-actions">
             {u.status !== 'VOIDED' && (
-              <button className="btn" onClick={() => openPrint(`units=${u.id}`)}>
-                Напечатать этикетку
-              </button>
+              <PrintLink scope={{ unit_ids: [u.id] }}>Напечатать этикетку</PrintLink>
             )}
             <button className="btn btn-ghost" onClick={onClose}>
               Закрыть
