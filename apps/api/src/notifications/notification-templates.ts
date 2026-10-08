@@ -16,6 +16,9 @@ export type TemplateName =
   | 'staff.new_order'
   | 'staff.customer_paid'
   | 'staff.payment_check_overdue'
+  | 'staff.yandex_new_order'
+  | 'staff.yandex_attention'
+  | 'staff.yandex_late_summary'
   | 'order.payment_reminder';
 
 export interface TemplatePayload {
@@ -33,6 +36,12 @@ export interface TemplatePayload {
   admin_path?: string;
   /** Whole hours since the customer pressed «Я оплатил(а)» */
   hours?: number;
+  /** Stage 2D: «OZN-A001 × 2, OZN-A023 × 1» */
+  items?: string;
+  /** Stage 2D: how many orders a summary is about */
+  count?: number;
+  /** Stage 2D: the order was created without units (not enough stock) */
+  shortage?: boolean;
 }
 
 /** Text of the button under a message that has open_path. */
@@ -124,7 +133,23 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
     uz: (p) =>
       `⏳ ${p.order_number} buyurtmasi uchun ${sum(p.total_uzs, 'uz')} to‘lov ${p.hours ?? '?'} soatdan beri tekshiruvni kutmoqda.\nMijoz «To‘ladim» tugmasini bosgan, to‘lov hali tasdiqlanmagan.`,
   },
+  // Stage 2D: Yandex orders (staff only, Russian; order_number = the Yandex order number). No customer data.
+  'staff.yandex_new_order': {
+    ru: (p: TemplatePayload) =>
+      `🟡 Новый заказ Яндекса № ${p.order_number}\n${p.items ?? ''}${p.shortage ? '\n⚠️ Не хватает остатка: банки не зарезервированы' : '\nБанки зарезервированы, можно собирать.'}`,
+    uz: (p: TemplatePayload) => `🟡 Yandex buyurtmasi № ${p.order_number}\n${p.items ?? ''}`,
+  },
+  'staff.yandex_attention': {
+    ru: (p: TemplatePayload) => `⚠️ Заказ Яндекса № ${p.order_number} требует внимания: ${p.reason ?? ''}`,
+    uz: (p: TemplatePayload) => `⚠️ Yandex buyurtmasi № ${p.order_number}: ${p.reason ?? ''}`,
+  },
+  'staff.yandex_late_summary': {
+    ru: (p: TemplatePayload) =>
+      `ℹ️ Синхронизация Яндекса: ${p.count ?? 0} заказ(ов) впервые увидены уже отгруженными или отменёнными. Автоматически они не создаются — посмотрите «Требует внимания» и закройте неактуальные.`,
+    uz: (p: TemplatePayload) => `ℹ️ Yandex: ${p.count ?? 0} ta buyurtma.`,
+  },
 };
+
 
 export function isTemplate(name: string): name is TemplateName {
   return name in TEXTS;

@@ -20,10 +20,13 @@ import { AdminReceivingController, AdminReceivingService } from '../receiving/ad
 import { AdminUnitsController, AdminUnitsService, PrintLabelsController } from '../receiving/admin-units';
 import { UnitActionsController, UnitActionsService } from '../marketplace/unit-actions';
 import { YandexOrdersController, YandexOrdersService } from '../marketplace/yandex-orders';
+import { YANDEX_CLIENT_OPTIONS, YandexSyncService } from '../marketplace/yandex/yandex-sync';
+import { YandexSyncController, YandexWebhookController } from '../marketplace/yandex/yandex-sync.controller';
 
 /**
  * Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions, except
- * PrintLabelsController (/api/print/labels): it accepts only a signed print ticket issued by a signed-in employee.
+ * PrintLabelsController (/api/print/labels): it accepts only a signed print ticket issued by a signed-in employee, and
+ * YandexWebhookController (/api/yandex/notifications/<secret>): off by default, secret path + Yandex networks only.
  */
 @Module({
   imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule],
@@ -41,6 +44,8 @@ import { YandexOrdersController, YandexOrdersService } from '../marketplace/yand
     PrintLabelsController,
     UnitActionsController,
     YandexOrdersController,
+    YandexSyncController,
+    YandexWebhookController,
     AdminSettingsController,
     StaffUsersController,
     AuditController,
@@ -61,6 +66,9 @@ import { YandexOrdersController, YandexOrdersService } from '../marketplace/yand
     AdminUnitsService,
     UnitActionsService,
     YandexOrdersService,
+    YandexSyncService,
+    // real fetch and pauses; e2e tests override it with a fake fed by fixtures (never a real request to Yandex)
+    { provide: YANDEX_CLIENT_OPTIONS, useValue: {} },
     AdminSettingsService,
   ],
 })

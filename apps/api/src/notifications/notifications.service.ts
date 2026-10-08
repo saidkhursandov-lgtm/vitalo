@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, Prisma, StaffRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CUSTOMER_STATUS_TEMPLATES, type TemplateName } from './notification-templates';
+import { CUSTOMER_STATUS_TEMPLATES, type TemplateName, type TemplatePayload } from './notification-templates';
 import { tashkentDateTime } from '../common/tashkent';
 
 type Db = Prisma.TransactionClient | PrismaService;
@@ -66,6 +66,19 @@ export class NotificationsService {
         payload: { order_number: order.order_number, total_uzs: Number(order.total_uzs), hours, admin_path: `/orders/${order.id}`, lang: 'ru' },
       })),
     });
+  }
+
+  /**
+   * Stage 2D: one message to every active employee with one of the roles (Yandex orders: warehouse and admin for a
+   * new order, admin for a problem). Never to customers: only staff_users are read here.
+   */
+  async toStaffRoles(db: Db, roles: StaffRole[], template: Extract<TemplateName, `staff.${string}`>, payload: TemplatePayload): Promise<number> {
+    const staff = await db.staff_users.findMany({ where: { status: 'active', role: { in: roles } } });
+    if (!staff.length) return 0;
+    await db.notifications.createMany({
+      data: staff.map((s) => ({ staff_user_id: s.id, chat_id: s.telegram_user_id, kind: 'service', template, payload: { ...payload, lang: 'ru' } as Prisma.InputJsonObject })),
+    });
+    return staff.length;
   }
 
   /** Same message to every active admin and manager. */

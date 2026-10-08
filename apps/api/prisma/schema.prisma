@@ -759,10 +759,20 @@ model marketplace_orders {
   handed_at          DateTime?
   delivered_at       DateTime?
   closed_at          DateTime? // cancelled or returned
+  /// Stage 2D: manual (typed in the admin panel) or yandex_api (created by the sync)
+  source             String                 @default("manual")
+  /// Created by the sync without units: not enough stock («Не хватает остатка»), «Зарезервировать банки» later
+  stock_shortage     Boolean                @default(false)
+  /// Stage 2D: Yandex side, shown only; our statuses are moved by employees (except a Yandex cancellation)
+  yandex_status      String?
+  yandex_substatus   String?
+  yandex_campaign_id BigInt?
+  yandex_updated_at  DateTime?
 
-  staff staff_users?              @relation(fields: [created_by], references: [id])
-  lines marketplace_order_lines[]
-  units marketplace_order_units[]
+  staff    staff_users?                  @relation(fields: [created_by], references: [id])
+  lines    marketplace_order_lines[]
+  units    marketplace_order_units[]
+  external marketplace_external_orders[]
 
   @@unique([marketplace, external_number])
   @@index([status, order_date])
@@ -807,6 +817,59 @@ model marketplace_order_units {
 
   @@index([order_id])
   @@index([physical_unit_id])
+}
+
+/// Stage 2D: one Yandex order as seen by the sync (read only). Unique per (marketplace, external number), so a
+/// repeated poll or notification never creates a second order. Keeps the last raw answer of Yandex (no token
+/// is ever stored), the link to our order and the «Требует внимания» state with its closing.
+model marketplace_external_orders {
+  id                    String      @id @default(uuid()) @db.Uuid
+  marketplace           Marketplace @default(yandex)
+  external_number       String
+  campaign_id           BigInt
+  status                String
+  substatus             String?
+  yandex_updated_at     DateTime?
+  raw                   Json
+  order_id              String?     @db.Uuid
+  /// UNKNOWN_SKU | NOT_UNIT_TRACKED | NOT_ENOUGH_STOCK | FIRST_SEEN_LATE | RETURN | UNKNOWN_STATUS | BAD_DATA | CURRENCY
+  attention_kind        String?
+  attention_reason      String?
+  attention_at          DateTime?
+  attention_notified_at DateTime?
+  new_order_notified_at DateTime?
+  /// «Закрыть как неактуальный» (admin): never raised again by later polls
+  closed_at             DateTime?
+  closed_by             String?     @db.Uuid
+  close_reason          String?
+  last_error            String?
+  first_seen_at         DateTime    @default(now())
+  last_seen_at          DateTime    @default(now())
+
+  order marketplace_orders? @relation(fields: [order_id], references: [id])
+
+  @@unique([marketplace, external_number])
+  @@index([attention_at])
+}
+
+/// Stage 2D: one sync run (schedule, «Проверить сейчас» or a notification). details: what was done or, in
+/// DRY_RUN, what would be done, per order.
+model yandex_sync_runs {
+  id          String    @id @default(uuid()) @db.Uuid
+  trigger     String // schedule | manual | webhook
+  mode        String // DRY_RUN | LIVE
+  started_at  DateTime  @default(now())
+  finished_at DateTime?
+  found       Int       @default(0)
+  created     Int       @default(0)
+  updated     Int       @default(0)
+  attention   Int       @default(0)
+  errors      Int       @default(0)
+  error       String?
+  details     Json?
+  started_by  String?   @db.Uuid
+
+  @@index([started_at])
 }
 
 /// One receiving: PURCHASE (by Ozon account or supplier) or OPENING_BALANCE (the stock count sheet).

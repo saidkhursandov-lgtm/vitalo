@@ -68,7 +68,13 @@ export class SystemErrorsService {
   async alert(entry: SystemErrorEntry, now = Date.now()): Promise<boolean> {
     const chat = this.config.get<string>('TECH_CHAT_ID')?.trim();
     if (!chat || !/^-?\d{1,20}$/.test(chat)) return false;
-    const secrets = [this.config.get<string>('TELEGRAM_BOT_TOKEN'), this.config.get<string>('BOT_API_SECRET'), this.config.get<string>('DATABASE_URL')];
+    const secrets = [
+      this.config.get<string>('TELEGRAM_BOT_TOKEN'),
+      this.config.get<string>('BOT_API_SECRET'),
+      this.config.get<string>('DATABASE_URL'),
+      this.config.get<string>('YANDEX_API_KEY'),
+      this.config.get<string>('YANDEX_WEBHOOK_SECRET'),
+    ];
     // Rate limit by the shape of the message (numbers ignored), so a burst of the same failure is one alert.
     const key = `${entry.level}|${entry.service}|${entry.message.replace(/\d+/g, '#')}`;
     const last = this.lastSent.get(key);

@@ -139,6 +139,18 @@ export const ORDER_STATUS_RU: Record<MarketplaceOrderStatus, string> = {
   RETURNED: 'Возврат',
 };
 
+/** What the manual form and the sync give to createInTx. */
+export interface NewOrderInput {
+  external_number: string;
+  order_date: string; // YYYY-MM-DD
+  customer_name?: string | null;
+  note?: string | null;
+  commission_percent?: number;
+  lines: { product_id: string; qty: number; unit_price_uzs?: number }[];
+}
+
+export type LockedOrder = Prisma.marketplace_ordersGetPayload<object>;
+
 const orderInclude = {
   lines: { orderBy: { position: 'asc' }, include: { product: { select: { id: true, sku: true, name_ru: true } } } },
   units: {
@@ -261,6 +273,9 @@ export class YandexOrdersService {
       delivered_at: o.delivered_at,
       closed_at: o.closed_at,
       total_uzs: lines.reduce((s, l) => s + l.unit_price_uzs * l.qty, 0),
+      source: o.source,
+      stock_shortage: o.stock_shortage,
+      yandex: o.yandex_status ? { status: o.yandex_status, substatus: o.yandex_substatus, campaign_id: o.yandex_campaign_id === null ? null : Number(o.yandex_campaign_id), updated_at: o.yandex_updated_at } : null,
       lines,
       released: released.map((a) => ({
         physical_id: a.unit.physical_id,
@@ -293,79 +308,147 @@ export class YandexOrdersService {
           throw new ConflictException({ code: 'ORDER_EXISTS', message: `Заказ Яндекса №${dto.external_number} уже есть` });
         },
       },
-      async (tx) => {
-        const products = await tx.products.findMany({
-          where: { id: { in: dto.lines.map((l) => l.product_id) } },
-          select: { id: true, sku: true, unit_tracking: true, yandex_price_uzs: true, yandex_commission_percent: true },
-        });
-        const priced = dto.lines.map((l) => {
-          const p = products.find((x) => x.id === l.product_id);
-          if (!p) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT', message: 'Товар не найден' });
-          if (!p.unit_tracking) throw new ConflictException({ code: 'NOT_UNIT_TRACKED', message: `${p.sku}: товар не учитывается по банкам (Physical ID)` });
-          // S2C-12: the Yandex price of the product card unless typed at creation
-          const price = l.unit_price_uzs ?? (p.yandex_price_uzs === null ? null : Number(p.yandex_price_uzs));
-          if (price === null) throw new BadRequestException({ code: 'PRICE_REQUIRED', message: `${p.sku}: в карточке нет цены Яндекса — укажите цену` });
-          return { ...l, unit_price_uzs: price, commission: p.yandex_commission_percent === null ? null : Number(p.yandex_commission_percent) };
-        });
-        const order = await tx.marketplace_orders.create({
-          data: {
-            marketplace: 'yandex',
-            external_number: dto.external_number,
-            order_date: new Date(`${dto.order_date}T00:00:00Z`),
-            customer_name: dto.customer_name ?? null,
-            note: dto.note ?? null,
-            commission_percent: dto.commission_percent ?? defaultCommission(priced.map((l) => ({ revenue: l.unit_price_uzs * l.qty, percent: l.commission }))),
-            created_by: me.staff.id,
-            lines: { create: priced.map((l, i) => ({ product_id: l.product_id, position: i + 1, qty: l.qty, unit_price_uzs: BigInt(l.unit_price_uzs) })) },
-          },
-          include: { lines: true },
-        });
-        const warehouseId = await this.stock.mainWarehouseId(tx);
-        // Fixed lock order (by product id): two orders with the same products cannot deadlock.
-        const byProduct = new Map<string, { lineId: string; qty: number }[]>();
-        for (const l of order.lines) byProduct.set(l.product_id, [...(byProduct.get(l.product_id) ?? []), { lineId: l.id, qty: l.qty }]);
-        const reserved: string[] = [];
-        for (const productId of [...byProduct.keys()].sort()) {
-          const lines = byProduct.get(productId)!;
-          const n = lines.reduce((s, l) => s + l.qty, 0);
-          const sku = products.find((p) => p.id === productId)!.sku;
-          const move: StockMove = { warehouseId, productId, referenceType: 'marketplace_order', referenceId: order.id, reason: `Резерв банок под заказ Яндекса ${order.external_number}`, staffId: me.staff.id };
-          try {
-            await reserveStock(tx, move, n);
-          } catch (e) {
-            if (e instanceof ConflictException) {
-              const r = e.getResponse() as { available?: number };
-              throw new ConflictException({ code: 'INSUFFICIENT_STOCK', message: `${sku}: нужно ${n} шт., свободно ${r.available ?? 0} (остальное в резерве заказов)` });
-            }
-            throw e;
-          }
-          // FEFO: the earliest expiry first, then the lowest number. SKIP LOCKED: a parallel order takes other units.
-          const units = await tx.$queryRaw<{ id: string; physical_id: string }[]>`
-            SELECT id, physical_id FROM physical_units
-            WHERE product_id = ${productId}::uuid AND status = 'IN_STOCK'
-              AND NOT EXISTS (SELECT 1 FROM marketplace_order_units a WHERE a.physical_unit_id = physical_units.id AND a.released_at IS NULL)
-            ORDER BY expiry_date, seq
-            LIMIT ${n}
-            FOR UPDATE SKIP LOCKED`;
-          if (units.length < n) {
-            throw new ConflictException({ code: 'NOT_ENOUGH_UNITS', message: `${sku}: нужно ${n} банок, на складе свободно ${units.length}` });
-          }
-          let k = 0;
-          for (const line of lines) {
-            for (let i = 0; i < line.qty; i++, k++) {
-              await this.assign(tx, order.id, line.lineId, units[k].id, me.staff.id, null, false);
-              reserved.push(units[k].physical_id);
-            }
-          }
-        }
-        await this.audit.log(
-          { staffId: me.staff.id, action: 'yandex_order.created', entityType: 'marketplace_order', entityId: order.id, after: { external_number: order.external_number, lines: dto.lines, reserved } },
-          tx,
-        );
-        return { id: order.id };
-      },
+      async (tx) => ({ id: (await this.createInTx(tx, me.staff.id, dto, { source: 'manual', onShortage: 'throw' })).id }),
     );
     return { ...(await this.get(res.id, can(me.staff.role, 'yandex.orders.money'))), replayed: res.replayed };
+  }
+
+  /**
+   * Creates an order with its lines and reserves units by FEFO, inside the caller's transaction. Used by the manual
+   * «Новый заказ» (staffId = employee, not enough stock -> 409, nothing created) and by the Yandex sync (staffId =
+   * null, the system; not enough stock -> the order is created WITHOUT units and marked stock_shortage, S2D-5).
+   */
+  async createInTx(
+    tx: Tx,
+    staffId: string | null,
+    input: NewOrderInput,
+    opts: { source: 'manual' | 'yandex_api'; onShortage: 'throw' | 'flag'; yandex?: { status: string; substatus: string | null; campaignId: bigint; updatedAt: Date | null } },
+  ): Promise<{ id: string; reserved: string[]; shortage: string | null }> {
+    const products = await tx.products.findMany({
+      where: { id: { in: input.lines.map((l) => l.product_id) } },
+      select: { id: true, sku: true, unit_tracking: true, yandex_price_uzs: true, yandex_commission_percent: true },
+    });
+    const priced = input.lines.map((l) => {
+      const p = products.find((x) => x.id === l.product_id);
+      if (!p) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT', message: 'Товар не найден' });
+      if (!p.unit_tracking) throw new ConflictException({ code: 'NOT_UNIT_TRACKED', message: `${p.sku}: товар не учитывается по банкам (Physical ID)` });
+      // S2C-12: the Yandex price of the product card unless typed at creation
+      const price = l.unit_price_uzs ?? (p.yandex_price_uzs === null ? null : Number(p.yandex_price_uzs));
+      if (price === null) throw new BadRequestException({ code: 'PRICE_REQUIRED', message: `${p.sku}: в карточке нет цены Яндекса — укажите цену` });
+      return { ...l, unit_price_uzs: price, commission: p.yandex_commission_percent === null ? null : Number(p.yandex_commission_percent) };
+    });
+    const order = await tx.marketplace_orders.create({
+      data: {
+        marketplace: 'yandex',
+        external_number: input.external_number,
+        order_date: new Date(`${input.order_date}T00:00:00Z`),
+        customer_name: input.customer_name ?? null,
+        note: input.note ?? null,
+        commission_percent: input.commission_percent ?? defaultCommission(priced.map((l) => ({ revenue: l.unit_price_uzs * l.qty, percent: l.commission }))),
+        created_by: staffId,
+        source: opts.source,
+        ...(opts.yandex && {
+          yandex_status: opts.yandex.status,
+          yandex_substatus: opts.yandex.substatus,
+          yandex_campaign_id: opts.yandex.campaignId,
+          yandex_updated_at: opts.yandex.updatedAt,
+        }),
+        lines: { create: priced.map((l, i) => ({ product_id: l.product_id, position: i + 1, qty: l.qty, unit_price_uzs: BigInt(l.unit_price_uzs) })) },
+      },
+    });
+    let reserved: string[] = [];
+    let shortage: string | null = null;
+    if (opts.onShortage === 'throw') {
+      reserved = await this.reserveAll(tx, order.id, order.external_number, staffId);
+    } else {
+      // All or nothing inside a savepoint: on a shortage only the reservation is undone, the order stays.
+      await tx.$executeRawUnsafe('SAVEPOINT reserve_units');
+      try {
+        reserved = await this.reserveAll(tx, order.id, order.external_number, staffId);
+        await tx.$executeRawUnsafe('RELEASE SAVEPOINT reserve_units');
+      } catch (e) {
+        if (!(e instanceof ConflictException)) throw e;
+        await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT reserve_units');
+        shortage = (e.getResponse() as { message?: string }).message ?? 'Не хватает остатка';
+        await tx.marketplace_orders.update({ where: { id: order.id }, data: { stock_shortage: true } });
+      }
+    }
+    await this.audit.log(
+      {
+        staffId,
+        action: 'yandex_order.created',
+        entityType: 'marketplace_order',
+        entityId: order.id,
+        after: { external_number: order.external_number, source: opts.source, lines: priced.map((l) => ({ product_id: l.product_id, qty: l.qty, unit_price_uzs: l.unit_price_uzs })), reserved, shortage },
+      },
+      tx,
+    );
+    return { id: order.id, reserved, shortage };
+  }
+
+  /**
+   * FEFO reservation of every line of the order (all or nothing: a ConflictException leaves the caller to roll
+   * back). Products in a fixed order (by id): two orders with the same products cannot deadlock.
+   */
+  private async reserveAll(tx: Tx, orderId: string, externalNumber: string, staffId: string | null): Promise<string[]> {
+    const orderLines = await tx.marketplace_order_lines.findMany({ where: { order_id: orderId }, orderBy: { position: 'asc' }, include: { product: { select: { sku: true } } } });
+    const warehouseId = await this.stock.mainWarehouseId(tx);
+    const byProduct = new Map<string, { lineId: string; qty: number; sku: string }[]>();
+    for (const l of orderLines) byProduct.set(l.product_id, [...(byProduct.get(l.product_id) ?? []), { lineId: l.id, qty: l.qty, sku: l.product.sku }]);
+    const reserved: string[] = [];
+    for (const productId of [...byProduct.keys()].sort()) {
+      const lines = byProduct.get(productId)!;
+      const n = lines.reduce((s, l) => s + l.qty, 0);
+      const sku = lines[0].sku;
+      const move: StockMove = { warehouseId, productId, referenceType: 'marketplace_order', referenceId: orderId, reason: `Резерв банок под заказ Яндекса ${externalNumber}`, staffId };
+      try {
+        await reserveStock(tx, move, n);
+      } catch (e) {
+        if (e instanceof ConflictException) {
+          const r = e.getResponse() as { available?: number };
+          throw new ConflictException({ code: 'INSUFFICIENT_STOCK', message: `${sku}: нужно ${n} шт., свободно ${r.available ?? 0} (остальное в резерве заказов)` });
+        }
+        throw e;
+      }
+      // FEFO: the earliest expiry first, then the lowest number. SKIP LOCKED: a parallel order takes other units.
+      const units = await tx.$queryRaw<{ id: string; physical_id: string }[]>`
+        SELECT id, physical_id FROM physical_units
+        WHERE product_id = ${productId}::uuid AND status = 'IN_STOCK'
+          AND NOT EXISTS (SELECT 1 FROM marketplace_order_units a WHERE a.physical_unit_id = physical_units.id AND a.released_at IS NULL)
+        ORDER BY expiry_date, seq
+        LIMIT ${n}
+        FOR UPDATE SKIP LOCKED`;
+      if (units.length < n) {
+        throw new ConflictException({ code: 'NOT_ENOUGH_UNITS', message: `${sku}: нужно ${n} банок, на складе свободно ${units.length}` });
+      }
+      let k = 0;
+      for (const line of lines) {
+        for (let i = 0; i < line.qty; i++, k++) {
+          await this.assign(tx, orderId, line.lineId, units[k].id, staffId, null, false);
+          reserved.push(units[k].physical_id);
+        }
+      }
+    }
+    return reserved;
+  }
+
+  /**
+   * «Зарезервировать банки» (S2D-5): an order created by the sync without units («Не хватает остатка») gets them
+   * by FEFO once the stock is there — all or nothing again. Its «Требует внимания» entry is then resolved.
+   */
+  reserveMissing(me: StaffContext, key: string, id: string) {
+    return this.step(me, key, id, 'reserve', {}, async (tx, order) => {
+      if (order.status !== 'NEW') throw this.badStatus(order.status, 'резервировать банки');
+      if (!order.stock_shortage) throw new ConflictException({ code: 'ALREADY_RESERVED', message: 'Банки этого заказа уже зарезервированы' });
+      const reserved = await this.reserveAll(tx, id, order.external_number, me.staff.id);
+      await tx.marketplace_orders.update({ where: { id }, data: { stock_shortage: false } });
+      await tx.marketplace_external_orders.updateMany({
+        where: { order_id: id, attention_kind: 'NOT_ENOUGH_STOCK' },
+        data: { attention_kind: null, attention_reason: null, attention_at: null },
+      });
+      await this.audit.log({ staffId: me.staff.id, action: 'yandex_order.reserved', entityType: 'marketplace_order', entityId: id, after: { reserved } }, tx);
+      return { message: `Зарезервированы: ${reserved.join(', ')}` };
+    });
   }
 
   /** Admin: commission and prices (profit); everybody with access: note and customer name. */
@@ -414,6 +497,7 @@ export class YandexOrdersService {
     if (!physicalId) throw new BadRequestException({ code: 'BAD_PHYSICAL_ID', message: 'Это не Physical ID: введите, например, V-000184 или 184' });
     return this.step(me, key, id, 'pick', { physical_id: physicalId, fefo_reason: dto.fefo_reason ?? null }, async (tx, order) => {
       if (order.status !== 'NEW') throw this.badStatus(order.status, 'собирать');
+      if (order.stock_shortage) throw new ConflictException({ code: 'RESERVE_FIRST', message: 'У заказа нет банок (не хватало остатка): сначала «Зарезервировать банки»' });
       const [unit] = await tx.$queryRaw<{ id: string; physical_id: string; product_id: string; status: PhysicalUnitStatus; expiry_date: Date }[]>`
         SELECT id, physical_id, product_id, status, expiry_date FROM physical_units WHERE physical_id = ${physicalId} FOR UPDATE`;
       if (!unit) throw new NotFoundException({ code: 'UNIT_NOT_FOUND', message: `Банка ${physicalId} не найдена` });
@@ -491,7 +575,7 @@ export class YandexOrdersService {
           message: `Не все банки отмечены: ${missing.map((l) => `${l.product.sku} ${l.units.filter((u) => u.picked_at).length} из ${l.qty}`).join(', ')}`,
         });
       }
-      await this.setStatus(tx, me, order, 'ASSEMBLED', { assembled_at: new Date() });
+      await this.setStatus(tx, me.staff.id, order, 'ASSEMBLED', { assembled_at: new Date() });
       return { message: 'Заказ собран' };
     });
   }
@@ -508,7 +592,7 @@ export class YandexOrdersService {
       for (const [productId, n] of countBy(units.map((a) => a.unit.product_id))) {
         await deductStock(tx, { warehouseId, productId, referenceType: 'marketplace_order', referenceId: id, reason: `Передан в доставку: Яндекс ${order.external_number}`, staffId: me.staff.id }, n);
       }
-      await this.setStatus(tx, me, order, 'HANDED_TO_DELIVERY', { handed_at: new Date() });
+      await this.setStatus(tx, me.staff.id, order, 'HANDED_TO_DELIVERY', { handed_at: new Date() });
       return { message: 'Передан в доставку' };
     });
   }
@@ -520,7 +604,7 @@ export class YandexOrdersService {
       for (const a of await this.activeUnits(tx, id)) {
         await moveUnit(tx, a.physical_unit_id, 'YANDEX_DELIVERY', 'YANDEX_SOLD', { type: 'SOLD', referenceType: 'marketplace_order', referenceId: id, staffId: me.staff.id });
       }
-      await this.setStatus(tx, me, order, 'DELIVERED', { delivered_at: new Date() });
+      await this.setStatus(tx, me.staff.id, order, 'DELIVERED', { delivered_at: new Date() });
       return { message: 'Доставлен' };
     });
   }
@@ -530,40 +614,51 @@ export class YandexOrdersService {
    * released. After it (HANDED_TO_DELIVERY / DELIVERED): RETURNED, the units wait for a check («Возврат на проверке»).
    */
   cancel(me: StaffContext, key: string, id: string, dto: ReasonDto) {
-    return this.step(me, key, id, 'cancel', dto, async (tx, order) => {
-      const units = await this.activeUnits(tx, id);
-      if (order.status === 'NEW' || order.status === 'ASSEMBLED') {
-        const warehouseId = await this.stock.mainWarehouseId(tx);
-        for (const a of units) {
-          await tx.marketplace_order_units.update({ where: { id: a.id }, data: { released_at: new Date(), release_reason: `Отмена заказа: ${dto.reason}` } });
-          await moveUnit(tx, a.physical_unit_id, 'ASSIGNED', 'IN_STOCK', { type: 'RELEASED', note: `Отмена заказа: ${dto.reason}`, referenceType: 'marketplace_order', referenceId: id, staffId: me.staff.id });
-        }
-        for (const [productId, n] of countBy(units.map((a) => a.unit.product_id))) {
-          await releaseStock(tx, { warehouseId, productId, referenceType: 'marketplace_order', referenceId: id, reason: `Отмена заказа Яндекса ${order.external_number}: ${dto.reason}`, staffId: me.staff.id }, n);
-        }
-        await this.setStatus(tx, me, order, 'CANCELLED', { cancel_reason: dto.reason, closed_at: new Date() }, { reason: dto.reason, released: units.map((a) => a.unit.physical_id) });
-        return { message: 'Заказ отменён, банки вернулись на склад' };
+    return this.step(me, key, id, 'cancel', dto, async (tx, order) => this.cancelInTx(tx, order, me.staff.id, dto.reason));
+  }
+
+  /**
+   * The cancellation itself, inside the caller's transaction with the order row locked (lockOrder). Used by the
+   * employee and by the Yandex sync when Yandex cancelled the order (staffId = null, the system).
+   */
+  async cancelInTx(tx: Tx, order: LockedOrder, staffId: string | null, reason: string): Promise<{ message: string; status: MarketplaceOrderStatus }> {
+    const id = order.id;
+    const units = await this.activeUnits(tx, id);
+    if (order.status === 'NEW' || order.status === 'ASSEMBLED') {
+      const warehouseId = await this.stock.mainWarehouseId(tx);
+      for (const a of units) {
+        await tx.marketplace_order_units.update({ where: { id: a.id }, data: { released_at: new Date(), release_reason: `Отмена заказа: ${reason}` } });
+        await moveUnit(tx, a.physical_unit_id, 'ASSIGNED', 'IN_STOCK', { type: 'RELEASED', note: `Отмена заказа: ${reason}`, referenceType: 'marketplace_order', referenceId: id, staffId });
       }
-      if (order.status === 'HANDED_TO_DELIVERY' || order.status === 'DELIVERED') {
-        for (const a of units) {
-          await moveUnit(tx, a.physical_unit_id, a.unit.status, 'RETURNED', { type: 'RETURNED', note: dto.reason, referenceType: 'marketplace_order', referenceId: id, staffId: me.staff.id });
-        }
-        await this.setStatus(tx, me, order, 'RETURNED', { cancel_reason: dto.reason, closed_at: new Date() }, { reason: dto.reason, returned: units.map((a) => a.unit.physical_id) });
-        return { message: 'Оформлен возврат: банки ждут проверки на складе' };
+      for (const [productId, n] of countBy(units.map((a) => a.unit.product_id))) {
+        await releaseStock(tx, { warehouseId, productId, referenceType: 'marketplace_order', referenceId: id, reason: `Отмена заказа Яндекса ${order.external_number}: ${reason}`, staffId }, n);
       }
-      throw this.badStatus(order.status, 'отменить');
-    });
+      await this.setStatus(tx, staffId, order, 'CANCELLED', { cancel_reason: reason, closed_at: new Date(), stock_shortage: false }, { reason, released: units.map((a) => a.unit.physical_id) });
+      return { message: 'Заказ отменён, банки вернулись на склад', status: 'CANCELLED' };
+    }
+    if (order.status === 'HANDED_TO_DELIVERY' || order.status === 'DELIVERED') {
+      for (const a of units) {
+        await moveUnit(tx, a.physical_unit_id, a.unit.status, 'RETURNED', { type: 'RETURNED', note: reason, referenceType: 'marketplace_order', referenceId: id, staffId });
+      }
+      await this.setStatus(tx, staffId, order, 'RETURNED', { cancel_reason: reason, closed_at: new Date() }, { reason, returned: units.map((a) => a.unit.physical_id) });
+      return { message: 'Оформлен возврат: банки ждут проверки на складе', status: 'RETURNED' };
+    }
+    throw this.badStatus(order.status, 'отменить');
   }
 
   // ---------------------------------------------------------------- helpers
 
   /** One order action: order row locked, exactly once per Idempotency-Key, answers with the fresh card. */
-  private async step(me: StaffContext, key: string, id: string, action: string, request: object, fn: (tx: Tx, order: Awaited<ReturnType<YandexOrdersService['lock']>>) => Promise<{ message: string }>) {
-    const res = await runIdempotent(this.prisma, { scope: `yandex.${action}:${id}`, staffId: me.staff.id, key, request }, async (tx) => fn(tx, await this.lock(tx, id)));
+  private async step(me: StaffContext, key: string, id: string, action: string, request: object, fn: (tx: Tx, order: LockedOrder) => Promise<{ message: string }>) {
+    const res = await runIdempotent(this.prisma, { scope: `yandex.${action}:${id}`, staffId: me.staff.id, key, request }, async (tx) => {
+      const r = await fn(tx, await this.lock(tx, id));
+      return { message: r.message };
+    });
     return { ...(await this.get(id, can(me.staff.role, 'yandex.orders.money'))), message: res.message, replayed: res.replayed };
   }
 
-  private async lock(tx: Tx, id: string) {
+  /** The order row locked FOR UPDATE (every order change goes through it). */
+  async lock(tx: Tx, id: string): Promise<LockedOrder> {
     const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM marketplace_orders WHERE id = ${id}::uuid FOR UPDATE`;
     if (!rows.length) throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Заказ не найден' });
     return tx.marketplace_orders.findUniqueOrThrow({ where: { id } });
@@ -577,7 +672,7 @@ export class YandexOrdersService {
     });
   }
 
-  private async assign(tx: Tx, orderId: string, lineId: string, unitId: string, staffId: string, fefoReason: string | null, picked: boolean) {
+  private async assign(tx: Tx, orderId: string, lineId: string, unitId: string, staffId: string | null, fefoReason: string | null, picked: boolean) {
     try {
       await tx.marketplace_order_units.create({
         data: { order_id: orderId, line_id: lineId, physical_unit_id: unitId, assigned_by: staffId, fefo_override: fefoReason, picked_at: picked ? new Date() : null },
@@ -602,10 +697,10 @@ export class YandexOrdersService {
     return tx.physical_unit_events.create({ data: { physical_unit_id: unitId, type, reference_type: 'marketplace_order', reference_id: orderId, note, created_by: staffId } });
   }
 
-  private async setStatus(tx: Tx, me: StaffContext, order: { id: string; status: MarketplaceOrderStatus }, to: MarketplaceOrderStatus, data: Prisma.marketplace_ordersUpdateInput, extra?: object) {
+  private async setStatus(tx: Tx, staffId: string | null, order: { id: string; status: MarketplaceOrderStatus }, to: MarketplaceOrderStatus, data: Prisma.marketplace_ordersUpdateInput, extra?: object) {
     await tx.marketplace_orders.update({ where: { id: order.id }, data: { ...data, status: to } });
     await this.audit.log(
-      { staffId: me.staff.id, action: 'yandex_order.status', entityType: 'marketplace_order', entityId: order.id, before: { status: order.status }, after: { status: to, ...extra } },
+      { staffId, action: 'yandex_order.status', entityType: 'marketplace_order', entityId: order.id, before: { status: order.status }, after: { status: to, ...extra } },
       tx,
     );
   }
@@ -668,6 +763,13 @@ export class YandexOrdersController {
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   pick(@CurrentStaff() me: StaffContext, @Headers('idempotency-key') key: string | undefined, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: PickDto) {
     return this.orders.pick(me, requireIdempotencyKey(key), id, dto);
+  }
+
+  @Post(':id/reserve')
+  @HttpCode(200)
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  reserve(@CurrentStaff() me: StaffContext, @Headers('idempotency-key') key: string | undefined, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.orders.reserveMissing(me, requireIdempotencyKey(key), id);
   }
 
   @Post(':id/assemble')
