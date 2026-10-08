@@ -18,6 +18,8 @@ import { AnalyticsModule } from '../analytics/analytics.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { AdminReceivingController, AdminReceivingService } from '../receiving/admin-receiving';
 import { AdminUnitsController, AdminUnitsService, PrintLabelsController } from '../receiving/admin-units';
+import { UnitActionsController, UnitActionsService } from '../marketplace/unit-actions';
+import { YandexOrdersController, YandexOrdersService } from '../marketplace/yandex-orders';
 
 /**
  * Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions, except
@@ -37,6 +39,8 @@ import { AdminUnitsController, AdminUnitsService, PrintLabelsController } from '
     AdminReceivingController,
     AdminUnitsController,
     PrintLabelsController,
+    UnitActionsController,
+    YandexOrdersController,
     AdminSettingsController,
     StaffUsersController,
     AuditController,
@@ -55,6 +59,8 @@ import { AdminUnitsController, AdminUnitsService, PrintLabelsController } from '
     AdminPurchasesService,
     AdminReceivingService,
     AdminUnitsService,
+    UnitActionsService,
+    YandexOrdersService,
     AdminSettingsService,
   ],
 })

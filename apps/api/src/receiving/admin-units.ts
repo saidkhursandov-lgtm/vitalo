@@ -113,8 +113,8 @@ export class AdminUnitsService {
         note: e.note,
         staff_name: e.staff?.name ?? null,
         created_at: e.created_at,
-        // a receiving session is fine for everybody; a purchase reference only with costs
-        reference: e.reference_type && (full || e.reference_type === 'receiving_session') ? { type: e.reference_type, id: e.reference_id } : null,
+        // a receiving session and a Yandex order are fine for everybody; a purchase reference only with costs
+        reference: e.reference_type && (full || e.reference_type === 'receiving_session' || e.reference_type === 'marketplace_order') ? { type: e.reference_type, id: e.reference_id } : null,
       })),
     };
   }

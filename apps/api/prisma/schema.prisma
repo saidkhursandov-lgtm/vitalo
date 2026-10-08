@@ -415,21 +415,22 @@ model staff_users {
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 
-  sessions         staff_sessions[]
-  audit_logs       audit_logs[]
-  order_edits      order_edit_log[]
-  movements        inventory_movements[]
-  campaigns        marketing_campaigns[]
-  ledger           bonus_ledger[]
-  returns_approved returns[]
-  manual_payments  manual_payment_confirmations[]
-  tasks            manager_tasks[]
-  cancel_decisions cancel_requests[]
-  notifications    notifications[]
-  purchases        purchases[]
-  purchase_events  purchase_events[]
-  receiving        receiving_sessions[]
-  unit_events      physical_unit_events[]
+  sessions           staff_sessions[]
+  audit_logs         audit_logs[]
+  order_edits        order_edit_log[]
+  movements          inventory_movements[]
+  campaigns          marketing_campaigns[]
+  ledger             bonus_ledger[]
+  returns_approved   returns[]
+  manual_payments    manual_payment_confirmations[]
+  tasks              manager_tasks[]
+  cancel_decisions   cancel_requests[]
+  notifications      notifications[]
+  purchases          purchases[]
+  purchase_events    purchase_events[]
+  receiving          receiving_sessions[]
+  unit_events        physical_unit_events[]
+  marketplace_orders marketplace_orders[]
 }
 
 model staff_sessions {
@@ -522,21 +523,22 @@ model products {
   country_entry      countries?     @relation(fields: [country_id], references: [id])
   form_entry         forms?         @relation(fields: [form_id], references: [id])
 
-  categories      product_categories[]
-  media           product_media[]
-  relations       product_relations[]       @relation("RelMain")
-  related_to      product_relations[]       @relation("RelOther")
-  inventory       inventory[]
-  batches         inventory_batches[]
-  movements       inventory_movements[]
-  cart_items      cart_items[]
-  order_items     order_items[]
-  purchase_lines  purchase_lines[]
-  physical_units  physical_units[]
-  receiving_lines receiving_session_lines[]
-  favorites       favorites[]
-  promo_targets   promotion_targets[]
-  block_items     content_block_items[]
+  categories              product_categories[]
+  media                   product_media[]
+  relations               product_relations[]       @relation("RelMain")
+  related_to              product_relations[]       @relation("RelOther")
+  inventory               inventory[]
+  batches                 inventory_batches[]
+  movements               inventory_movements[]
+  cart_items              cart_items[]
+  order_items             order_items[]
+  purchase_lines          purchase_lines[]
+  physical_units          physical_units[]
+  marketplace_order_lines marketplace_order_lines[]
+  receiving_lines         receiving_session_lines[]
+  favorites               favorites[]
+  promo_targets           promotion_targets[]
+  block_items             content_block_items[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -686,11 +688,12 @@ model physical_units {
   created_at           DateTime           @default(now())
   updated_at           DateTime           @updatedAt
 
-  product           products               @relation(fields: [product_id], references: [id])
-  purchase          purchases?             @relation(fields: [purchase_id], references: [id])
-  purchase_line     purchase_lines?        @relation(fields: [purchase_line_id], references: [id])
-  receiving_session receiving_sessions     @relation(fields: [receiving_session_id], references: [id])
+  product           products                  @relation(fields: [product_id], references: [id])
+  purchase          purchases?                @relation(fields: [purchase_id], references: [id])
+  purchase_line     purchase_lines?           @relation(fields: [purchase_line_id], references: [id])
+  receiving_session receiving_sessions        @relation(fields: [receiving_session_id], references: [id])
   events            physical_unit_events[]
+  marketplace_units marketplace_order_units[]
 
   @@index([product_id, status, expiry_date, seq]) // FEFO later: the earliest expiry first
   @@index([status])
@@ -715,6 +718,95 @@ model physical_unit_events {
   staff staff_users?   @relation(fields: [created_by], references: [id])
 
   @@index([physical_unit_id, created_at])
+}
+
+// ───────────── STAGE 2C: MARKETPLACE (YANDEX) ORDERS ─────────────
+
+enum Marketplace {
+  yandex
+
+  @@map("marketplace")
+}
+
+/// NEW -> ASSEMBLED -> HANDED_TO_DELIVERY -> DELIVERED; CANCELLED (before the handover) and RETURNED (after it).
+enum MarketplaceOrderStatus {
+  NEW
+  ASSEMBLED
+  HANDED_TO_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURNED
+
+  @@map("marketplace_order_status")
+}
+
+/// A Yandex Market order, separate from the VITALO orders table (Q3). Unique per (marketplace, external number).
+/// Never deleted (trigger). Status changes are written to audit_logs with the employee and the time.
+model marketplace_orders {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  marketplace        Marketplace            @default(yandex)
+  external_number    String
+  order_date         DateTime               @db.Date
+  customer_name      String?
+  status             MarketplaceOrderStatus @default(NEW)
+  commission_percent Decimal                @default(18.5) @db.Decimal(5, 2) // admin only (costs.view)
+  note               String?
+  cancel_reason      String?
+  created_by         String?                @db.Uuid
+  created_at         DateTime               @default(now())
+  updated_at         DateTime               @updatedAt
+  assembled_at       DateTime?
+  handed_at          DateTime?
+  delivered_at       DateTime?
+  closed_at          DateTime? // cancelled or returned
+
+  staff staff_users?              @relation(fields: [created_by], references: [id])
+  lines marketplace_order_lines[]
+  units marketplace_order_units[]
+
+  @@unique([marketplace, external_number])
+  @@index([status, order_date])
+}
+
+model marketplace_order_lines {
+  id             String   @id @default(uuid()) @db.Uuid
+  order_id       String   @db.Uuid
+  product_id     String   @db.Uuid
+  position       Int
+  qty            Int
+  unit_price_uzs BigInt // sale price per unit on Yandex
+  created_at     DateTime @default(now())
+
+  order   marketplace_orders        @relation(fields: [order_id], references: [id])
+  product products                  @relation(fields: [product_id], references: [id])
+  units   marketplace_order_units[]
+
+  @@unique([order_id, position])
+  @@index([product_id])
+}
+
+/// Q5: order line <-> physical unit. Reserved (FEFO) when the order is created; picked_at = Physical ID confirmed
+/// at assembly; released_at = taken off the order (cancel, swap). One unit is in at most one active assignment:
+/// partial unique index in the migration.
+model marketplace_order_units {
+  id               String    @id @default(uuid()) @db.Uuid
+  order_id         String    @db.Uuid
+  line_id          String    @db.Uuid
+  physical_unit_id String    @db.Uuid
+  assigned_by      String?   @db.Uuid
+  assigned_at      DateTime  @default(now())
+  picked_at        DateTime?
+  fefo_override    String? // reason when not the earliest expiry was chosen
+  released_at      DateTime?
+  release_reason   String?
+  return_decision  String? // ACCEPTED | WRITTEN_OFF (after RETURNED)
+
+  order marketplace_orders      @relation(fields: [order_id], references: [id])
+  line  marketplace_order_lines @relation(fields: [line_id], references: [id])
+  unit  physical_units          @relation(fields: [physical_unit_id], references: [id])
+
+  @@index([order_id])
+  @@index([physical_unit_id])
 }
 
 /// One receiving: PURCHASE (by Ozon account or supplier) or OPENING_BALANCE (the stock count sheet).
