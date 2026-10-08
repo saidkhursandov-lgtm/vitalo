@@ -8,6 +8,8 @@
  * - reserved_qty above the number of jars on the sheet -> error for that SKU. All or nothing: any error -> nothing
  *   is written. A unit-tracked product, or one already in the open opening session, is skipped with a warning,
  *   so running the same file again creates nothing new.
+ * - SKU: a product renamed in the catalog (sheet «Товары», «Прежний SKU») is found by its old SKU too.
+ * - Rows with 0 jars or an empty expiry date are skipped (no error). Products with jars and no cost are listed.
  * - Writes ONE open OPENING_BALANCE session with units in status RECEIVED. Printing labels and «Завершить» happen in
  *   the admin panel (Приёмка → Незавершённые, admin): only then the stock becomes the number of units (an adjustment)
  *   and the product becomes unit-tracked.
@@ -56,6 +58,10 @@ export interface OpeningPlan {
   rows: OpeningRowPlan[];
   errors: OpeningIssue[];
   warnings: OpeningIssue[];
+  /** rows with 0 jars or no expiry date */
+  skippedRows: number;
+  /** SKUs with jars on the sheet and an empty cost_uzs */
+  missingCost: string[];
 }
 
 export interface OpeningResult {
@@ -87,16 +93,16 @@ export function cellDay(v: ExcelJS.CellValue): string | null {
 
 function cellInt(v: ExcelJS.CellValue): number | null | 'bad' {
   if (typeof v === 'object' && v !== null && 'result' in v) return cellInt(v.result as ExcelJS.CellValue);
-  if (typeof v === 'number') return Number.isInteger(v) && v > 0 ? v : 'bad';
+  if (typeof v === 'number') return Number.isInteger(v) && v >= 0 ? v : 'bad';
   const t = cellText(v).replace(/\s/g, '');
   if (!t) return null;
-  return /^\d+$/.test(t) && Number(t) > 0 ? Number(t) : 'bad';
+  return /^\d+$/.test(t) ? Number(t) : 'bad';
 }
 
 // ---------------------------------------------------------------- planning (read only)
 
 export async function planOpeningStock(prisma: PrismaService, file: string, today = tashkentDateString(new Date())): Promise<OpeningPlan> {
-  const plan: OpeningPlan = { file, rows: [], errors: [], warnings: [] };
+  const plan: OpeningPlan = { file, rows: [], errors: [], warnings: [], skippedRows: 0, missingCost: [] };
   const error = (row: number, message: string, sku?: string) => plan.errors.push({ row, sku, message });
   const warn = (row: number, message: string, sku?: string) => plan.warnings.push({ row, sku, message });
 
@@ -146,8 +152,14 @@ export async function planOpeningStock(prisma: PrismaService, file: string, toda
       error(r, 'не указан SKU');
       continue;
     }
-    if (qty === null || qty === 'bad') {
-      error(r, `«Количество банок»: нужно целое число больше 0 (сейчас «${cellText(row.getCell(cols.qty!).value)}»)`, sku);
+    if (qty === 'bad') {
+      error(r, `«Количество банок»: нужно целое число (сейчас «${cellText(row.getCell(cols.qty!).value)}»)`, sku);
+      continue;
+    }
+    // 0 jars or no expiry date: the row is skipped without an error
+    if (!qty || !cellText(rawExpiry)) {
+      plan.skippedRows++;
+      if (qty) warn(r, `${qty} банок без срока годности — строка пропущена, эти банки не загрузятся`, sku);
       continue;
     }
     const day = cellDay(rawExpiry);
@@ -165,7 +177,10 @@ export async function planOpeningStock(prisma: PrismaService, file: string, toda
   }
   if (!bySku.size && !plan.errors.length) error(0, 'на листе нет строк с товарами');
 
-  const products = await prisma.products.findMany({ where: { sku: { in: [...bySku.keys()] } }, include: { inventory: true } });
+  // Renamed SKUs: the catalog sheet says which old SKU a new one had (the rename itself is done by import:catalog).
+  const oldSkuOf = renamedSkus(wb);
+  const wanted = [...bySku.keys()].flatMap((s) => [s, ...(oldSkuOf.has(s) ? [oldSkuOf.get(s)!] : [])]);
+  const products = await prisma.products.findMany({ where: { sku: { in: wanted } }, include: { inventory: true } });
   const openOpening = await prisma.physical_units.findMany({
     where: { status: 'RECEIVED', product_id: { in: products.map((p) => p.id) }, receiving_session: { type: 'OPENING_BALANCE', status: 'OPEN' } },
     select: { product_id: true },
@@ -183,7 +198,9 @@ export async function planOpeningStock(prisma: PrismaService, file: string, toda
   });
 
   for (const [sku, { row, groups }] of bySku) {
-    const p = products.find((x) => x.sku === sku);
+    const old = oldSkuOf.get(sku);
+    const p = products.find((x) => x.sku === sku) ?? (old ? products.find((x) => x.sku === old) : undefined);
+    if (p && p.sku !== sku) warn(row, `найден по прежнему SKU ${p.sku} (переименование в ${sku} сделает npm run import:catalog)`, sku);
     if (!p) {
       error(row, 'товара с таким SKU нет в базе', sku);
       continue;
@@ -230,7 +247,10 @@ export async function planOpeningStock(prisma: PrismaService, file: string, toda
       continue;
     }
     if (p.status === 'archived') fail('товар в архиве');
-    else if (r.cost == null) fail('не заполнена себестоимость (cost_uzs) — без неё единицы не создаются');
+    else if (r.cost == null) {
+      plan.missingCost.push(sku);
+      fail('не заполнена себестоимость (cost_uzs) — без неё единицы не создаются');
+    }
     else if (reserved > sheetQty) fail(`в резерве по заказам ${reserved} шт., а банок на листе ${sheetQty} — сначала разберитесь с заказами`);
     else if (receivingNow.some((u) => u.product_id === p.id)) fail('по товару идёт приёмка закупки — завершите или отмените её перед вводом начального остатка');
     else if (newGroups.some((g) => g.qty < 0) || [...existing.keys()].some((d) => !merged.some((g) => g.expiry === d))) {
@@ -242,6 +262,27 @@ export async function planOpeningStock(prisma: PrismaService, file: string, toda
     }
   }
   return plan;
+}
+
+/** «Товары» sheet of the same file (if any): new SKU -> «Прежний SKU (если менялся)». */
+function renamedSkus(wb: ExcelJS.Workbook): Map<string, string> {
+  const map = new Map<string, string>();
+  const ws = wb.worksheets.find((w) => headerKey(w.name) === 'товары');
+  if (!ws) return map;
+  let skuCol = 0;
+  let oldCol = 0;
+  ws.getRow(1).eachCell((cell, c) => {
+    const h = headerKey(cellText(cell.value));
+    if (h === 'sku') skuCol = c;
+    if (h.startsWith('прежний sku')) oldCol = c;
+  });
+  if (!skuCol || !oldCol) return map;
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const sku = cellText(ws.getRow(r).getCell(skuCol).value);
+    const old = cellText(ws.getRow(r).getCell(oldCol).value);
+    if (sku && old && old !== sku) map.set(sku, old);
+  }
+  return map;
 }
 
 // ---------------------------------------------------------------- applying (writes)
@@ -289,8 +330,21 @@ export function formatOpeningPlan(plan: OpeningPlan): string {
     if (r.note) out.push(`    ${r.note}`);
   }
   const creating = plan.rows.filter((r) => r.action === 'create');
+  const jars = plan.rows.reduce((s, r) => s + r.sheetQty, 0);
+  const diff = plan.rows.reduce((s, r) => s + r.difference, 0);
   out.push('');
-  out.push(`Итого: товаров ${plan.rows.length}, к созданию ${creating.length}, единиц ${creating.reduce((s, r) => s + r.newUnits, 0)}.`);
+  out.push(
+    `Итого по листу: товаров ${plan.rows.length}, групп сроков ${plan.rows.reduce((s, r) => s + r.groups.length, 0)}, всего банок ${jars}; ` +
+      `в базе сейчас остаток ${jars - diff}, разница ${diff > 0 ? '+' : ''}${diff}. Пропущено строк (0 банок или без срока): ${plan.skippedRows}.`,
+  );
+  out.push(`К созданию: товаров ${creating.length}, единиц ${creating.reduce((s, r) => s + r.newUnits, 0)}.`);
+  if (plan.missingCost.length) {
+    out.push(
+      '',
+      `Нет себестоимости у товаров с банками (${plan.missingCost.length}): ${plan.missingCost.join(', ')}.`,
+      'Заполните «Себестоимость, сум» на листе «Товары» и выполните npm run import:catalog -- --apply-cost (или впишите её в карточке товара).',
+    );
+  }
   if (plan.warnings.length) {
     out.push('', `Предупреждения (${plan.warnings.length}):`);
     for (const w of plan.warnings) out.push(`  строка ${w.row}${w.sku ? ` (${w.sku})` : ''}: ${w.message}`);

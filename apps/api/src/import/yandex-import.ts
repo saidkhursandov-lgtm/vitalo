@@ -100,7 +100,7 @@ export interface YandexResult {
 const headerKey = (s: string) => s.replace(/\*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
 /** Text of a cell: rich text / formulas included; literal «\n» and Windows line breaks become real ones. */
-function cellText(v: ExcelJS.CellValue): string {
+export function cellText(v: ExcelJS.CellValue): string {
   if (v == null) return '';
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
   if (v instanceof Date) return v.toISOString();
@@ -125,7 +125,7 @@ const sameText = (a: string | null | undefined, b: string | null | undefined) =>
 const short = (s: string) => (s.length > 40 ? `${s.slice(0, 40).replace(/\n/g, ' ')}…` : s.replace(/\n/g, ' '));
 
 /** «Таблетки; Капсулы» -> the set form; any other list of forms is an error. */
-function normalizeForm(text: string): { form: string; note?: string } | { error: string } {
+export function normalizeForm(text: string): { form: string; note?: string } | { error: string } {
   if (!text.includes(';')) return { form: cleanName(text) };
   const parts = text.split(';').map((s) => matchKey(s)).filter(Boolean).sort();
   if (parts.join('|') === 'капсулы|таблетки') return { form: TABLETS_AND_CAPSULES, note: `форма «${text}» → «${TABLETS_AND_CAPSULES}»` };
