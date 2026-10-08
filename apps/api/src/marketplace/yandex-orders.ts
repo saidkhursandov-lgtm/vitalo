@@ -58,7 +58,8 @@ const textOrNull = ({ value }: { value: unknown }) => (typeof value === 'string'
 export class YandexLineInput {
   @ApiProperty() @IsUUID() product_id!: string;
   @ApiProperty({ minimum: 1, maximum: 50 }) @IsInt() @Min(1) @Max(50) qty!: number;
-  @ApiProperty({ description: 'Цена продажи за единицу, сум' }) @IsInt() @Min(0) @Max(1_000_000_000) unit_price_uzs!: number;
+  @ApiPropertyOptional({ description: 'Цена продажи за единицу, сум; не указана — цена Яндекса из карточки товара' })
+  @IsOptional() @IsInt() @Min(0) @Max(1_000_000_000) unit_price_uzs?: number;
 }
 
 export class CreateYandexOrderDto {
@@ -93,6 +94,12 @@ export class ReasonDto {
   @ApiProperty() @Transform(trim) @IsString() @MinLength(3) @MaxLength(300) reason!: string;
 }
 
+export class PriceHintsQuery {
+  @ApiProperty({ description: 'id товаров через запятую' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',').filter(Boolean) : value))
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(30) @IsUUID('all', { each: true }) product_ids!: string[];
+}
+
 export class YandexOrdersQuery extends PageQuery {
   @ApiPropertyOptional({ enum: MarketplaceOrderStatus }) @IsOptional() @IsEnum(MarketplaceOrderStatus) status?: MarketplaceOrderStatus;
   @ApiPropertyOptional() @IsOptional() @IsDateString({ strict: true }) from?: string;
@@ -108,6 +115,19 @@ export function orderMoney(lines: { qty: number; unit_price_uzs: bigint }[], uni
   const commission = Math.round((revenue * commissionPercent) / 100);
   const cost = unitCosts.reduce((s, c) => s + Number(c), 0);
   return { revenue_uzs: revenue, commission_uzs: commission, cost_uzs: cost, profit_uzs: revenue - commission - cost };
+}
+
+/**
+ * S2C-11: the commission of a new order from the product cards (yandex_commission_percent), 18.5 where empty.
+ * One percentage per order: with several products, weighted by the line revenue (2 decimals), so the commission
+ * in money is (almost exactly) the sum of the per-product commissions. The admin can change it on the order.
+ */
+export function defaultCommission(lines: { revenue: number; percent: number | null }[]): number {
+  const pcts = lines.map((l) => ({ revenue: l.revenue, percent: l.percent ?? DEFAULT_COMMISSION_PERCENT }));
+  if (pcts.every((l) => l.percent === pcts[0].percent)) return pcts[0]?.percent ?? DEFAULT_COMMISSION_PERCENT;
+  const total = pcts.reduce((s, l) => s + l.revenue, 0);
+  if (!total) return pcts[0].percent;
+  return Math.round((pcts.reduce((s, l) => s + l.revenue * l.percent, 0) / total) * 100) / 100;
 }
 
 export const ORDER_STATUS_RU: Record<MarketplaceOrderStatus, string> = {
@@ -182,6 +202,12 @@ export class YandexOrdersService {
       total,
       total_pages: Math.ceil(total / PAGE_SIZE),
     };
+  }
+
+  /** Yandex prices of the product cards for the «Новый заказ» form (S2C-12: also for the warehouse). */
+  async priceHints(ids: string[]) {
+    const rows = await this.prisma.products.findMany({ where: { id: { in: ids } }, select: { id: true, yandex_price_uzs: true } });
+    return rows.map((r) => ({ product_id: r.id, yandex_price_uzs: r.yandex_price_uzs === null ? null : Number(r.yandex_price_uzs) }));
   }
 
   async get(id: string, money: boolean) {
@@ -268,12 +294,19 @@ export class YandexOrdersService {
         },
       },
       async (tx) => {
-        const products = await tx.products.findMany({ where: { id: { in: dto.lines.map((l) => l.product_id) } }, select: { id: true, sku: true, unit_tracking: true } });
-        for (const l of dto.lines) {
+        const products = await tx.products.findMany({
+          where: { id: { in: dto.lines.map((l) => l.product_id) } },
+          select: { id: true, sku: true, unit_tracking: true, yandex_price_uzs: true, yandex_commission_percent: true },
+        });
+        const priced = dto.lines.map((l) => {
           const p = products.find((x) => x.id === l.product_id);
           if (!p) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT', message: 'Товар не найден' });
           if (!p.unit_tracking) throw new ConflictException({ code: 'NOT_UNIT_TRACKED', message: `${p.sku}: товар не учитывается по банкам (Physical ID)` });
-        }
+          // S2C-12: the Yandex price of the product card unless typed at creation
+          const price = l.unit_price_uzs ?? (p.yandex_price_uzs === null ? null : Number(p.yandex_price_uzs));
+          if (price === null) throw new BadRequestException({ code: 'PRICE_REQUIRED', message: `${p.sku}: в карточке нет цены Яндекса — укажите цену` });
+          return { ...l, unit_price_uzs: price, commission: p.yandex_commission_percent === null ? null : Number(p.yandex_commission_percent) };
+        });
         const order = await tx.marketplace_orders.create({
           data: {
             marketplace: 'yandex',
@@ -281,9 +314,9 @@ export class YandexOrdersService {
             order_date: new Date(`${dto.order_date}T00:00:00Z`),
             customer_name: dto.customer_name ?? null,
             note: dto.note ?? null,
-            commission_percent: dto.commission_percent ?? DEFAULT_COMMISSION_PERCENT,
+            commission_percent: dto.commission_percent ?? defaultCommission(priced.map((l) => ({ revenue: l.unit_price_uzs * l.qty, percent: l.commission }))),
             created_by: me.staff.id,
-            lines: { create: dto.lines.map((l, i) => ({ product_id: l.product_id, position: i + 1, qty: l.qty, unit_price_uzs: BigInt(l.unit_price_uzs) })) },
+            lines: { create: priced.map((l, i) => ({ product_id: l.product_id, position: i + 1, qty: l.qty, unit_price_uzs: BigInt(l.unit_price_uzs) })) },
           },
           include: { lines: true },
         });
@@ -597,12 +630,13 @@ const moneyFor = (role: StaffRole) => can(role, 'yandex.orders.money');
 @ApiTags('staff: yandex orders')
 @ApiBearerAuth()
 @UseGuards(StaffGuard)
-@RequirePermission('yandex.orders')
+@RequirePermission('yandex.orders') // actions; list and card: yandex.orders.view (manager too, without money)
 @Controller('staff/yandex-orders')
 export class YandexOrdersController {
   constructor(private readonly orders: YandexOrdersService) {}
 
   @Get()
+  @RequirePermission('yandex.orders.view')
   list(@Query() q: YandexOrdersQuery) {
     return this.orders.list(q);
   }
@@ -613,7 +647,13 @@ export class YandexOrdersController {
     return this.orders.create(me, requireIdempotencyKey(key), dto);
   }
 
+  @Get('price-hints')
+  priceHints(@Query() q: PriceHintsQuery) {
+    return this.orders.priceHints(q.product_ids);
+  }
+
   @Get(':id')
+  @RequirePermission('yandex.orders.view')
   get(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
     return this.orders.get(id, moneyFor(me.staff.role));
   }

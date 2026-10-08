@@ -66,10 +66,12 @@ describe('Stage 2C: Yandex orders and the unit life cycle (e2e)', () => {
     await app.close();
   });
 
-  it('roles: Yandex orders for warehouse and admin only; write-off and correction for admin only', async () => {
+  it('roles: Yandex orders for warehouse and admin; manager only views (no money); write-off and correction for admin only', async () => {
     const { product, units } = await stocked(['2028-01-01']);
+    expect((await as('marketer').get('/staff/yandex-orders').expect(403)).body.code).toBe('FORBIDDEN_FOR_ROLE');
+    await as('manager').get('/staff/yandex-orders').expect(200);
+    await as('manager').get(`/staff/yandex-orders/price-hints?product_ids=${product.id}`).expect(403);
     for (const r of ['manager', 'marketer'] as Role[]) {
-      expect((await as(r).get('/staff/yandex-orders').expect(403)).body.code).toBe('FORBIDDEN_FOR_ROLE');
       await newOrder(r, [{ product_id: product.id, qty: 1 }]).expect(403);
       await as(r).post(`/staff/units/${units[0].id}/missing`, { reason: 'не нашли' }).expect(403);
       await as(r).post(`/staff/units/${units[0].id}/return-decision`, { decision: 'ACCEPT', reason: 'проверена', checked: true }).expect(403);
@@ -287,6 +289,16 @@ describe('Stage 2C: Yandex orders and the unit life cycle (e2e)', () => {
     const unit = (await as('warehouse').get(`/staff/units/${o.lines[0].units[0].unit_id}`).expect(200)).body;
     for (const b of [card, list, unit]) expect(keysOf(b).filter((k) => LEAK.test(k))).toEqual([]);
     expect((await as('warehouse').patch(`/staff/yandex-orders/${o.id}`, { commission_percent: 10 }).expect(403)).body.code).toBe('COMMISSION_FORBIDDEN');
+
+    // manager: list and card without money, no actions at all
+    const mCard = (await as('manager').get(`/staff/yandex-orders/${o.id}`).expect(200)).body;
+    const mList = (await as('manager').get('/staff/yandex-orders').expect(200)).body;
+    expect(mCard.lines[0].units).toHaveLength(2);
+    for (const b of [mCard, mList]) expect(keysOf(b).filter((k) => LEAK.test(k))).toEqual([]);
+    for (const a of ['pick', 'assemble', 'hand-over', 'deliver', 'cancel']) {
+      expect((await as('manager').post(`/staff/yandex-orders/${o.id}/${a}`, { physical_id: '1', reason: 'проверка' }).expect(403)).body.code).toBe('FORBIDDEN_FOR_ROLE');
+    }
+    await as('manager').patch(`/staff/yandex-orders/${o.id}`, { note: 'x' }).expect(403);
     expect((await as('warehouse').patch(`/staff/yandex-orders/${o.id}`, { note: 'Позвонить курьеру' }).expect(200)).body.note).toBe('Позвонить курьеру');
 
     const admin = (await as('admin').get(`/staff/yandex-orders/${o.id}`).expect(200)).body;
@@ -294,6 +306,36 @@ describe('Stage 2C: Yandex orders and the unit life cycle (e2e)', () => {
     expect(admin).toMatchObject({ commission_percent: 18.5, money: { revenue_uzs: 200_000, commission_uzs: 37_000, cost_uzs: 80_000, profit_uzs: 83_000 } });
     const edited = (await as('admin').patch(`/staff/yandex-orders/${o.id}`, { commission_percent: 10, prices: [{ line_id: o.lines[0].id, unit_price_uzs: 120_000 }] }).expect(200)).body;
     expect(edited.money).toEqual({ revenue_uzs: 240_000, commission_uzs: 24_000, cost_uzs: 80_000, profit_uzs: 136_000 });
+  });
+
+  it('defaults from the product card: Yandex price and commission (else 18.5 %); editable at creation; price hints for the form', async () => {
+    const a = await stocked(['2028-01-01', '2028-02-01']);
+    const b = await stocked(['2028-01-01']);
+    const c = await stocked(['2028-01-01']);
+    await prisma.products.update({ where: { id: a.product.id }, data: { yandex_price_uzs: 120_000n, yandex_commission_percent: 15 } });
+    await prisma.products.update({ where: { id: b.product.id }, data: { yandex_price_uzs: 80_000n, yandex_commission_percent: null } });
+    const create = (lines: object[]) =>
+      as('warehouse').post('/staff/yandex-orders', { external_number: `YM-${RUN}-${++orderNo}`, order_date: '2026-10-10', lines });
+
+    const hints = (await as('warehouse').get(`/staff/yandex-orders/price-hints?product_ids=${a.product.id},${c.product.id}`).expect(200)).body;
+    expect(hints).toEqual(expect.arrayContaining([{ product_id: a.product.id, yandex_price_uzs: 120_000 }, { product_id: c.product.id, yandex_price_uzs: null }]));
+
+    // price and commission from the card
+    const one = (await create([{ product_id: a.product.id, qty: 1 }]).expect(201)).body;
+    expect(one.lines[0].unit_price_uzs).toBe(120_000);
+    expect((await as('admin').get(`/staff/yandex-orders/${one.id}`).expect(200)).body.commission_percent).toBe(15);
+    // the warehouse types another price at creation
+    const typed = (await create([{ product_id: a.product.id, qty: 1, unit_price_uzs: 110_000 }]).expect(201)).body;
+    expect(typed.lines[0].unit_price_uzs).toBe(110_000);
+    // no commission in the card -> 18.5
+    const plain = (await create([{ product_id: b.product.id, qty: 1 }]).expect(201)).body;
+    expect((await as('admin').get(`/staff/yandex-orders/${plain.id}`).expect(200)).body.commission_percent).toBe(18.5);
+    // no Yandex price in the card and none typed -> a clear error, nothing reserved
+    expect((await create([{ product_id: c.product.id, qty: 1 }]).expect(400)).body.code).toBe('PRICE_REQUIRED');
+    expect(await shelf(c.product.id)).toEqual({ actual: 1, reserved: 0 });
+    // the admin sets the commission at creation explicitly
+    const own = (await as('admin').post('/staff/yandex-orders', { external_number: `YM-${RUN}-${++orderNo}`, order_date: '2026-10-10', commission_percent: 12, lines: [{ product_id: c.product.id, qty: 1, unit_price_uzs: 50_000 }] }).expect(201)).body;
+    expect(own.commission_percent).toBe(12);
   });
 
   it('the database itself refuses a wrong unit transition and deleting an order', async () => {

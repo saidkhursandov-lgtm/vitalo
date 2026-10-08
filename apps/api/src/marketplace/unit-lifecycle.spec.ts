@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { reconcileState } from '../receiving/reconcile';
 import { canMove, CORRECTABLE_FROM, CORRECTABLE_TO, onShelf, TRANSITIONS } from './unit-lifecycle';
-import { orderMoney } from './yandex-orders';
+import { defaultCommission, orderMoney } from './yandex-orders';
 
 const MIGRATION = join(__dirname, '../../prisma/migrations/20261010100000_stage2c_marketplace_orders/migration.sql');
 
@@ -47,5 +47,15 @@ describe('«Сверка» states', () => {
     expect(reconcileState({ difference: 2, assigned: 0, reserved: 0, sold: 2 })).toBe('vitalo_orders');
     expect(reconcileState({ difference: 1, assigned: 0, reserved: 0, sold: 2 })).toBe('unexplained');
     expect(reconcileState({ difference: 0, assigned: 2, reserved: 1, sold: 0 })).toBe('unexplained'); // a Yandex unit without its reservation
+  });
+});
+
+describe('commission of a new order (S2C-11)', () => {
+  it('from the product card, 18.5 where empty, weighted by revenue for several products', () => {
+    expect(defaultCommission([{ revenue: 100_000, percent: 15 }])).toBe(15);
+    expect(defaultCommission([{ revenue: 100_000, percent: null }])).toBe(18.5);
+    expect(defaultCommission([{ revenue: 100_000, percent: 15 }, { revenue: 300_000, percent: 15 }])).toBe(15);
+    expect(defaultCommission([{ revenue: 100_000, percent: 10 }, { revenue: 300_000, percent: null }])).toBe(16.38); // (10 000 + 55 500) / 400 000
+    expect(defaultCommission([{ revenue: 0, percent: 12 }, { revenue: 0, percent: 20 }])).toBe(12);
   });
 });

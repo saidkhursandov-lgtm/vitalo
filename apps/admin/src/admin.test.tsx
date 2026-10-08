@@ -12,9 +12,9 @@ afterEach(cleanup);
 
 /** Same lists as apps/api/src/staff/permissions.ts permissionsOf(role). */
 const PERMS: Record<string, Permission[]> = {
-  warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders', 'units.missing', 'units.return_decision'],
+  warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision'],
   marketer: ['dashboard.view', 'products.view', 'yandex.price.view'],
-  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label'],
+  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label', 'yandex.orders.view'],
 };
 
 describe('menu by role', () => {
@@ -29,8 +29,8 @@ describe('menu by role', () => {
     expect(labels('marketer')).toEqual(['Дашборд', 'Товары']);
   });
 
-  it('manager: everything except settings, audit and Yandex orders (stage 2C)', () => {
-    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Товары', 'Склад', 'Закупки', 'Клиенты']);
+  it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {
+    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты']);
   });
 });
 

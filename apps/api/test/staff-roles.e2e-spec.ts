@@ -76,9 +76,10 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'open a unit', method: 'get', path: () => `/api/staff/units/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'reconcile units', method: 'get', path: () => '/api/staff/units/reconcile', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'print labels', method: 'post', path: () => '/api/staff/units/labels', body: {}, allowed: ['admin', 'manager', 'warehouse'] },
-    { label: 'list Yandex orders', method: 'get', path: () => '/api/staff/yandex-orders', allowed: ['admin', 'warehouse'] },
+    { label: 'list Yandex orders', method: 'get', path: () => '/api/staff/yandex-orders', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'create a Yandex order', method: 'post', path: () => '/api/staff/yandex-orders', body: {}, allowed: ['admin', 'warehouse'] },
-    { label: 'open a Yandex order', method: 'get', path: () => `/api/staff/yandex-orders/${MISSING}`, allowed: ['admin', 'warehouse'] },
+    { label: 'open a Yandex order', method: 'get', path: () => `/api/staff/yandex-orders/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'see Yandex prices for a new order', method: 'get', path: () => `/api/staff/yandex-orders/price-hints?product_ids=${MISSING}`, allowed: ['admin', 'warehouse'] },
     { label: 'pick a unit for a Yandex order', method: 'post', path: () => `/api/staff/yandex-orders/${MISSING}/pick`, body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'cancel a Yandex order', method: 'post', path: () => `/api/staff/yandex-orders/${MISSING}/cancel`, body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'see returned units', method: 'get', path: () => '/api/staff/units/returns/pending', allowed: ['admin', 'manager', 'warehouse'] },
@@ -152,10 +153,12 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
   it('GET /staff/auth/me lists exactly the permissions of the role', async () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
     expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'yandex.price.view']);
-    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
+    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
     expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
     expect((await me('manager')).permissions).toContain('dashboard.revenue');
     expect((await me('manager')).permissions).not.toContain('costs.view');
+    expect((await me('manager')).permissions).toContain('yandex.orders.view');
+    expect((await me('manager')).permissions).not.toContain('yandex.orders');
     expect((await me('manager')).staff).toMatchObject({ role: 'manager', name: 'Менеджер (тест)' });
   });
 

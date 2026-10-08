@@ -9,7 +9,7 @@ import { AUDIT_ACTION, dateTime, money, ruDate, UNIT_STATUS, YANDEX_STATUS } fro
 import { ProductPicker } from './Purchases';
 
 /**
- * Stage 2C «Заказы Яндекса» (warehouse and admin). Units are reserved by FEFO when the order is created; at
+ * Stage 2C «Заказы Яндекса»: warehouse and admin work with the orders, the manager only views them (no buttons). Units are reserved by FEFO when the order is created; at
  * assembly every Physical ID is typed or scanned; the buttons follow the status. Commission, unit costs and
  * profit come from the server only for the admin, so the screens show them only when they are there.
  */
@@ -66,6 +66,7 @@ const today = () => new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 1
 // ====================================================================== list
 
 export function YandexOrders() {
+  const { can } = useSession();
   const [params, setParams] = useSearchParams();
   const page = Number(params.get('page')) || 1;
   const f = { status: params.get('status') ?? '', from: params.get('from') ?? '', to: params.get('to') ?? '', q: params.get('q') ?? '' };
@@ -84,9 +85,11 @@ export function YandexOrders() {
   return (
     <>
       <PageHead title="Заказы Яндекса">
-        <Link className="btn" to="/yandex-orders/new">
-          Новый заказ
-        </Link>
+        {can('yandex.orders') && (
+          <Link className="btn" to="/yandex-orders/new">
+            Новый заказ
+          </Link>
+        )}
       </PageHead>
       <form
         className="filters"
@@ -192,6 +195,19 @@ export function YandexOrderNew() {
     onSuccess: (o) => navigate(`/yandex-orders/${o.id}`, { replace: true }),
   });
   const edit = (i: number, patch: Partial<DraftLine>) => setLines(lines.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+  /** A picked product comes with the Yandex price of its card (S2C-12), editable before saving. */
+  const addLine = async (p: DraftLine['product']) => {
+    setLines((cur) => [...cur, { product: p, qty: '1', price: '' }]);
+    try {
+      const [hint] = await api<{ product_id: string; yandex_price_uzs: number | null }[]>(`/staff/yandex-orders/price-hints${qs({ product_ids: p.id })}`);
+      if (hint?.yandex_price_uzs !== null && hint?.yandex_price_uzs !== undefined) {
+        const price = String(hint.yandex_price_uzs);
+        setLines((cur) => cur.map((l) => (l.product.id === p.id && l.price === '' ? { ...l, price } : l)));
+      }
+    } catch {
+      /* no hint: the price is typed by hand */
+    }
+  };
   const valid = form.external_number.trim() && form.order_date && lines.length > 0 && lines.every((l) => Number(l.qty) >= 1 && l.price.trim() !== '' && Number(l.price.replace(/\s/g, '')) >= 0);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -261,7 +277,8 @@ export function YandexOrderNew() {
             </tbody>
           </table>
         )}
-        <ProductPicker exclude={lines.map((l) => l.product.id)} onPick={(p) => setLines([...lines, { product: p, qty: '1', price: '' }])} />
+        <ProductPicker exclude={lines.map((l) => l.product.id)} onPick={(p) => void addLine(p)} />
+        <p className="muted small">Цена подставляется из карточки товара (цена Яндекса); её можно изменить.</p>
       </section>
       <ErrorBox error={create.error} />
       <button className="btn btn-lg" disabled={!valid || create.isPending}>
@@ -277,6 +294,8 @@ type Action = 'assemble' | 'hand-over' | 'deliver' | 'cancel';
 
 export function YandexOrderDetail() {
   const { id } = useParams();
+  const { can } = useSession();
+  const acts = can('yandex.orders'); // the manager only views
   const client = useQueryClient();
   const q = useQuery({ queryKey: ['yandex-order', id], queryFn: () => api<Order>(`/staff/yandex-orders/${id}`) });
   const [message, setMessage] = useState<string | null>(null);
@@ -337,7 +356,7 @@ export function YandexOrderDetail() {
         </dl>
       </section>
 
-      {o.status === 'NEW' && <PickBox order={o} onDone={done} />}
+      {acts && o.status === 'NEW' && <PickBox order={o} onDone={done} />}
 
       <section className="card flush">
         <table className="table">
@@ -382,6 +401,7 @@ export function YandexOrderDetail() {
         </table>
       </section>
 
+      {acts && (
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
         {o.status === 'NEW' && (
           <ActionButton id={o.id} action="assemble" disabled={!allPicked} onDone={done}>
@@ -404,7 +424,8 @@ export function YandexOrderDetail() {
           </button>
         )}
       </div>
-      {o.status === 'NEW' && !allPicked && <p className="muted small">«Собран» станет доступно, когда все банки отмечены по Physical ID.</p>}
+      )}
+      {acts && o.status === 'NEW' && !allPicked && <p className="muted small">«Собран» станет доступно, когда все банки отмечены по Physical ID.</p>}
 
       {o.commission_percent !== undefined && <MoneyCard order={o} onDone={done} />}
 

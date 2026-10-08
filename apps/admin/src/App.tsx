@@ -34,9 +34,9 @@ export function App() {
         <Route index element={<Home />} />
         <Route path="orders" element={<Guard perm="orders.view"><Orders /></Guard>} />
         <Route path="orders/:id" element={<Guard perm="orders.view"><OrderDetail /></Guard>} />
-        <Route path="yandex-orders" element={<Guard perm="yandex.orders"><YandexOrders /></Guard>} />
+        <Route path="yandex-orders" element={<Guard perm="yandex.orders.view"><YandexOrders /></Guard>} />
         <Route path="yandex-orders/new" element={<Guard perm="yandex.orders"><YandexOrderNew /></Guard>} />
-        <Route path="yandex-orders/:id" element={<Guard perm="yandex.orders"><YandexOrderDetail /></Guard>} />
+        <Route path="yandex-orders/:id" element={<Guard perm="yandex.orders.view"><YandexOrderDetail /></Guard>} />
         <Route path="products" element={<Guard perm="products.view"><Products /></Guard>} />
         <Route path="products/new" element={<Guard perm="products.edit"><ProductEdit /></Guard>} />
         <Route path="products/:id" element={<Guard perm="products.view"><ProductEdit /></Guard>} />
