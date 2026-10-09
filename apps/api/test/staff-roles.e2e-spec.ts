@@ -88,6 +88,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'remove an alternative SKU', method: 'delete', path: () => `/api/staff/products/${MISSING}/aliases/${MISSING}`, allowed: ['admin'] },
     { label: 'see the Yandex sync', method: 'get', path: () => '/api/staff/yandex-sync', allowed: ['admin'] },
     { label: 'run the Yandex sync now', method: 'post', path: () => '/api/staff/yandex-sync/run', body: {}, allowed: ['admin'] },
+    { label: 'close Yandex attention entries in a batch', method: 'post', path: () => '/api/staff/yandex-sync/attention/close-batch', body: {}, allowed: ['admin'] },
     { label: 'close a Yandex attention entry', method: 'post', path: () => `/api/staff/yandex-sync/attention/${MISSING}/close`, body: {}, allowed: ['admin'] },
     { label: 'see a raw Yandex order', method: 'get', path: () => `/api/staff/yandex-sync/external/${MISSING}`, allowed: ['admin'] },
     { label: 'see returned units', method: 'get', path: () => '/api/staff/units/returns/pending', allowed: ['admin', 'manager', 'warehouse'] },

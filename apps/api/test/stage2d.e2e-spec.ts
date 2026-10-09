@@ -5,6 +5,7 @@ import { StockService } from '../src/inventory/stock.service';
 import type { FetchLike } from '../src/marketplace/yandex/yandex-client';
 import { YANDEX_CLIENT_OPTIONS, YandexSyncService } from '../src/marketplace/yandex/yandex-sync';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { AuditService } from '../src/staff/audit.service';
 import { createUnits, moveUnits } from '../src/receiving/units';
 import { archiveTestProducts, bearer, createTestApp, createTestProduct, loginStaff } from './helpers';
 
@@ -317,6 +318,74 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
     await runSync(); // seen again: no new summary
     expect(await prisma.notifications.count({ where: { template: 'staff.yandex_late_summary' } })).toBe(before + activeAdmins);
     expect(await shelf(p.id)).toEqual({ actual: 1, reserved: 0 });
+  });
+
+  it('«Закрыть выбранные»: admin only, up to 100, all or nothing, entries with an order refused, idempotent, never raised again', async () => {
+    const p = await stocked(['2028-01-01']);
+    const late = [
+      yOrder([{ sku: p.sku, count: 1 }], { status: 'DELIVERED', substatus: null }),
+      yOrder([{ sku: p.sku, count: 1 }], { status: 'PICKUP', substatus: null }),
+      yOrder([{ sku: p.sku, count: 1 }], { status: 'CANCELLED', substatus: 'USER_CHANGED_MIND' }),
+    ];
+    const reserved = yOrder([{ sku: p.sku, count: 1 }]); // created with a unit
+    const shortage = yOrder([{ sku: p.sku, count: 5 }]); // created without units, in «Требует внимания»
+    await runSync();
+    const ext = async (o: { orderId: number }) => (await external(o))!;
+    const lateIds = await Promise.all(late.map(async (o) => (await ext(o)).id));
+    expect((await ext(shortage)).attention_kind).toBe('NOT_ENOUGH_STOCK');
+    const close = (r: Role, body: object) => http().post('/api/staff/yandex-sync/attention/close-batch').set(bearer(tokens[r])).send(body);
+    const reason = 'Старый заказ, уже обработан вручную';
+
+    // rights and limits
+    for (const r of ['manager', 'warehouse', 'marketer'] as Role[]) expect((await close(r, { ids: lateIds, reason }).expect(403)).body.code).toBe('FORBIDDEN_FOR_ROLE');
+    await close('admin', { ids: lateIds, reason: 'x' }).expect(400);
+    await close('admin', { ids: [], reason }).expect(400);
+    await close('admin', { ids: Array.from({ length: 101 }, () => randomUUID()), reason }).expect(400);
+
+    // an entry that already became our order (with or without units) → nothing at all is closed
+    const withOrder = [(await ext(shortage)).id, (await ext(reserved)).id];
+    const refused = (await close('admin', { ids: [...lateIds, ...withOrder], reason }).expect(409)).body;
+    expect(refused.code).toBe('BATCH_REJECTED');
+    expect(refused.rejected.map((r: { reason: string }) => r.reason).sort()).toEqual([expect.stringContaining('есть резерв банок'), expect.stringContaining('уже превращён в заказ')].sort());
+    const unknown = (await close('admin', { ids: [lateIds[0], randomUUID()], reason }).expect(409)).body;
+    expect(unknown.rejected).toEqual([expect.objectContaining({ reason: 'не найден' })]);
+    for (const o of late) expect((await ext(o)).closed_at).toBeNull();
+
+    // a failure in the middle rolls everything back
+    const audit = app.get(AuditService);
+    const original = audit.log.bind(audit);
+    let calls = 0;
+    const spy = jest.spyOn(audit, 'log').mockImplementation(async (entry, db) => {
+      if (entry.action === 'yandex_sync.closed' && ++calls === 2) throw new Error('simulated failure');
+      return original(entry, db);
+    });
+    try {
+      await close('admin', { ids: lateIds, reason }).expect(500);
+    } finally {
+      spy.mockRestore();
+    }
+    for (const o of late) expect((await ext(o)).closed_at).toBeNull();
+    expect(await prisma.audit_logs.count({ where: { action: 'yandex_sync.closed', entity_id: { in: lateIds } } })).toBe(0);
+
+    // the batch: all closed, one audit row each with the shared reason
+    expect((await close('admin', { ids: lateIds, reason }).expect(200)).body).toMatchObject({ closed: 3, skipped: 0 });
+    const rows = await prisma.audit_logs.findMany({ where: { action: 'yandex_sync.closed', entity_id: { in: lateIds } } });
+    expect(rows).toHaveLength(3);
+    for (const r of rows) expect(r.after_json).toMatchObject({ reason });
+    for (const o of late) expect(await ext(o)).toMatchObject({ closed_at: expect.any(Date), close_reason: reason });
+
+    // repeated: nothing more, no error
+    expect((await close('admin', { ids: lateIds, reason }).expect(200)).body).toMatchObject({ closed: 0, skipped: 3 });
+    expect(await prisma.audit_logs.count({ where: { action: 'yandex_sync.closed', entity_id: { in: lateIds } } })).toBe(3);
+
+    // later polls do not raise them and send nothing
+    const before = await prisma.notifications.count({ where: { template: { startsWith: 'staff.yandex' } } });
+    await runSync();
+    await runSync();
+    const screen = (await as('admin').get('/staff/yandex-sync').expect(200)).body;
+    expect(screen.attention.some((a: { id: string }) => lateIds.includes(a.id))).toBe(false);
+    expect(await prisma.notifications.count({ where: { template: { startsWith: 'staff.yandex' } } })).toBe(before);
+    for (const o of late) expect(await ext(o)).toMatchObject({ closed_at: expect.any(Date) });
   });
 
   it('one bad order never breaks the batch: broken data → attention, an order without number → counted as error, the good one is created', async () => {

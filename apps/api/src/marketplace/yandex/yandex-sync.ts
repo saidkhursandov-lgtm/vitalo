@@ -496,16 +496,62 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
    */
   async close(staffId: string, id: string, reason: string) {
     return this.prisma.$transaction(async (tx) => {
-      const row = await tx.marketplace_external_orders.findUnique({ where: { id } });
+      const [row] = await this.lockExternal(tx, [id]);
       if (!row) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Заказ Яндекса не найден' });
       if (row.closed_at) throw new ConflictException({ code: 'ALREADY_CLOSED', message: 'Уже закрыт' });
-      await tx.marketplace_external_orders.update({ where: { id }, data: { closed_at: new Date(), closed_by: staffId, close_reason: reason } });
-      await this.audit.log(
-        { staffId, action: 'yandex_sync.closed', entityType: 'marketplace_external_order', entityId: id, before: { attention_kind: row.attention_kind, attention_reason: row.attention_reason }, after: { external_number: row.external_number, reason } },
-        tx,
-      );
+      await this.closeInTx(tx, staffId, row, reason);
       return { id, closed: true };
     });
+  }
+
+  /**
+   * «Закрыть выбранные как неактуальные» (admin): up to 100 entries, ONE transaction — all of them are closed or none.
+   * Every entry is closed by the same closeInTx as a single one (one audit row each, the shared reason).
+   * Already closed → skipped (no error, the request can be repeated). Refused, and then nothing is closed: an entry
+   * that already became our Yandex order (it may hold units), one that is not in «Требует внимания», an unknown id.
+   */
+  async closeMany(staffId: string, ids: string[], reason: string) {
+    const unique = [...new Set(ids)];
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await this.lockExternal(tx, unique);
+      const rejected: { id: string; external_number: string | null; reason: string }[] = [];
+      for (const id of unique.filter((x) => !rows.some((r) => r.id === x))) rejected.push({ id, external_number: null, reason: 'не найден' });
+      const open = rows.filter((r) => !r.closed_at);
+      for (const r of open) {
+        if (r.order_id) {
+          const units = await tx.marketplace_order_units.count({ where: { order_id: r.order_id, released_at: null } });
+          rejected.push({ id: r.id, external_number: r.external_number, reason: units ? `есть резерв банок (${units}) — заказ уже создан, решайте в его карточке` : 'уже превращён в заказ Яндекса — решайте в его карточке' });
+        } else if (!r.attention_kind) {
+          rejected.push({ id: r.id, external_number: r.external_number, reason: 'не в «Требует внимания»' });
+        }
+      }
+      if (rejected.length) {
+        throw new ConflictException({
+          code: 'BATCH_REJECTED',
+          message: `Ничего не закрыто: ${rejected.length} из ${unique.length} нельзя закрыть массово — снимите с них отметку`,
+          rejected,
+        });
+      }
+      for (const r of open) await this.closeInTx(tx, staffId, r, reason);
+      return { closed: open.length, skipped: rows.length - open.length, ids: open.map((r) => r.id) };
+    });
+  }
+
+  /** The entries locked FOR UPDATE (in id order): a poll processing the same order waits for the close. */
+  private lockExternal(tx: Tx, ids: string[]) {
+    if (!ids.length) return Promise.resolve([]);
+    return tx.$queryRaw<{ id: string; external_number: string; order_id: string | null; attention_kind: string | null; attention_reason: string | null; closed_at: Date | null }[]>`
+      SELECT id, external_number, order_id, attention_kind, attention_reason, closed_at FROM marketplace_external_orders
+      WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR UPDATE`;
+  }
+
+  /** The close itself (single and batch): closed for good + one audit row. */
+  private async closeInTx(tx: Tx, staffId: string, row: { id: string; external_number: string; attention_kind: string | null; attention_reason: string | null }, reason: string) {
+    await tx.marketplace_external_orders.update({ where: { id: row.id }, data: { closed_at: new Date(), closed_by: staffId, close_reason: reason } });
+    await this.audit.log(
+      { staffId, action: 'yandex_sync.closed', entityType: 'marketplace_external_order', entityId: row.id, before: { attention_kind: row.attention_kind, attention_reason: row.attention_reason }, after: { external_number: row.external_number, reason } },
+      tx,
+    );
   }
 
   /** Error texts never carry the token or the webhook secret (order numbers stay readable). */

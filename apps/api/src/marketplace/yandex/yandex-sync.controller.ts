@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, NotFoundException, Param, ParseUUIDPipe, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiExcludeController, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { createHash, timingSafeEqual } from 'crypto';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +12,10 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 
 export class CloseAttentionDto {
   @ApiProperty() @Transform(trim) @IsString() @MinLength(3) @MaxLength(300) reason!: string;
+}
+
+export class CloseAttentionBatchDto extends CloseAttentionDto {
+  @ApiProperty({ type: [String], maxItems: 100 }) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @IsUUID('all', { each: true }) ids!: string[];
 }
 
 /** «Синхронизация Яндекса» — admin only (yandex.sync). */
@@ -43,6 +47,13 @@ export class YandexSyncController {
   @Get('external/:id')
   external(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.sync.external(id);
+  }
+
+  /** «Закрыть выбранные как неактуальные»: one request, up to 100, all or nothing. */
+  @Post('attention/close-batch')
+  @HttpCode(200)
+  closeBatch(@CurrentStaff() me: StaffContext, @Body() dto: CloseAttentionBatchDto) {
+    return this.sync.closeMany(me.staff.id, dto.ids, dto.reason);
   }
 
   @Post('attention/:id/close')

@@ -6,6 +6,7 @@ import { dateTime, money } from './lib/format';
 import { homeFor, navFor } from './lib/nav';
 import { Diff } from './pages/Audit';
 import { ReasonPicker } from './components/Reason';
+import { ordersRu } from './pages/YandexSync';
 import { fireEvent } from '@testing-library/react';
 
 afterEach(cleanup);
@@ -74,5 +75,11 @@ describe('reason picker', () => {
     expect(reason).toBe('');
     fireEvent.change(screen.getByLabelText(/Ваша причина/), { target: { value: '  Уронили банку  ' } });
     expect(reason).toBe('Уронили банку');
+  });
+});
+
+describe('batch close wording', () => {
+  it('Russian plural of «заказ»', () => {
+    expect([1, 2, 5, 11, 12, 21, 22, 25, 100, 101, 112].map(ordersRu)).toEqual(['1 заказ', '2 заказа', '5 заказов', '11 заказов', '12 заказов', '21 заказ', '22 заказа', '25 заказов', '100 заказов', '101 заказ', '112 заказов']);
   });
 });

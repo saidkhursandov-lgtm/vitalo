@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ReasonPicker } from '../components/Reason';
 import { Badge, ErrorBox, Loading, Modal, PageHead } from '../components/ui';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { dateTime } from '../lib/format';
 
 /**
@@ -81,6 +81,8 @@ export function YandexSync() {
   const [open, setOpen] = useState<string | null>(null);
   const [raw, setRaw] = useState<string | null>(null);
   const [closing, setClosing] = useState<Attention | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [closingMany, setClosingMany] = useState(false);
   const run = useMutation({
     mutationFn: () => api<Run | { skipped: string }>('/staff/yandex-sync/run', { method: 'POST' }),
     onSettled: () => void client.invalidateQueries({ queryKey: ['yandex-sync'] }),
@@ -89,6 +91,16 @@ export function YandexSync() {
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const { config: c, runs, attention } = q.data;
   const last = runs[0];
+  // only entries without our order (no units can be held) are closed in a batch
+  const selectable = attention.filter((a) => !a.order_id);
+  const chosen = selectable.filter((a) => selected.has(a.id));
+  const allChosen = selectable.length > 0 && chosen.length === selectable.length;
+  const toggle = (id: string) => setSelected((cur) => {
+    const next = new Set(cur);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
   return (
     <>
       <PageHead title="Синхронизация Яндекса">
@@ -145,6 +157,14 @@ export function YandexSync() {
       <section className="card flush">
         <div className="section-head pad">
           <h2>Требует внимания: {attention.length}</h2>
+          {selectable.length > 0 && (
+            <span>
+              <span className="muted small">Выбрано: {chosen.length}</span>{' '}
+              <button className="btn btn-sm" disabled={!chosen.length} onClick={() => setClosingMany(true)}>
+                Закрыть выбранные как неактуальные
+              </button>
+            </span>
+          )}
         </div>
         {!attention.length ? (
           <p className="muted pad">Нет заказов, требующих внимания.</p>
@@ -152,6 +172,16 @@ export function YandexSync() {
           <table className="table">
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    aria-label="Выбрать все"
+                    title="Выбрать все (кроме заказов, уже созданных у нас)"
+                    checked={allChosen}
+                    disabled={!selectable.length}
+                    onChange={() => setSelected(allChosen ? new Set() : new Set(selectable.slice(0, 100).map((a) => a.id)))}
+                  />
+                </th>
                 <th>№ Яндекса</th>
                 <th>Статус Яндекса</th>
                 <th>Что не так</th>
@@ -162,6 +192,16 @@ export function YandexSync() {
             <tbody>
               {attention.map((a) => (
                 <tr key={a.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Выбрать ${a.external_number}`}
+                      checked={selected.has(a.id)}
+                      disabled={!!a.order_id}
+                      title={a.order_id ? 'Заказ уже создан у нас (может держать банки) — решайте в его карточке' : undefined}
+                      onChange={() => toggle(a.id)}
+                    />
+                  </td>
                   <td>
                     {a.order_id ? <Link to={`/yandex-orders/${a.order_id}`}>{a.external_number}</Link> : a.external_number}
                   </td>
@@ -229,6 +269,16 @@ export function YandexSync() {
       {open && <RunModal id={open} onClose={() => setOpen(null)} />}
       {raw && <RawModal id={raw} onClose={() => setRaw(null)} />}
       {closing && <CloseModal row={closing} onClose={() => setClosing(null)} />}
+      {closingMany && (
+        <CloseManyModal
+          rows={chosen}
+          onClose={() => setClosingMany(false)}
+          onDone={() => {
+            setSelected(new Set());
+            setClosingMany(false);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -325,6 +375,72 @@ function CloseModal({ row, onClose }: { row: Attention; onClose: () => void }) {
           Отмена
         </button>
       </div>
+    </Modal>
+  );
+}
+
+/** «1 заказ», «2 заказа», «5 заказов», «21 заказ» */
+export function ordersRu(n: number): string {
+  const d = n % 10;
+  const t = n % 100;
+  const word = d === 1 && t !== 11 ? 'заказ' : d >= 2 && d <= 4 && (t < 12 || t > 14) ? 'заказа' : 'заказов';
+  return `${n} ${word}`;
+}
+
+/** «Закрыть выбранные как неактуальные»: one shared reason, one request, all or nothing on the server. */
+function CloseManyModal({ rows, onClose, onDone }: { rows: Attention[]; onClose: () => void; onDone: () => void }) {
+  const client = useQueryClient();
+  const [reason, setReason] = useState('');
+  const m = useMutation({
+    mutationFn: () => api<{ closed: number; skipped: number }>('/staff/yandex-sync/attention/close-batch', { method: 'POST', body: { ids: rows.map((r) => r.id), reason } }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['yandex-sync'] }),
+  });
+  const rejected = m.error instanceof ApiError ? (m.error.body.rejected as { external_number: string | null; reason: string }[] | undefined) : undefined;
+  return (
+    <Modal title={`Закрыть ${ordersRu(rows.length)}?`} onClose={onClose}>
+      {m.data ? (
+        <>
+          <div className="alert alert-ok">
+            Закрыто: {m.data.closed}
+            {m.data.skipped ? `, пропущено (уже были закрыты): ${m.data.skipped}` : ''}.
+          </div>
+          <div className="modal-actions">
+            <button className="btn" onClick={onDone}>
+              Готово
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted">
+            Заказы {rows.map((r) => r.external_number).join(', ')} уйдут из «Требует внимания» навсегда: следующие опросы их не поднимут и
+            уведомлений не будет. Причина одна на все, пишется в журнал аудита по каждому заказу. Закрываются все сразу или ни один.
+          </p>
+          <ReasonPicker options={CLOSE_REASONS} onChange={setReason} />
+          {rejected?.length ? (
+            <div className="alert alert-error">
+              {m.error instanceof Error ? m.error.message : ''}
+              <ul>
+                {rejected.map((r, i) => (
+                  <li key={i}>
+                    {r.external_number ?? 'запись'}: {r.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <ErrorBox error={m.error} />
+          )}
+          <div className="modal-actions">
+            <button className="btn" disabled={reason.length < 3 || m.isPending} onClick={() => m.mutate()}>
+              Закрыть {ordersRu(rows.length)}
+            </button>
+            <button className="btn btn-ghost" onClick={onClose}>
+              Отмена
+            </button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }
