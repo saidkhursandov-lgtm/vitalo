@@ -2,7 +2,7 @@ import { Body, ConflictException, Controller, Delete, Get, Injectable, NotFoundE
 import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsIn, IsString, Matches } from 'class-validator';
+import { IsIn, IsString, ValidateBy } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
@@ -16,8 +16,38 @@ type Db = Prisma.TransactionClient | PrismaService;
 export const ALIAS_SOURCES = ['yandex', 'internal'] as const;
 export type AliasSource = (typeof ALIAS_SOURCES)[number];
 
-/** Looks like a SKU: latin letters, digits and . _ / - , 2–64 characters, at least one digit. No spaces, no Cyrillic. */
-export const SKU_LIKE = /^(?=.*\d)[A-Za-z0-9][A-Za-z0-9._/-]{1,63}$/;
+/** Length of an alternative SKU (the database CHECK of the aliases table: 2–64 after trimming). */
+export const ALIAS_MIN = 2;
+export const ALIAS_MAX = 64;
+
+/**
+ * Why a text is not a code (null = it is one): only latin letters, digits and . _ / - , no spaces, ALIAS_MIN–ALIAS_MAX
+ * characters, at least one letter or digit. Letters-only codes (MRKT-VNQUDOHD) are fine. The text is checked as is
+ * (callers trim it first). Used for alternative SKUs (admin card and the xlsx import); product SKUs have their own rule.
+ */
+export function skuProblem(text: string): string | null {
+  if (!text) return 'пустое значение';
+  if (/\s/.test(text)) return 'есть пробел — код пишется без пробелов';
+  if (/[А-Яа-яЁё]/.test(text)) return 'есть кириллица — буквы должны быть латинские';
+  const bad = text.match(/[^A-Za-z0-9._/-]/);
+  if (bad) return `недопустимый символ «${bad[0]}» — можно только латиницу, цифры и . _ / -`;
+  if (!/[A-Za-z0-9]/.test(text)) return 'нет ни одной буквы или цифры';
+  if (text.length < ALIAS_MIN) return `короче ${ALIAS_MIN} символов`;
+  if (text.length > ALIAS_MAX) return `длиннее ${ALIAS_MAX} символов`;
+  return null;
+}
+
+export const isSkuLike = (text: string) => skuProblem(text) === null;
+
+/** class-validator: the alias with the real reason in the error message. */
+const IsSkuLike = () =>
+  ValidateBy({
+    name: 'isSkuLike',
+    validator: {
+      validate: (value: unknown) => typeof value === 'string' && isSkuLike(value),
+      defaultMessage: (args) => `Это не похоже на SKU: ${typeof args?.value === 'string' ? skuProblem(args.value) : 'нужен текст'}`,
+    },
+  });
 export const normSku = (s: string) => s.trim().toUpperCase();
 
 export interface ResolvedProduct {
@@ -71,7 +101,7 @@ export class AddAliasDto {
   @ApiProperty({ example: 'TPRD-031' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
-  @Matches(SKU_LIKE, { message: 'Это не похоже на SKU: латиница, цифры и . _ / -, без пробелов' })
+  @IsSkuLike()
   alias!: string;
 
   @ApiProperty({ enum: ALIAS_SOURCES }) @IsIn([...ALIAS_SOURCES]) source!: AliasSource;

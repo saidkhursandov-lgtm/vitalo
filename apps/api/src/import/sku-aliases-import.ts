@@ -8,7 +8,7 @@
 import ExcelJS from 'exceljs';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { aliasConflict, normSku, SKU_LIKE, type AliasSource } from '../staff/sku-aliases';
+import { aliasConflict, isSkuLike, normSku, skuProblem, type AliasSource } from '../staff/sku-aliases';
 import { AuditService } from '../staff/audit.service';
 import { cellText } from './yandex-import';
 
@@ -34,7 +34,7 @@ export interface AliasesPlan {
   /** the old SKU equals the product SKU */
   same: { row: number; sku: string }[];
   /** not a SKU (text), with a warning */
-  notSku: { row: number; sku: string; column: string; text: string }[];
+  notSku: { row: number; sku: string; column: string; text: string; reason: string }[];
   /** our SKU in column A is not in the database: skipped with a warning */
   unknownProduct: { row: number; sku: string }[];
   /** belongs to another product (alias or SKU): shown, not overwritten */
@@ -61,16 +61,18 @@ export async function planSkuAliases(prisma: PrismaService, file: string): Promi
   for (let r = 1; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
     const sku = cellText(row.getCell(1).value).trim();
-    if (!sku || !SKU_LIKE.test(sku)) continue; // the header and empty rows
+    if (!sku || !isSkuLike(sku)) continue; // empty rows and text headers
     const product = await prisma.products.findUnique({ where: { sku }, select: { id: true, sku: true } });
+    if (!product && r === 1) continue; // the header row («SKU», «Прежний SKU у нас», …) is not a product
     const cells = COLUMNS.map((c) => ({ ...c, text: cellText(row.getCell(c.col).value).trim() })).filter((c) => c.text);
     if (!product) {
       if (cells.length) plan.unknownProduct.push({ row: r, sku });
       continue;
     }
     for (const c of cells) {
-      if (!SKU_LIKE.test(c.text)) {
-        plan.notSku.push({ row: r, sku, column: c.title, text: c.text.slice(0, 80) });
+      const problem = skuProblem(c.text);
+      if (problem) {
+        plan.notSku.push({ row: r, sku, column: c.title, text: c.text.slice(0, 80), reason: problem });
         continue;
       }
       if (normSku(c.text) === normSku(product.sku)) {
@@ -116,7 +118,7 @@ export function formatAliasesPlan(plan: AliasesPlan): string {
   list('Будет создано', plan.create.map((a) => `стр. ${a.row}: ${a.sku} ← ${a.alias} (${a.source === 'yandex' ? 'старый SKU в Яндексе' : 'прежний SKU у нас'})`));
   list('Уже есть', plan.existing.map((a) => `стр. ${a.row}: ${a.sku} ← ${a.alias}`));
   list('Пропущено: совпадает с SKU товара', plan.same.map((a) => `стр. ${a.row}: ${a.sku}`));
-  list('Пропущено: не похоже на SKU (предупреждение)', plan.notSku.map((a) => `стр. ${a.row}: ${a.sku}, «${a.column}»: «${a.text}»`));
+  list('Пропущено: не похоже на SKU (предупреждение)', plan.notSku.map((a) => `стр. ${a.row}: ${a.sku}, «${a.column}»: «${a.text}» — ${a.reason}`));
   list('Пропущено: товара с таким SKU нет в базе (предупреждение)', plan.unknownProduct.map((a) => `стр. ${a.row}: ${a.sku}`));
   list('Конфликты (не перезаписываются)', plan.conflicts.map((a) => `стр. ${a.row}: ${a.sku} ← ${a.alias}: ${a.message}`));
   if (plan.errors.length) list('ОШИБКИ', plan.errors.map((e) => (e.row ? `стр. ${e.row}: ${e.message}` : e.message)));

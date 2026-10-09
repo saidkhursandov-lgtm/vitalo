@@ -125,8 +125,16 @@ describe('Alternative SKUs (e2e)', () => {
     expect((await as('admin').post(`/staff/products/${a.id}/aliases`, { alias, source: 'internal' }).expect(409)).body.code).toBe('ALIAS_EXISTS');
     expect((await as('admin').post(`/staff/products/${b.id}/aliases`, { alias: a.sku.toLowerCase(), source: 'internal' }).expect(409)).body.code).toBe('ALIAS_IS_SKU');
     expect((await as('admin').post(`/staff/products/${a.id}/aliases`, { alias: a.sku, source: 'internal' }).expect(409)).body.code).toBe('ALIAS_IS_OWN_SKU');
-    await as('admin').post(`/staff/products/${a.id}/aliases`, { alias: 'НА ЯНДЕКС ЕЩЁ НЕ ВЫСТАВЛЕН', source: 'yandex' }).expect(400);
-    await as('admin').post(`/staff/products/${a.id}/aliases`, { alias: 'NO-DIGITS', source: 'yandex' }).expect(400);
+    // really bad values: refused with the real reason
+    const bad = async (alias: string) => String((await as('admin').post(`/staff/products/${a.id}/aliases`, { alias, source: 'yandex' }).expect(400)).body.message);
+    expect(await bad('НА ЯНДЕКС ЕЩЁ НЕ ВЫСТАВЛЕН')).toContain('пробел');
+    expect(await bad('MRKT VNQUDOHD')).toContain('пробел');
+    expect(await bad('МРКТ-ВНКУ')).toContain('кириллица');
+    expect(await bad('')).toContain('пустое значение');
+    expect(await bad('   ')).toContain('пустое значение'); // trimmed first
+    expect(await bad('---')).toContain('ни одной буквы или цифры');
+    // a letters-only code (no digits) is a normal code
+    await as('admin').post(`/staff/products/${a.id}/aliases`, { alias: `MRKT-VNQUDOHD${RUN.replace(/\d/g, (d) => 'ABCDEFGHIJ'[Number(d)])}`, source: 'yandex' }).expect(201);
     await as('admin').post(`/staff/products/${a.id}/aliases`, { alias: 'X-1', source: 'other' }).expect(400);
     // directly in the database: an alias equal to a SKU, a SKU equal to another product's alias
     await expect(prisma.product_sku_aliases.create({ data: { product_id: a.id, alias: b.sku, alias_norm: b.sku.toUpperCase(), source: 'yandex' } })).rejects.toThrow(/equals the SKU/);
@@ -186,6 +194,7 @@ describe('Alternative SKUs (e2e)', () => {
   it('import from the xlsx: created, already there, same as SKU, not a SKU (warning), unknown product, conflicts not overwritten; all or nothing', async () => {
     const [p1, p2, p3, other] = [await product(), await product(), await product(), await product()];
     const taken = `TAKEN-${RUN}9`;
+    const lettersOnly = `MRKT-${RUN.replace(/\d/g, (d) => 'KLMNOPQRST'[Number(d)])}`; // letters and a dash only
     await as('admin').post(`/staff/products/${other.id}/aliases`, { alias: taken, source: 'yandex' }).expect(201);
     const dir = mkdtempSync(join(tmpdir(), 'vitalo-aliases-'));
     const file = join(dir, 'VITALO_SKU_для_Яндекса.xlsx');
@@ -197,6 +206,8 @@ describe('Alternative SKUs (e2e)', () => {
     ws.addRow([p3.sku, 'Товар 3', 1, null, taken]);
     ws.addRow([`NO-SUCH-${RUN}1`, 'Нет товара', 1, `TPRD-${RUN}2`, null]);
     ws.addRow([p3.sku, 'Товар 3 ещё раз', 1, `TPRD-${RUN}1`, null]); // the same old code for two products in the file
+    ws.addRow([p2.sku, 'Товар 2: код из одних букв', 1, null, lettersOnly]); // like E19 = MRKT-VNQUDOHD
+    ws.addRow([p2.sku, 'Товар 2: плохие значения', 1, 'МРКТ-ВНКУ', 'MRKT VNQUDOHD']);
     await wb.xlsx.writeFile(file);
 
     const plan = await planSkuAliases(prisma, file);
@@ -204,14 +215,20 @@ describe('Alternative SKUs (e2e)', () => {
     expect(plan.create.map((c) => [c.sku, c.alias, c.source])).toEqual([
       [p1.sku, `TPRD-${RUN}1`, 'internal'],
       [p1.sku, `ym-${RUN}-a`, 'yandex'],
+      [p2.sku, lettersOnly, 'yandex'],
     ]);
     expect(plan.same).toEqual([{ row: 3, sku: p2.sku }]);
-    expect(plan.notSku).toEqual([expect.objectContaining({ row: 3, sku: p2.sku, column: 'Старый SKU в Яндексе' })]);
+    expect(plan.notSku).toEqual([
+      expect.objectContaining({ row: 3, sku: p2.sku, column: 'Старый SKU в Яндексе', reason: expect.stringContaining('пробел') }),
+      expect.objectContaining({ row: 8, column: 'Прежний SKU у нас', reason: expect.stringContaining('кириллица') }),
+      expect.objectContaining({ row: 8, column: 'Старый SKU в Яндексе', reason: expect.stringContaining('пробел') }),
+    ]);
     expect(plan.unknownProduct).toEqual([{ row: 5, sku: `NO-SUCH-${RUN}1` }]);
     expect(plan.conflicts.map((c) => [c.row, c.alias])).toEqual([[4, taken], [6, `TPRD-${RUN}1`]]);
     expect(await prisma.product_sku_aliases.count({ where: { product_id: p1.id } })).toBe(0); // the plan writes nothing
 
-    expect(await applySkuAliases(prisma, new AuditService(prisma), plan)).toBe(2);
+    expect(await applySkuAliases(prisma, new AuditService(prisma), plan)).toBe(3);
+    expect((await prisma.product_sku_aliases.findUniqueOrThrow({ where: { alias_norm: lettersOnly } })).product_id).toBe(p2.id);
     expect((await prisma.product_sku_aliases.findMany({ where: { product_id: p1.id }, orderBy: { alias: 'asc' } })).map((a) => [a.alias, a.source])).toEqual([
       [`TPRD-${RUN}1`, 'internal'],
       [`ym-${RUN}-a`, 'yandex'],
@@ -219,7 +236,7 @@ describe('Alternative SKUs (e2e)', () => {
     expect((await prisma.product_sku_aliases.findUniqueOrThrow({ where: { alias_norm: taken } })).product_id).toBe(other.id); // not overwritten
     const again = await planSkuAliases(prisma, file);
     expect(again.create).toEqual([]);
-    expect(again.existing.map((e) => e.alias)).toEqual([`TPRD-${RUN}1`, `ym-${RUN}-a`]);
+    expect(again.existing.map((e) => e.alias)).toEqual([`TPRD-${RUN}1`, `ym-${RUN}-a`, lettersOnly]);
 
     // all or nothing: a conflict appearing between the plan and the write stops everything
     const late = await planSkuAliases(prisma, file);
