@@ -21,6 +21,7 @@ import { AdminUnitsController, AdminUnitsService, PrintLabelsController } from '
 import { UnitActionsController, UnitActionsService } from '../marketplace/unit-actions';
 import { YandexOrdersController, YandexOrdersService } from '../marketplace/yandex-orders';
 import { YANDEX_CLIENT_OPTIONS, YandexSyncService } from '../marketplace/yandex/yandex-sync';
+import { SkuAliasesController, SkuAliasesService } from './sku-aliases';
 import { YandexSyncController, YandexWebhookController } from '../marketplace/yandex/yandex-sync.controller';
 
 /**
@@ -45,6 +46,7 @@ import { YandexSyncController, YandexWebhookController } from '../marketplace/ya
     UnitActionsController,
     YandexOrdersController,
     YandexSyncController,
+    SkuAliasesController,
     YandexWebhookController,
     AdminSettingsController,
     StaffUsersController,
@@ -67,6 +69,7 @@ import { YandexSyncController, YandexWebhookController } from '../marketplace/ya
     UnitActionsService,
     YandexOrdersService,
     YandexSyncService,
+    SkuAliasesService,
     // real fetch and pauses; e2e tests override it with a fake fed by fixtures (never a real request to Yandex)
     { provide: YANDEX_CLIENT_OPTIONS, useValue: {} },
     AdminSettingsService,

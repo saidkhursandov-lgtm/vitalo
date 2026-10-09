@@ -38,7 +38,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
    * an allowed role then gets 400/404 — the request passed the permission check but changed nothing —
    * while a forbidden role must get 403 before any validation happens.
    */
-  const MATRIX: { label: string; method: 'get' | 'post' | 'patch' | 'put'; path: () => string; body?: object; allowed: Role[] }[] = [
+  const MATRIX: { label: string; method: 'get' | 'post' | 'patch' | 'put' | 'delete'; path: () => string; body?: object; allowed: Role[] }[] = [
     { label: 'see the dashboard', method: 'get', path: () => '/api/staff/dashboard', allowed: ['admin', 'manager', 'marketer'] },
     { label: 'list orders', method: 'get', path: () => '/api/staff/orders', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'open an order', method: 'get', path: () => `/api/staff/orders/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
@@ -83,6 +83,9 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'pick a unit for a Yandex order', method: 'post', path: () => `/api/staff/yandex-orders/${MISSING}/pick`, body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'cancel a Yandex order', method: 'post', path: () => `/api/staff/yandex-orders/${MISSING}/cancel`, body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'reserve units for a Yandex order', method: 'post', path: () => `/api/staff/yandex-orders/${MISSING}/reserve`, body: {}, allowed: ['admin', 'warehouse'] },
+    { label: 'see alternative SKUs', method: 'get', path: () => `/api/staff/products/${MISSING}/aliases`, allowed: ['admin', 'manager', 'warehouse', 'marketer'] },
+    { label: 'add an alternative SKU', method: 'post', path: () => `/api/staff/products/${MISSING}/aliases`, body: {}, allowed: ['admin'] },
+    { label: 'remove an alternative SKU', method: 'delete', path: () => `/api/staff/products/${MISSING}/aliases/${MISSING}`, allowed: ['admin'] },
     { label: 'see the Yandex sync', method: 'get', path: () => '/api/staff/yandex-sync', allowed: ['admin'] },
     { label: 'run the Yandex sync now', method: 'post', path: () => '/api/staff/yandex-sync/run', body: {}, allowed: ['admin'] },
     { label: 'close a Yandex attention entry', method: 'post', path: () => `/api/staff/yandex-sync/attention/${MISSING}/close`, body: {}, allowed: ['admin'] },

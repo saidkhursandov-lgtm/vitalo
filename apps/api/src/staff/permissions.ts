@@ -50,6 +50,7 @@ export const PERMISSIONS = {
   'units.return_decision': ['warehouse'], // a returned unit: back on stock or written off
   'units.writeoff': [], // write-off of a unit (На складе / Возврат на проверке / Потеряна)
   'units.correct': [], // correction of the expiry date or the status (obvious mistake)
+  'products.aliases': [], // add / remove alternative SKUs of a product (old codes for the Yandex sync)
   'yandex.sync': [], // Stage 2D: «Синхронизация Яндекса», «Проверить сейчас», «Требует внимания», «Закрыть как неактуальный»
 } as const satisfies Record<string, readonly StaffRole[]>;
 

@@ -5,6 +5,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { SystemErrorsService } from '../../notifications/system-errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../staff/audit.service';
+import { findProductsBySkus } from '../../staff/sku-aliases';
 import { YandexOrdersService } from '../yandex-orders';
 import { YandexApiError, YandexMarketClient, type FetchLike } from './yandex-client';
 import {
@@ -63,7 +64,7 @@ type Trigger = 'schedule' | 'manual' | 'webhook';
 type Plan =
   | { type: 'skip'; reason: string }
   | { type: 'closed' }
-  | { type: 'create'; lines: { product_id: string; sku: string; qty: number; unit_price_uzs?: number }[]; enough: boolean }
+  | { type: 'create'; lines: { product_id: string; sku: string; qty: number; unit_price_uzs?: number }[]; enough: boolean; byAlias: string[] }
   | { type: 'attention'; kind: AttentionKind; reason: string }
   | { type: 'sync'; orderId: string; then: 'cancel' | 'return' | null; attention?: { kind: AttentionKind; reason: string } };
 
@@ -177,6 +178,18 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
         const days = first ? cfg.firstDays : cfg.days;
         const from = new Date(Date.now() - days * 86_400_000).toISOString();
         rawOrders = await this.client().businessOrders(cfg.businessId, { campaignIds: cfg.campaignIds, updateDateFrom: from });
+        // «Требует внимания: неизвестный SKU» (not closed, no order yet) is read again every run, even if Yandex did
+        // not change it within the window: an alternative SKU added later lets the next poll create it.
+        const seen = new Set(rawOrders.map((r) => String((r as { orderId?: unknown })?.orderId)));
+        const waiting = await this.prisma.marketplace_external_orders.findMany({
+          where: { attention_kind: 'UNKNOWN_SKU', closed_at: null, order_id: null },
+          select: { external_number: true },
+          take: 500,
+        });
+        const again = waiting.map((w) => Number(w.external_number)).filter((n) => Number.isInteger(n) && n > 0 && !seen.has(String(n)));
+        for (let i = 0; i < again.length; i += 50) {
+          rawOrders.push(...(await this.client().businessOrders(cfg.businessId, { campaignIds: cfg.campaignIds, orderIds: again.slice(i, i + 50) })));
+        }
       }
       counters.found = rawOrders.length;
       for (const raw of rawOrders) {
@@ -239,7 +252,7 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
             number,
             status,
             action: plan.enough ? 'would_create' : 'would_create_without_units',
-            reason: `${plan.lines.map((l) => `${l.sku} × ${l.qty}`).join(', ')}${plan.enough ? '' : ' — не хватает остатка, без резерва'}`,
+            reason: `${plan.lines.map((l) => `${l.sku} × ${l.qty}`).join(', ')}${plan.enough ? '' : ' — не хватает остатка, без резерва'}${aliasNote(plan.byAlias)}`,
           },
         };
       case 'attention':
@@ -327,7 +340,7 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
             return {
               created: true,
               attention: !!created.shortage,
-              detail: { number, status: statusText, action: created.shortage ? 'created_without_units' : 'created', reason: `${items}${created.shortage ? ` — ${created.shortage}` : ` — банки: ${created.reserved.join(', ')}`}` },
+              detail: { number, status: statusText, action: created.shortage ? 'created_without_units' : 'created', reason: `${items}${created.shortage ? ` — ${created.shortage}` : ` — банки: ${created.reserved.join(', ')}`}${aliasNote(plan.byAlias)}` },
             };
           }
           case 'sync': {
@@ -385,19 +398,23 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
     }
     if (o.status !== CREATE_STATUS) return { type: 'attention', kind: 'UNKNOWN_STATUS', reason: `статус ${o.status} не в таблице соответствия` };
 
+    // the SKU itself first, then an alternative SKU (old code)
     const skus = [...new Set(o.items.map((i) => i.offerId))];
-    const products = await db.products.findMany({ where: { sku: { in: skus } }, select: { id: true, sku: true, unit_tracking: true, yandex_price_uzs: true } });
-    const unknown = skus.filter((s) => !products.some((p) => p.sku === s));
-    if (unknown.length) return { type: 'attention', kind: 'UNKNOWN_SKU', reason: `нет товара с SKU ${unknown.join(', ')}` };
+    const found = await findProductsBySkus(db, skus);
+    const unknown = skus.filter((s) => !found.has(s));
+    if (unknown.length) return { type: 'attention', kind: 'UNKNOWN_SKU', reason: `нет товара с SKU ${unknown.join(', ')} (ни по SKU, ни по альтернативному SKU)` };
+    const products = [...new Map([...found.values()].map((p) => [p.id, p])).values()];
+    const byOffer = (offerId: string) => found.get(offerId)!;
+    const byAlias = skus.filter((s) => found.get(s)!.alias).map((s) => `${s} → ${found.get(s)!.sku}`);
     const untracked = products.filter((p) => !p.unit_tracking).map((p) => p.sku);
     if (untracked.length) return { type: 'attention', kind: 'NOT_UNIT_TRACKED', reason: `${untracked.join(', ')} не учитывается по банкам` };
     const foreign = o.items.filter((i) => i.currency && i.currency !== 'UZS');
     if (foreign.length) return { type: 'attention', kind: 'CURRENCY', reason: `цена в ${foreign[0].currency}, ожидаются сумы (UZS)` };
-    const noPrice = o.items.filter((i) => i.unitPrice === null && products.find((p) => p.sku === i.offerId)!.yandex_price_uzs === null);
+    const noPrice = o.items.filter((i) => i.unitPrice === null && byOffer(i.offerId).yandex_price_uzs === null);
     if (noPrice.length) return { type: 'attention', kind: 'BAD_DATA', reason: `нет цены у ${noPrice.map((i) => i.offerId).join(', ')} ни в заказе, ни в карточке товара` };
 
     const lines = o.items.map((i) => {
-      const p = products.find((x) => x.sku === i.offerId)!;
+      const p = byOffer(i.offerId);
       return { product_id: p.id, sku: p.sku, qty: i.count, ...(i.unitPrice !== null && { unit_price_uzs: i.unitPrice }) };
     });
     // enough: only for the DRY_RUN text; LIVE decides under locks in createInTx
@@ -408,7 +425,7 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
       const free = await db.physical_units.count({ where: { product_id: productId, status: 'IN_STOCK', marketplace_units: { none: { released_at: null } } } });
       if (available < n || free < n) enough = false;
     }
-    return { type: 'create', lines, enough };
+    return { type: 'create', lines, enough, byAlias };
   }
 
   /**
@@ -504,6 +521,9 @@ interface Outcome {
   attention?: boolean;
   lateNew?: boolean;
 }
+
+/** «найден по старому SKU» in the run log */
+const aliasNote = (byAlias: string[]) => (byAlias.length ? ` — найден по старому SKU: ${byAlias.join(', ')}` : '');
 
 const countBy = (pairs: (readonly [string, number])[]) => {
   const m = new Map<string, number>();

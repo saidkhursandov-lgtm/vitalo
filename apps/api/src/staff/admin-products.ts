@@ -242,6 +242,8 @@ export class AdminProductsService {
       ...(q.q && {
         OR: [
           { sku: { contains: q.q, mode: 'insensitive' } },
+          // an old code (alternative SKU) finds the product too
+          { sku_aliases: { some: { alias_norm: { contains: q.q.trim().toUpperCase() } } } },
           { name_ru: { contains: q.q, mode: 'insensitive' } },
           { name_uz: { contains: q.q, mode: 'insensitive' } },
           { brand: { contains: q.q, mode: 'insensitive' } },
@@ -255,7 +257,11 @@ export class AdminProductsService {
         orderBy: [{ status: 'asc' }, { name_ru: 'asc' }],
         skip: (q.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        include: { inventory: true, media: { where: { is_main: true }, take: 1 } },
+        include: {
+          inventory: true,
+          media: { where: { is_main: true }, take: 1 },
+          ...(q.q && { sku_aliases: { where: { alias_norm: { contains: q.q.trim().toUpperCase() } }, select: { alias: true }, take: 1 } }),
+        },
       }),
     ]);
     return {
@@ -272,6 +278,8 @@ export class AdminProductsService {
         available_qty: p.inventory.reduce((s, i) => s + i.actual_qty - i.reserved_qty, 0),
         yandex_price_uzs: num(p.yandex_price_uzs),
         yandex_price_sync_needed: p.yandex_price_sync_needed,
+        // found by an old code: «по старому SKU …» in the picker
+        matched_alias: q.q && !p.sku.toUpperCase().includes(q.q.trim().toUpperCase()) ? ((p as { sku_aliases?: { alias: string }[] }).sku_aliases?.[0]?.alias ?? null) : null,
       })),
       page: q.page,
       page_size: PAGE_SIZE,

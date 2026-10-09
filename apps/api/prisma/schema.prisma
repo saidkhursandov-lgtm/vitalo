@@ -535,6 +535,7 @@ model products {
   purchase_lines          purchase_lines[]
   physical_units          physical_units[]
   marketplace_order_lines marketplace_order_lines[]
+  sku_aliases             product_sku_aliases[]
   receiving_lines         receiving_session_lines[]
   favorites               favorites[]
   promo_targets           promotion_targets[]
@@ -817,6 +818,24 @@ model marketplace_order_units {
 
   @@index([order_id])
   @@index([physical_unit_id])
+}
+
+/// Alternative SKUs of a product (old codes): the Yandex sync and the product search find the product by them
+/// when the SKU itself does not match. Unique for the whole catalog ignoring case (alias_norm = upper(trim)),
+/// and never equal to the SKU of another product (triggers in the migration).
+model product_sku_aliases {
+  id         String   @id @default(uuid()) @db.Uuid
+  product_id String   @db.Uuid
+  alias      String
+  alias_norm String   @unique
+  /// yandex: an old SKU on Yandex Market; internal: our old SKU (TPRD-…)
+  source     String
+  created_by String?  @db.Uuid
+  created_at DateTime @default(now())
+
+  product products @relation(fields: [product_id], references: [id])
+
+  @@index([product_id])
 }
 
 /// Stage 2D: one Yandex order as seen by the sync (read only). Unique per (marketplace, external number), so a

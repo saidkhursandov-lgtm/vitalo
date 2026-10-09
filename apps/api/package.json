@@ -17,6 +17,7 @@
     "import:yandex": "ts-node scripts/import-yandex.ts",
     "backfill:dictionaries": "ts-node scripts/backfill-dictionaries.ts",
     "import:catalog": "ts-node scripts/import-catalog.ts",
+    "import:yandex-aliases": "ts-node scripts/import-yandex-aliases.ts",
     "import:opening-stock": "ts-node scripts/import-opening-stock.ts",
     "reconcile:units": "ts-node scripts/reconcile-units.ts",
     "photos:optimize": "ts-node scripts/optimize-photos.ts",
