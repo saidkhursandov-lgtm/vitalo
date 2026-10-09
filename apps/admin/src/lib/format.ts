@@ -77,6 +77,8 @@ export const AUDIT_ACTION: Record<string, string> = {
   'yandex_order.status': 'Статус заказа Яндекса',
   'yandex_order.reserved': 'Зарезервированы банки заказа Яндекса',
   'yandex_sync.closed': 'Заказ Яндекса закрыт как неактуальный',
+  'product.alias_added': 'Добавлен альтернативный SKU',
+  'product.alias_removed': 'Удалён альтернативный SKU',
   'unit.missing': 'Банка отмечена потерянной',
   'unit.found': 'Банка найдена',
   'unit.written_off': 'Банка списана',

@@ -535,7 +535,7 @@ export function ProductPicker({ exclude, onPick }: { exclude: string[]; onPick: 
   }, [text]);
   const q = useQuery({
     queryKey: ['products', 'picker', term],
-    queryFn: () => api<{ items: { id: string; sku: string; name_ru: string; status: string }[] }>(`/staff/products${qs({ q: term })}`),
+    queryFn: () => api<{ items: { id: string; sku: string; name_ru: string; status: string; matched_alias?: string | null }[] }>(`/staff/products${qs({ q: term })}`),
     enabled: term.length >= 2,
   });
   const items = (q.data?.items ?? []).filter((p) => p.status !== 'archived' && !exclude.includes(p.id)).slice(0, 8);
@@ -558,6 +558,7 @@ export function ProductPicker({ exclude, onPick }: { exclude: string[]; onPick: 
               }}
             >
               {p.name_ru} <span className="muted small">{p.sku}</span>
+              {p.matched_alias && <span className="muted small"> · по старому SKU {p.matched_alias}</span>}
             </button>
           ))}
         </div>

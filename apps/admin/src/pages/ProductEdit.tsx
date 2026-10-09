@@ -1,3 +1,4 @@
+import { SkuAliases } from './SkuAliases';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -175,6 +176,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   );
 
   return (
+    <>
     <form onSubmit={submit}>
       <PageHead title={product ? `Товар: ${product.name_ru as string}` : 'Новый товар'}>
         <Link to="/products" className="btn btn-ghost">
@@ -374,9 +376,12 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         ))}
       </section>
 
-      {product && <LabelCard product={product} />}
-      {product ? <Photos product={product} editable={editable} /> : <p className="muted">Фото можно добавить после первого сохранения.</p>}
     </form>
+    {/* Own forms and buttons: outside the product form, so their submit never saves the whole product too. */}
+    {product && <LabelCard product={product} />}
+    {product && <SkuAliases productId={product.id} sku={product.sku} />}
+    {product ? <Photos product={product} editable={editable} /> : <p className="muted">Фото можно добавить после первого сохранения.</p>}
+    </>
   );
 }
 
