@@ -782,6 +782,14 @@ function UnitCardModal({ id, onClose }: { id: string; onClose: () => void }) {
               <li key={e.id}>
                 <strong>{UNIT_EVENT[e.type] ?? e.type}</strong>
                 {e.to_status && <span className="muted"> → {UNIT_STATUS[e.to_status] ?? e.to_status}</span>}
+                {e.reference?.type === 'order' && (
+                  <>
+                    {' '}
+                    <Link className="small" to={'/orders/' + e.reference.id}>
+                      заказ VITALO
+                    </Link>
+                  </>
+                )}
                 {e.reference?.type === 'marketplace_order' && (
                   <>
                     {' '}
@@ -821,13 +829,14 @@ interface ReconcileRow {
   name_ru: string;
   units_in_stock: number;
   units_reserved_yandex: number;
+  units_reserved_vitalo: number;
   actual_qty: number;
   reserved_qty: number;
   reserved_vitalo: number;
   difference: number;
   sold_by_orders: number;
   explained: boolean;
-  state: 'ok' | 'vitalo_orders' | 'unexplained';
+  state: 'ok' | 'legacy_orders' | 'unexplained';
 }
 
 export function Reconcile() {
@@ -848,11 +857,12 @@ export function Reconcile() {
               <tr>
                 <th>Товар</th>
                 <th className="num">Банок на полке</th>
-                <th className="num">из них резерв Яндекса</th>
+                <th className="num">резерв Яндекса</th>
+                <th className="num">резерв Mini App</th>
                 <th className="num">Остаток</th>
-                <th className="num">Резерв VITALO</th>
+                <th className="num">Резерв по количеству</th>
                 <th className="num">Разница</th>
-                <th className="num">Продано заказами VITALO</th>
+                <th className="num">Старые заказы без банок</th>
                 <th>Итог</th>
               </tr>
             </thead>
@@ -865,6 +875,7 @@ export function Reconcile() {
                   </td>
                   <td className="num">{r.units_in_stock}</td>
                   <td className="num">{r.units_reserved_yandex}</td>
+                  <td className="num">{r.units_reserved_vitalo}</td>
                   <td className="num">{r.actual_qty}</td>
                   <td className="num">{r.reserved_vitalo}</td>
                   <td className="num strong">{r.difference}</td>
@@ -872,8 +883,8 @@ export function Reconcile() {
                   <td>
                     {r.state === 'ok' ? (
                       <Badge tone="ok">сходится</Badge>
-                    ) : r.state === 'vitalo_orders' ? (
-                      <Badge tone="info">только заказы VITALO (до 2E)</Badge>
+                    ) : r.state === 'legacy_orders' ? (
+                      <Badge tone="info">старые заказы без банок</Badge>
                     ) : (
                       <Badge tone="bad">не объясняется</Badge>
                     )}
@@ -1003,6 +1014,7 @@ interface PendingReturn {
   expiry_date: string;
   expired: boolean;
   order: { id: string; external_number: string; cancel_reason: string | null } | null;
+  vitalo_order?: { id: string; order_number: string } | null;
 }
 
 /** «Возвраты на проверке»: returned units waiting for the warehouse decision. */
@@ -1034,6 +1046,8 @@ function PendingReturns({ onOpen }: { onOpen: (id: string) => void }) {
                     Яндекс № {r.order.external_number}
                     {r.order.cancel_reason && <div className="muted">{r.order.cancel_reason}</div>}
                   </>
+                ) : r.vitalo_order ? (
+                  <>Заказ VITALO {r.vitalo_order.order_number}</>
                 ) : (
                   '—'
                 )}

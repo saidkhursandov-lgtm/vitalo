@@ -99,7 +99,7 @@ export class OrderUnitsService {
       if (line.held <= 0) continue; // a legacy order (written off at payment before 2E): nothing to reserve
       const units = await takeFefoUnits(tx, line.product_id, line.qty);
       if (units.length < line.qty) {
-        throw new ConflictException({ code: 'NOT_ENOUGH_UNITS', message: `${line.product.sku}: нужно ${line.qty} банок, свободных на складе ${units.length}` });
+        throw new ConflictException({ code: 'NOT_ENOUGH_UNITS', message: `${line.product.sku}: нужно банок: ${line.qty}, свободных на складе: ${units.length}` });
       }
       for (const u of units) {
         await this.assign(tx, order, line.id, u.id, staffId, null, false);

@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone } from '../lib/format';
 import { CheckIcon, ForwardIcon } from '../components/Icons';
+import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly';
 
 interface Named {
   id: string;
@@ -30,7 +31,9 @@ export interface AdminOrder {
   customer: { id: string; name: string; username: string | null; telegram_user_id: number; status: string };
   edits: { reason: string; before: Record<string, unknown>; after: Record<string, unknown>; staff_name: string; created_at: string }[];
   tasks: { type: string; status: string; note: string | null; created_at: string }[];
-  actions: { confirm_payment: boolean; next_status: string | null; cancel: boolean; edit: boolean; locked: boolean };
+  actions: { confirm_payment: boolean; next_status: string | null; cancel: boolean; edit: boolean; locked: boolean; units: boolean; return_order: boolean };
+  /** Stage 2E: jars of unit-tracked lines (null when the order has none) */
+  assembly: Assembly | null;
 }
 
 interface Region extends Named {
@@ -54,7 +57,7 @@ export function OrderDetail() {
   const { can } = useSession();
   const client = useQueryClient();
   const q = useQuery({ queryKey: ['order', id], queryFn: () => api<AdminOrder>(`/staff/orders/${id}`) });
-  const [modal, setModal] = useState<'confirm' | 'cancel' | 'edit' | null>(null);
+  const [modal, setModal] = useState<'confirm' | 'cancel' | 'edit' | 'return' | null>(null);
 
   const done = (o: AdminOrder) => {
     client.setQueryData(['order', id], o);
@@ -100,14 +103,21 @@ export function OrderDetail() {
             Отменить заказ
           </button>
         )}
+        {a.return_order && (
+          <button className="btn btn-ghost" onClick={() => setModal('return')}>
+            Оформить возврат
+          </button>
+        )}
       </PageHead>
 
       <ErrorBox error={nextStatus.error} />
       {a.locked && (
         <div className="alert alert-info">
-          Заказ передан в доставку: редактирование и отмена здесь заблокированы. Отмена — только через запрос клиента.
+          Заказ передан в доставку: редактирование и отмена здесь заблокированы. Если заказ вернулся — «Оформить возврат» (склад и администратор).
         </div>
       )}
+      <OrderAssembly order={o} onDone={(next) => client.setQueryData(['order', id], next)} />
+      {modal === 'return' && <ReturnOrderModal order={o} onDone={done} onClose={() => setModal(null)} />}
       {o.payment?.customer_reported_paid_at && o.payment_status === 'payment_pending' && (
         <div className="alert alert-warn">
           Клиент нажал «Я оплатил» {dateTime(o.payment.customer_reported_paid_at)}. Проверьте поступление на счёт и подтвердите оплату.

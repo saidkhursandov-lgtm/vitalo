@@ -34,6 +34,7 @@ export type Permission =
   | 'receiving.opening'
   | 'inventory.unit_override'
   | 'products.label'
+  | 'orders.units'
   | 'yandex.orders.view'
   | 'yandex.orders'
   | 'yandex.orders.money'

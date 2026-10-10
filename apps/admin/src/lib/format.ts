@@ -70,6 +70,11 @@ export const CONDITION: Record<string, string> = {
 
 /** Human names for audit actions; unknown actions are shown as is. */
 export const AUDIT_ACTION: Record<string, string> = {
+  'order.unit_picked': 'Банка собрана в заказ',
+  'order.unit_replaced': 'Банка заменена при сборке заказа',
+  'order.units_reserved': 'Зарезервированы банки заказа',
+  'order.units_attached': 'Старому заказу закреплены банки',
+  'order.returned': 'Оформлен возврат заказа',
   'yandex_order.created': 'Создан заказ Яндекса (банки зарезервированы)',
   'yandex_order.updated': 'Изменён заказ Яндекса',
   'yandex_order.picked': 'Банка собрана в заказ Яндекса',
@@ -155,8 +160,8 @@ export const UNIT_EVENT: Record<string, string> = {
   LABEL_PRINTED: 'Напечатана этикетка',
   VOIDED: 'Отменена',
   COST_CHANGED: 'Пересчитана себестоимость',
-  ASSIGNED: 'Зарезервирована под заказ Яндекса',
-  PICKED: 'Собрана в заказ Яндекса',
+  ASSIGNED: 'Зарезервирована под заказ',
+  PICKED: 'Собрана в заказ',
   RELEASED: 'Снята с заказа, на склад',
   HANDED_TO_DELIVERY: 'Передана в доставку',
   SOLD: 'Продана (доставлена)',

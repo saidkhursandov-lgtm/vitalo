@@ -129,7 +129,7 @@ describe('Stage 2E: physical units for Mini App orders (e2e)', () => {
     expect(await statusOf(units[0].id)).toBe('IN_STOCK');
     expect(await shelf(product.id)).toEqual({ actual: 2, reserved: 2 }); // still held: the Mini App cannot sell it again
     const c = await card('warehouse', o.id);
-    expect(c.assembly.attention).toContain('нужно 2 банок, свободных на складе 1');
+    expect(c.assembly.attention).toContain('нужно банок: 2, свободных на складе: 1');
     const notes = await prisma.notifications.findMany({ where: { template: 'staff.order_units_attention', payload: { path: ['order_number'], equals: o.number } }, include: { staff: true } });
     expect(notes.length).toBeGreaterThan(0);
     expect(new Set(notes.map((n) => n.staff!.role))).toEqual(new Set(['admin', 'manager']));
