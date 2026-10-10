@@ -468,9 +468,12 @@ sudo -u vitalo bash -c 'cd /opt/vitalo/app/apps/api && comm -23 <(grep -oE "^[A-
 ### 4.3 Новый секрет бота и API (создаётся и записывается сам, на экран не выводится)
 
 ```bash
-sudo -iu vitalo bash -c 'F=/opt/vitalo/app/apps/api/.env; S=$(openssl rand -hex 32); if grep -q "^BOT_API_SECRET=" $F; then sed -i "s/^BOT_API_SECRET=.*/BOT_API_SECRET=$S/" $F; else echo "BOT_API_SECRET=$S" >> $F; fi; chmod 600 $F; echo "СЕКРЕТ ЗАМЕНЁН"'
+sudo -u vitalo grep -q '^BOT_API_SECRET=' /opt/vitalo/app/apps/api/.env || printf 'BOT_API_SECRET=\n' | sudo -u vitalo tee -a /opt/vitalo/app/apps/api/.env >/dev/null
+sudo -u vitalo sed -i "s|^BOT_API_SECRET=.*|BOT_API_SECRET=$(openssl rand -hex 32)|" /opt/vitalo/app/apps/api/.env
+sudo -u vitalo chmod 600 /opt/vitalo/app/apps/api/.env && echo "СЕКРЕТ ЗАМЕНЁН"
 ```
 
+Что делает: первая строка добавляет ключ, если его ещё нет; вторая записывает в него новое случайное значение.
 Хорошо: «СЕКРЕТ ЗАМЕНЁН».
 
 ### 4.4 Остальное — в редакторе
@@ -570,48 +573,102 @@ sudo certbot renew --dry-run
 ### 6.1 Создать секрет и включить
 
 ```bash
-sudo -iu vitalo bash -c 'F=/opt/vitalo/app/apps/api/.env; S=$(openssl rand -hex 24); for kv in "YANDEX_WEBHOOK_SECRET=$S" "YANDEX_WEBHOOK_ENABLED=true" "YANDEX_WEBHOOK_CHECK_IP=true"; do k=${kv%%=*}; if grep -q "^$k=" $F; then sed -i "s|^$k=.*|$kv|" $F; else echo "$kv" >> $F; fi; done; chmod 600 $F; echo "ВЕБХУК ВКЛЮЧЁН В НАСТРОЙКАХ"'
-sudo systemctl restart vitalo-api
+sudo -u vitalo grep -q '^YANDEX_WEBHOOK_SECRET=' /opt/vitalo/app/apps/api/.env || printf 'YANDEX_WEBHOOK_SECRET=\n' | sudo -u vitalo tee -a /opt/vitalo/app/apps/api/.env >/dev/null
+sudo -u vitalo sed -i "s|^YANDEX_WEBHOOK_SECRET=.*|YANDEX_WEBHOOK_SECRET=$(openssl rand -hex 24)|" /opt/vitalo/app/apps/api/.env
+sudo -u vitalo grep -q '^YANDEX_WEBHOOK_ENABLED=' /opt/vitalo/app/apps/api/.env || printf 'YANDEX_WEBHOOK_ENABLED=\n' | sudo -u vitalo tee -a /opt/vitalo/app/apps/api/.env >/dev/null
+sudo -u vitalo sed -i "s|^YANDEX_WEBHOOK_ENABLED=.*|YANDEX_WEBHOOK_ENABLED=true|" /opt/vitalo/app/apps/api/.env
+sudo -u vitalo grep -q '^YANDEX_WEBHOOK_CHECK_IP=' /opt/vitalo/app/apps/api/.env || printf 'YANDEX_WEBHOOK_CHECK_IP=\n' | sudo -u vitalo tee -a /opt/vitalo/app/apps/api/.env >/dev/null
+sudo -u vitalo sed -i "s|^YANDEX_WEBHOOK_CHECK_IP=.*|YANDEX_WEBHOOK_CHECK_IP=true|" /opt/vitalo/app/apps/api/.env
+sudo -u vitalo chmod 600 /opt/vitalo/app/apps/api/.env
+sudo systemctl restart vitalo-api && echo "ВЕБХУК ВКЛЮЧЁН"
 ```
 
-Хорошо: «ВЕБХУК ВКЛЮЧЁН В НАСТРОЙКАХ».
+Что делает: для каждого из трёх ключей — добавляет строку, если её нет, и записывает значение. Секрет создаётся
+случайным и на экран не выводится. Хорошо: «ВЕБХУК ВКЛЮЧЁН».
+
+Проверка без показа секрета (должно вывести три имени, у секрета — только длину):
+
+```bash
+sudo -u vitalo grep -E '^YANDEX_WEBHOOK_(ENABLED|CHECK_IP)=' /opt/vitalo/app/apps/api/.env
+sudo -u vitalo sed -n 's|^YANDEX_WEBHOOK_SECRET=||p' /opt/vitalo/app/apps/api/.env | tr -d '\n' | wc -c
+```
+
+Хорошо: `YANDEX_WEBHOOK_ENABLED=true`, `YANDEX_WEBHOOK_CHECK_IP=true`, число `48`.
 
 ### 6.2 Получить адрес для кабинета Яндекса
 
 ```bash
-sudo -iu vitalo bash -c 'echo "https://api.vitalo.uz/api/yandex/notifications/$(grep "^YANDEX_WEBHOOK_SECRET=" /opt/vitalo/app/apps/api/.env | cut -d= -f2)"'
+sudo -u vitalo sed -n 's|^YANDEX_WEBHOOK_SECRET=|https://api.vitalo.uz/api/yandex/notifications/|p' /opt/vitalo/app/apps/api/.env
 ```
 
-Что делает: печатает полный адрес. **Этот адрес — секрет**: скопируйте его сразу в кабинет Яндекса, не присылайте
-в чат и не сохраняйте в заметках. После копирования очистите экран: `clear`.
+Что делает: печатает полный адрес вида `https://api.vitalo.uz/api/yandex/notifications/<секрет>`. **Этот адрес —
+секрет**: скопируйте его сразу в кабинет Яндекса, не присылайте в чат и не сохраняйте в заметках. После копирования
+очистите экран: `clear`.
+
+> **В кабинет вставляется именно этот адрес, без `/notification` на конце.** Яндекс сам дописывает `/notification`
+> и отправляет запросы на `…/<секрет>/notification`. Сервер принимает оба варианта.
 
 ### 6.3 Проверка с сервера (без Яндекса)
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/json' -d '{"notificationType":"PING"}' https://api.vitalo.uz/api/yandex/notifications/nepravilnyy-sekret-0000
-sudo -iu vitalo bash -c 'curl -sS -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" -d "{\"notificationType\":\"PING\"}" "https://api.vitalo.uz/api/yandex/notifications/$(grep "^YANDEX_WEBHOOK_SECRET=" /opt/vitalo/app/apps/api/.env | cut -d= -f2)"'
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/json' -d '{"notificationType":"PING"}' https://api.vitalo.uz/api/yandex/notifications/nepravilnyy-sekret-0000/notification
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/json' -d '{"notificationType":"PING"}' "$(sudo -u vitalo sed -n 's|^YANDEX_WEBHOOK_SECRET=|https://api.vitalo.uz/api/yandex/notifications/|p' /opt/vitalo/app/apps/api/.env)/notification"
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST -H 'content-type: application/json' -d '{"notificationType":"PING"}' "$(sudo -u vitalo sed -n 's|^YANDEX_WEBHOOK_SECRET=|https://api.vitalo.uz/api/yandex/notifications/|p' /opt/vitalo/app/apps/api/.env)"
 ```
 
-Хорошо: первая команда — `404` (неверный секрет: адреса «не существует»); вторая — `403` (секрет верный, но запрос
-пришёл не с адреса Яндекса — так и должно быть). Если вторая вернула `404` — вебхук не включился: проверьте шаг 6.1.
+Хорошо: первая команда — `404` (неверный секрет: адреса «не существует»); вторая и третья — `403` (секрет верный, но
+запрос пришёл не с адреса Яндекса — так и должно быть). Секрет на экран не выводится.
+
+Если вторая вернула `404` — на сервере ещё старая версия (обновите: «Шпаргалка» в конце) или вебхук не включён (шаг 6.1).
 
 ### 6.4 Зарегистрировать адрес в кабинете Яндекса
 
 В кабинете продавца Яндекс Маркета: **Настройки → API и модули → API-уведомления** (название раздела может немного
-отличаться). Вставьте адрес из шага 6.2, выберите уведомления о заказах (создание заказа, изменение статуса, отмена)
-и сохраните. Яндекс отправит проверочный запрос `PING`; кабинет должен показать, что адрес принят.
+отличаться). Вставьте адрес из шага 6.2 (без `/notification`), выберите уведомления о заказах (создание заказа,
+изменение статуса, отмена) и сохраните.
 
-> Точное расположение этой настройки в кабинете я проверить не могу — если раздела нет или он выглядит иначе, пришлите
-> скриншот (без адреса). Пока вебхук не зарегистрирован, заказы всё равно приходят опросом.
+Яндекс сразу отправит проверочный запрос `PING` на `…/<секрет>/notification` и ждёт ответ за 1 секунду: код `200` и
+`{"version":"1.0.0","name":"VITALO","time":"<время в UTC>"}`. Кабинет должен показать, что адрес принят.
+
+Если кабинет пишет «Некорректный URL» — посмотрите, что ответил сервер (секрет в журнале скрыт):
+
+```bash
+sudo grep 'yandex/notifications' /var/log/nginx/access.log | tail -n 5 | sed -E 's#(notifications/)[^/ ]+#\1<секрет>#'
+```
+
+`200` — сервер ответил правильно; `404` — неверный секрет в адресе или вебхук выключен; `403` — запрос пришёл не с
+адресов Яндекса (`5.45.207.0/25`, `141.8.142.0/25`, `5.255.253.0/25`).
 
 ### 6.5 Проверка
 
 Сделайте в Яндексе тестовый заказ (или дождитесь настоящего). В админке → **Синхронизация Яндекса** в списке
-запусков появится строка с пометкой **«уведомление»** в течение минуты.
+запусков появится строка с пометкой **«уведомление»** в течение минуты. Из уведомления сервер берёт только номер
+заказа и сам запрашивает заказ у Яндекса своим токеном; данные покупателя не сохраняются.
 
-Выключить вебхук в любой момент: в `.env` `YANDEX_WEBHOOK_ENABLED=false` и `sudo systemctl restart vitalo-api`.
+Выключить вебхук в любой момент:
 
-**Проверка фазы 6:** коды `404` и `403`, в кабинете адрес принят, появился запуск «уведомление».
+```bash
+sudo -u vitalo sed -i "s|^YANDEX_WEBHOOK_ENABLED=.*|YANDEX_WEBHOOK_ENABLED=false|" /opt/vitalo/app/apps/api/.env
+sudo systemctl restart vitalo-api
+```
+
+### 6.6 Сменить секрет вебхука
+
+Когда: адрес где-то засветился (чат, скриншот, чужой экран) или просто раз в полгода.
+
+```bash
+sudo -u vitalo sed -i "s|^YANDEX_WEBHOOK_SECRET=.*|YANDEX_WEBHOOK_SECRET=$(openssl rand -hex 24)|" /opt/vitalo/app/apps/api/.env
+sudo systemctl restart vitalo-api
+sudo -u vitalo sed -n 's|^YANDEX_WEBHOOK_SECRET=|https://api.vitalo.uz/api/yandex/notifications/|p' /opt/vitalo/app/apps/api/.env
+```
+
+Что делает: записывает новый случайный секрет, перезапускает API и печатает **новый** адрес. Старый адрес с этой
+секунды отвечает `404`.
+
+Затем сразу: в кабинете Яндекса замените адрес на новый (шаг 6.4), выполните `clear` и повторите проверку 6.3.
+Пока адрес в кабинете старый, уведомления не доходят, но заказы не теряются — их забирает опрос раз в 5 минут.
+
+**Проверка фазы 6:** коды `404`, `403`, `403`; в кабинете адрес принят; появился запуск «уведомление».
 
 ---
 

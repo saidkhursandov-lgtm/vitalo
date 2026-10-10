@@ -77,11 +77,19 @@ export function ipInNetworks(ip: string, networks = YANDEX_NOTIFY_NETWORKS): boo
   });
 }
 
+/** «Версия интеграции» in the answer to Yandex (any text of 1–100 characters). */
+export const WEBHOOK_VERSION = '1.0.0';
+
 const ORDER_EVENTS = ['ORDER_CREATED', 'ORDER_STATUS_UPDATED', 'ORDER_CANCELLED', 'ORDER_UPDATED'];
 
 /**
- * Yandex API notifications (S2D-8), OFF by default (YANDEX_WEBHOOK_ENABLED=false → 404) and not registered in
- * Yandex. URL: https://<api>/api/yandex/notifications/<YANDEX_WEBHOOK_SECRET>.
+ * Yandex API notifications (S2D-8), OFF by default (YANDEX_WEBHOOK_ENABLED=false → 404).
+ * URL typed in the Yandex cabinet: https://<api>/api/yandex/notifications/<YANDEX_WEBHOOK_SECRET>.
+ * Yandex calls «POST /notification» RELATIVE to that address (its specification «sendNotification»), i.e.
+ * …/<secret>/notification — so both paths are served by the same handler (S-E-12). Anything else is 404.
+ *
+ * Answer (the specification): 200 with { version, name, time } — strings 1–100 characters and the UTC time the
+ * processing started; within 1 second for PING, 10 seconds for the rest. Errors: { error: { type, message } }.
  *
  * Yandex signs nothing, so: our secret in the path + the sender must be in Yandex's networks (behind nginx the
  * address comes from X-Real-IP; YANDEX_WEBHOOK_CHECK_IP=false turns that off for a manual test only). A
@@ -96,7 +104,8 @@ export class YandexWebhookController {
     private readonly config: ConfigService,
   ) {}
 
-  @Post(':secret')
+  @Post([':secret', ':secret/notification'])
+  @HttpCode(200)
   notify(@Param('secret') secret: string, @Req() req: Request, @Res() res: Response) {
     const cfg = this.sync.cfg();
     const expected = this.config.get<string>('YANDEX_WEBHOOK_SECRET')?.trim() ?? '';
@@ -109,7 +118,7 @@ export class YandexWebhookController {
     }
 
     const body = (req.body ?? {}) as { notificationType?: unknown; orderId?: unknown; campaignId?: unknown };
-    const ok = { version: '2D', name: 'VITALO', time: new Date().toISOString() };
+    const ok = { version: WEBHOOK_VERSION, name: 'VITALO', time: new Date().toISOString() };
     if (body.notificationType === 'PING') return res.status(200).json(ok);
     if (typeof body.notificationType !== 'string') {
       return res.status(400).json({ error: { type: 'WRONG_EVENT_FORMAT', message: 'notificationType is required' } });

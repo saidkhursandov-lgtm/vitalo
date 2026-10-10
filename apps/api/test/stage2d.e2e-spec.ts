@@ -481,6 +481,25 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
       await http().post(url).send({ notificationType: 'PING' }).expect(403); // not from Yandex networks
       const ping = (await http().post(url).set('X-Real-IP', '5.45.207.10').send({ notificationType: 'PING', time: new Date().toISOString() }).expect(200)).body;
       expect(ping).toEqual({ version: expect.any(String), name: 'VITALO', time: expect.any(String) });
+
+      // S-E-12: Yandex calls «POST /notification» relative to the address typed in the cabinet — the same handler
+      const tail = `${url}/notification`;
+      const started = Date.now();
+      const ping2 = await http().post(tail).set('X-Real-IP', '5.45.207.43').send({ notificationType: 'PING', time: new Date().toISOString() }).expect(200);
+      expect(Date.now() - started).toBeLessThan(1000); // PING must be answered within a second
+      expect(ping2.headers['content-type']).toMatch(/application\/json/);
+      expect(Object.keys(ping2.body).sort()).toEqual(['name', 'time', 'version']);
+      expect(ping2.body.version).toMatch(/^.{1,100}$/);
+      expect(ping2.body.name).toMatch(/^.{1,100}$/);
+      expect(ping2.body.time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/); // UTC
+      await http().post('/api/yandex/notifications/wrong-secret-0123456789/notification').set('X-Real-IP', '5.45.207.43').send({ notificationType: 'PING' }).expect(404);
+      await http().post(tail).send({ notificationType: 'PING' }).expect(403); // the right secret, not Yandex
+      await http().post(tail).set('X-Real-IP', '8.8.8.8').send({ notificationType: 'PING' }).expect(403);
+      // nothing else exists under the secret
+      await http().post(`${url}/notification/more`).set('X-Real-IP', '5.45.207.43').send({ notificationType: 'PING' }).expect(404);
+      await http().post(`${url}/other`).set('X-Real-IP', '5.45.207.43').send({ notificationType: 'PING' }).expect(404);
+      await http().get(tail).set('X-Real-IP', '5.45.207.43').expect(404);
+      await http().get(url).set('X-Real-IP', '5.45.207.43').expect(404);
       expect((await http().post(url).set('X-Real-IP', '5.45.207.10').send({ notificationType: 'ORDER_CREATED' }).expect(400)).body.error.type).toBe('WRONG_EVENT_FORMAT');
 
       const p = await stocked(['2028-01-01']);
@@ -495,6 +514,30 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
       await http().post(url).set('X-Real-IP', '141.8.142.5').send({ notificationType: 'ORDER_STATUS_UPDATED', orderId: o.orderId, campaignId: CAMPAIGN, status: 'PROCESSING', substatus: 'STARTED', updatedAt: new Date().toISOString() }).expect(200);
       await sync.lastWebhookJob;
       expect(await prisma.marketplace_orders.count({ where: { external_number: String(o.orderId) } })).toBe(1);
+
+      // the same on …/notification: one read of exactly this order, one order, no duplicate — also when repeated on both paths
+      const p2 = await stocked(['2028-01-01', '2028-02-01']);
+      const o2 = yOrder([{ sku: p2.sku, count: 1 }]);
+      const created = { notificationType: 'ORDER_CREATED', orderId: o2.orderId, campaignId: CAMPAIGN, createdAt: new Date().toISOString(), items: [{ offerId: p2.sku, count: 1 }] };
+      const callsBefore = yandex.calls.length;
+      const runsBefore = await prisma.yandex_sync_runs.count({ where: { trigger: 'webhook' } });
+      const answer = (await http().post(tail).set('X-Real-IP', '5.45.207.46').send(created).expect(200)).body;
+      expect(Object.keys(answer).sort()).toEqual(['name', 'time', 'version']);
+      await sync.lastWebhookJob;
+      expect(yandex.calls.length).toBe(callsBefore + 1);
+      expect(yandex.calls.at(-1)!.body.orderIds).toEqual([o2.orderId]);
+      expect(await prisma.yandex_sync_runs.count({ where: { trigger: 'webhook' } })).toBe(runsBefore + 1);
+      expect((await ourOrder(o2))!.units).toHaveLength(1);
+      await http().post(tail).set('X-Real-IP', '5.45.207.46').send(created).expect(200);
+      await sync.lastWebhookJob;
+      await http().post(url).set('X-Real-IP', '5.45.207.46').send(created).expect(200);
+      await sync.lastWebhookJob;
+      expect(await prisma.marketplace_orders.count({ where: { external_number: String(o2.orderId) } })).toBe(1);
+      expect((await ourOrder(o2))!.units).toHaveLength(1); // no second jar reserved
+      expect(await prisma.physical_units.count({ where: { product_id: p2.id, status: 'ASSIGNED' } })).toBe(1);
+      // S2D-12: nothing personal from the notification or the order is stored
+      const ext = await prisma.marketplace_external_orders.findFirstOrThrow({ where: { external_number: String(o2.orderId) } });
+      expect(JSON.stringify(ext, (_k, v) => (typeof v === "bigint" ? String(v) : v))).not.toMatch(/buyer|phone|address|recipient|email|lastName|firstName/i);
     } finally {
       process.env.YANDEX_WEBHOOK_ENABLED = 'false';
     }
