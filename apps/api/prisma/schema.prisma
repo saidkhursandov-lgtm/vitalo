@@ -748,6 +748,98 @@ model order_item_units {
   @@index([physical_unit_id])
 }
 
+// ───────────── STAGE 3: EXPENSES, TAX, PAYROLL (admin only) ─────────────
+
+/// Never deleted when it has expenses: only hidden.
+model expense_categories {
+  id         String     @id @default(uuid()) @db.Uuid
+  name       String     @unique
+  hidden     Boolean    @default(false)
+  position   Int        @default(0)
+  created_at DateTime   @default(now())
+  expenses   expenses[]
+}
+
+/// Other expenses (packaging, ads, …). Deleted softly with a reason (audit).
+model expenses {
+  id            String    @id @default(uuid()) @db.Uuid
+  spent_on      DateTime  @db.Date
+  category_id   String    @db.Uuid
+  amount_uzs    BigInt
+  comment       String?
+  created_by    String?   @db.Uuid
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  deleted_at    DateTime?
+  delete_reason String?
+
+  category expense_categories @relation(fields: [category_id], references: [id])
+
+  @@index([spent_on])
+}
+
+/// «Отметить оплаченным» for the turnover tax of a month (YYYY-MM). What was paid never changes afterwards.
+model tax_payments {
+  month           String   @id // YYYY-MM
+  paid_on         DateTime @db.Date
+  paid_amount_uzs BigInt
+  /// what the system showed when it was marked paid
+  turnover_uzs    BigInt
+  rate_percent    Decimal  @db.Decimal(5, 2)
+  tax_uzs         BigInt
+  paid_by         String?  @db.Uuid
+  created_at      DateTime @default(now())
+}
+
+/// People who get a fixed monthly salary (not necessarily users of the system).
+model payroll_employees {
+  id          String             @id @default(uuid()) @db.Uuid
+  name        String
+  start_month String // YYYY-MM: the first month a salary is accrued for
+  end_month   String? // YYYY-MM: the last month (set when the employee is switched off)
+  created_at  DateTime           @default(now())
+  rates       payroll_rates[]
+  payments    payroll_payments[]
+}
+
+/// The monthly amount from a month on; earlier months keep their amount.
+model payroll_rates {
+  id          String   @id @default(uuid()) @db.Uuid
+  employee_id String   @db.Uuid
+  from_month  String // YYYY-MM
+  amount_uzs  BigInt
+  created_at  DateTime @default(now())
+
+  employee payroll_employees @relation(fields: [employee_id], references: [id])
+
+  @@unique([employee_id, from_month])
+}
+
+/// «Отметить выплаченной» for one employee and month.
+model payroll_payments {
+  id          String   @id @default(uuid()) @db.Uuid
+  employee_id String   @db.Uuid
+  month       String // YYYY-MM
+  paid_on     DateTime @db.Date
+  amount_uzs  BigInt
+  paid_by     String?  @db.Uuid
+  created_at  DateTime @default(now())
+
+  employee payroll_employees @relation(fields: [employee_id], references: [id])
+
+  @@unique([employee_id, month])
+}
+
+/// A reminder was sent (kind + day): never twice, also after a restart.
+model finance_reminders {
+  id      String   @id @default(uuid()) @db.Uuid
+  kind    String // before_due | due_day
+  day     DateTime @db.Date
+  sent_at DateTime @default(now())
+
+  @@unique([kind, day])
+}
+
 // ───────────── STAGE 2C: MARKETPLACE (YANDEX) ORDERS ─────────────
 
 enum Marketplace {
@@ -771,31 +863,35 @@ enum MarketplaceOrderStatus {
 /// A Yandex Market order, separate from the VITALO orders table (Q3). Unique per (marketplace, external number).
 /// Never deleted (trigger). Status changes are written to audit_logs with the employee and the time.
 model marketplace_orders {
-  id                 String                 @id @default(uuid()) @db.Uuid
-  marketplace        Marketplace            @default(yandex)
-  external_number    String
-  order_date         DateTime               @db.Date
-  customer_name      String?
-  status             MarketplaceOrderStatus @default(NEW)
-  commission_percent Decimal                @default(18.5) @db.Decimal(5, 2) // admin only (costs.view)
-  note               String?
-  cancel_reason      String?
-  created_by         String?                @db.Uuid
-  created_at         DateTime               @default(now())
-  updated_at         DateTime               @updatedAt
-  assembled_at       DateTime?
-  handed_at          DateTime?
-  delivered_at       DateTime?
-  closed_at          DateTime? // cancelled or returned
+  id                    String                 @id @default(uuid()) @db.Uuid
+  marketplace           Marketplace            @default(yandex)
+  external_number       String
+  order_date            DateTime               @db.Date
+  customer_name         String?
+  status                MarketplaceOrderStatus @default(NEW)
+  commission_percent    Decimal                @default(18.5) @db.Decimal(5, 2) // admin only (costs.view)
+  note                  String?
+  cancel_reason         String?
+  created_by            String?                @db.Uuid
+  created_at            DateTime               @default(now())
+  updated_at            DateTime               @updatedAt
+  assembled_at          DateTime?
+  handed_at             DateTime?
+  delivered_at          DateTime?
+  closed_at             DateTime? // cancelled or returned
   /// Stage 2D: manual (typed in the admin panel) or yandex_api (created by the sync)
-  source             String                 @default("manual")
+  source                String                 @default("manual")
   /// Created by the sync without units: not enough stock («Не хватает остатка»), «Зарезервировать банки» later
-  stock_shortage     Boolean                @default(false)
+  stock_shortage        Boolean                @default(false)
   /// Stage 2D: Yandex side, shown only; our statuses are moved by employees (except a Yandex cancellation)
-  yandex_status      String?
-  yandex_substatus   String?
-  yandex_campaign_id BigInt?
-  yandex_updated_at  DateTime?
+  yandex_status         String?
+  yandex_substatus      String?
+  yandex_campaign_id    BigInt?
+  yandex_updated_at     DateTime?
+  /// Stage 3: a test order (admin) — excluded from analytics, tax and summaries
+  is_test               Boolean                @default(false)
+  /// Stage 3: what the delivery really cost US (we bring it to the pickup point), admin only
+  own_delivery_cost_uzs BigInt                 @default(0)
 
   staff    staff_users?                  @relation(fields: [created_by], references: [id])
   lines    marketplace_order_lines[]
@@ -827,17 +923,19 @@ model marketplace_order_lines {
 /// at assembly; released_at = taken off the order (cancel, swap). One unit is in at most one active assignment:
 /// partial unique index in the migration.
 model marketplace_order_units {
-  id               String    @id @default(uuid()) @db.Uuid
-  order_id         String    @db.Uuid
-  line_id          String    @db.Uuid
-  physical_unit_id String    @db.Uuid
-  assigned_by      String?   @db.Uuid
-  assigned_at      DateTime  @default(now())
-  picked_at        DateTime?
-  fefo_override    String? // reason when not the earliest expiry was chosen
-  released_at      DateTime?
-  release_reason   String?
-  return_decision  String? // ACCEPTED | WRITTEN_OFF (after RETURNED)
+  id                String    @id @default(uuid()) @db.Uuid
+  order_id          String    @db.Uuid
+  line_id           String    @db.Uuid
+  physical_unit_id  String    @db.Uuid
+  assigned_by       String?   @db.Uuid
+  assigned_at       DateTime  @default(now())
+  picked_at         DateTime?
+  fefo_override     String? // reason when not the earliest expiry was chosen
+  released_at       DateTime?
+  release_reason    String?
+  return_decision   String? // ACCEPTED | WRITTEN_OFF (after RETURNED)
+  /// Stage 3: the cost of the unit when it was handed to delivery (sale), like order_item_units
+  cost_snapshot_uzs BigInt?
 
   order marketplace_orders      @relation(fields: [order_id], references: [id])
   line  marketplace_order_lines @relation(fields: [line_id], references: [id])
@@ -1153,6 +1251,10 @@ model orders {
   cancelled_at                   DateTime?
   /// Stage 2E: paid, but the units of unit-tracked lines could not be reserved (reason). «Нужно внимание склада»
   units_attention                String?
+  /// Stage 3: a test order (admin) — excluded from analytics, tax and summaries
+  is_test                        Boolean       @default(false)
+  /// Stage 3: what the delivery really cost US (free delivery for the customer), admin only
+  own_delivery_cost_uzs          BigInt        @default(0)
 
   user            users                  @relation(fields: [user_id], references: [id])
   region          regions                @relation(fields: [region_id], references: [id])

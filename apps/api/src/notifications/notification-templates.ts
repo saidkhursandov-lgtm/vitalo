@@ -20,6 +20,8 @@ export type TemplateName =
   | 'staff.yandex_new_order'
   | 'staff.yandex_attention'
   | 'staff.yandex_late_summary'
+  | 'staff.finance_before_due'
+  | 'staff.finance_due_day'
   | 'order.payment_reminder';
 
 export interface TemplatePayload {
@@ -43,6 +45,9 @@ export interface TemplatePayload {
   count?: number;
   /** Stage 2D: the order was created without units (not enough stock) */
   shortage?: boolean;
+  /** Stage 3 (admins only): what is not marked paid yet */
+  tax_uzs?: number;
+  salaries_uzs?: number;
 }
 
 /** Text of the button under a message that has open_path. */
@@ -153,6 +158,15 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
     ru: (p: TemplatePayload) =>
       `ℹ️ Синхронизация Яндекса: ${p.count ?? 0} заказ(ов) впервые увидены уже отгруженными или отменёнными. Автоматически они не создаются — посмотрите «Требует внимания» и закройте неактуальные.`,
     uz: (p: TemplatePayload) => `ℹ️ Yandex: ${p.count ?? 0} ta buyurtma.`,
+  },
+  // Stage 3: only admins get these (money). order_number is not used.
+  'staff.finance_before_due': {
+    ru: (p: TemplatePayload) => `🗓 14-го к оплате: налог ${sum(p.tax_uzs, 'ru')}, зарплаты ${sum(p.salaries_uzs, 'ru')}.`,
+    uz: (p: TemplatePayload) => `🗓 14-kuni to‘lov: soliq ${sum(p.tax_uzs, 'uz')}, ish haqi ${sum(p.salaries_uzs, 'uz')}.`,
+  },
+  'staff.finance_due_day': {
+    ru: (p: TemplatePayload) => `⏰ Срок оплаты — 14-е. Не отмечено оплаченным: налог ${sum(p.tax_uzs, 'ru')}, зарплаты ${sum(p.salaries_uzs, 'ru')}.`,
+    uz: (p: TemplatePayload) => `⏰ To‘lov muddati — 14-kun. To‘lanmagan: soliq ${sum(p.tax_uzs, 'uz')}, ish haqi ${sum(p.salaries_uzs, 'uz')}.`,
   },
 };
 

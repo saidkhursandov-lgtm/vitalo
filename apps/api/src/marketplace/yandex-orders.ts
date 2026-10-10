@@ -105,6 +105,11 @@ export class YandexOrdersQuery extends PageQuery {
   @ApiPropertyOptional() @IsOptional() @IsDateString({ strict: true }) from?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString({ strict: true }) to?: string;
   @ApiPropertyOptional({ description: 'Номер заказа Яндекса' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(64) q?: string;
+
+  @ApiPropertyOptional({ description: 'true — скрыть тестовые заказы' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  hide_test?: boolean;
 }
 
 // ---------------------------------------------------------------- money (admin only)
@@ -183,6 +188,7 @@ export class YandexOrdersService {
     const where: Prisma.marketplace_ordersWhereInput = {
       marketplace: 'yandex',
       ...(q.status && { status: q.status }),
+      ...(q.hide_test && { is_test: false }),
       ...(q.q && { external_number: { contains: q.q, mode: 'insensitive' } }),
       ...((q.from || q.to) && { order_date: { ...(q.from && { gte: new Date(`${q.from}T00:00:00Z`) }), ...(q.to && { lte: new Date(`${q.to}T00:00:00Z`) }) } }),
     };
@@ -207,6 +213,7 @@ export class YandexOrdersService {
         picked: o.units.filter((u) => u.picked_at).length,
         skus: [...new Set(o.lines.map((l) => l.product.sku))],
         total_uzs: o.lines.reduce((s, l) => s + Number(l.unit_price_uzs) * l.qty, 0),
+        is_test: o.is_test,
         created_at: o.created_at,
       })),
       page: q.page,
@@ -250,7 +257,7 @@ export class YandexOrdersService {
           status: a.unit.status,
           picked: !!a.picked_at,
           fefo_override: a.fefo_override,
-          ...(money && { actual_cost_uzs: Number(a.unit.actual_cost_uzs) }),
+          ...(money && { actual_cost_uzs: Number(a.cost_snapshot_uzs ?? a.unit.actual_cost_uzs) }),
         })),
         picked: units.filter((a) => a.picked_at).length,
       };
@@ -274,6 +281,7 @@ export class YandexOrdersService {
       closed_at: o.closed_at,
       total_uzs: lines.reduce((s, l) => s + l.unit_price_uzs * l.qty, 0),
       source: o.source,
+      is_test: o.is_test,
       stock_shortage: o.stock_shortage,
       yandex: o.yandex_status ? { status: o.yandex_status, substatus: o.yandex_substatus, campaign_id: o.yandex_campaign_id === null ? null : Number(o.yandex_campaign_id), updated_at: o.yandex_updated_at } : null,
       lines,
@@ -287,7 +295,9 @@ export class YandexOrdersService {
       history: history.map((h) => ({ action: h.action, at: h.created_at, staff_name: h.staff?.name ?? null, details: h.after_json })),
       ...(money && {
         commission_percent: pct,
-        money: o.status === 'CANCELLED' || o.status === 'RETURNED' ? null : orderMoney(o.lines, active.map((a) => a.unit.actual_cost_uzs), pct),
+        // Stage 3: what the delivery really cost us (admin; counted in «Аналитика», not in the order profit below)
+        own_delivery_cost_uzs: Number(o.own_delivery_cost_uzs),
+        money: o.status === 'CANCELLED' || o.status === 'RETURNED' ? null : orderMoney(o.lines, active.map((a) => a.cost_snapshot_uzs ?? a.unit.actual_cost_uzs), pct),
       }),
     };
   }
@@ -577,6 +587,8 @@ export class YandexOrdersService {
       const units = await this.activeUnits(tx, id);
       const warehouseId = await this.stock.mainWarehouseId(tx);
       for (const a of units) {
+        // stage 3: the cost of the unit at the moment of the sale (used by analytics and the profit of the order)
+        await tx.marketplace_order_units.update({ where: { id: a.id }, data: { cost_snapshot_uzs: a.unit.actual_cost_uzs } });
         await moveUnit(tx, a.physical_unit_id, 'ASSIGNED', 'YANDEX_DELIVERY', { type: 'HANDED_TO_DELIVERY', referenceType: 'marketplace_order', referenceId: id, staffId: me.staff.id });
       }
       for (const [productId, n] of countBy(units.map((a) => a.unit.product_id))) {
@@ -658,7 +670,7 @@ export class YandexOrdersService {
     return tx.marketplace_order_units.findMany({
       where: { order_id: id, released_at: null },
       orderBy: { assigned_at: 'asc' },
-      include: { unit: { select: { physical_id: true, product_id: true, status: true } } },
+      include: { unit: { select: { physical_id: true, product_id: true, status: true, actual_cost_uzs: true } } },
     });
   }
 

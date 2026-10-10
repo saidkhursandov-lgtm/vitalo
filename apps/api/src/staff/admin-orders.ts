@@ -45,6 +45,9 @@ export const FULFILMENT_STEPS: Partial<Record<OrderStatus, { next: OrderStatus; 
 /** Editing is allowed only before handover; after it the order is locked (Master TZ §11). */
 export const EDITABLE_STATUSES: OrderStatus[] = ['new', 'awaiting_payment', 'paid', 'picking'];
 
+/** «Нужно внимание склада» matters while the order is paid and not handed over yet. */
+const ATTENTION_STATUSES: OrderStatus[] = ['paid', 'picking'];
+
 export class StaffOrdersQuery extends PageQuery {
   @ApiPropertyOptional({ enum: OrderStatus }) @IsOptional() @IsEnum(OrderStatus) status?: OrderStatus;
   @ApiPropertyOptional({ enum: PaymentStatus }) @IsOptional() @IsEnum(PaymentStatus) payment_status?: PaymentStatus;
@@ -56,6 +59,16 @@ export class StaffOrdersQuery extends PageQuery {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   awaiting_confirmation?: boolean;
+
+  @ApiPropertyOptional({ description: 'true — скрыть тестовые заказы' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  hide_test?: boolean;
+
+  @ApiPropertyOptional({ description: 'true — только «Нужно внимание склада» (оплачен, банки не закреплены)' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  units_attention?: boolean;
 }
 
 export class ConfirmPaymentDto {
@@ -108,6 +121,7 @@ export class AdminOrdersService {
   ) {}
 
   async list(q: StaffOrdersQuery) {
+    const ATTENTION: Prisma.ordersWhereInput = { units_attention: { not: null }, status: { in: ATTENTION_STATUSES } };
     const and: Prisma.ordersWhereInput[] = [];
     if (q.status) and.push({ status: q.status });
     if (q.payment_status) and.push({ payment_status: q.payment_status });
@@ -120,6 +134,8 @@ export class AdminOrdersService {
         payments: { some: { manual: { some: { customer_confirmed_at: { not: null } } } } },
       });
     }
+    if (q.hide_test) and.push({ is_test: false });
+    if (q.units_attention) and.push(ATTENTION);
     if (q.q) {
       const digits = q.q.replace(/\D/g, '');
       and.push({
@@ -132,7 +148,8 @@ export class AdminOrdersService {
       });
     }
     const where: Prisma.ordersWhereInput = { AND: and };
-    const [total, rows] = await this.prisma.$transaction([
+    const [attention, total, rows] = await this.prisma.$transaction([
+      this.prisma.orders.count({ where: ATTENTION }),
       this.prisma.orders.count({ where }),
       this.prisma.orders.findMany({
         where,
@@ -150,12 +167,16 @@ export class AdminOrdersService {
         status: o.status,
         payment_status: o.payment_status,
         total_uzs: Number(o.total_uzs),
+        is_test: o.is_test,
+        units_attention: ATTENTION_STATUSES.includes(o.status) ? o.units_attention : null,
         reserved_until: o.reserved_until,
         customer_reported_paid: o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at)),
         customer: { id: o.user.id, name: [o.user.first_name, o.user.last_name].filter(Boolean).join(' '), username: o.user.username },
         recipient_name: o.recipient_name,
         recipient_phone: o.recipient_phone,
       })),
+      // Stage 3: how many orders wait for the warehouse now (counter above the list, whatever the filters are)
+      attention_count: attention,
       page: q.page,
       page_size: PAGE_SIZE,
       total,
@@ -178,6 +199,9 @@ export class AdminOrdersService {
     const role = staff.staff.role;
     return {
       ...toOrderView(order),
+      is_test: order.is_test,
+      // Stage 3: what the delivery really cost us — admin only
+      ...(can(role, 'finance.manage') && { finance: { own_delivery_cost_uzs: Number(order.own_delivery_cost_uzs) } }),
       customer: {
         id: order.user.id,
         name: [order.user.first_name, order.user.last_name].filter(Boolean).join(' '),

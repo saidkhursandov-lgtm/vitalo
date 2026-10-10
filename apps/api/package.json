@@ -19,6 +19,7 @@
     "import:catalog": "ts-node scripts/import-catalog.ts",
     "import:yandex-aliases": "ts-node scripts/import-yandex-aliases.ts",
     "orders:attach-units": "ts-node scripts/attach-order-units.ts",
+    "orders:mark-test": "ts-node scripts/mark-test-orders.ts",
     "import:opening-stock": "ts-node scripts/import-opening-stock.ts",
     "reconcile:units": "ts-node scripts/reconcile-units.ts",
     "photos:optimize": "ts-node scripts/optimize-photos.ts",

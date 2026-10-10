@@ -37,12 +37,13 @@ export class DashboardService {
   /** withRevenue = false (no dashboard.revenue, e.g. marketer): no revenue, average check or revenue per product. */
   async get(days: number, withRevenue = true) {
     const from = new Date(Date.now() - days * 86_400_000);
-    const paidInPeriod = { status: { in: PAID_STATUSES }, paid_at: { gte: from } };
+    // Stage 3: test orders are in no summary
+    const paidInPeriod = { is_test: false, status: { in: PAID_STATUSES }, paid_at: { gte: from } };
 
     const [revenue, created, byStatus, top, lowStock] = await Promise.all([
       this.prisma.orders.aggregate({ where: paidInPeriod, _sum: { total_uzs: true }, _count: { _all: true } }),
-      this.prisma.orders.count({ where: { created_at: { gte: from } } }),
-      this.prisma.orders.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.orders.count({ where: { is_test: false, created_at: { gte: from } } }),
+      this.prisma.orders.groupBy({ by: ['status'], where: { is_test: false }, _count: { _all: true } }),
       this.prisma.order_items.groupBy({
         by: ['product_id'],
         where: { order: paidInPeriod },

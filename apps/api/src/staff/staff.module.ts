@@ -23,6 +23,9 @@ import { YandexOrdersController, YandexOrdersService } from '../marketplace/yand
 import { YANDEX_CLIENT_OPTIONS, YandexSyncService } from '../marketplace/yandex/yandex-sync';
 import { SkuAliasesController, SkuAliasesService } from './sku-aliases';
 import { YandexSyncController, YandexWebhookController } from '../marketplace/yandex/yandex-sync.controller';
+import { FinanceController, OrderFinanceService } from '../finance/finance.controller';
+import { FinanceRemindersService } from '../finance/finance-reminders.service';
+import { FinanceService } from '../finance/finance.service';
 
 /**
  * Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions, except
@@ -48,6 +51,7 @@ import { YandexSyncController, YandexWebhookController } from '../marketplace/ya
     YandexSyncController,
     SkuAliasesController,
     YandexWebhookController,
+    FinanceController,
     AdminSettingsController,
     StaffUsersController,
     AuditController,
@@ -70,6 +74,9 @@ import { YandexSyncController, YandexWebhookController } from '../marketplace/ya
     YandexOrdersService,
     YandexSyncService,
     SkuAliasesService,
+    FinanceService,
+    OrderFinanceService,
+    FinanceRemindersService,
     // real fetch and pauses; e2e tests override it with a fake fed by fixtures (never a real request to Yandex)
     { provide: YANDEX_CLIENT_OPTIONS, useValue: {} },
     AdminSettingsService,
