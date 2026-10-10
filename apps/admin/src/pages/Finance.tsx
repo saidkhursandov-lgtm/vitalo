@@ -364,7 +364,7 @@ function Tax() {
           <dd>
             {q.data.rates.map((r, i) => (
               <div key={r.from}>
-                {r.value}% {i === 0 ? '(с начала)' : `с ${monthName(r.from)}`}
+                {r.value}% {i === 0 ? '(с начала)' : `с месяца: ${monthName(r.from)}`}
               </div>
             ))}
             <button className="btn btn-sm btn-ghost" onClick={() => setRate(true)}>
@@ -578,7 +578,7 @@ function Payroll() {
                 <td className="strong">{e.name}</td>
                 <td className="num">
                   {money(e.amount_uzs)}
-                  {e.rates.length > 1 && <div className="muted small">{e.rates.map((r) => `с ${monthName(r.from_month)}: ${money(r.amount_uzs)}`).join('; ')}</div>}
+                  {e.rates.length > 1 && <div className="muted small">{e.rates.map((r) => `с месяца ${monthName(r.from_month)} — ${money(r.amount_uzs)}`).join('; ')}</div>}
                 </td>
                 <td>{monthName(e.start_month)}</td>
                 <td>{e.active ? <Badge tone="ok">активен</Badge> : <Badge>не активен{e.end_month ? `, последний месяц — ${monthName(e.end_month)}` : ''}</Badge>}</td>
