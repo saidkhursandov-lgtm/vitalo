@@ -51,6 +51,7 @@ export class UnitActionsService {
       include: {
         product: { select: { sku: true, name_ru: true } },
         marketplace_units: { where: { released_at: null }, include: { order: { select: { id: true, external_number: true, cancel_reason: true } } } },
+        order_units: { where: { released_at: null }, include: { order: { select: { id: true, order_number: true } } } },
       },
     });
     return units.map((u) => ({
@@ -60,6 +61,8 @@ export class UnitActionsService {
       expiry_date: day(u.expiry_date),
       expired: day(u.expiry_date) < day(new Date()),
       order: u.marketplace_units[0]?.order ?? null,
+      // Stage 2E: a unit returned from a Mini App order
+      vitalo_order: u.order_units[0]?.order ?? null,
     }));
   }
 
@@ -172,10 +175,9 @@ export class UnitActionsService {
 
   /** A returned unit leaves its order (the assignment is released, the decision kept). */
   private async closeReturn(tx: Tx, unitId: string, decision: 'ACCEPTED' | 'WRITTEN_OFF' | null, reason: string) {
-    await tx.marketplace_order_units.updateMany({
-      where: { physical_unit_id: unitId, released_at: null },
-      data: { released_at: new Date(), release_reason: reason, return_decision: decision },
-    });
+    const data = { released_at: new Date(), release_reason: reason, return_decision: decision };
+    await tx.marketplace_order_units.updateMany({ where: { physical_unit_id: unitId, released_at: null }, data });
+    await tx.order_item_units.updateMany({ where: { physical_unit_id: unitId, released_at: null }, data }); // stage 2E: Mini App orders
   }
 
   private log(tx: Tx, me: StaffContext, action: string, u: LockedUnit, after: object) {

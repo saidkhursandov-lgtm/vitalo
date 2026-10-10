@@ -4,12 +4,12 @@ import { reconcileState } from '../receiving/reconcile';
 import { canMove, CORRECTABLE_FROM, CORRECTABLE_TO, onShelf, TRANSITIONS } from './unit-lifecycle';
 import { defaultCommission, orderMoney } from './yandex-orders';
 
-const MIGRATION = join(__dirname, '../../prisma/migrations/20261010100000_stage2c_marketplace_orders/migration.sql');
+const MIGRATION = join(__dirname, '../../prisma/migrations/20261013100000_stage2e_order_units/migration.sql');
 
 describe('unit life cycle', () => {
   it('the service table is exactly the database trigger table', () => {
     const sql = readFileSync(MIGRATION, 'utf8');
-    const fn = sql.slice(sql.indexOf('check_physical_unit_status()'), sql.indexOf('CREATE TRIGGER physical_units_status_chk'));
+    const fn = sql.slice(sql.indexOf('check_physical_unit_status()'));
     const pairs = [...fn.matchAll(/\('([A-Z_]+)', '([A-Z_]+)'\)/g)].map((m) => `${m[1]}>${m[2]}`).sort();
     expect(pairs).toEqual(TRANSITIONS.map(([a, b]) => `${a}>${b}`).sort());
   });
@@ -23,7 +23,9 @@ describe('unit life cycle', () => {
     expect(canMove('ASSIGNED', 'MISSING')).toBe(false); // a unit of an order is not marked lost
     expect(canMove('YANDEX_SOLD', 'IN_STOCK')).toBe(false); // only through a return and its check
     expect(canMove('VOIDED', 'IN_STOCK')).toBe(false);
-    expect(canMove('IN_STOCK', 'VITALO_SOLD')).toBe(false); // stage 2E
+    expect(canMove('IN_STOCK', 'VITALO_SOLD')).toBe(false); // never skip the order steps
+    expect(canMove('ASSIGNED', 'VITALO_DELIVERY')).toBe(true); // stage 2E
+    expect(canMove('VITALO_SOLD', 'RETURNED')).toBe(true);
   });
 
   it('every admin correction is an allowed move; shelf statuses', () => {
@@ -42,9 +44,9 @@ describe('Yandex order profit (S2C-6: no Yandex logistics)', () => {
 });
 
 describe('«Сверка» states', () => {
-  it('ok, only VITALO orders (until 2E), unexplained', () => {
+  it('ok, old orders without units (paid before 2E), unexplained', () => {
     expect(reconcileState({ difference: 0, assigned: 1, reserved: 1, sold: 0 })).toBe('ok');
-    expect(reconcileState({ difference: 2, assigned: 0, reserved: 0, sold: 2 })).toBe('vitalo_orders');
+    expect(reconcileState({ difference: 2, assigned: 0, reserved: 0, sold: 2 })).toBe('legacy_orders');
     expect(reconcileState({ difference: 1, assigned: 0, reserved: 0, sold: 2 })).toBe('unexplained');
     expect(reconcileState({ difference: 0, assigned: 2, reserved: 1, sold: 0 })).toBe('unexplained'); // a Yandex unit without its reservation
   });

@@ -499,7 +499,7 @@ describe('Stage 2B: Physical ID, receiving, labels (e2e)', () => {
       ]);
       for (const id of [o1.id, o4.id]) expect((await prisma.products.findUniqueOrThrow({ where: { id } })).unit_tracking).toBe(true);
       const rec = (await as('manager').get('/staff/units/reconcile').expect(200)).body;
-      expect(rec.hint).toContain('До этапа 2E'); // stage 2C: Yandex orders move units and stock together
+      expect(rec.hint).toContain('старые заказы без банок'); // stage 2E: both channels move units and stock together
       expect(rec.items.find((i: { product_id: string }) => i.product_id === o1.id)).toMatchObject({ units_in_stock: 10, actual_qty: 10, difference: 0, explained: true });
     });
 

@@ -77,9 +77,28 @@ export class StockService {
     return this.settle(tx, orderId, 'release', staffId);
   }
 
-  /** Payment confirmed: the reservation becomes a real write-off (actual and reserved both go down). */
-  deduct(tx: Prisma.TransactionClient, orderId: string, staffId?: string): Promise<void> {
-    return this.settle(tx, orderId, 'deduct', staffId);
+  /**
+   * Payment confirmed: the reservation becomes a real write-off (actual and reserved both go down).
+   * Stage 2E: `skipProductIds` — unit-tracked products keep their reservation at payment (their units are reserved
+   * instead) and are written off at the handover by deductProducts, so nothing is deducted twice.
+   */
+  deduct(tx: Prisma.TransactionClient, orderId: string, staffId?: string, skipProductIds: string[] = []): Promise<void> {
+    return this.settle(tx, orderId, 'deduct', staffId, (productId) => !skipProductIds.includes(productId));
+  }
+
+  /** Stage 2E, handed to delivery: what the order still holds of these (unit-tracked) products leaves the shelf. */
+  deductProducts(tx: Prisma.TransactionClient, orderId: string, productIds: string[], staffId?: string): Promise<void> {
+    return this.settle(tx, orderId, 'deduct', staffId, (productId) => productIds.includes(productId));
+  }
+
+  /** What the order still holds in reservation per product (reserve − release − deduct). */
+  async heldByProduct(tx: Prisma.TransactionClient, orderId: string): Promise<Map<string, number>> {
+    const rows = await tx.$queryRaw<{ product_id: string; held: bigint }[]>`
+      SELECT product_id, SUM(CASE WHEN movement_type = 'reserve' THEN qty ELSE -qty END) AS held
+      FROM inventory_movements
+      WHERE reference_type = 'order' AND reference_id = ${orderId}::uuid AND movement_type IN ('reserve', 'release', 'deduct')
+      GROUP BY product_id`;
+    return new Map(rows.map((r) => [r.product_id, Number(r.held)]));
   }
 
   /**
@@ -228,7 +247,7 @@ export class StockService {
   }
 
   /** Must be called while holding the order row lock, so an order is never settled twice. */
-  private async settle(tx: Prisma.TransactionClient, orderId: string, kind: 'release' | 'deduct', staffId?: string) {
+  private async settle(tx: Prisma.TransactionClient, orderId: string, kind: 'release' | 'deduct', staffId?: string, only: (productId: string) => boolean = () => true) {
     const held = await tx.$queryRaw<{ warehouse_id: string; product_id: string; held: bigint }[]>`
       SELECT warehouse_id, product_id,
              SUM(CASE WHEN movement_type = 'reserve' THEN qty ELSE -qty END) AS held
@@ -240,7 +259,7 @@ export class StockService {
 
     for (const h of held) {
       const qty = Number(h.held);
-      if (qty <= 0) continue;
+      if (qty <= 0 || !only(h.product_id)) continue;
       if (kind === 'deduct') {
         await tx.$executeRaw`
           UPDATE inventory SET reserved_qty = reserved_qty - ${qty}, actual_qty = actual_qty - ${qty}, updated_at = now()

@@ -17,10 +17,11 @@ import {
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { OrderLifecycleService } from '../orders/order-lifecycle.service';
+import { OrderUnitsService } from '../orders/order-units.service';
 import { orderViewInclude, toOrderView } from '../orders/order-view';
 import { normalizeUzPhone } from '../orders/orders.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -69,6 +70,12 @@ export class ChangeStatusDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) comment?: string;
 }
 
+export class PickUnitDto {
+  @ApiProperty({ example: 'V-000184' }) @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(40) physical_id!: string;
+  @ApiPropertyOptional({ description: 'Причина, если выбрана не самая старая банка (мягкий FEFO)' })
+  @IsOptional() @Transform(trim) @IsString() @MinLength(3) @MaxLength(300) fefo_reason?: string;
+}
+
 export class StaffCancelDto {
   @ApiProperty({ description: 'Причина отмены (обязательно)' }) @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
 }
@@ -97,6 +104,7 @@ export class AdminOrdersService {
     private readonly delivery: DeliveryService,
     private readonly audit: AuditService,
     private readonly analytics: AnalyticsService,
+    private readonly units: OrderUnitsService,
   ) {}
 
   async list(q: StaffOrdersQuery) {
@@ -185,6 +193,8 @@ export class AdminOrdersService {
         created_at: e.created_at,
       })),
       tasks: order.tasks.map((t) => ({ type: t.type, status: t.status, note: t.note, created_at: t.created_at })),
+      // Stage 2E «Сборка»: units of unit-tracked lines (null when the order has none); costs and profit only with costs.view
+      assembly: await this.units.view(this.prisma, id, can(role, 'costs.view')),
       // What the current employee may do now (the server re-checks on every action).
       actions: {
         confirm_payment: can(role, 'orders.payment') && order.payment_status === 'payment_pending' && ['new', 'awaiting_payment'].includes(order.status),
@@ -192,6 +202,8 @@ export class AdminOrdersService {
         cancel: can(role, 'orders.cancel') && EDITABLE_STATUSES.includes(order.status),
         edit: can(role, 'orders.edit') && EDITABLE_STATUSES.includes(order.status),
         locked: !EDITABLE_STATUSES.includes(order.status) && order.status !== 'cancelled',
+        units: can(role, 'orders.units') && (order.status === 'paid' || order.status === 'picking'),
+        return_order: can(role, 'orders.units') && ['handed_to_delivery', 'in_transit', 'delivered'].includes(order.status),
       },
     };
   }
@@ -215,6 +227,9 @@ export class AdminOrdersService {
       if (!can(staff.staff.role, step.permission)) {
         throw new ForbiddenException({ code: 'FORBIDDEN_FOR_ROLE', message: `Role ${staff.staff.role} cannot set ${to}` });
       }
+      // Stage 2E: the units of unit-tracked lines move with the order (and the stock is written off at the handover)
+      if (to === 'handed_to_delivery') await this.units.handOver(tx, order, staff.staff.id);
+      if (to === 'delivered') await this.units.deliver(tx, order, staff.staff.id);
       await tx.orders.update({ where: { id }, data: { status: to, ...(to === 'delivered' && { delivered_at: new Date() }) } });
       await this.lifecycle.addHistory(tx, id, order.status, to, { type: 'staff', id: staff.staff.id }, comment);
       await this.audit.log(
@@ -241,6 +256,47 @@ export class AdminOrdersService {
         tx,
       );
     });
+  }
+
+  /** Stage 2E «Сборка»: the Physical ID typed or scanned for this order (warehouse, admin). */
+  pickUnit(staff: StaffContext, id: string, dto: PickUnitDto) {
+    return this.unitStep(staff, id, (tx, order) => this.units.pick(tx, order, dto.physical_id, dto.fefo_reason ?? null, staff.staff.id));
+  }
+
+  /** Stage 2E «Зарезервировать банки» for an order in «Нужно внимание склада». */
+  reserveUnits(staff: StaffContext, id: string) {
+    return this.unitStep(staff, id, async (tx, order) => {
+      const reserved = await this.units.reserveMissing(tx, order, staff.staff.id);
+      await this.audit.log({ staffId: staff.staff.id, action: 'order.units_reserved', entityType: 'order', entityId: id, after: { reserved } }, tx);
+      return `Зарезервированы: ${reserved.join(', ')}`;
+    });
+  }
+
+  /**
+   * Stage 2E, after the handover (there was no such action before): the order comes back. Handed / in transit →
+   * Cancelled, delivered → Return. Units of unit-tracked lines wait for a check («Возврат на проверке») and are
+   * decided one by one on the warehouse screen; a refund task is created (refunds are manual). Lines by quantity:
+   * the stock is not changed here (as before, their return to stock is «Склад → Возврат»).
+   */
+  returnOrder(staff: StaffContext, id: string, reason: string) {
+    return this.unitStep(staff, id, async (tx, order) => {
+      const to: OrderStatus | null = order.status === 'delivered' ? 'return' : order.status === 'handed_to_delivery' || order.status === 'in_transit' ? 'cancelled' : null;
+      if (!to) throw new ConflictException({ code: 'INVALID_STATUS_TRANSITION', message: 'Возврат оформляется только после передачи в доставку' });
+      const returned = await this.units.returnAfterHandover(tx, order, staff.staff.id, reason);
+      const full = await tx.orders.update({ where: { id }, data: { status: to, ...(to === 'cancelled' && { cancelled_at: new Date() }) } });
+      await tx.manager_tasks.create({ data: { type: 'refund', order_id: id, note: `Вернуть клиенту ${Number(full.total_uzs)} сум: заказ ${order.order_number} возвращён после отправки. Причина: ${reason}` } });
+      await this.lifecycle.addHistory(tx, id, order.status, to, { type: 'staff', id: staff.staff.id }, reason);
+      await this.audit.log({ staffId: staff.staff.id, action: 'order.returned', entityType: 'order', entityId: id, before: { status: order.status }, after: { status: to, reason, returned } }, tx);
+      return returned.length ? `Возврат оформлен: банки ${returned.join(', ')} ждут проверки на складе` : 'Возврат оформлен';
+    });
+  }
+
+  private async unitStep(staff: StaffContext, id: string, fn: (tx: Prisma.TransactionClient, order: Awaited<ReturnType<OrderLifecycleService['lockOrder']>>) => Promise<string>) {
+    let message = '';
+    await this.prisma.$transaction(async (tx) => {
+      message = await fn(tx, await this.lifecycle.lockOrder(tx, id));
+    }, TX);
+    return { ...(await this.get(id, staff)), message };
   }
 
   /**
@@ -341,6 +397,27 @@ export class AdminOrdersController {
   async cancel(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: StaffCancelDto) {
     await this.orders.cancel(me, id, dto.reason);
     return this.orders.get(id, me);
+  }
+
+  @Post(':id/units/pick')
+  @HttpCode(200)
+  @RequirePermission('orders.units')
+  pickUnit(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: PickUnitDto) {
+    return this.orders.pickUnit(me, id, dto);
+  }
+
+  @Post(':id/units/reserve')
+  @HttpCode(200)
+  @RequirePermission('orders.units')
+  reserveUnits(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.orders.reserveUnits(me, id);
+  }
+
+  @Post(':id/return')
+  @HttpCode(200)
+  @RequirePermission('orders.units')
+  returnOrder(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: StaffCancelDto) {
+    return this.orders.returnOrder(me, id, dto.reason);
   }
 
   @Patch(':id')

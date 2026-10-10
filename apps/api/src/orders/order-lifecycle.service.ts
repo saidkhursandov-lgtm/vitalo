@@ -5,6 +5,7 @@ import { MANUAL_PAYMENT_METHODS } from '../settings/settings.service';
 import { EXPIRED_REASON_CODE } from '../notifications/notification-templates';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertTransition, CUSTOMER_CANCELLABLE } from './order-state';
+import { OrderUnitsService } from './order-units.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -32,6 +33,7 @@ export class OrderLifecycleService {
   constructor(
     private readonly stock: StockService,
     private readonly notifications: NotificationsService,
+    private readonly units: OrderUnitsService,
   ) {}
 
   async lockOrder(tx: Tx, orderId: string): Promise<LockedOrder> {
@@ -72,8 +74,10 @@ export class OrderLifecycleService {
   }
 
   /**
-   * Manager confirms a bank transfer: reservation -> real write-off, order -> Paid.
-   * Already paid -> no-op (idempotent), so a double click never deducts stock twice.
+   * Manager confirms a bank transfer: order -> Paid. Lines by quantity: reservation -> real write-off (as before).
+   * Stage 2E, unit-tracked lines: the reservation stays and concrete units are reserved by FEFO; the write-off
+   * happens at the handover. Not enough units never fails the payment (orders.units_attention + a staff message).
+   * Already paid -> no-op (idempotent), so a double click never deducts stock or reserves units twice.
    */
   async confirmBankTransfer(tx: Tx, order: LockedOrder, staffId: string, comment?: string): Promise<'paid' | 'already_paid'> {
     if (order.payment_status === 'payment_success') return 'already_paid';
@@ -89,7 +93,7 @@ export class OrderLifecycleService {
     if (!payment) throw new ConflictException({ code: 'NO_BANK_TRANSFER_PAYMENT', message: 'Order has no pending bank transfer' });
 
     const now = new Date();
-    await this.stock.deduct(tx, order.id, staffId);
+    await this.stock.deduct(tx, order.id, staffId, await this.units.trackedProductIds(tx, order.id));
     await tx.payments.update({ where: { id: payment.id }, data: { status: 'payment_success', paid_at: now } });
     await tx.payment_attempts.updateMany({ where: { payment_id: payment.id, status: 'pending' }, data: { status: 'success' } });
 
@@ -115,6 +119,7 @@ export class OrderLifecycleService {
       data: { status: 'done', done_at: now, assigned_to: staffId },
     });
     await this.addHistory(tx, order.id, order.status, 'paid', { type: 'staff', id: staffId }, 'Bank transfer confirmed');
+    const units = await this.units.reserveOnPayment(tx, { id: order.id, order_number: order.order_number, status: 'paid' }, staffId);
     await tx.audit_logs.create({
       data: {
         staff_user_id: staffId,
@@ -122,19 +127,23 @@ export class OrderLifecycleService {
         entity_type: 'order',
         entity_id: order.id,
         before_json: { status: order.status, payment_status: order.payment_status },
-        after_json: { status: 'paid', payment_status: 'payment_success', comment: comment ?? null },
+        after_json: { status: 'paid', payment_status: 'payment_success', comment: comment ?? null, units_reserved: units.reserved, units_shortage: units.shortage },
       },
     });
     return 'paid';
   }
 
   /**
-   * Staff cancels a paid order before handover: written-off units return to stock, the order becomes
+   * Staff cancels a paid order before handover. Lines by quantity (and legacy orders): what was written off returns
+   * to stock. Stage 2E, unit-tracked lines: reserved units go back «На складе» and the held quantity is released
+   * (nothing was written off for them yet). The order becomes
    * Cancelled and a refund task is created (refunds are manual, Master TZ §10). Payment status stays
    * payment_success: the money was received and is returned outside the system.
    */
   async cancelPaid(tx: Tx, order: LockedOrder, staffId: string, reason: string): Promise<void> {
     assertTransition(order.status, 'cancelled');
+    await this.units.releaseOnCancel(tx, order, staffId, reason);
+    await this.stock.release(tx, order.id, staffId);
     await this.stock.returnDeducted(tx, order.id, staffId);
     const full = await tx.orders.update({
       where: { id: order.id },

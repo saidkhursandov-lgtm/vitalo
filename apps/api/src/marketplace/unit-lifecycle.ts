@@ -7,7 +7,7 @@
  * (by quantity, until stage 2E). So available = actual − reserved already includes the Yandex reservations,
  * and nobody can sell more than the shelf has: a unit is reserved only if one unit is still available.
  *
- * The allowed transitions are the same table as the database trigger (migration 20261010100000).
+ * The allowed transitions are the same table as the database trigger (latest: migration 20261013100000, stage 2E).
  */
 import { ConflictException } from '@nestjs/common';
 import { MovementType, PhysicalUnitStatus, Prisma } from '@prisma/client';
@@ -23,6 +23,11 @@ export const TRANSITIONS: readonly [PhysicalUnitStatus, PhysicalUnitStatus][] = 
   ['YANDEX_DELIVERY', 'YANDEX_SOLD'],
   ['YANDEX_DELIVERY', 'RETURNED'],
   ['YANDEX_SOLD', 'RETURNED'],
+  // Stage 2E: Mini App orders
+  ['ASSIGNED', 'VITALO_DELIVERY'],
+  ['VITALO_DELIVERY', 'VITALO_SOLD'],
+  ['VITALO_DELIVERY', 'RETURNED'],
+  ['VITALO_SOLD', 'RETURNED'],
   ['RETURNED', 'IN_STOCK'],
   ['RETURNED', 'WRITTEN_OFF'],
   ['RETURNED', 'MISSING'],
@@ -184,4 +189,40 @@ export async function shiftShelf(tx: Tx, m: StockMove, delta: 1 | -1, type: Move
     });
   }
   await movement(tx, m, type, type === 'adjustment' ? delta : 1);
+}
+
+// ---------------------------------------------------------------- FEFO (shared by Yandex and Mini App orders)
+
+/**
+ * n free units of the product by FEFO: the earliest expiry first, then the lowest number. Free = IN_STOCK and in
+ * no active assignment of any channel. FOR UPDATE SKIP LOCKED: a parallel order takes other units, never the same.
+ * May return fewer than n (the caller decides: 409 or «не хватает»).
+ */
+export function takeFefoUnits(tx: Tx, productId: string, n: number): Promise<{ id: string; physical_id: string; expiry_date: Date }[]> {
+  return tx.$queryRaw<{ id: string; physical_id: string; expiry_date: Date }[]>`
+    SELECT id, physical_id, expiry_date FROM physical_units
+    WHERE product_id = ${productId}::uuid AND status = 'IN_STOCK'
+      AND NOT EXISTS (SELECT 1 FROM marketplace_order_units a WHERE a.physical_unit_id = physical_units.id AND a.released_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM order_item_units a WHERE a.physical_unit_id = physical_units.id AND a.released_at IS NULL)
+    ORDER BY expiry_date, seq
+    LIMIT ${n}
+    FOR UPDATE SKIP LOCKED`;
+}
+
+/** The free unit with the earliest expiry (not `exceptId`): what «мягкий FEFO» compares the typed unit with. */
+export async function oldestFreeUnit(tx: Tx, productId: string, exceptId: string): Promise<{ physical_id: string; expiry_date: Date } | null> {
+  const [u] = await tx.$queryRaw<{ physical_id: string; expiry_date: Date }[]>`
+    SELECT physical_id, expiry_date FROM physical_units
+    WHERE product_id = ${productId}::uuid AND status = 'IN_STOCK' AND id <> ${exceptId}::uuid
+    ORDER BY expiry_date, seq LIMIT 1`;
+  return u ?? null;
+}
+
+/**
+ * Soft FEFO: among the candidates (free units and the order's own not yet confirmed ones) is there an earlier expiry
+ * than the typed unit's? Returns that candidate (to recommend) or null.
+ */
+export function earlierThan<T extends { expiry_date: Date }>(typedExpiry: Date, candidates: T[]): T | null {
+  const oldest = [...candidates].sort((a, b) => a.expiry_date.getTime() - b.expiry_date.getTime())[0];
+  return oldest && oldest.expiry_date.getTime() < typedExpiry.getTime() ? oldest : null;
 }

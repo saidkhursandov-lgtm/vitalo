@@ -45,7 +45,7 @@ import { normalizePhysicalId } from '../receiving/physical-id';
 import { AuditService } from '../staff/audit.service';
 import { can } from '../staff/permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
-import { deductStock, moveUnit, releaseStock, reserveStock, UNIT_STATUS_RU, type StockMove } from './unit-lifecycle';
+import { deductStock, earlierThan, moveUnit, oldestFreeUnit, releaseStock, reserveStock, takeFefoUnits, UNIT_STATUS_RU, type StockMove } from './unit-lifecycle';
 
 type Tx = Prisma.TransactionClient;
 const PAGE_SIZE = 50;
@@ -411,13 +411,7 @@ export class YandexOrdersService {
         throw e;
       }
       // FEFO: the earliest expiry first, then the lowest number. SKIP LOCKED: a parallel order takes other units.
-      const units = await tx.$queryRaw<{ id: string; physical_id: string }[]>`
-        SELECT id, physical_id FROM physical_units
-        WHERE product_id = ${productId}::uuid AND status = 'IN_STOCK'
-          AND NOT EXISTS (SELECT 1 FROM marketplace_order_units a WHERE a.physical_unit_id = physical_units.id AND a.released_at IS NULL)
-        ORDER BY expiry_date, seq
-        LIMIT ${n}
-        FOR UPDATE SKIP LOCKED`;
+      const units = await takeFefoUnits(tx, productId, n);
       if (units.length < n) {
         throw new ConflictException({ code: 'NOT_ENOUGH_UNITS', message: `${sku}: нужно ${n} банок, на складе свободно ${units.length}` });
       }
@@ -531,14 +525,10 @@ export class YandexOrdersService {
       if (!replaceable.length) throw new ConflictException({ code: 'LINE_COMPLETE', message: `Все банки ${sameProduct[0].product.sku} в этом заказе уже собраны` });
 
       // Soft FEFO: is there a unit with an earlier expiry (free on the shelf or reserved here and not confirmed)?
-      const [free] = await tx.$queryRaw<{ physical_id: string; expiry_date: Date }[]>`
-        SELECT physical_id, expiry_date FROM physical_units
-        WHERE product_id = ${unit.product_id}::uuid AND status = 'IN_STOCK' AND id <> ${unit.id}::uuid
-        ORDER BY expiry_date, seq LIMIT 1`;
-      const candidates = [...replaceable.map((a) => ({ physical_id: a.unit.physical_id, expiry_date: a.unit.expiry_date })), ...(free ? [free] : [])];
-      const oldest = candidates.sort((a, b) => a.expiry_date.getTime() - b.expiry_date.getTime())[0];
-      const notFefo = oldest && oldest.expiry_date.getTime() < unit.expiry_date.getTime();
-      if (notFefo && !dto.fefo_reason) {
+      const free = await oldestFreeUnit(tx, unit.product_id, unit.id);
+      const oldest = earlierThan(unit.expiry_date, [...replaceable.map((a) => ({ physical_id: a.unit.physical_id, expiry_date: a.unit.expiry_date })), ...(free ? [free] : [])]);
+      const notFefo = !!oldest;
+      if (oldest && !dto.fefo_reason) {
         throw new ConflictException({
           code: 'FEFO_REASON_REQUIRED',
           message: `Есть банка со сроком раньше: рекомендуем ${oldest.physical_id}, срок ${ruDate(oldest.expiry_date)}. Чтобы взять ${physicalId} (срок ${ruDate(unit.expiry_date)}), укажите причину.`,

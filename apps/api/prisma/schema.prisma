@@ -695,6 +695,7 @@ model physical_units {
   receiving_session receiving_sessions        @relation(fields: [receiving_session_id], references: [id])
   events            physical_unit_events[]
   marketplace_units marketplace_order_units[]
+  order_units       order_item_units[]
 
   @@index([product_id, status, expiry_date, seq]) // FEFO later: the earliest expiry first
   @@index([status])
@@ -719,6 +720,32 @@ model physical_unit_events {
   staff staff_users?   @relation(fields: [created_by], references: [id])
 
   @@index([physical_unit_id, created_at])
+}
+
+/// Stage 2E: Mini App order line <-> physical unit (the same idea as marketplace_order_units, Q5). Reserved by FEFO
+/// when the payment is confirmed; picked_at = Physical ID confirmed at assembly; released_at = taken off the order
+/// (cancel, swap, return decision). cost_snapshot_uzs = the cost of the unit when it was handed to delivery (sale).
+/// One unit is in at most one active assignment across Mini App AND Yandex orders (index + triggers).
+model order_item_units {
+  id                String    @id @default(uuid()) @db.Uuid
+  order_id          String    @db.Uuid
+  order_item_id     String    @db.Uuid
+  physical_unit_id  String    @db.Uuid
+  assigned_by       String?   @db.Uuid
+  assigned_at       DateTime  @default(now())
+  picked_at         DateTime?
+  fefo_override     String?
+  released_at       DateTime?
+  release_reason    String?
+  return_decision   String?
+  cost_snapshot_uzs BigInt?
+
+  order orders         @relation(fields: [order_id], references: [id])
+  item  order_items    @relation(fields: [order_item_id], references: [id])
+  unit  physical_units @relation(fields: [physical_unit_id], references: [id])
+
+  @@index([order_id])
+  @@index([physical_unit_id])
 }
 
 // ───────────── STAGE 2C: MARKETPLACE (YANDEX) ORDERS ─────────────
@@ -1124,6 +1151,8 @@ model orders {
   payment_check_reminder_sent_at DateTime? // Stage 0.2: "payment not checked for N hours" sent to admins/managers (once per order)
   delivered_at                   DateTime?
   cancelled_at                   DateTime?
+  /// Stage 2E: paid, but the units of unit-tracked lines could not be reserved (reason). «Нужно внимание склада»
+  units_attention                String?
 
   user            users                  @relation(fields: [user_id], references: [id])
   region          regions                @relation(fields: [region_id], references: [id])
@@ -1131,6 +1160,7 @@ model orders {
   promo           promotions?            @relation(fields: [promo_id], references: [id])
   shipment        shipments?             @relation(fields: [shipment_id], references: [id])
   items           order_items[]
+  item_units      order_item_units[]
   history         order_status_history[]
   edits           order_edit_log[]
   payments        payments[]
@@ -1145,19 +1175,20 @@ model orders {
 }
 
 model order_items {
-  id                  String         @id @default(uuid()) @db.Uuid
-  order_id            String         @db.Uuid
-  product_id          String         @db.Uuid
+  id                  String             @id @default(uuid()) @db.Uuid
+  order_id            String             @db.Uuid
+  product_id          String             @db.Uuid
   sku_snapshot        String
   name_ru_snapshot    String
   qty                 Int
   unit_price_uzs      BigInt
   line_total_uzs      BigInt
-  discount_uzs        BigInt         @default(0)
+  discount_uzs        BigInt             @default(0)
   paid_line_total_uzs BigInt // actual paid price of line (basis for returns)
-  order               orders         @relation(fields: [order_id], references: [id])
-  product             products       @relation(fields: [product_id], references: [id])
+  order               orders             @relation(fields: [order_id], references: [id])
+  product             products           @relation(fields: [product_id], references: [id])
   return_items        return_items[]
+  units               order_item_units[]
 
   @@index([order_id])
 }

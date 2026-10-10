@@ -16,6 +16,7 @@ export type TemplateName =
   | 'staff.new_order'
   | 'staff.customer_paid'
   | 'staff.payment_check_overdue'
+  | 'staff.order_units_attention'
   | 'staff.yandex_new_order'
   | 'staff.yandex_attention'
   | 'staff.yandex_late_summary'
@@ -132,6 +133,11 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
       `⏳ Оплата заказа ${p.order_number} на ${sum(p.total_uzs, 'ru')} ждёт проверки уже ${p.hours ?? '?'} ч.\nКлиент нажал «Я оплатил(а)», платёж ещё не подтверждён. Заказ не отменяется, товар остаётся в резерве.`,
     uz: (p) =>
       `⏳ ${p.order_number} buyurtmasi uchun ${sum(p.total_uzs, 'uz')} to‘lov ${p.hours ?? '?'} soatdan beri tekshiruvni kutmoqda.\nMijoz «To‘ladim» tugmasini bosgan, to‘lov hali tasdiqlanmagan.`,
+  },
+  // Stage 2E: a paid Mini App order whose units could not be reserved. No customer data.
+  'staff.order_units_attention': {
+    ru: (p: TemplatePayload) => `⚠️ Заказ ${p.order_number} оплачен, но банки не закреплены: ${p.reason ?? ''}. Нужно внимание склада.`,
+    uz: (p: TemplatePayload) => `⚠️ ${p.order_number}: ${p.reason ?? ''}`,
   },
   // Stage 2D: Yandex orders (staff only, Russian; order_number = the Yandex order number). No customer data.
   'staff.yandex_new_order': {

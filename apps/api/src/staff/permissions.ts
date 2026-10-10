@@ -43,6 +43,7 @@ export const PERMISSIONS = {
   'receiving.opening': [], // opening balance: complete / cancel its session (the import itself is a CLI script)
   'inventory.unit_override': [], // old quantity operations on a unit-tracked product (with a reason)
   'products.label': ['manager'], // short composition RU/UZ for the label
+  'orders.units': ['warehouse'], // Stage 2E: assembly of a Mini App order (pick / reserve units), return after the handover
   'yandex.orders.view': ['manager', 'warehouse'], // Stage 2C: list and card of Yandex orders (money only with yandex.orders.money)
   'yandex.orders': ['warehouse'], // Stage 2C: create, pick units, assembled, handed over, delivered, cancel / return
   'yandex.orders.money': [], // commission %, sale prices after creation, unit costs and profit of a Yandex order

@@ -76,6 +76,9 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'open a unit', method: 'get', path: () => `/api/staff/units/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'reconcile units', method: 'get', path: () => '/api/staff/units/reconcile', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'print labels', method: 'post', path: () => '/api/staff/units/labels', body: {}, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'pick a unit for a Mini App order', method: 'post', path: () => '/api/staff/orders/' + MISSING + '/units/pick', body: {}, allowed: ['admin', 'warehouse'] },
+    { label: 'reserve units for a Mini App order', method: 'post', path: () => '/api/staff/orders/' + MISSING + '/units/reserve', body: {}, allowed: ['admin', 'warehouse'] },
+    { label: 'return a Mini App order after the handover', method: 'post', path: () => '/api/staff/orders/' + MISSING + '/return', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'list Yandex orders', method: 'get', path: () => '/api/staff/yandex-orders', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'create a Yandex order', method: 'post', path: () => '/api/staff/yandex-orders', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'open a Yandex order', method: 'get', path: () => `/api/staff/yandex-orders/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
@@ -159,10 +162,21 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     });
   });
 
+  it('tests never reach the real Yandex: no token from .env, no live mode, the run makes no request and stores nothing', async () => {
+    // whatever apps/api/.env says, the test environment wins (test-env.ts)
+    expect(process.env.YANDEX_API_KEY).toBe('');
+    expect(process.env.YANDEX_SYNC_DRY_RUN).toBe('true');
+    const before = [await prisma.marketplace_external_orders.count(), await prisma.marketplace_orders.count({ where: { source: 'yandex_api' } })];
+    const run = (await request(app.getHttpServer()).post('/api/staff/yandex-sync/run').set(bearer(tokens.admin)).expect(200)).body;
+    expect(run).toMatchObject({ mode: 'DRY_RUN', found: 0, created: 0 });
+    expect(run.error).toContain('YANDEX_API_KEY');
+    expect([await prisma.marketplace_external_orders.count(), await prisma.marketplace_orders.count({ where: { source: 'yandex_api' } })]).toEqual(before);
+  });
+
   it('GET /staff/auth/me lists exactly the permissions of the role', async () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
     expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'yandex.price.view']);
-    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
+    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'orders.units', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
     expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
     expect((await me('manager')).permissions).toContain('dashboard.revenue');
     expect((await me('manager')).permissions).not.toContain('costs.view');
