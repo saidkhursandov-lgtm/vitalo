@@ -133,7 +133,8 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
   private client(): YandexMarketClient {
     this.lastClient = new YandexMarketClient({
       apiKey: this.config.get<string>('YANDEX_API_KEY')?.trim() || undefined,
-      fetch: this.clientOptions?.fetch,
+      // Second lock: under NODE_ENV=test a request can only go to an injected fake — never to the real Yandex.
+      fetch: this.clientOptions?.fetch ?? (process.env.NODE_ENV === 'test' ? blockedInTests : undefined),
       retryDelaysMs: this.clientOptions?.retryDelaysMs,
     });
     return this.lastClient;
@@ -575,6 +576,10 @@ const countBy = (pairs: (readonly [string, number])[]) => {
   const m = new Map<string, number>();
   for (const [k, n] of pairs) m.set(k, (m.get(k) ?? 0) + n);
   return [...m.entries()];
+};
+
+const blockedInTests: FetchLike = async () => {
+  throw new Error('Real requests to Yandex are disabled in tests: inject a fake fetch (YANDEX_CLIENT_OPTIONS)');
 };
 
 /** Cuts the given secrets, Yandex API keys (ACMA:…) and Telegram bot tokens out of a text. */
