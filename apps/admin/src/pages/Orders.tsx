@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ErrorBox, Loading, OrderStatus, PageHead, Pagination, PaymentStatus } from '../components/ui';
+import { Badge, ErrorBox, Loading, OrderStatus, PageHead, Pagination, PaymentStatus } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { dateTime, money, ORDER_STATUS, PAYMENT_STATUS, prettyPhone } from '../lib/format';
+import { TestBadge } from '../components/OrderFinance';
 
 interface OrderRow {
   id: string;
@@ -12,6 +13,9 @@ interface OrderRow {
   status: string;
   payment_status: string;
   total_uzs: number;
+  is_test: boolean;
+  /** Stage 2E/3: paid, but the jars are not reserved («Нужно внимание склада») */
+  units_attention: string | null;
   customer_reported_paid: boolean;
   customer: { name: string; username: string | null };
   recipient_name: string;
@@ -23,9 +27,10 @@ interface Page<T> {
   page: number;
   total: number;
   total_pages: number;
+  attention_count?: number;
 }
 
-const FILTER_KEYS = ['q', 'status', 'payment_status', 'date_from', 'date_to', 'awaiting_confirmation', 'page'] as const;
+const FILTER_KEYS = ['q', 'status', 'payment_status', 'date_from', 'date_to', 'awaiting_confirmation', 'hide_test', 'units_attention', 'page'] as const;
 
 /** Orders list; filters are kept in the URL so a filtered view can be shared or bookmarked. */
 export function Orders() {
@@ -81,7 +86,33 @@ export function Orders() {
           <input type="checkbox" checked={filters.awaiting_confirmation === 'true'} onChange={(e) => set({ awaiting_confirmation: e.target.checked ? 'true' : '' })} />
           Ждут подтверждения оплаты
         </label>
+        <label className="check">
+          <input type="checkbox" checked={filters.hide_test === 'true'} onChange={(e) => set({ hide_test: e.target.checked ? 'true' : '' })} />
+          Скрыть тестовые
+        </label>
       </div>
+      {q.data && (q.data.attention_count ?? 0) > 0 && (
+        <div className="alert alert-warn">
+          Нужно внимание склада: {q.data.attention_count} заказ(ов) оплачены, но банки не закреплены.{' '}
+          {filters.units_attention === 'true' ? (
+            <button className="btn btn-sm btn-ghost" onClick={() => set({ units_attention: '' })}>
+              Показать все заказы
+            </button>
+          ) : (
+            <button className="btn btn-sm" onClick={() => set({ units_attention: 'true' })}>
+              Показать только их
+            </button>
+          )}
+        </div>
+      )}
+      {q.data && !q.data.attention_count && filters.units_attention === 'true' && (
+        <div className="alert alert-ok">
+          Заказов, которым нужно внимание склада, нет.{' '}
+          <button className="btn btn-sm btn-ghost" onClick={() => set({ units_attention: '' })}>
+            Показать все заказы
+          </button>
+        </div>
+      )}
 
       {q.isPending ? (
         <Loading />
@@ -113,7 +144,8 @@ export function Orders() {
                   <td>
                     <Link to={`/orders/${o.id}`} className="strong">
                       {o.order_number}
-                    </Link>
+                    </Link>{' '}
+                    <TestBadge show={o.is_test} />
                   </td>
                   <td>{dateTime(o.created_at)}</td>
                   <td>
@@ -125,6 +157,11 @@ export function Orders() {
                   </td>
                   <td>
                     <OrderStatus status={o.status} />
+                    {o.units_attention && (
+                      <div title={o.units_attention}>
+                        <Badge tone="bad">Нужно внимание склада</Badge>
+                      </div>
+                    )}
                   </td>
                   <td>
                     <PaymentStatus status={o.payment_status} />

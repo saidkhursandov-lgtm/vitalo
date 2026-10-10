@@ -4,6 +4,9 @@ import { ApiError, errorText, qs } from './lib/api';
 import type { Permission } from './lib/auth';
 import { dateTime, money } from './lib/format';
 import { homeFor, navFor } from './lib/nav';
+import { TestBadge } from './components/OrderFinance';
+import { monthRange } from './pages/Analytics';
+import { monthName } from './pages/Finance';
 import { Diff } from './pages/Audit';
 import { ReasonPicker } from './components/Reason';
 import { ordersRu } from './pages/YandexSync';
@@ -81,5 +84,31 @@ describe('reason picker', () => {
 describe('batch close wording', () => {
   it('Russian plural of «заказ»', () => {
     expect([1, 2, 5, 11, 12, 21, 22, 25, 100, 101, 112].map(ordersRu)).toEqual(['1 заказ', '2 заказа', '5 заказов', '11 заказов', '12 заказов', '21 заказ', '22 заказа', '25 заказов', '100 заказов', '101 заказ', '112 заказов']);
+  });
+});
+
+describe('stage 3: money is for the admin only', () => {
+  it('«Аналитика» and «Финансы» appear only with finance.manage (no role but admin has it)', () => {
+    for (const role of Object.keys(PERMS)) {
+      expect(PERMS[role]).not.toContain('finance.manage');
+      expect(navFor(PERMS[role]).map((n) => n.label)).not.toEqual(expect.arrayContaining(['Аналитика']));
+      expect(navFor(PERMS[role]).map((n) => n.label)).not.toEqual(expect.arrayContaining(['Финансы']));
+    }
+    expect(navFor(['finance.manage']).map((n) => n.to)).toEqual(['/analytics', '/finance']);
+  });
+
+  it('periods and month names', () => {
+    expect(monthRange('2026-11-17', 0)).toEqual({ from: '2026-11-01', to: '2026-11-30' });
+    expect(monthRange('2027-01-05', -1)).toEqual({ from: '2026-12-01', to: '2026-12-31' });
+    expect(monthRange('2028-03-05', -1)).toEqual({ from: '2028-02-01', to: '2028-02-29' });
+    expect(monthName('2026-11')).toBe('ноябрь 2026');
+    expect(money(-15000).replace(/\s/g, ' ')).toBe('-15 000 сум');
+  });
+
+  it('«ТЕСТ» badge only on test orders', () => {
+    const { container, rerender } = render(<TestBadge show={false} />);
+    expect(container.textContent).toBe('');
+    rerender(<TestBadge show />);
+    expect(container.textContent).toBe('ТЕСТ');
   });
 });

@@ -7,6 +7,7 @@ import { api, ApiError, newKey, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { AUDIT_ACTION, dateTime, money, ruDate, UNIT_STATUS, YANDEX_STATUS } from '../lib/format';
 import { ProductPicker } from './Purchases';
+import { OrderFinance, TestBadge } from '../components/OrderFinance';
 
 /**
  * Stage 2C «Заказы Яндекса»: warehouse and admin work with the orders, the manager only views them (no buttons). Units are reserved by FEFO when the order is created; at
@@ -24,6 +25,7 @@ interface ListRow {
   picked: number;
   skus: string[];
   total_uzs: number;
+  is_test?: boolean;
 }
 
 interface OrderUnit {
@@ -54,6 +56,9 @@ interface Order {
   source?: 'manual' | 'yandex_api';
   stock_shortage?: boolean;
   yandex?: { status: string; substatus: string | null; campaign_id: number | null; updated_at: string | null } | null;
+  is_test?: boolean;
+  /** Stage 3: only for the admin (comes with the money block) */
+  own_delivery_cost_uzs?: number;
   commission_percent?: number;
   money?: { revenue_uzs: number; commission_uzs: number; cost_uzs: number; profit_uzs: number } | null;
   message?: string;
@@ -72,7 +77,7 @@ export function YandexOrders() {
   const { can } = useSession();
   const [params, setParams] = useSearchParams();
   const page = Number(params.get('page')) || 1;
-  const f = { status: params.get('status') ?? '', from: params.get('from') ?? '', to: params.get('to') ?? '', q: params.get('q') ?? '' };
+  const f = { status: params.get('status') ?? '', from: params.get('from') ?? '', to: params.get('to') ?? '', q: params.get('q') ?? '', hide_test: params.get('hide_test') ?? '' };
   const [text, setText] = useState(f.q);
   const list = useQuery({
     queryKey: ['yandex-orders', f, page],
@@ -116,6 +121,10 @@ export function YandexOrders() {
         <label className="muted small">
           по <input type="date" value={f.to} onChange={(e) => set('to', e.target.value)} aria-label="Дата по" />
         </label>
+        <label className="check">
+          <input type="checkbox" checked={f.hide_test === 'true'} onChange={(e) => set('hide_test', e.target.checked ? 'true' : '')} />
+          Скрыть тестовые
+        </label>
       </form>
       {list.isPending ? (
         <Loading />
@@ -141,7 +150,7 @@ export function YandexOrders() {
               {list.data.items.map((o) => (
                 <tr key={o.id}>
                   <td>
-                    <Link to={`/yandex-orders/${o.id}`}>{o.external_number}</Link>
+                    <Link to={`/yandex-orders/${o.id}`}>{o.external_number}</Link> <TestBadge show={o.is_test} />
                     {o.customer_name && <div className="muted small">{o.customer_name}</div>}
                   </td>
                   <td>{ruDate(o.order_date)}</td>
@@ -334,7 +343,7 @@ export function YandexOrderDetail() {
       <PageHead
         title={
           <>
-            Яндекс № {o.external_number} <StatusBadge status={o.status} />
+            Яндекс № {o.external_number} <StatusBadge status={o.status} /> <TestBadge show={o.is_test} />
           </>
         }
       >
@@ -477,6 +486,19 @@ export function YandexOrderDetail() {
       {acts && o.status === 'NEW' && !allPicked && <p className="muted small">«Собран» станет доступно, когда все банки отмечены по Physical ID.</p>}
 
       {o.commission_percent !== undefined && <MoneyCard order={o} onDone={done} />}
+      {o.own_delivery_cost_uzs !== undefined && (
+        <OrderFinance
+          key={`${o.is_test}|${o.own_delivery_cost_uzs}`}
+          channel="yandex"
+          id={o.id}
+          isTest={!!o.is_test}
+          ownDelivery={o.own_delivery_cost_uzs}
+          onDone={() => {
+            void q.refetch();
+            void client.invalidateQueries({ queryKey: ['yandex-orders'] });
+          }}
+        />
+      )}
 
       {o.released.length > 0 && (
         <section className="card">

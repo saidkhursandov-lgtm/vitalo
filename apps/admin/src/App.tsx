@@ -4,9 +4,11 @@ import { Layout } from './components/Layout';
 import { NoAccess } from './components/ui';
 import { useSession, type Permission } from './lib/auth';
 import { homeFor } from './lib/nav';
+import { Analytics } from './pages/Analytics';
 import { Audit } from './pages/Audit';
 import { CustomerDetail, Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
+import { Finance } from './pages/Finance';
 import { Inventory } from './pages/Inventory';
 import { OrderDetail } from './pages/OrderDetail';
 import { Orders } from './pages/Orders';
@@ -48,6 +50,8 @@ export function App() {
         <Route path="purchases/:id" element={<Guard perm="purchases.view"><PurchaseDetail /></Guard>} />
         <Route path="customers" element={<Guard perm="customers.view"><Customers /></Guard>} />
         <Route path="customers/:id" element={<Guard perm="customers.view"><CustomerDetail /></Guard>} />
+        <Route path="analytics" element={<Guard perm="finance.manage"><Analytics /></Guard>} />
+        <Route path="finance" element={<Guard perm="finance.manage"><Finance /></Guard>} />
         <Route path="settings" element={<Guard perm="settings.manage"><Settings /></Guard>} />
         <Route path="audit" element={<Guard perm="audit.view"><Audit /></Guard>} />
         <Route path="*" element={<NoAccess />} />

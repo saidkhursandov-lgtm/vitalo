@@ -7,6 +7,7 @@ import { useSession } from '../lib/auth';
 import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone } from '../lib/format';
 import { CheckIcon, ForwardIcon } from '../components/Icons';
 import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly';
+import { OrderFinance, TestBadge } from '../components/OrderFinance';
 
 interface Named {
   id: string;
@@ -32,6 +33,9 @@ export interface AdminOrder {
   edits: { reason: string; before: Record<string, unknown>; after: Record<string, unknown>; staff_name: string; created_at: string }[];
   tasks: { type: string; status: string; note: string | null; created_at: string }[];
   actions: { confirm_payment: boolean; next_status: string | null; cancel: boolean; edit: boolean; locked: boolean; units: boolean; return_order: boolean };
+  is_test?: boolean;
+  /** Stage 3: only for the admin */
+  finance?: { own_delivery_cost_uzs: number };
   /** Stage 2E: jars of unit-tracked lines (null when the order has none) */
   assembly: Assembly | null;
 }
@@ -79,7 +83,7 @@ export function OrderDetail() {
       <PageHead
         title={
           <>
-            Заказ {o.order_number} <OrderStatus status={o.status} /> <PaymentStatus status={o.payment_status} />
+            Заказ {o.order_number} <OrderStatus status={o.status} /> <PaymentStatus status={o.payment_status} /> <TestBadge show={o.is_test} />
           </>
         }
       >
@@ -117,6 +121,19 @@ export function OrderDetail() {
         </div>
       )}
       <OrderAssembly order={o} onDone={(next) => client.setQueryData(['order', id], next)} />
+      {o.finance && (
+        <OrderFinance
+          key={`${o.is_test}|${o.finance.own_delivery_cost_uzs}`}
+          channel="vitalo"
+          id={o.id}
+          isTest={!!o.is_test}
+          ownDelivery={o.finance.own_delivery_cost_uzs}
+          onDone={() => {
+            void q.refetch();
+            void client.invalidateQueries({ queryKey: ['orders'] });
+          }}
+        />
+      )}
       {modal === 'return' && <ReturnOrderModal order={o} onDone={done} onClose={() => setModal(null)} />}
       {o.payment?.customer_reported_paid_at && o.payment_status === 'payment_pending' && (
         <div className="alert alert-warn">

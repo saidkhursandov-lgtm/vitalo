@@ -43,6 +43,7 @@ export type Permission =
   | 'units.writeoff'
   | 'units.correct'
   | 'yandex.sync'
+  | 'finance.manage'
   | 'products.aliases';
 
 export interface Me {

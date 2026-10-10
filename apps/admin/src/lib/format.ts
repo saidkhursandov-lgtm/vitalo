@@ -70,6 +70,20 @@ export const CONDITION: Record<string, string> = {
 
 /** Human names for audit actions; unknown actions are shown as is. */
 export const AUDIT_ACTION: Record<string, string> = {
+  'order.marked_test': 'Заказ помечен тестовым',
+  'order.unmarked_test': 'Снята пометка «тест»',
+  'order.own_delivery_cost_changed': 'Изменены наши расходы на доставку',
+  'finance.expense_added': 'Добавлен расход',
+  'finance.expense_changed': 'Изменён расход',
+  'finance.expense_deleted': 'Удалён расход',
+  'finance.category_added': 'Добавлена категория расходов',
+  'finance.category_changed': 'Изменена категория расходов',
+  'finance.category_deleted': 'Удалена категория расходов',
+  'finance.tax_rate_changed': 'Изменена ставка налога',
+  'finance.tax_paid': 'Налог отмечен оплаченным',
+  'finance.employee_added': 'Добавлен сотрудник (зарплаты)',
+  'finance.employee_changed': 'Изменён сотрудник (зарплаты)',
+  'finance.salary_paid': 'Зарплата отмечена выплаченной',
   'order.unit_picked': 'Банка собрана в заказ',
   'order.unit_replaced': 'Банка заменена при сборке заказа',
   'order.units_reserved': 'Зарезервированы банки заказа',
