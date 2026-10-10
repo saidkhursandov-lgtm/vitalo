@@ -1,5 +1,8 @@
 # VITALO — запуск на сервере
 
+> Это инструкция **первой установки** сервера с нуля. Переезд текущей версии и данных на уже настроенный сервер —
+> в [docs/DEPLOY_RUNBOOK.md](docs/DEPLOY_RUNBOOK.md).
+
 Инструкция по настройке **уже арендованного** сервера и выкладке магазина.
 
 | Что | Значение |
@@ -41,9 +44,10 @@ Telegram ──► https://vitalo.uz ─┐
 | `deploy/nginx/snippets/*.conf` | `/etc/nginx/snippets/` |
 | `deploy/systemd/*.service`, `*.timer` | `/etc/systemd/system/` |
 | `deploy/sudoers-vitalo` | `/etc/sudoers.d/vitalo` |
-| `deploy/api.env.example` | шаблон для `/opt/vitalo/app/apps/api/.env` |
+| `apps/api/.env.production.example` | шаблон для `/opt/vitalo/app/apps/api/.env` |
 | `deploy/scripts/update.sh` | обновление сайта; миграции базы — только с `--migrate` (раздел 13) |
-| `deploy/scripts/backup.sh` | резервная копия |
+| `deploy/scripts/backup.sh` | резервная копия (сам скрипт — `scripts/server/backup.sh`) |
+| `scripts/server/*.sh` | проверки сервера, бэкап, проверка восстановления, перенос базы — см. `docs/DEPLOY_RUNBOOK.md` |
 
 ---
 
@@ -227,7 +231,7 @@ sudo -iu vitalo git clone /opt/vitalo/repo.git /opt/vitalo/app
 Файл из шаблона и секрет между ботом и API (создаётся и записывается сразу, на экран не выводится):
 
 ```bash
-sudo -iu vitalo bash -c 'cd /opt/vitalo/app/apps/api && cp ../../deploy/api.env.example .env && chmod 600 .env && sed -i "s/^BOT_API_SECRET=.*/BOT_API_SECRET=$(openssl rand -hex 32)/" .env && echo "ФАЙЛ СОЗДАН"'
+sudo -iu vitalo bash -c 'cd /opt/vitalo/app/apps/api && cp .env.production.example .env && chmod 600 .env && sed -i "s/^BOT_API_SECRET=.*/BOT_API_SECRET=$(openssl rand -hex 32)/" .env && echo "ФАЙЛ СОЗДАН"'
 ```
 
 Токен **рабочего** бота (@BotFather → `/mybots` → бот → API Token; копировать на этом же компьютере).
