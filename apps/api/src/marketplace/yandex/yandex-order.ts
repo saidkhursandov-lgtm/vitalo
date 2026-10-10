@@ -28,7 +28,39 @@ export interface ParsedYandexOrder {
   fake: boolean;
   cancelRequested: boolean;
   items: ParsedYandexItem[];
+  /** «Отгрузить до»: delivery.shipment of Yandex; null when it sent none or sent something unreadable */
+  shipBy: ShipBy | null;
 }
+
+export interface ShipBy {
+  date: string; // YYYY-MM-DD
+  time: string | null; // HH:MM
+}
+
+/**
+ * The shipment deadline of a Yandex order: delivery.shipment.shipmentDate («YYYY-MM-DD», required inside the block)
+ * and shipmentTime («HH:MM» in the schema, «HH:MM:SS» in the example; optional). The block itself is not promised
+ * for every order, so anything missing or malformed is simply «no deadline» — never an error of the order.
+ * Nothing else of `delivery` is read: the customer's address and the courier's name and phone live there.
+ */
+export function parseShipBy(raw: unknown): ShipBy | null {
+  if (!isObj(raw) || !isObj(raw.delivery)) return shipByOf(isObj(raw) ? raw.shipment : null); // the stored snapshot keeps it at the top
+  return shipByOf(raw.delivery.shipment);
+}
+
+function shipByOf(shipment: unknown): ShipBy | null {
+  if (!isObj(shipment)) return null;
+  const date = str(shipment.shipmentDate);
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== date) return null; // 2026-02-31
+  const t = str(shipment.shipmentTime);
+  const m = t ? /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/.exec(t) : null;
+  return { date, time: m ? `${m[1]}:${m[2]}` : null };
+}
+
+/** «14.10.2026 12:00» / «14.10.2026» for messages and screens. */
+export const shipByRu = (s: ShipBy) => `${s.date.slice(8, 10)}.${s.date.slice(5, 7)}.${s.date.slice(0, 4)}${s.time ? ` ${s.time}` : ''}`;
 
 export type ParseResult =
   | { ok: true; order: ParsedYandexOrder }
@@ -94,6 +126,7 @@ export function parseYandexOrder(raw: unknown): ParseResult {
       fake: raw.fake === true,
       cancelRequested: raw.cancelRequested === true,
       items,
+      shipBy: parseShipBy(raw),
     },
   };
 }
@@ -141,7 +174,7 @@ export const ATTENTION_RU: Record<AttentionKind, string> = {
 
 /**
  * What of a Yandex order is ever stored (snapshot, run log): a WHITE LIST — the number, campaign, statuses, dates,
- * flags and the items with their amounts and currency. Everything else is dropped BEFORE saving, above all the
+ * flags, the shipment deadline (date and time only) and the items with their amounts and currency. Everything else is dropped BEFORE saving, above all the
  * customer: `buyer`, `delivery` (address, recipient, phones), `notes` (free text of the buyer) and any field
  * Yandex may add later. Personal data never reaches the database, the run log or Telegram.
  */
@@ -160,6 +193,8 @@ export function minimizeYandexOrder(raw: unknown): Record<string, unknown> {
   return {
     ...pick(raw, ['orderId', 'campaignId', 'programType', 'status', 'substatus', 'creationDate', 'updateDate', 'fake', 'cancelRequested', 'paymentType', 'paymentMethod', 'sourcePlatform']),
     ...(isObj(raw.prices) && { prices: prices(raw.prices) }),
+    // of `delivery` only the shipment deadline, re-built from the checked values (never the block itself)
+    ...(parseShipBy(raw) && { shipment: { shipmentDate: parseShipBy(raw)!.date, ...(parseShipBy(raw)!.time && { shipmentTime: parseShipBy(raw)!.time }) } }),
     items: Array.isArray(raw.items)
       ? raw.items.map((it) => (isObj(it) ? { ...pick(it, ['id', 'offerId', 'offerName', 'count']), ...(isObj(it.prices) && { prices: prices(it.prices) }) } : { invalid: true }))
       : raw.items === undefined

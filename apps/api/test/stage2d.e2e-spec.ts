@@ -4,6 +4,7 @@ import request from 'supertest';
 import { StockService } from '../src/inventory/stock.service';
 import type { FetchLike } from '../src/marketplace/yandex/yandex-client';
 import { YANDEX_CLIENT_OPTIONS, YandexSyncService } from '../src/marketplace/yandex/yandex-sync';
+import { renderNotification } from '../src/notifications/notification-templates';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuditService } from '../src/staff/audit.service';
 import { createUnits, moveUnits } from '../src/receiving/units';
@@ -412,6 +413,122 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
     yandex.queue = [{ status: 200, body: { nothing: true } }];
     expect((await runSync()).error).toContain('без списка orders');
     expect(await prisma.marketplace_orders.count({ where: { external_number: String(o.orderId) } })).toBe(1);
+  });
+
+  describe('«Отгрузить до» (delivery.shipment of Yandex)', () => {
+    const shipment = (s: object | null) => ({
+      delivery: { type: 'DELIVERY', address: { city: PII.city, street: PII.street, phone: PII.phone }, transfer: { courier: { fullName: PII.lastName, phone: PII.phone } }, ...(s && { shipment: s }) },
+    });
+    const message = async (o: { orderId: number }) =>
+      prisma.notifications.findFirstOrThrow({ where: { template: 'staff.yandex_new_order', payload: { path: ['order_number'], equals: String(o.orderId) } } });
+    const textOf = (n: { template: string; payload: unknown }) => renderNotification(n.template, n.payload as Parameters<typeof renderNotification>[1]);
+
+    it('date and time: in the message to warehouse and admins, in the card and the list; only the two values of delivery are stored', async () => {
+      const p = await stocked(['2028-01-01', '2028-02-01']);
+      const o = yOrder([{ sku: p.sku, count: 1 }], shipment({ id: 777, shipmentDate: '2026-10-14', shipmentTime: '12:00:00' }));
+      expect(await runSync()).toMatchObject({ created: 1, errors: 0 });
+      const ours = (await ourOrder(o))!;
+      expect(ours.ship_by_date!.toISOString().slice(0, 10)).toBe('2026-10-14');
+      expect(ours.ship_by_time).toBe('12:00');
+
+      const msg = await message(o);
+      expect(msg.payload).toMatchObject({ ship_by: '14.10.2026 12:00', items: `${p.sku} × 1` });
+      expect(textOf(msg)).toBe(`🟡 Новый заказ Яндекс № ${o.orderId}, отгрузить до 14.10.2026 12:00\n${p.sku} × 1\nБанки зарезервированы, можно собирать.`);
+      const sent = await prisma.notifications.findMany({ where: { template: 'staff.yandex_new_order', payload: { path: ['order_number'], equals: String(o.orderId) } }, include: { staff: true } });
+      expect(new Set(sent.map((n) => n.staff!.role))).toEqual(new Set(['admin', 'warehouse'])); // not the manager, not the marketer
+      expect(sent).toHaveLength(activeAdminsAndWarehouse);
+
+      const card = (await as('warehouse').get(`/staff/yandex-orders/${ours.id}`).expect(200)).body;
+      expect(card.ship_by).toEqual({ date: '2026-10-14', time: '12:00' });
+      const row = (await as('manager').get(`/staff/yandex-orders?q=${o.orderId}`).expect(200)).body.items[0];
+      expect(row.ship_by).toEqual({ date: '2026-10-14', time: '12:00' });
+
+      // of delivery nothing but the deadline is kept: no address, no courier, not even the block or the shipment id
+      const ext = (await external(o))!;
+      expect(ext.raw).toMatchObject({ shipment: { shipmentDate: '2026-10-14', shipmentTime: '12:00' } });
+      expect(Object.keys((ext.raw as { shipment: object }).shipment).sort()).toEqual(['shipmentDate', 'shipmentTime']);
+      const stored = JSON.stringify([ext, ours, sent.map((n) => n.payload)], (_k, v) => (typeof v === 'bigint' ? Number(v) : v));
+      for (const value of Object.values(PII)) expect(stored).not.toContain(value);
+      for (const field of ['"delivery"', '"address"', '"courier"', '"transfer"', '"phone"']) expect(stored).not.toContain(field);
+    });
+
+    it('no time → only the date; no shipment block or a broken date → the order is created as usual, the old text, «срок не указан», no attention', async () => {
+      const p = await stocked(['2028-01-01', '2028-02-01', '2028-03-01', '2028-04-01']);
+      const dateOnly = yOrder([{ sku: p.sku, count: 1 }], shipment({ shipmentDate: '2026-10-15', shipmentTime: null }));
+      const short = yOrder([{ sku: p.sku, count: 1 }], shipment({ shipmentDate: '2026-10-16', shipmentTime: '09:30' }));
+      const none = yOrder([{ sku: p.sku, count: 1 }], shipment(null));
+      const broken = yOrder([{ sku: p.sku, count: 1 }], shipment({ shipmentDate: '14-10-2026', shipmentTime: 'утром' }));
+      expect(await runSync()).toMatchObject({ created: 4, attention: 0, errors: 0 });
+
+      expect(textOf(await message(dateOnly))).toContain(`Новый заказ Яндекс № ${dateOnly.orderId}, отгрузить до 15.10.2026\n`);
+      expect((await ourOrder(dateOnly))!).toMatchObject({ ship_by_time: null });
+      expect(textOf(await message(short))).toContain('отгрузить до 16.10.2026 09:30\n');
+      for (const o of [none, broken]) {
+        const ours = (await ourOrder(o))!;
+        expect(ours).toMatchObject({ status: 'NEW', ship_by_date: null, ship_by_time: null });
+        expect(ours.units).toHaveLength(1);
+        const msg = await message(o);
+        expect(msg.payload).not.toHaveProperty('ship_by');
+        expect(textOf(msg)).toBe(`🟡 Новый заказ Яндекса № ${o.orderId}\n${p.sku} × 1\nБанки зарезервированы, можно собирать.`);
+        expect((await as('warehouse').get(`/staff/yandex-orders/${ours.id}`).expect(200)).body.ship_by).toBeNull();
+        expect((await external(o))!.attention_kind).toBeNull();
+        expect((await external(o))!.raw).not.toHaveProperty('shipment');
+      }
+    });
+
+    it('one message per order whatever comes again (poll, both webhook paths); a deadline that appears or moves later is updated quietly', async () => {
+      const p = await stocked(['2028-01-01']);
+      const o = yOrder([{ sku: p.sku, count: 1 }], shipment(null));
+      await runSync();
+      expect(await notes(o, 'staff.yandex_new_order')).toBe(activeAdminsAndWarehouse);
+      expect((await ourOrder(o))!.ship_by_date).toBeNull();
+
+      // Yandex adds the deadline later, then moves it; the order comes by the poll and by notifications on both paths
+      Object.assign(o, shipment({ shipmentDate: '2026-10-20', shipmentTime: '18:00' }));
+      await runSync();
+      expect((await ourOrder(o))!).toMatchObject({ ship_by_time: '18:00' });
+      Object.assign(o, shipment({ shipmentDate: '2026-10-21' }));
+      process.env.YANDEX_WEBHOOK_ENABLED = 'true';
+      try {
+        for (const path of [`/api/yandex/notifications/${WEBHOOK_SECRET}`, `/api/yandex/notifications/${WEBHOOK_SECRET}/notification`]) {
+          await http().post(path).set('X-Real-IP', '5.45.207.43').send({ notificationType: 'ORDER_STATUS_UPDATED', orderId: o.orderId, campaignId: CAMPAIGN }).expect(200);
+          await sync.lastWebhookJob;
+        }
+      } finally {
+        process.env.YANDEX_WEBHOOK_ENABLED = 'false';
+      }
+      const ours = (await ourOrder(o))!;
+      expect(ours.ship_by_date!.toISOString().slice(0, 10)).toBe('2026-10-21');
+      expect(ours.ship_by_time).toBeNull();
+      // an answer without the block does not erase what we know
+      Object.assign(o, shipment(null));
+      await runSync();
+      expect((await ourOrder(o))!.ship_by_date!.toISOString().slice(0, 10)).toBe('2026-10-21');
+
+      expect(await prisma.marketplace_orders.count({ where: { external_number: String(o.orderId) } })).toBe(1);
+      expect(await notes(o, 'staff.yandex_new_order')).toBe(activeAdminsAndWarehouse); // still the one message
+      expect(ours.units).toHaveLength(1);
+    });
+
+    it('DRY_RUN: no order and no message, with or without a deadline; «требует внимания» goes to admins only', async () => {
+      const p = await stocked(['2028-01-01']);
+      const dry = yOrder([{ sku: p.sku, count: 1 }], shipment({ shipmentDate: '2026-10-14' }));
+      process.env.YANDEX_SYNC_DRY_RUN = 'true';
+      try {
+        await runSync();
+      } finally {
+        process.env.YANDEX_SYNC_DRY_RUN = 'false';
+      }
+      expect(await ourOrder(dry)).toBeNull();
+      expect(await notes(dry, 'staff.yandex_new_order')).toBe(0);
+
+      const unknown = yOrder([{ sku: `NONE-SHIP-${RUN}`, count: 1 }], shipment({ shipmentDate: '2026-10-14' }));
+      await runSync();
+      expect(await notes(unknown, 'staff.yandex_new_order')).toBe(0);
+      const attention = await prisma.notifications.findMany({ where: { template: 'staff.yandex_attention', payload: { path: ['order_number'], equals: String(unknown.orderId) } }, include: { staff: true } });
+      expect(attention.length).toBeGreaterThan(0);
+      expect(new Set(attention.map((n) => n.staff!.role))).toEqual(new Set(['admin']));
+    });
   });
 
   it('personal data of the customer never reaches the database, the run log or Telegram (DRY_RUN and LIVE)', async () => {

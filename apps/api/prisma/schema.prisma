@@ -888,6 +888,9 @@ model marketplace_orders {
   yandex_substatus      String?
   yandex_campaign_id    BigInt?
   yandex_updated_at     DateTime?
+  /// «Отгрузить до» from Yandex (delivery.shipment): the date and, when given, the time HH:MM. Null when Yandex sent none
+  ship_by_date          DateTime?              @db.Date
+  ship_by_time          String?
   /// Stage 3: a test order (admin) — excluded from analytics, tax and summaries
   is_test               Boolean                @default(false)
   /// Stage 3: what the delivery really cost US (we bring it to the pickup point), admin only

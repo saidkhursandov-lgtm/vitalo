@@ -214,6 +214,7 @@ export class YandexOrdersService {
         skus: [...new Set(o.lines.map((l) => l.product.sku))],
         total_uzs: o.lines.reduce((s, l) => s + Number(l.unit_price_uzs) * l.qty, 0),
         is_test: o.is_test,
+        ship_by: o.ship_by_date ? { date: day(o.ship_by_date), time: o.ship_by_time } : null,
         created_at: o.created_at,
       })),
       page: q.page,
@@ -281,6 +282,8 @@ export class YandexOrdersService {
       closed_at: o.closed_at,
       total_uzs: lines.reduce((s, l) => s + l.unit_price_uzs * l.qty, 0),
       source: o.source,
+      // «Отгрузить до» from Yandex; null for manual orders and when Yandex sent no deadline
+      ship_by: o.ship_by_date ? { date: day(o.ship_by_date), time: o.ship_by_time } : null,
       is_test: o.is_test,
       stock_shortage: o.stock_shortage,
       yandex: o.yandex_status ? { status: o.yandex_status, substatus: o.yandex_substatus, campaign_id: o.yandex_campaign_id === null ? null : Number(o.yandex_campaign_id), updated_at: o.yandex_updated_at } : null,
@@ -332,7 +335,7 @@ export class YandexOrdersService {
     tx: Tx,
     staffId: string | null,
     input: NewOrderInput,
-    opts: { source: 'manual' | 'yandex_api'; onShortage: 'throw' | 'flag'; yandex?: { status: string; substatus: string | null; campaignId: bigint; updatedAt: Date | null } },
+    opts: { source: 'manual' | 'yandex_api'; onShortage: 'throw' | 'flag'; yandex?: { status: string; substatus: string | null; campaignId: bigint; updatedAt: Date | null; shipBy?: { date: string; time: string | null } | null } },
   ): Promise<{ id: string; reserved: string[]; shortage: string | null }> {
     const products = await tx.products.findMany({
       where: { id: { in: input.lines.map((l) => l.product_id) } },
@@ -362,6 +365,8 @@ export class YandexOrdersService {
           yandex_substatus: opts.yandex.substatus,
           yandex_campaign_id: opts.yandex.campaignId,
           yandex_updated_at: opts.yandex.updatedAt,
+          ship_by_date: opts.yandex.shipBy ? new Date(`${opts.yandex.shipBy.date}T00:00:00Z`) : null,
+          ship_by_time: opts.yandex.shipBy?.time ?? null,
         }),
         lines: { create: priced.map((l, i) => ({ product_id: l.product_id, position: i + 1, qty: l.qty, unit_price_uzs: BigInt(l.unit_price_uzs) })) },
       },

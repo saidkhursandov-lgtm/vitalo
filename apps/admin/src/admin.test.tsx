@@ -10,6 +10,7 @@ import { monthName } from './pages/Finance';
 import { Diff } from './pages/Audit';
 import { ReasonPicker } from './components/Reason';
 import { ordersRu } from './pages/YandexSync';
+import { ShipBy } from './pages/YandexOrders';
 import { fireEvent } from '@testing-library/react';
 
 afterEach(cleanup);
@@ -84,6 +85,26 @@ describe('reason picker', () => {
 describe('batch close wording', () => {
   it('Russian plural of «заказ»', () => {
     expect([1, 2, 5, 11, 12, 21, 22, 25, 100, 101, 112].map(ordersRu)).toEqual(['1 заказ', '2 заказа', '5 заказов', '11 заказов', '12 заказов', '21 заказ', '22 заказа', '25 заказов', '100 заказов', '101 заказ', '112 заказов']);
+  });
+});
+
+describe('Yandex order: «Отгрузить до»', () => {
+  const text = (el: Parameters<typeof render>[0]) => {
+    const { container } = render(el);
+    const out = container.textContent ?? '';
+    cleanup();
+    return out;
+  };
+  it('date with or without the time; no deadline is a dash', () => {
+    expect(text(<ShipBy value={{ date: '2026-10-14', time: '12:00' }} status="NEW" today="2026-10-10" />)).toBe('14.10.2026 12:00');
+    expect(text(<ShipBy value={{ date: '2026-10-14', time: null }} status="NEW" today="2026-10-10" />)).toBe('14.10.2026');
+    expect(text(<ShipBy value={null} status="NEW" today="2026-10-10" />)).toBe('—');
+  });
+  it('marked «сегодня» and «просрочено» only while the order is not handed over', () => {
+    expect(text(<ShipBy value={{ date: '2026-10-14', time: null }} status="ASSEMBLED" today="2026-10-14" />)).toBe('14.10.2026 — сегодня');
+    expect(text(<ShipBy value={{ date: '2026-10-14', time: '09:00' }} status="NEW" today="2026-10-15" />)).toBe('14.10.2026 09:00 — просрочено');
+    expect(text(<ShipBy value={{ date: '2026-10-14', time: null }} status="HANDED_TO_DELIVERY" today="2026-10-15" />)).toBe('14.10.2026');
+    expect(text(<ShipBy value={{ date: '2026-10-14', time: null }} status="CANCELLED" today="2026-10-15" />)).toBe('14.10.2026');
   });
 });
 

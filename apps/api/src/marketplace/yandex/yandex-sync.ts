@@ -17,6 +17,7 @@ import {
   RETURN_STATUSES,
   WAIT_STATUSES,
   yandexStatusRu,
+  shipByRu,
   type AttentionKind,
   type ParsedYandexOrder,
 } from './yandex-order';
@@ -321,7 +322,7 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
               tx,
               null,
               { external_number: number, order_date: parsed.order.orderDate, lines: plan.lines.map(({ product_id, qty, unit_price_uzs }) => ({ product_id, qty, unit_price_uzs })) },
-              { source: 'yandex_api', onShortage: 'flag', yandex: { status: parsed.order.status, substatus: parsed.order.substatus, campaignId: BigInt(parsed.order.campaignId), updatedAt: parsed.order.updatedAt } },
+              { source: 'yandex_api', onShortage: 'flag', yandex: { status: parsed.order.status, substatus: parsed.order.substatus, campaignId: BigInt(parsed.order.campaignId), updatedAt: parsed.order.updatedAt, shipBy: parsed.order.shipBy } },
             );
             await tx.marketplace_external_orders.update({
               where: { id: ext.id },
@@ -334,6 +335,7 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
               await this.notifications.toStaffRoles(tx, ['warehouse', 'admin'], 'staff.yandex_new_order', {
                 order_number: number,
                 items,
+                ...(parsed.order.shipBy && { ship_by: shipByRu(parsed.order.shipBy) }),
                 shortage: !!created.shortage,
                 admin_path: `/yandex-orders/${created.id}`,
               });
@@ -349,7 +351,14 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
             const changed = ours.yandex_status !== parsed.order.status || ours.yandex_substatus !== parsed.order.substatus;
             await tx.marketplace_orders.update({
               where: { id: ours.id },
-              data: { yandex_status: parsed.order.status, yandex_substatus: parsed.order.substatus, yandex_campaign_id: BigInt(parsed.order.campaignId), yandex_updated_at: parsed.order.updatedAt },
+              data: {
+                yandex_status: parsed.order.status,
+                yandex_substatus: parsed.order.substatus,
+                yandex_campaign_id: BigInt(parsed.order.campaignId),
+                yandex_updated_at: parsed.order.updatedAt,
+                // the deadline may appear or move later: updated quietly, no second message; a later answer without it keeps what we have
+                ...(parsed.order.shipBy && { ship_by_date: new Date(`${parsed.order.shipBy.date}T00:00:00Z`), ship_by_time: parsed.order.shipBy.time }),
+              },
             });
             if (!ext.order_id) await tx.marketplace_external_orders.update({ where: { id: ext.id }, data: { order_id: ours.id } });
             let action = changed ? 'status_updated' : 'unchanged';

@@ -43,6 +43,8 @@ export interface TemplatePayload {
   items?: string;
   /** Stage 2D: how many orders a summary is about */
   count?: number;
+  /** «14.10.2026 12:00»: the shipment deadline of a Yandex order, when Yandex gave one */
+  ship_by?: string;
   /** Stage 2D: the order was created without units (not enough stock) */
   shortage?: boolean;
   /** Stage 3 (admins only): what is not marked paid yet */
@@ -147,7 +149,7 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   // Stage 2D: Yandex orders (staff only, Russian; order_number = the Yandex order number). No customer data.
   'staff.yandex_new_order': {
     ru: (p: TemplatePayload) =>
-      `🟡 Новый заказ Яндекса № ${p.order_number}\n${p.items ?? ''}${p.shortage ? '\n⚠️ Не хватает остатка: банки не зарезервированы' : '\nБанки зарезервированы, можно собирать.'}`,
+      `🟡 ${p.ship_by ? `Новый заказ Яндекс № ${p.order_number}, отгрузить до ${p.ship_by}` : `Новый заказ Яндекса № ${p.order_number}`}\n${p.items ?? ''}${p.shortage ? '\n⚠️ Не хватает остатка: банки не зарезервированы' : '\nБанки зарезервированы, можно собирать.'}`,
     uz: (p: TemplatePayload) => `🟡 Yandex buyurtmasi № ${p.order_number}\n${p.items ?? ''}`,
   },
   'staff.yandex_attention': {

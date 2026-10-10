@@ -26,6 +26,7 @@ interface ListRow {
   skus: string[];
   total_uzs: number;
   is_test?: boolean;
+  ship_by?: ShipByValue | null;
 }
 
 interface OrderUnit {
@@ -54,6 +55,7 @@ interface Order {
   released: { physical_id: string; status: string; released_at: string; reason: string | null; return_decision: string | null }[];
   history: { action: string; at: string; staff_name: string | null; details: Record<string, unknown> | null }[];
   source?: 'manual' | 'yandex_api';
+  ship_by?: ShipByValue | null;
   stock_shortage?: boolean;
   yandex?: { status: string; substatus: string | null; campaign_id: number | null; updated_at: string | null } | null;
   is_test?: boolean;
@@ -62,6 +64,21 @@ interface Order {
   commission_percent?: number;
   money?: { revenue_uzs: number; commission_uzs: number; cost_uzs: number; profit_uzs: number } | null;
   message?: string;
+}
+
+interface ShipByValue {
+  date: string; // YYYY-MM-DD
+  time: string | null; // HH:MM
+}
+
+/** «Отгрузить до» from Yandex. While the order is not handed over yet: red when the day has passed, yellow on the day. */
+export function ShipBy({ value, status, today: now = today() }: { value: ShipByValue | null | undefined; status: string; today?: string }) {
+  if (!value) return <span className="muted">—</span>;
+  const text = `${ruDate(value.date)}${value.time ? ` ${value.time}` : ''}`;
+  const open = status === 'NEW' || status === 'ASSEMBLED';
+  if (open && value.date < now) return <Badge tone="bad">{text} — просрочено</Badge>;
+  if (open && value.date === now) return <Badge tone="warn">{text} — сегодня</Badge>;
+  return <>{text}</>;
 }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -140,6 +157,7 @@ export function YandexOrders() {
                 <th>№ Яндекса</th>
                 <th>Дата</th>
                 <th>Статус</th>
+                <th>Отгрузить до</th>
                 <th>Товары</th>
                 <th className="num">Банок</th>
                 <th className="num">Собрано</th>
@@ -156,6 +174,9 @@ export function YandexOrders() {
                   <td>{ruDate(o.order_date)}</td>
                   <td>
                     <StatusBadge status={o.status} />
+                  </td>
+                  <td>
+                    <ShipBy value={o.ship_by} status={o.status} />
                   </td>
                   <td className="small">{o.skus.join(', ')}</td>
                   <td className="num">{o.qty}</td>
@@ -392,6 +413,8 @@ export function YandexOrderDetail() {
               {o.yandex.substatus ? ` · ${o.yandex.substatus}` : ''}
               {o.yandex.updated_at && <span className="muted small"> · обновлён в Яндексе {dateTime(o.yandex.updated_at)}</span>}
             </dd>
+            <dt>Отгрузить до</dt>
+            <dd>{o.ship_by ? <ShipBy value={o.ship_by} status={o.status} /> : <span className="muted">срок не указан Яндексом</span>}</dd>
             <dt>Заказ в Яндексе</dt>
             <dd>
               № {o.external_number}
