@@ -216,10 +216,13 @@ sudo /opt/vitalo/app/scripts/server/healthcheck.sh
 - **Вернуть базу, какой она была до обновления** (только если миграции что-то испортили — это крайняя мера):
 
   ```bash
-  sudo systemctl stop vitalo-bot vitalo-api
   sudo -iu vitalo bash -c 'ls -1t /var/backups/vitalo/db-*.dump | head -n 3'
-  sudo -iu vitalo pg_restore --clean --if-exists --no-owner -d vitalo /var/backups/vitalo/db-<ДАТА-ДО-ОБНОВЛЕНИЯ>.dump
+  sudo /opt/vitalo/app/scripts/server/transfer-restore.sh /var/backups/vitalo/db-<ДАТА-ДО-ОБНОВЛЕНИЯ>.dump
+  sudo /opt/vitalo/app/scripts/server/transfer-swap.sh
   ```
+
+  Копия восстанавливается в новую базу рядом, затем базы меняются местами; нынешняя база не удаляется, а
+  переименовывается (как в фазе 3). Службы после этого остановлены — их запускают уже со старым кодом.
 
   После этого нужен и старый код: на компьютере `git push server 2016a61:main --force` **делать только вместе с
   разработчиком** — это единственная команда в инструкции, которая переписывает историю на сервере.
@@ -315,7 +318,18 @@ sudo /opt/vitalo/app/scripts/server/transfer-restore.sh "$(sudo -u vitalo bash -
 
 - левая колонка **совпадает** с числами из окна PowerShell (шаг 3.2): товары, банки, банки на полке, остаток,
   альтернативные SKU, заказы;
-- «последняя миграция в новой базе: `20261014100000_stage3_finance`».
+- «последняя миграция в новой базе: `20261014100000_stage3_finance`»;
+- строки «защит от ошибок (триггеров)» и «индексов» в левой колонке не нулевые (26 триггеров на момент переезда).
+
+Во время работы скрипт пишет три шага: «структура…», «данные…», «индексы, проверки и защиты (триггеры)…».
+
+**Если скрипт остановился с ошибкой** — рабочая база не тронута, неполную базу `vitalo_new` он удалил сам.
+Пришлите текст ошибки; после исправления шаг просто запускается заново.
+
+> Под каким пользователем идёт восстановление. Всё восстанавливается от имени `vitalo` — обычного пользователя базы,
+> **не** суперпользователя (так же работает сам магазин), поэтому все таблицы сразу принадлежат ему. Владельцы и права
+> из копии не переносятся (`--no-owner`, `--no-acl`), комментарии тоже (`--no-comments`). Расширения `pg_trgm` и
+> `unaccent` создаются заранее самим `vitalo` — это разрешено владельцу базы.
 
 Посмотрите правую колонку: сколько на сервере **сейчас** заказов и покупателей. Если там есть настоящие заказы —
 остановитесь (см. выше).
@@ -374,8 +388,11 @@ sudo -iu vitalo bash -c 'cd /opt/vitalo/app/apps/api && npm run staff:add -- --t
 sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh --check
 ```
 
-Хорошо: «Новых миграций нет». (Если показал миграции — значит, на компьютере они не были применены; выполните
-`sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh --migrate` — он применит их и сам запустит службы.)
+Хорошо: «Новых миграций нет». Если показал миграции — это нормально, когда на компьютере они ещё не были применены
+(например, `20261015100000_search_doc_schema_qualified`: она появилась после вашей копии и только переписывает одну
+поисковую функцию, данных не меняет). Тогда выполните
+`sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh --migrate` — он применит их и сам запустит службы;
+следующую команду запуска можно пропустить, только проверку оставьте.
 
 ```bash
 sudo systemctl start vitalo-api vitalo-bot && sleep 5 && sudo /opt/vitalo/app/scripts/server/healthcheck.sh
@@ -644,10 +661,15 @@ scp "vitalo@91.213.99.230:/var/backups/vitalo/uploads-*.tar.gz" D:\VITALO-backup
 ### 7.4 Настоящее восстановление (только при потере данных)
 
 ```bash
-sudo systemctl stop vitalo-bot vitalo-api
-sudo -iu vitalo pg_restore --clean --if-exists --no-owner -d vitalo /var/backups/vitalo/db-<ДАТА>.dump
-sudo systemctl start vitalo-api vitalo-bot
+sudo /opt/vitalo/app/scripts/server/transfer-restore.sh /var/backups/vitalo/db-<ДАТА>.dump
+sudo /opt/vitalo/app/scripts/server/transfer-swap.sh
+sudo systemctl start vitalo-api vitalo-bot && sleep 5 && sudo /opt/vitalo/app/scripts/server/healthcheck.sh
 ```
+
+Что делает: первая команда восстанавливает копию в новую базу **рядом** с рабочей и показывает числа; вторая (после
+слова `REPLACE`) останавливает магазин и меняет базы местами — нынешняя база не удаляется, а получает имя
+`vitalo_before_transfer_<дата>`; третья запускает магазин и проверяет его. `server:after-transfer` здесь не нужен.
+Так надёжнее, чем восстанавливать поверх рабочей базы: если копия окажется плохой, вы ничего не потеряете.
 
 Фото: `sudo -iu vitalo tar -xzf /var/backups/vitalo/uploads-<ДАТА>.tar.gz -C /var/lib/vitalo`.
 

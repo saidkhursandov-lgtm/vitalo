@@ -445,10 +445,13 @@ sudo -iu vitalo /opt/vitalo/app/deploy/scripts/backup.sh
 Восстановление базы из копии. Делайте это только при реальной потере данных: сначала остановите API.
 
 ```bash
-sudo systemctl stop vitalo-api vitalo-bot
-sudo -iu vitalo pg_restore --clean --if-exists --no-owner -d vitalo /var/backups/vitalo/db-<ДАТА>.dump
-sudo systemctl start vitalo-api vitalo-bot
+sudo /opt/vitalo/app/scripts/server/transfer-restore.sh /var/backups/vitalo/db-<ДАТА>.dump
+sudo /opt/vitalo/app/scripts/server/transfer-swap.sh
+sudo systemctl start vitalo-api vitalo-bot && sleep 5 && sudo /opt/vitalo/app/scripts/server/healthcheck.sh
 ```
+
+Копия восстанавливается в новую базу рядом с рабочей, затем базы меняются местами; нынешняя не удаляется
+(подробнее — docs/DEPLOY_RUNBOOK.md, фаза 7.4).
 
 Фото восстанавливаются так: `tar -xzf uploads-<ДАТА>.tar.gz -C /var/lib/vitalo` (от пользователя `vitalo`).
 

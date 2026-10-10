@@ -3,9 +3,13 @@
 # NEW database `vitalo_new` next to the working one. The working database `vitalo` and the services are not touched,
 # the shop keeps running. Run on the server through sudo:
 #   sudo /opt/vitalo/app/scripts/server/transfer-restore.sh /opt/vitalo/import/vitalo_dev-for-server-….dump
+# The same script restores a nightly backup next to the working database (runbook, phase 7.4):
+#   sudo /opt/vitalo/app/scripts/server/transfer-restore.sh /var/backups/vitalo/db-….dump
 # Then look at the numbers it prints. Step 2: transfer-swap.sh
 set -euo pipefail
 cd / # sudo -u vitalo / postgres must be able to enter the current folder
+
+. "$(dirname "$(readlink -f "$0")")/lib-restore.sh"
 
 NEW_DB=vitalo_new
 DB_NAME=${DB_NAME:-vitalo}
@@ -34,11 +38,12 @@ q() { sudo -u vitalo psql -X -At -d "$1" -c "$2" 2>/dev/null || echo "нет"; }
 
 echo "1/3 Новая пустая база $NEW_DB (рабочая база $DB_NAME не меняется)"
 sudo -u postgres createdb -O vitalo "$NEW_DB"
-sudo -u postgres psql -X -q -d "$NEW_DB" -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS unaccent;'
 
 echo "2/3 Восстановление копии: $DUMP ($(sudo -u vitalo du -h "$DUMP" | cut -f1))"
-if ! sudo -u vitalo pg_restore --no-owner --no-acl --exit-on-error -d "$NEW_DB" "$DUMP"; then
-  echo "ОШИБКА восстановления. Рабочая база не тронута. Удалите неполную базу: sudo -u postgres dropdb $NEW_DB" >&2
+if ! restore_into "$NEW_DB" "$DUMP"; then
+  # a half-restored database must never be taken for a good one
+  sudo -u postgres dropdb --if-exists "$NEW_DB"
+  echo "ОШИБКА восстановления (текст ошибки выше). Рабочая база не тронута, неполная база $NEW_DB удалена." >&2
   exit 1
 fi
 
@@ -57,6 +62,8 @@ row "  из них с пометкой «тест»" "SELECT count(*) FROM marke
 row "покупателей"                "SELECT count(*) FROM users"
 row "сотрудников"                "SELECT count(*) FROM staff_users"
 row "миграций применено"         "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL"
+row "защит от ошибок (триггеров)" "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal"
+row "индексов"                   "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public'"
 echo "    («нет» в правой колонке — в рабочей базе ещё нет такой таблицы или колонки: это нормально для старой версии)"
 echo "    последняя миграция в новой базе: $(q "$NEW_DB" "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY 1 DESC LIMIT 1")"
 echo
