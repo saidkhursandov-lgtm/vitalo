@@ -11,6 +11,7 @@ import { Diff } from './pages/Audit';
 import { ReasonPicker } from './components/Reason';
 import { ordersRu } from './pages/YandexSync';
 import { ShipBy } from './pages/YandexOrders';
+import { printable, REPRINT_MAX, UnitTable, type Unit } from './pages/Receiving';
 import { LABEL_MAX_ITEMS, numberSizeMm, OrderLabelSheet, type OrderLabelData } from './pages/OrderLabel';
 import { fireEvent } from '@testing-library/react';
 
@@ -86,6 +87,54 @@ describe('reason picker', () => {
 describe('batch close wording', () => {
   it('Russian plural of «заказ»', () => {
     expect([1, 2, 5, 11, 12, 21, 22, 25, 100, 101, 112].map(ordersRu)).toEqual(['1 заказ', '2 заказа', '5 заказов', '11 заказов', '12 заказов', '21 заказ', '22 заказа', '25 заказов', '100 заказов', '101 заказ', '112 заказов']);
+  });
+});
+
+describe('«Единицы»: check boxes for reprinting labels of existing units', () => {
+  const unit = (n: number, status = 'IN_STOCK'): Unit => ({
+    id: `u${n}`,
+    physical_id: `V-00000${n}`,
+    product: { id: 'p', sku: 'OZN-A001', name_ru: 'Товар' },
+    expiry_date: '2028-01-01',
+    status,
+    receiving_session_id: 's',
+    label_print_count: n,
+    last_printed_at: null,
+    created_at: '2026-10-01T00:00:00Z',
+  });
+  const units = [unit(1), unit(2), unit(3, 'VOIDED')];
+
+  it('a box per row and «выбрать все на странице»; a cancelled unit cannot be chosen; a box does not open the card', () => {
+    const toggled: string[] = [];
+    let all = 0;
+    let opened = 0;
+    render(<UnitTable units={units} onOpen={() => opened++} select={{ ids: new Set(['u1']), toggle: (id) => toggled.push(id), toggleAll: () => all++ }} />);
+    const one = screen.getByLabelText('Выбрать V-000001') as HTMLInputElement;
+    const two = screen.getByLabelText('Выбрать V-000002') as HTMLInputElement;
+    const voided = screen.getByLabelText('Выбрать V-000003') as HTMLInputElement;
+    const head = screen.getByLabelText('Выбрать все на странице') as HTMLInputElement;
+    expect([one.checked, two.checked, voided.checked, head.checked]).toEqual([true, false, false, false]);
+    expect(voided.disabled).toBe(true);
+    fireEvent.click(two);
+    fireEvent.click(head);
+    expect(toggled).toEqual(['u2']);
+    expect(all).toBe(1);
+    expect(opened).toBe(0); // choosing is not opening
+    fireEvent.click(screen.getByText('V-000002'));
+    expect(opened).toBe(1);
+  });
+
+  it('«выбрать все» is on when every printable unit of the page is chosen (the cancelled one does not count)', () => {
+    render(<UnitTable units={units} select={{ ids: new Set(['u1', 'u2']), toggle: () => undefined, toggleAll: () => undefined }} />);
+    expect((screen.getByLabelText('Выбрать все на странице') as HTMLInputElement).checked).toBe(true);
+    expect(units.filter(printable)).toHaveLength(2);
+    expect(REPRINT_MAX).toBe(50); // the same limit as the print ticket on the server
+  });
+
+  it('without the selection the table is as before (receiving screen): no boxes', () => {
+    render(<UnitTable units={units} />);
+    expect(screen.queryByLabelText('Выбрать все на странице')).toBeNull();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
   });
 });
 

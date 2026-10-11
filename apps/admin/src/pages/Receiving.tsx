@@ -609,11 +609,31 @@ function AcceptModal({ sessionId, item, onClose, onDone }: { sessionId: string; 
   );
 }
 
-function UnitTable({ units, onOpen }: { units: Unit[]; onOpen?: (u: Unit) => void }) {
+/** At most this many labels in one print (the server limit of a print ticket for single units). */
+export const REPRINT_MAX = 50;
+/** A cancelled unit has no label: it cannot be chosen. */
+export const printable = (u: Pick<Unit, 'status'>) => u.status !== 'VOIDED';
+
+/** Check boxes for «Напечатать этикетки выбранных» (the «Единицы» tab); without `select` the table is as before. */
+export interface UnitSelection {
+  ids: Set<string>;
+  toggle: (id: string) => void;
+  /** all printable units of the page on / off */
+  toggleAll: () => void;
+}
+
+export function UnitTable({ units, onOpen, select }: { units: Unit[]; onOpen?: (u: Unit) => void; select?: UnitSelection }) {
+  const choosable = units.filter(printable);
+  const all = choosable.length > 0 && choosable.every((u) => select?.ids.has(u.id));
   return (
     <table className={`table ${onOpen ? 'table-hover' : ''}`}>
       <thead>
         <tr>
+          {select && (
+            <th style={{ width: 36 }}>
+              <input type="checkbox" aria-label="Выбрать все на странице" checked={all} disabled={!choosable.length} onChange={select.toggleAll} />
+            </th>
+          )}
           <th>Physical ID</th>
           <th>Товар</th>
           <th>Срок годности</th>
@@ -624,6 +644,19 @@ function UnitTable({ units, onOpen }: { units: Unit[]; onOpen?: (u: Unit) => voi
       <tbody>
         {units.map((u) => (
           <tr key={u.id} onClick={onOpen && (() => onOpen(u))} style={onOpen && { cursor: 'pointer' }}>
+            {select && (
+              // the cell itself does not open the card: a click next to the small box must not surprise
+              <td onClick={(e) => e.stopPropagation()} style={{ cursor: 'default' }}>
+                <input
+                  type="checkbox"
+                  aria-label={`Выбрать ${u.physical_id}`}
+                  checked={select.ids.has(u.id)}
+                  disabled={!printable(u)}
+                  title={printable(u) ? undefined : 'Отменённая единица: этикетка не печатается'}
+                  onChange={() => select.toggle(u.id)}
+                />
+              </td>
+            )}
             <td>
               <span className="id-chip">{u.physical_id}</span>
             </td>
@@ -657,6 +690,10 @@ export function Units() {
   const [code, setCode] = useState('');
   const [card, setCard] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  // «Напечатать этикетки выбранных»: the choice lives while the same page of the same list is shown
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [printedNote, setPrintedNote] = useState<string | null>(null);
+  useEffect(() => setChosen(new Set()), [status, purchaseId, page]);
   const list = useQuery({
     queryKey: ['units', status, purchaseId, page],
     queryFn: () => api<{ items: Unit[]; total: number; total_pages: number }>(`/staff/units${qs({ status, purchase_id: purchaseId, page })}`),
@@ -670,6 +707,51 @@ export function Units() {
     onSettled: () => input.current?.focus(),
   });
   useEffect(() => input.current?.focus(), []);
+  const pageUnits = list.data?.items ?? [];
+  const chosenIds = pageUnits.filter((u) => chosen.has(u.id) && printable(u)).map((u) => u.id);
+  const selection: UnitSelection = {
+    ids: chosen,
+    toggle: (id) =>
+      setChosen((cur) => {
+        const next = new Set(cur);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    toggleAll: () =>
+      setChosen((cur) => {
+        const ids = pageUnits.filter(printable).map((u) => u.id);
+        return ids.every((id) => cur.has(id)) ? new Set() : new Set(ids);
+      }),
+  };
+  /**
+   * The same print as «Напечатать этикетку» of one unit, for the chosen ones: a print ticket for these units and the
+   * label page in a new tab. Prints existing units only: nothing is created, the stock and the IDs do not change.
+   */
+  const reprint = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const tg = window.Telegram?.WebApp;
+      const inTelegram = !!(tg?.initData && tg.openLink);
+      // the tab is opened at once, inside the click (a browser blocks a window opened after waiting for the server)
+      const tab = inTelegram ? null : window.open('about:blank', '_blank');
+      try {
+        const { ticket } = await api<{ ticket: string }>('/staff/units/labels/ticket', { method: 'POST', body: { unit_ids: ids } });
+        const url = new URL(`/print/labels#t=${encodeURIComponent(ticket)}`, window.location.href).href;
+        if (inTelegram) tg!.openLink!(url);
+        else if (tab) tab.location.href = url;
+        else throw new Error('Браузер не дал открыть вкладку печати: разрешите всплывающие окна для админки и нажмите ещё раз');
+        return ids.length;
+      } catch (e) {
+        tab?.close();
+        throw e;
+      }
+    },
+    onSuccess: (n) => {
+      setPrintedNote(`Открыта печать этикеток: ${n} шт. Новые банки не создаются, остатки не меняются; счётчик «Этикеток» обновится после печати.`);
+      setChosen(new Set());
+      window.setTimeout(() => void list.refetch(), 2500);
+    },
+  });
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
     next.delete('page');
@@ -708,14 +790,25 @@ export function Units() {
             Только единицы закупки × показать все
           </button>
         )}
+        <button className="btn" disabled={!chosenIds.length || chosenIds.length > REPRINT_MAX || reprint.isPending} onClick={() => reprint.mutate(chosenIds)}>
+          Напечатать этикетки выбранных{chosenIds.length ? ` (${chosenIds.length})` : ''}
+        </button>
+        {chosenIds.length > 0 && (
+          <button className="btn btn-sm btn-ghost" onClick={() => setChosen(new Set())}>
+            Снять выбор
+          </button>
+        )}
+        <span className="muted small">Отметьте банки галочками (или верхней галочкой — все на странице). До {REPRINT_MAX} этикеток за раз.</span>
       </div>
+      <ErrorBox error={reprint.error} />
+      {printedNote && <div className="alert alert-ok">{printedNote}</div>}
       {list.isPending ? (
         <Loading />
       ) : list.isError ? (
         <ErrorBox error={list.error} />
       ) : (
         <section className="card flush">
-          <UnitTable units={list.data.items} onOpen={(u) => setCard(u.id)} />
+          <UnitTable units={list.data.items} onOpen={(u) => setCard(u.id)} select={selection} />
           <div className="table-foot">
             <span className="muted">Единиц: {list.data.total}</span>
             <Pagination page={page} totalPages={list.data.total_pages} onPage={(p) => set('page', String(p))} />
