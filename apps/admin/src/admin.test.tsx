@@ -124,7 +124,7 @@ describe('shipping label of a Mini App order, 75×120', () => {
     const text = container.textContent ?? '';
     expect(container.querySelectorAll('.olabel-item')).toHaveLength(LABEL_MAX_ITEMS);
     expect(text).toContain('Состав: 55 шт.');
-    expect(text).toContain('…и ещё 4 поз. (34 шт.)'); // 7 + 8 + 9 + 10
+    expect(text).toContain('…и ещё 5 поз. (40 шт.)'); // 6 + 7 + 8 + 9 + 10
     expect(numberSizeMm('VTL-261017-0042') * 0.6 * 15).toBeLessThanOrEqual(69);
     expect(numberSizeMm('VTL-1')).toBe(11);
     expect(numberSizeMm('VTL-20261017-000042-X') * 0.6 * 21).toBeLessThanOrEqual(69);

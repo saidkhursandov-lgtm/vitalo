@@ -20,8 +20,8 @@ export interface OrderLabelData {
   waybill: string | null;
 }
 
-/** How many lines of the order fit above the QR code; the rest is summed up in one line. */
-export const LABEL_MAX_ITEMS = 7;
+/** How many lines of the order fit above the QR code even with a three-line address; the rest is summed up in one line. */
+export const LABEL_MAX_ITEMS = 6;
 const short = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
 /** The order number always fits the 69 mm of the label in one line (monospace: a character ≈ 0.6 of the size). */
 export const numberSizeMm = (n: string) => Math.min(11, Math.floor((69 / (Math.max(n.length, 6) * 0.6)) * 10) / 10);
@@ -52,7 +52,7 @@ export function OrderLabelSheet({ data }: { data: OrderLabelData }) {
         </b>
         <div className="olabel-address">{data.address.text}</div>
       </div>
-      <div className="olabel-items">
+      <div className={`olabel-items${data.items.length <= 3 ? ' is-short' : ''}`}>
         <span>Состав: {units} шт.</span>
         {shown.map((i) => (
           <div key={i.sku} className="olabel-item">
@@ -69,12 +69,13 @@ export function OrderLabelSheet({ data }: { data: OrderLabelData }) {
         )}
       </div>
       <div className="olabel-bottom">
-        <QrCode value={data.order_number} sizeMm={24} />
+        <QrCode value={data.order_number} sizeMm={18} />
         <div className="olabel-waybill">
           {data.waybill && (
             <>
               <span>Накладная службы доставки</span>
-              <strong>{data.waybill}</strong>
+              {/* a usual number is large; a very long one is set smaller so that the block never grows over the QR code */}
+              <strong style={{ fontSize: data.waybill.length <= 16 ? undefined : data.waybill.length <= 32 ? '3.6mm' : '3mm' }}>{data.waybill}</strong>
             </>
           )}
         </div>
