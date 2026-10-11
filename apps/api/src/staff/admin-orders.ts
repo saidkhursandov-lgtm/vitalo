@@ -200,6 +200,8 @@ export class AdminOrdersService {
     return {
       ...toOrderView(order),
       is_test: order.is_test,
+      // waybill of the delivery service (never in the customer's view of the order)
+      delivery_waybill: order.delivery_waybill,
       // Stage 3: what the delivery really cost us — admin only
       ...(can(role, 'finance.manage') && { finance: { own_delivery_cost_uzs: Number(order.own_delivery_cost_uzs) } }),
       customer: {
@@ -227,6 +229,8 @@ export class AdminOrdersService {
         edit: can(role, 'orders.edit') && EDITABLE_STATUSES.includes(order.status),
         locked: !EDITABLE_STATUSES.includes(order.status) && order.status !== 'cancelled',
         units: can(role, 'orders.units') && (order.status === 'paid' || order.status === 'picking'),
+        print_label: order.payment_status === 'payment_success' && ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'].includes(order.status),
+        waybill: can(role, 'orders.waybill') && order.status !== 'cancelled',
         return_order: can(role, 'orders.units') && ['handed_to_delivery', 'in_transit', 'delivered'].includes(order.status),
       },
     };

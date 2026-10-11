@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
  * Print ticket: lets the label page open in a normal browser (Chrome) without Telegram and without the staff token.
  *
  * The signed-in employee asks for a ticket in the admin panel; the ticket only allows printing the labels of ONE
- * receiving session (or a few units), lives TICKET_TTL_SECONDS and is tied to the employee's staff session: logout,
+ * receiving session (or a few units, or the shipping label of one order), lives TICKET_TTL_SECONDS and is tied to the employee's staff session: logout,
  * block or an expired session make it useless at once. Stateless (HMAC), so no table and no migration. The admin
  * panel puts it into the URL fragment (#t=…), which browsers do not send to servers or in the Referer.
  */
@@ -15,6 +15,8 @@ export const TICKET_MAX_UNITS = 50;
 export interface PrintScope {
   session_id?: string;
   unit_ids?: string[];
+  /** the shipping label of ONE Mini App order (staff/order-label.ts) */
+  order_id?: string;
 }
 
 export interface PrintTicketPayload extends PrintScope {
@@ -51,7 +53,8 @@ export function verifyPrintTicket(key: Buffer, ticket: string, now = Date.now())
     throw new PrintTicketError('malformed');
   }
   if (p?.v !== 1 || typeof p.ss !== 'string' || typeof p.exp !== 'number') throw new PrintTicketError('malformed');
-  if (!p.session_id === !p.unit_ids?.length) throw new PrintTicketError('malformed'); // exactly one scope
+  const scopes = [!!p.session_id, !!p.unit_ids?.length, !!p.order_id].filter(Boolean).length;
+  if (scopes !== 1 || (p.order_id !== undefined && typeof p.order_id !== 'string')) throw new PrintTicketError('malformed'); // exactly one scope
   if (p.exp * 1000 <= now) throw new PrintTicketError('expired');
   return p;
 }

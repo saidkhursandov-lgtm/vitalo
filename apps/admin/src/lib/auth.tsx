@@ -35,6 +35,7 @@ export type Permission =
   | 'inventory.unit_override'
   | 'products.label'
   | 'orders.units'
+  | 'orders.waybill'
   | 'yandex.orders.view'
   | 'yandex.orders'
   | 'yandex.orders.money'

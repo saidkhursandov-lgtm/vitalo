@@ -8,6 +8,7 @@ import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone } from '../l
 import { CheckIcon, ForwardIcon } from '../components/Icons';
 import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly';
 import { OrderFinance, TestBadge } from '../components/OrderFinance';
+import { OrderShipping } from './OrderLabel';
 
 interface Named {
   id: string;
@@ -32,8 +33,10 @@ export interface AdminOrder {
   customer: { id: string; name: string; username: string | null; telegram_user_id: number; status: string };
   edits: { reason: string; before: Record<string, unknown>; after: Record<string, unknown>; staff_name: string; created_at: string }[];
   tasks: { type: string; status: string; note: string | null; created_at: string }[];
-  actions: { confirm_payment: boolean; next_status: string | null; cancel: boolean; edit: boolean; locked: boolean; units: boolean; return_order: boolean };
+  actions: { confirm_payment: boolean; next_status: string | null; cancel: boolean; edit: boolean; locked: boolean; units: boolean; return_order: boolean; print_label?: boolean; waybill?: boolean };
   is_test?: boolean;
+  /** waybill number of the delivery service, printed on the label */
+  delivery_waybill?: string | null;
   /** Stage 3: only for the admin */
   finance?: { own_delivery_cost_uzs: number };
   /** Stage 2E: jars of unit-tracked lines (null when the order has none) */
@@ -121,6 +124,14 @@ export function OrderDetail() {
         </div>
       )}
       <OrderAssembly order={o} onDone={(next) => client.setQueryData(['order', id], next)} />
+      <OrderShipping
+        key={o.delivery_waybill ?? ''}
+        orderId={o.id}
+        waybill={o.delivery_waybill ?? null}
+        canPrint={!!a.print_label}
+        canEdit={!!a.waybill}
+        onSaved={() => void q.refetch()}
+      />
       {o.finance && (
         <OrderFinance
           key={`${o.is_test}|${o.finance.own_delivery_cost_uzs}`}

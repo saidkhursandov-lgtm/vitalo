@@ -1254,6 +1254,8 @@ model orders {
   cancelled_at                   DateTime?
   /// Stage 2E: paid, but the units of unit-tracked lines could not be reserved (reason). «Нужно внимание склада»
   units_attention                String?
+  /// Waybill number of the delivery service (BTS, Yandex Go…): optional, typed by the warehouse or the admin, printed on the label
+  delivery_waybill               String?
   /// Stage 3: a test order (admin) — excluded from analytics, tax and summaries
   is_test                        Boolean       @default(false)
   /// Stage 3: what the delivery really cost US (free delivery for the customer), admin only

@@ -11,6 +11,7 @@ import { Diff } from './pages/Audit';
 import { ReasonPicker } from './components/Reason';
 import { ordersRu } from './pages/YandexSync';
 import { ShipBy } from './pages/YandexOrders';
+import { LABEL_MAX_ITEMS, numberSizeMm, OrderLabelSheet, type OrderLabelData } from './pages/OrderLabel';
 import { fireEvent } from '@testing-library/react';
 
 afterEach(cleanup);
@@ -85,6 +86,48 @@ describe('reason picker', () => {
 describe('batch close wording', () => {
   it('Russian plural of «заказ»', () => {
     expect([1, 2, 5, 11, 12, 21, 22, 25, 100, 101, 112].map(ordersRu)).toEqual(['1 заказ', '2 заказа', '5 заказов', '11 заказов', '12 заказов', '21 заказ', '22 заказа', '25 заказов', '100 заказов', '101 заказ', '112 заказов']);
+  });
+});
+
+describe('shipping label of a Mini App order, 75×120', () => {
+  const data: OrderLabelData = {
+    order_number: 'VTL-261017-0042',
+    order_date: '2026-10-17',
+    prepaid: true,
+    recipient: { name: 'Тест Получатель', phone: '+998901112233' },
+    address: { region: 'Ташкент', city: 'Юнусабад', text: 'ул. Примерная, 1' },
+    items: [{ sku: 'OZN-A001', name: 'Очень длинное название товара, которое не помещается в одну строку наклейки', qty: 2 }],
+    waybill: null,
+  };
+
+  it('everything asked for is on it: VITALO, number, date, «ПРЕДОПЛАЧЕНО», recipient, phone, address, items, QR with the number', () => {
+    const { container } = render(<OrderLabelSheet data={data} />);
+    const text = container.textContent ?? '';
+    for (const part of ['VITALO', 'VTL-261017-0042', '17.10.2026', 'ПРЕДОПЛАЧЕНО', 'Тест Получатель', '+998 90 111 22 33', 'Ташкент, Юнусабад', 'ул. Примерная, 1', 'OZN-A001 × 2', 'Состав: 2 шт.']) {
+      expect(text).toContain(part);
+    }
+    expect(text).toContain('Очень длинное название товара, ко…'); // names are shortened
+    expect(screen.getByRole('img', { name: 'QR VTL-261017-0042' })).toBeTruthy(); // the QR holds only the order number
+    expect(text).not.toContain('Накладная'); // no waybill — no line
+    expect(text).not.toMatch(/сум|цена|себестоимость/i); // no money on the label
+  });
+
+  it('the waybill of the delivery service is printed when filled in', () => {
+    const { container } = render(<OrderLabelSheet data={{ ...data, waybill: 'BTS-12345678' }} />);
+    expect(container.textContent).toContain('Накладная службы доставки');
+    expect(container.textContent).toContain('BTS-12345678');
+  });
+
+  it('a long order: the first lines and «…и ещё N поз.», nothing is lost silently; the number always fits one line', () => {
+    const items = Array.from({ length: 10 }, (_, i) => ({ sku: `SKU-${i + 1}`, name: `Товар ${i + 1}`, qty: i + 1 }));
+    const { container } = render(<OrderLabelSheet data={{ ...data, items }} />);
+    const text = container.textContent ?? '';
+    expect(container.querySelectorAll('.olabel-item')).toHaveLength(LABEL_MAX_ITEMS);
+    expect(text).toContain('Состав: 55 шт.');
+    expect(text).toContain('…и ещё 4 поз. (34 шт.)'); // 7 + 8 + 9 + 10
+    expect(numberSizeMm('VTL-261017-0042') * 0.6 * 15).toBeLessThanOrEqual(69);
+    expect(numberSizeMm('VTL-1')).toBe(11);
+    expect(numberSizeMm('VTL-20261017-000042-X') * 0.6 * 21).toBeLessThanOrEqual(69);
   });
 });
 

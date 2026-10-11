@@ -79,6 +79,8 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'pick a unit for a Mini App order', method: 'post', path: () => '/api/staff/orders/' + MISSING + '/units/pick', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'reserve units for a Mini App order', method: 'post', path: () => '/api/staff/orders/' + MISSING + '/units/reserve', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'return a Mini App order after the handover', method: 'post', path: () => '/api/staff/orders/' + MISSING + '/return', body: {}, allowed: ['admin', 'warehouse'] },
+    { label: 'get a print ticket for an order label', method: 'post', path: () => '/api/staff/orders/' + MISSING + '/label/ticket', body: {}, allowed: ['admin', 'manager', 'warehouse'] },
+    { label: 'set the delivery waybill of an order', method: 'patch', path: () => '/api/staff/orders/' + MISSING + '/waybill', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'list Yandex orders', method: 'get', path: () => '/api/staff/yandex-orders', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'create a Yandex order', method: 'post', path: () => '/api/staff/yandex-orders', body: {}, allowed: ['admin', 'warehouse'] },
     { label: 'open a Yandex order', method: 'get', path: () => `/api/staff/yandex-orders/${MISSING}`, allowed: ['admin', 'manager', 'warehouse'] },
@@ -188,7 +190,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
   it('GET /staff/auth/me lists exactly the permissions of the role', async () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
     expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'yandex.price.view']);
-    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'orders.units', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
+    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'orders.waybill', 'orders.units', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
     expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
     expect((await me('manager')).permissions).toContain('dashboard.revenue');
     expect((await me('manager')).permissions).not.toContain('costs.view');

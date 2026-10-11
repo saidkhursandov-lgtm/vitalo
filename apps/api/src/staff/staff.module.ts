@@ -26,10 +26,12 @@ import { YandexSyncController, YandexWebhookController } from '../marketplace/ya
 import { FinanceController, OrderFinanceService } from '../finance/finance.controller';
 import { FinanceRemindersService } from '../finance/finance-reminders.service';
 import { FinanceService } from '../finance/finance.service';
+import { OrderLabelController, OrderLabelService, PrintOrderLabelController } from './order-label';
 
 /**
  * Admin panel API (/api/staff/*). Every controller is behind StaffGuard + role permissions, except
- * PrintLabelsController (/api/print/labels): it accepts only a signed print ticket issued by a signed-in employee, and
+ * PrintLabelsController (/api/print/labels) and PrintOrderLabelController (/api/print/order-label): they accept only a
+ * signed print ticket issued by a signed-in employee, and
  * YandexWebhookController (/api/yandex/notifications/<secret>): off by default, secret path + Yandex networks only.
  */
 @Module({
@@ -38,6 +40,8 @@ import { FinanceService } from '../finance/finance.service';
     StaffAuthController,
     DashboardController,
     AdminOrdersController,
+    OrderLabelController,
+    PrintOrderLabelController,
     AdminProductsController,
     AdminInventoryController,
     AdminCustomersController,
@@ -63,6 +67,7 @@ import { FinanceService } from '../finance/finance.service';
     AuditService,
     DashboardService,
     AdminOrdersService,
+    OrderLabelService,
     AdminProductsService,
     AdminInventoryService,
     AdminCustomersService,
