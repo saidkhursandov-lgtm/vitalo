@@ -11,7 +11,7 @@ type Role = keyof typeof STAFF_TG;
 const RUN = `${process.pid}${Date.now() % 100000}`;
 
 /**
- * «Склад → Единицы → Напечатать этикетки выбранных» (S2B-13): labels of EXISTING units in one print, through the
+ * «Склад → Единицы → Напечатать этикетки выбранных» (S2B-9): labels of EXISTING units in one print, through the
  * same print ticket as one label. The admin panel only collects the chosen ids; these tests pin what the print does
  * and — above all — what it does not do.
  */
