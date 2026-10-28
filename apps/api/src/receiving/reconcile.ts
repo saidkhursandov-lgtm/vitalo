@@ -1,5 +1,7 @@
 /**
  * «Сверка»: for every unit-tracked product, the units on the shelf vs inventory.actual_qty. Read only.
+ * Also lists products with units on the shelf that are NOT unit-tracked (state not_tracked, S2B-10): Yandex orders
+ * refuse them, so they must not stay invisible.
  *
  * On the shelf = IN_STOCK + ASSIGNED (reserved for a Yandex or a Mini App order, still physically there). Since
  * stage 2E both channels move the units and the stock together (write-off at the handover), so they never cause a
@@ -12,12 +14,13 @@
  */
 import { PrismaService } from '../prisma/prisma.service';
 
-export type ReconcileState = 'ok' | 'legacy_orders' | 'unexplained';
+export type ReconcileState = 'ok' | 'legacy_orders' | 'unexplained' | 'not_tracked';
 
 export interface ReconcileRow {
   product_id: string;
   sku: string;
   name_ru: string;
+  unit_tracking: boolean;
   /** IN_STOCK + ASSIGNED */
   units_in_stock: number;
   /** ASSIGNED for Yandex orders */
@@ -37,7 +40,7 @@ export interface ReconcileRow {
 }
 
 export const RECONCILE_HINT =
-  'Заказы Яндекса и Mini App двигают банки и остаток вместе: банок на полке должно быть столько же, сколько в остатке. Расхождение из-за заказов Mini App, оплаченных до перехода на банки, помечено «старые заказы без банок».';
+  'Заказы Яндекса и Mini App двигают банки и остаток вместе: банок на полке должно быть столько же, сколько в остатке. Расхождение из-за заказов Mini App, оплаченных до перехода на банки, помечено «старые заказы без банок». «Не на учёте по банкам» — банки есть, но товар не переведён на учёт по банкам: заказы Яндекса по нему не создаются.';
 
 /**
  * ok: units on the shelf = stock. legacy_orders: the difference is exactly what Mini App orders without units (paid
@@ -50,8 +53,12 @@ export function reconcileState(r: { difference: number; assigned: number; reserv
 }
 
 export async function reconcileUnits(prisma: PrismaService): Promise<ReconcileRow[]> {
-  const rows = await prisma.$queryRaw<{ product_id: string; sku: string; name_ru: string; in_stock: bigint; yandex: bigint; vitalo: bigint; actual: bigint; reserved: bigint; sold: bigint }[]>`
-    WITH tracked AS (SELECT id, sku, name_ru FROM products WHERE unit_tracking),
+  const rows = await prisma.$queryRaw<{ product_id: string; sku: string; name_ru: string; unit_tracking: boolean; in_stock: bigint; yandex: bigint; vitalo: bigint; actual: bigint; reserved: bigint; sold: bigint }[]>`
+    WITH tracked AS (
+      -- unit-tracked products, plus untracked ones that already have units on the shelf (S2B-10)
+      SELECT p.id, p.sku, p.name_ru, p.unit_tracking FROM products p
+      WHERE p.unit_tracking OR EXISTS (SELECT 1 FROM physical_units x WHERE x.product_id = p.id AND x.status IN ('IN_STOCK', 'ASSIGNED'))
+    ),
     u AS (
       SELECT pu.product_id,
              count(*) FILTER (WHERE pu.status IN ('IN_STOCK', 'ASSIGNED')) AS in_stock,
@@ -81,7 +88,7 @@ export async function reconcileUnits(prisma: PrismaService): Promise<ReconcileRo
         )
       GROUP BY m.product_id
     )
-    SELECT t.id AS product_id, t.sku, t.name_ru,
+    SELECT t.id AS product_id, t.sku, t.name_ru, t.unit_tracking,
            coalesce(u.in_stock, 0) AS in_stock, coalesce(u.yandex, 0) AS yandex, coalesce(u.vitalo, 0) AS vitalo,
            coalesce(inv.actual, 0) AS actual, coalesce(inv.reserved, 0) AS reserved, coalesce(sold.sold, 0) AS sold
     FROM tracked t
@@ -97,11 +104,12 @@ export async function reconcileUnits(prisma: PrismaService): Promise<ReconcileRo
     const reserved = Number(r.reserved);
     const sold = Number(r.sold);
     const difference = units - actual;
-    const state = reconcileState({ difference, assigned: yandex + vitalo, reserved, sold });
+    const state = r.unit_tracking ? reconcileState({ difference, assigned: yandex + vitalo, reserved, sold }) : 'not_tracked';
     return {
       product_id: r.product_id,
       sku: r.sku,
       name_ru: r.name_ru,
+      unit_tracking: r.unit_tracking,
       units_in_stock: units,
       units_reserved_yandex: yandex,
       units_reserved_vitalo: vitalo,
@@ -110,13 +118,13 @@ export async function reconcileUnits(prisma: PrismaService): Promise<ReconcileRo
       reserved_vitalo: reserved - yandex - vitalo,
       difference,
       sold_by_orders: sold,
-      explained: state !== 'unexplained',
+      explained: state === 'ok' || state === 'legacy_orders',
       state,
     };
   });
 }
 
-const STATE_RU: Record<ReconcileState, string> = { ok: 'ок', legacy_orders: 'старые заказы без банок', unexplained: 'НЕ ОБЪЯСНЯЕТСЯ' };
+const STATE_RU: Record<ReconcileState, string> = { ok: 'ок', legacy_orders: 'старые заказы без банок', unexplained: 'НЕ ОБЪЯСНЯЕТСЯ', not_tracked: 'НЕ НА УЧЁТЕ ПО БАНКАМ' };
 
 export function formatReconcile(rows: ReconcileRow[]): string {
   if (!rows.length) return 'Товаров с учётом по единицам пока нет.';

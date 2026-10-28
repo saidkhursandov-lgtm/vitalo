@@ -44,6 +44,8 @@ interface Session {
   lines: { id: string; product: { sku: string; name_ru: string }; qty: number; discrepancy_qty: number | null }[];
   units: Unit[];
   summary: { units: number; printed: number; discrepancy_qty: number };
+  /** completed, but these products did not switch to unit tracking (S2B-10): Yandex orders refuse them */
+  not_unit_tracked?: { product_id: string; sku: string; reason: string }[];
   created?: string[];
   warnings?: string[];
   replayed?: boolean;
@@ -339,6 +341,12 @@ function SessionScreen({ id, onExit }: { id: string; onExit: () => void }) {
           </button>
         </div>
       )}
+      {s.status === 'COMPLETED' &&
+        s.not_unit_tracked?.map((t) => (
+          <div key={t.product_id} className="alert alert-warn">
+            {t.reason}. Пока товар не на учёте по банкам, заказы Яндекса по нему не создаются.
+          </div>
+        ))}
       {s.status === 'CANCELLED' && <div className="alert alert-info">Приёмка отменена: её единицы получили статус «Отменена».</div>}
 
       {s.status === 'OPEN' && s.type === 'PURCHASE' && (
@@ -929,7 +937,7 @@ interface ReconcileRow {
   difference: number;
   sold_by_orders: number;
   explained: boolean;
-  state: 'ok' | 'legacy_orders' | 'unexplained';
+  state: 'ok' | 'legacy_orders' | 'unexplained' | 'not_tracked';
 }
 
 export function Reconcile() {
@@ -940,7 +948,7 @@ export function Reconcile() {
   return (
     <>
       <div className="alert alert-info">{q.data.hint}</div>
-      {bad > 0 && <div className="alert alert-error">Не объясняется: {bad} — проверьте эти товары (красные строки).</div>}
+      {bad > 0 && <div className="alert alert-error">Требуют проверки: {bad} — красные строки («не объясняется» или «не на учёте по банкам»).</div>}
       {!q.data.items.length ? (
         <p className="muted">Товаров с учётом по единицам пока нет: они появятся после завершения начального остатка.</p>
       ) : (
@@ -978,6 +986,8 @@ export function Reconcile() {
                       <Badge tone="ok">сходится</Badge>
                     ) : r.state === 'legacy_orders' ? (
                       <Badge tone="info">старые заказы без банок</Badge>
+                    ) : r.state === 'not_tracked' ? (
+                      <Badge tone="bad">не на учёте по банкам</Badge>
                     ) : (
                       <Badge tone="bad">не объясняется</Badge>
                     )}

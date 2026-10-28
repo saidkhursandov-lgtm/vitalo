@@ -29,6 +29,7 @@ import { auditJson, AuditService } from '../staff/audit.service';
 import { can } from '../staff/permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
 import { checkExpiryGroups, distribute, groupExpiries, lineUnitCosts, ruDay, unitExpiries } from './receiving-math';
+import { canStartTracking, notTrackedReason, trackingStates } from './unit-tracking';
 import { createUnits, moveUnits, NewUnit, reassignLineUnitCosts, unitInclude, unitView } from './units';
 
 type Tx = Prisma.TransactionClient;
@@ -227,6 +228,9 @@ export class AdminReceivingService {
       this.prisma.physical_units.findMany({ where: { receiving_session_id: id }, orderBy: { seq: 'asc' }, include: unitInclude }),
     ]);
     const live = units.filter((u) => u.status !== 'VOIDED');
+    // A completed receiving whose products did not switch to unit tracking: say why (Yandex orders refuse them).
+    const untracked = s.status === 'COMPLETED' ? [...new Set(live.filter((u) => !u.product.unit_tracking).map((u) => u.product_id))] : [];
+    const notTracked = (await trackingStates(this.prisma, untracked)).filter((st) => !st.unit_tracking).map((st) => ({ product_id: st.product_id, sku: st.sku, reason: notTrackedReason(st) }));
     return {
       id: s.id,
       type: s.type,
@@ -254,6 +258,7 @@ export class AdminReceivingService {
         discrepancy_qty: lines.reduce((sum, l) => sum + (l.discrepancy_qty ?? 0), 0),
       },
       label_warnings: [] as string[], // the 58×40 label has no composition: nothing blocks the «Этикетки» step
+      not_unit_tracked: notTracked,
     };
   }
 
@@ -408,6 +413,23 @@ export class AdminReceivingService {
           await this.stock.receiveUnits(tx, { warehouseId, productId, qty, referenceType: 'receiving_session', referenceId: session.id, reason: 'Приёмка по закупке', staffId });
         }
         summary.purchases = purchaseIds;
+        // S2B-10: a product not yet unit-tracked switches over when its stock is now exactly its units on the shelf
+        // (it had no stock without units). Otherwise it stays as is and still needs the opening balance.
+        const states = (await trackingStates(tx, [...byProduct.keys()])).filter((s) => !s.unit_tracking);
+        const started = states.filter(canStartTracking);
+        for (const s of started) {
+          await tx.products.update({ where: { id: s.product_id }, data: { unit_tracking: true } });
+          await this.audit.log(
+            { staffId, action: 'product.unit_tracking_started', entityType: 'product', entityId: s.product_id, before: { unit_tracking: false }, after: { unit_tracking: true, actual_qty: s.actual, units_on_shelf: s.on_shelf, receiving_session_id: session.id } },
+            tx,
+          );
+        }
+        if (states.length) {
+          summary.unit_tracking = {
+            started: started.map((s) => s.sku),
+            not_started: states.filter((s) => !canStartTracking(s)).map((s) => ({ sku: s.sku, actual_qty: s.actual, units_on_shelf: s.on_shelf })),
+          };
+        }
       } else {
         // Opening balance: the stock becomes the number of units in stock; from now on the product is unit-tracked.
         const changes: object[] = [];

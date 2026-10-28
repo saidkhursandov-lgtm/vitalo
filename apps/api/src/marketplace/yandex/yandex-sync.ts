@@ -4,6 +4,7 @@ import { MarketplaceOrderStatus, Prisma } from '@prisma/client';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { SystemErrorsService } from '../../notifications/system-errors';
 import { PrismaService } from '../../prisma/prisma.service';
+import { notTrackedReason, trackingStates } from '../../receiving/unit-tracking';
 import { AuditService } from '../../staff/audit.service';
 import { findProductsBySkus } from '../../staff/sku-aliases';
 import { YandexOrdersService } from '../yandex-orders';
@@ -77,6 +78,8 @@ export interface RunDetail {
 }
 
 const MAX_DETAILS = 500;
+/** «Требует внимания» without an order that the admin fixes on our side: read again on every run. */
+const RETRY_KINDS: AttentionKind[] = ['UNKNOWN_SKU', 'NOT_UNIT_TRACKED'];
 
 /**
  * Stage 2D: Yandex orders arrive by themselves — read only (S2D-3). A poll every N minutes (and «Проверить
@@ -180,11 +183,12 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
         const days = first ? cfg.firstDays : cfg.days;
         const from = new Date(Date.now() - days * 86_400_000).toISOString();
         rawOrders = await this.client().businessOrders(cfg.businessId, { campaignIds: cfg.campaignIds, updateDateFrom: from });
-        // «Требует внимания: неизвестный SKU» (not closed, no order yet) is read again every run, even if Yandex did
-        // not change it within the window: an alternative SKU added later lets the next poll create it.
+        // «Требует внимания: неизвестный SKU / товар без учёта по банкам» (not closed, no order yet) is read again every
+        // run, even if Yandex did not change it within the window: an alternative SKU added later, or the product
+        // switched to unit tracking, lets the next poll create it.
         const seen = new Set(rawOrders.map((r) => String((r as { orderId?: unknown })?.orderId)));
         const waiting = await this.prisma.marketplace_external_orders.findMany({
-          where: { attention_kind: 'UNKNOWN_SKU', closed_at: null, order_id: null },
+          where: { attention_kind: { in: RETRY_KINDS }, closed_at: null, order_id: null },
           select: { external_number: true },
           take: 500,
         });
@@ -416,8 +420,8 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
     const products = [...new Map([...found.values()].map((p) => [p.id, p])).values()];
     const byOffer = (offerId: string) => found.get(offerId)!;
     const byAlias = skus.filter((s) => found.get(s)!.alias).map((s) => `${s} → ${found.get(s)!.sku}`);
-    const untracked = products.filter((p) => !p.unit_tracking).map((p) => p.sku);
-    if (untracked.length) return { type: 'attention', kind: 'NOT_UNIT_TRACKED', reason: `${untracked.join(', ')} не учитывается по банкам` };
+    const untracked = await trackingStates(db, products.filter((p) => !p.unit_tracking).map((p) => p.id));
+    if (untracked.length) return { type: 'attention', kind: 'NOT_UNIT_TRACKED', reason: untracked.map(notTrackedReason).join('; ') };
     const foreign = o.items.filter((i) => i.currency && i.currency !== 'UZS');
     if (foreign.length) return { type: 'attention', kind: 'CURRENCY', reason: `цена в ${foreign[0].currency}, ожидаются сумы (UZS)` };
     const noPrice = o.items.filter((i) => i.unitPrice === null && byOffer(i.offerId).yandex_price_uzs === null);

@@ -405,7 +405,8 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
     const o = yOrder([{ sku: p.sku, count: 1 }]);
     yandex.queue = [{ status: 420, headers: { 'X-RateLimit-Resource-Remaining': '3' } }, { status: 503 }];
     expect(await runSync()).toMatchObject({ error: null, created: 1 });
-    expect(yandex.calls).toHaveLength(3);
+    // 420 and 503 retried, then the answer (orders still «Требует внимания» from the tests above are read again too)
+    expect(yandex.calls.filter((c) => !c.body.orderIds)).toHaveLength(3);
 
     yandex.queue = [{ status: 420, body: { status: 'ERROR', errors: [{ code: 'LIMIT' }] }, headers: { 'X-RateLimit-Resource-Remaining': '0' } }];
     const limited = await runSync();
