@@ -36,7 +36,7 @@ VITALO — интернет-магазин БАДов и витаминов в �
 | Остановить всё | `stop.bat` |
 | Тесты API (база `vitalo_test`, можно без разрешения) | `cd apps\api` → `npm test`, `npm run test:e2e` |
 | Тесты Mini App / админки / бота | `npm test` в папке приложения |
-| Prisma Client после смены схемы | `cd apps\api` → `npx prisma generate` |
+| Prisma Client после смены схемы | `cd apps\api` → `npx prisma generate`, затем перезапустить API (`stop.bat` → `start.bat`): `start:dev` следит только за `src` |
 | Миграции на `vitalo_dev` | только с разрешения пользователя (см. «Базы данных») |
 | Выкладка на сервер | только пользователь сам: `git push server main` → `update.sh --check` → `update.sh` ([DEPLOY_RUNBOOK](docs/DEPLOY_RUNBOOK.md), «Шпаргалка») |
 
