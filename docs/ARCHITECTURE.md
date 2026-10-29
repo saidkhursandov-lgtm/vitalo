@@ -64,7 +64,7 @@
 
 | Адрес | Что |
 | --- | --- |
-| `vitalo.uz` | основной: сейчас Mini App (`apps/miniapp/dist`); позже лендинг/сайт |
+| `vitalo.uz` | основной: сейчас Mini App (`apps/miniapp/dist`). Лендинг — временная страница до релиза 6; сайт = тот же Mini App в браузере (релиз 6, D-30), отдельного сайта нет |
 | `admin.vitalo.uz` | админка (`apps/admin/dist`) |
 | `api.vitalo.uz` | API (nginx → `vitalo-api` на порту 3000, наружу порт не открыт) |
 | `vitalostore.uz` | должен перенаправлять на `vitalo.uz` (29.10 не ответил — проверить) |
