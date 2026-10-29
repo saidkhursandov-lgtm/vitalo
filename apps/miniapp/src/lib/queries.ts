@@ -88,9 +88,9 @@ export function useCart(city?: CityRef | null) {
   });
 }
 
-/** Badge in the top bar. Uses the read-only counter so it never "eats" the cart warnings. */
+/** Badge in the top bar and the floating cart bar. Uses the read-only counter so it never "eats" the cart warnings. */
 export function useCartCount() {
-  return useQuery({ queryKey: ['cart', 'count'], queryFn: async () => (await api<{ items_count: number }>('/cart/count')).items_count });
+  return useQuery({ queryKey: ['cart', 'count'], queryFn: () => api<{ items_count: number; goods_total_uzs: number }>('/cart/count') });
 }
 
 /** Every cart mutation returns the fresh cart; we store it and refresh views that depend on a city. */

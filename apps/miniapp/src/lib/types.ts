@@ -31,7 +31,8 @@ export interface LocalizedText {
   uz: string;
 }
 
-export type PaymentMethodCode = 'card_transfer' | 'bank_transfer';
+/** `bank_transfer` is no longer offered at checkout (D-06) but old orders with it still open. */
+export type PaymentMethodCode = 'card_transfer' | 'bank_transfer' | 'cod';
 
 export interface CategoryTrees {
   need: CategoryNode[];
@@ -125,6 +126,8 @@ export interface ShopInfo {
   delivery_terms: { tashkent: DaysRange | null; regions: DaysRange | null };
   home_content?: HomeContent;
   bonus_teaser?: { enabled: boolean; text: LocalizedText };
+  /** Release 1 switches from Настройки → Оплата. */
+  checkout?: { cod_max_total_uzs: number | null; show_online_soon: boolean; first_order_free_delivery: boolean };
 }
 
 export type TrustKey = 'original' | 'delivery' | 'documents' | 'payments';
@@ -237,6 +240,7 @@ export interface OrderListItem {
   total_uzs: number;
   items_count: number;
   payment_reported?: boolean;
+  payment_method?: string | null;
 }
 
 export interface OrderPreview {
@@ -246,6 +250,8 @@ export interface OrderPreview {
   delivery: DeliveryQuote;
   problems: { code: string; product_id: string; requested: number; available: number }[];
   can_place: boolean;
+  /** «Оплата при получении» is offered only for the city of Tashkent and up to the limit. */
+  payment_options?: { cod: boolean; cod_unavailable: 'region' | 'limit' | 'off' | null };
 }
 
 /** Payment instruction for a manual transfer (card or bank requisites). */
@@ -257,7 +263,8 @@ export interface BankTransfer {
   amount_uzs: number;
   purpose: string;
   requisites: { recipient: string; bank_name: string; account: string; mfo: string; inn: string } | null;
-  card: { card_number: string; recipient: string } | null;
+  /** D-04: only the number; the card holder's name is never shown. */
+  card: { card_number: string } | null;
   hint: LocalizedText;
   pay_until: string | null;
   customer_reported_paid_at: string | null;

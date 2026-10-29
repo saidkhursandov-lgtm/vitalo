@@ -19,23 +19,22 @@ export const prettyCard = (digits: string) => digits.replace(/(\d{4})(?=\d)/g, '
 function CopyRow({ label, value, copyValue = value }: { label: string; value: string; copyValue?: string }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  // One tap on the value or on the button copies it (D-04)
+  const copy = () =>
+    void copyText(copyValue).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
   return (
     <div className="copy-row">
       <div>
         <div className="hint small">{label}</div>
-        <div className="copy-value">{value}</div>
+        <button type="button" className="copy-value copy-tap" onClick={copy}>
+          {value}
+        </button>
       </div>
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm"
-        onClick={() =>
-          void copyText(copyValue).then((ok) => {
-            if (!ok) return;
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          })
-        }
-      >
+      <button type="button" className="btn btn-secondary btn-sm" onClick={copy}>
         <CopyIcon width={16} height={16} /> {copied ? t('pay.copied') : t('pay.copy')}
       </button>
     </div>
@@ -121,10 +120,7 @@ export function Payment() {
   const reported = !!d.customer_reported_paid_at || reportPaid.isSuccess;
   const rows: [MessageKey, string, string?][] =
     d.method === 'card_transfer' && d.card
-      ? [
-          ['pay.cardNumber', prettyCard(d.card.card_number), d.card.card_number],
-          ['pay.cardRecipient', d.card.recipient],
-        ]
+      ? [['pay.cardNumber', prettyCard(d.card.card_number), d.card.card_number]] // D-04: never the card holder's name
       : d.requisites
         ? [
             ['pay.recipient', d.requisites.recipient],
@@ -162,6 +158,7 @@ export function Payment() {
               <CopyRow key={label} label={t(label)} value={value} copyValue={copy} />
             ))}
           </section>
+          {d.method === 'card_transfer' && <p className="hint small">{t('pay.tapToCopy')}</p>}
           <p className="notice notice-info">{lang === 'uz' ? d.hint.uz : d.hint.ru}</p>
 
           {(

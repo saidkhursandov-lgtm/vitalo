@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState, Loading, RegionCitySelect } from '../components/ui';
@@ -7,19 +7,18 @@ import { useUser } from '../lib/auth';
 import { money, normalizePhone, prettyPhone } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { createIdempotencyKeys } from '../lib/idempotency';
-import { useAddressActions, useAddresses, useCheckoutDefaults, useRegions, type CityRef } from '../lib/queries';
+import { useAddressActions, useAddresses, useCheckoutDefaults, useRegions, useShopTexts, type CityRef } from '../lib/queries';
 import { canRequestPhone, haptic, requestPhone } from '../lib/telegram';
 import { track } from '../lib/analytics';
 import { PhoneIcon } from '../components/Icons';
 import type { Order, OrderPreview, PaymentMethodCode } from '../lib/types';
-import type { MessageKey } from '../lib/i18n';
 
-const MANUAL_METHODS: { code: PaymentMethodCode; title: MessageKey; desc: MessageKey }[] = [
-  { code: 'card_transfer', title: 'pay.card', desc: 'pay.cardDesc' },
-  { code: 'bank_transfer', title: 'pay.bank', desc: 'pay.bankDesc' },
-];
-/** Shown disabled with a "Скоро" badge until connected (payment architecture stays the same). */
-const SOON_METHODS = ['Payme', 'Click', 'Uzum', 'cod'] as const;
+/**
+ * Release 1: «Перевод по реквизитам компании» is gone (D-06). «Оплата при получении» is added only where the server
+ * says it is possible (the city of Tashkent, up to the limit). Online providers are shown as «Скоро» only while the
+ * switch show_online_soon is on (Настройки → Оплата).
+ */
+const SOON_METHODS = ['Payme', 'Click', 'Uzum'] as const;
 import { FreeShippingProgress } from './Cart';
 import { QuoteTerm } from '../components/Delivery';
 
@@ -50,6 +49,7 @@ export function Checkout() {
   const regions = useRegions();
   const addresses = useAddresses();
   const defaults = useCheckoutDefaults();
+  const shop = useShopTexts();
   const { create: saveAddress } = useAddressActions();
   const keys = useRef(createIdempotencyKeys()).current;
   useEffect(() => track('checkout_start', { source: params.get('buy') ? 'buy_now' : 'cart' }), [params]);
@@ -95,7 +95,14 @@ export function Checkout() {
     queryKey: ['preview', source, city, method],
     queryFn: () => api<OrderPreview>('/orders/preview', { method: 'POST', body: { ...source, ...city, payment_method: method } }),
     enabled: !!city,
+    placeholderData: keepPreviousData, // no flicker of the payment options while the method or the address changes
   });
+
+  // «Оплата при получении» disappears when the address moves out of Tashkent: fall back to the card transfer.
+  const codOption = preview.data?.payment_options;
+  useEffect(() => {
+    if (method === 'cod' && codOption && !codOption.cod) setMethod('card_transfer');
+  }, [method, codOption]);
 
   const placeOrder = useMutation({
     mutationFn: ({ body, key }: { body: object; key: string }) => api<Order>('/orders', { method: 'POST', body, headers: { 'Idempotency-Key': key } }),
@@ -159,7 +166,8 @@ export function Checkout() {
       }
       void client.invalidateQueries({ queryKey: ['cart'] });
       void client.invalidateQueries({ queryKey: ['orders'] });
-      navigate(`/orders/${order.id}/pay`, { replace: true });
+      // Cash on delivery has no transfer screen: the order waits for the manager's call
+      navigate(order.payment?.method === 'cod' ? `/orders/${order.id}` : `/orders/${order.id}/pay`, { replace: true });
     } catch (err) {
       haptic('error');
       const code = err instanceof ApiError ? err.code : undefined;
@@ -240,24 +248,45 @@ export function Checkout() {
 
       <section className="card">
         <h2>{t('checkout.payment')}</h2>
-        {/* Only manual transfers work now; online providers and cash on delivery are shown as "Скоро". */}
-        {MANUAL_METHODS.map((m) => (
-          <label key={m.code} className={`pay-option ${method === m.code ? 'is-on' : ''}`}>
-            <input type="radio" name="payment" checked={method === m.code} onChange={() => setMethod(m.code)} />
+        <label className={`pay-option ${method === 'card_transfer' ? 'is-on' : ''}`}>
+          <input type="radio" name="payment" checked={method === 'card_transfer'} onChange={() => setMethod('card_transfer')} />
+          <span>
+            <strong>{t('pay.card')}</strong>
+            <span className="hint small block">{t('pay.cardDesc')}</span>
+          </span>
+        </label>
+        {/* Hidden for other regions; for an order above the limit it is shown disabled with the reason */}
+        {codOption && (codOption.cod || codOption.cod_unavailable === 'limit') && (
+          <label className={`pay-option ${method === 'cod' ? 'is-on' : ''} ${codOption.cod ? '' : 'is-disabled'}`}>
+            <input
+              type="radio"
+              name="payment"
+              checked={method === 'cod'}
+              disabled={!codOption.cod}
+              onChange={() => {
+                setMethod('cod');
+                track('cod_selected');
+              }}
+            />
             <span>
-              <strong>{t(m.title)}</strong>
-              <span className="hint small block">{t(m.desc)}</span>
+              <strong>{t('pay.codTitle')}</strong>
+              <span className="hint small block">
+                {codOption.cod || shop.data?.checkout?.cod_max_total_uzs == null
+                  ? t('pay.codDesc')
+                  : t('pay.codLimit', { max: money(shop.data.checkout.cod_max_total_uzs, lang) })}
+              </span>
             </span>
           </label>
-        ))}
-        {SOON_METHODS.map((name) => (
-          <div key={name} className="pay-option is-disabled" aria-disabled="true">
-            <input type="radio" disabled />
-            <span>{name === 'cod' ? t('pay.cod') : name}</span>
-            <span className="soon-badge">{t('pay.soon')}</span>
-          </div>
-        ))}
-        <p className="hint small">{t('checkout.bankTransferHint')}</p>
+        )}
+        {shop.data?.checkout?.show_online_soon &&
+          SOON_METHODS.map((name) => (
+            <div key={name} className="pay-option is-disabled" aria-disabled="true">
+              <input type="radio" disabled />
+              <span>{name}</span>
+              <span className="soon-badge">{t('pay.soon')}</span>
+            </div>
+          ))}
+        <p className="hint small">{t(method === 'cod' ? 'pay.codHint' : 'checkout.bankTransferHint')}</p>
       </section>
 
       <section className="card summary">

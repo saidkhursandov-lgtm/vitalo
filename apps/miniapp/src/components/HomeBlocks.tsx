@@ -1,10 +1,92 @@
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useI18n } from '../lib/i18n';
+import { openSupport } from '../lib/shop';
 import type { HomeContent, Lang, LocalizedText, ShopInfo } from '../lib/types';
 import { generalTerms } from './Delivery';
-import { BadgeIcon, TRUST_ICONS } from './Icons';
+import { BadgeIcon, DoctorIcon, ShieldIcon, StarIcon, SupportIcon, TRUST_ICONS } from './Icons';
+import { useSupportUrl } from './Support';
 
 const pick = (t: LocalizedText, lang: Lang) => (lang === 'uz' ? t.uz : t.ru);
+
+/**
+ * Home banner (120–140 px): two slides — «Отбор врачом • 4,9★ на Яндекс Маркете» and «Бесплатная доставка первого
+ * заказа». The second one is shown only while the «first order free delivery» switch is on, so we never promise it falsely.
+ */
+export function HomeCarousel({ freeFirstOrder }: { freeFirstOrder: boolean }) {
+  const { t } = useI18n();
+  const track = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(0);
+  const slides = [
+    {
+      key: 'doctor',
+      title: t('home.slide1.title'),
+      sub: (
+        <>
+          <strong>4,9</strong>
+          <StarIcon filled width={14} height={14} aria-label="★" />
+          {t('home.slide1.sub')}
+        </>
+      ),
+    },
+    ...(freeFirstOrder ? [{ key: 'free', title: t('home.slide2.title'), sub: <>{t('home.slide2.sub')}</> }] : []),
+  ];
+  return (
+    <section className="hero" aria-roledescription="carousel">
+      <div
+        className="hero-track"
+        ref={track}
+        onScroll={(e) => setIndex(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}
+      >
+        {slides.map((s) => (
+          <div key={s.key} className="hero-slide">
+            <BadgeIcon className="banner-mark" width={96} height={96} />
+            <h2>{s.title}</h2>
+            <p>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+      {slides.length > 1 && (
+        <div className="hero-dots" aria-hidden>
+          {slides.map((s, i) => (
+            <span key={s.key} className={i === index ? 'is-on' : ''} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Three short trust chips under the search field. */
+export function TrustChips() {
+  const { t } = useI18n();
+  const chips = [
+    { key: 'original', Icon: ShieldIcon, text: t('home.chip.original') },
+    { key: 'doctor', Icon: DoctorIcon, text: t('home.chip.doctor') },
+    { key: 'delivery', Icon: TRUST_ICONS.delivery, text: t('home.chip.delivery') },
+  ];
+  return (
+    <div className="chips scroll-x trust-chips">
+      {chips.map(({ key, Icon, text }) => (
+        <span key={key} className="chip chip-static">
+          <Icon width={16} height={16} />
+          {text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** «Поможем с выбором» — opens the support chat. */
+export function HelpButton() {
+  const { t } = useI18n();
+  const url = useSupportUrl();
+  return (
+    <button type="button" className="btn btn-secondary btn-block help-btn" onClick={() => openSupport(url)}>
+      <SupportIcon width={20} height={20} /> {t('home.help')}
+    </button>
+  );
+}
 
 /** Banner on the brand background: title, subtitle, «Смотреть каталог». */
 export function HomeBanner({ content }: { content: HomeContent }) {

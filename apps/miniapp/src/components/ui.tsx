@@ -135,14 +135,16 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 // ---------------------------------------------------------------- order status pill
 
 /** Coloured pill: dot + text in lists, SVG icon + text on the order screen. */
-export function StatusPill({ status, reported = false, large = false }: { status: OrderStatus; reported?: boolean; large?: boolean }) {
+export function StatusPill({ status, reported = false, large = false, cod = false }: { status: OrderStatus; reported?: boolean; large?: boolean; cod?: boolean }) {
   const { t } = useI18n();
   const shown = shownStatus(status, reported);
+  // «Оплата при получении»: a new order waits for the manager, not for a payment
+  const waitsForManager = cod && status === 'new';
   const I = STATUS_ICONS[shown];
   return (
     <span className={`status status-${shown}${large ? ' status-lg' : ''}`}>
       {large && I ? <I width={18} height={18} /> : <span className="status-dot" aria-hidden />}
-      {t(statusKey(status, reported))}
+      {t(waitsForManager ? 'status.codWaiting' : statusKey(status, reported))}
     </span>
   );
 }

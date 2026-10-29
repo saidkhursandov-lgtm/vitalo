@@ -29,7 +29,7 @@ export function OrderRow({ order }: { order: OrderListItem }) {
         </div>
       </div>
       <div className="order-row-right">
-        <StatusPill status={order.status} reported={order.payment_reported} />
+        <StatusPill status={order.status} reported={order.payment_reported} cod={order.payment_method === 'cod'} />
         <strong>{money(order.total_uzs, lang)}</strong>
       </div>
       <ChevronIcon width={18} height={18} className="hint" />
@@ -90,6 +90,7 @@ export function OrderDetail() {
   const o = order.data;
   const unpaid = o.status === 'new' || o.status === 'awaiting_payment';
   const reported = !!o.payment?.customer_reported_paid_at;
+  const cod = o.payment?.method === 'cod';
   const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
 
   async function onCancel() {
@@ -101,10 +102,11 @@ export function OrderDetail() {
     <div className="page">
       <h1>{t('orders.number', { n: o.order_number })}</h1>
       <div className="order-status-hero">
-        <StatusPill status={o.status} reported={reported} large />
+        <StatusPill status={o.status} reported={reported} large cod={cod} />
         <span className="hint small">{dateTime(o.created_at, lang)}</span>
       </div>
 
+      {cod && o.status === 'new' && <div className="notice notice-info">{t('orders.codWaiting')}</div>}
       {unpaid && o.reserved_until && !reported && <PayBy until={o.reserved_until} />}
       {unpaid && reported && <div className="notice notice-ok">{t('orders.payWaiting')}</div>}
 

@@ -75,6 +75,12 @@ describe('format', () => {
     expect(discountPercent(65000, 60000)).toBeNull();
   });
 
+  it('D-09: no crossed-out price and no percent for a discount above 25%', () => {
+    expect(discountPercent(75000, 100000)).toBe(25); // exactly 25% is still shown
+    expect(discountPercent(74000, 100000)).toBeNull(); // 26%
+    expect(discountPercent(30000, 100000)).toBeNull(); // 70%
+  });
+
   it('normalizes Uzbek phone numbers', () => {
     expect(normalizePhone('90 123-45-67')).toBe('+998901234567');
     expect(normalizePhone('+998 (90) 123 45 67')).toBe('+998901234567');

@@ -92,7 +92,7 @@ export function OrderDetail() {
       >
         {a.confirm_payment && (
           <button className="btn" onClick={() => setModal('confirm')}>
-            Подтвердить оплату
+            {o.payment?.method === 'cod' ? 'Подтвердить заказ' : 'Подтвердить оплату'}
           </button>
         )}
         {a.next_status && (
@@ -146,6 +146,11 @@ export function OrderDetail() {
         />
       )}
       {modal === 'return' && <ReturnOrderModal order={o} onDone={done} onClose={() => setModal(null)} />}
+      {o.payment?.method === 'cod' && o.payment_status === 'payment_pending' && o.status === 'new' && (
+        <div className="alert alert-warn">
+          Оплата при получении (только г. Ташкент). Позвоните клиенту и подтвердите заказ; деньги забирает курьер. Заказ не отменяется сам — через 3 часа придёт напоминание.
+        </div>
+      )}
       {o.payment?.customer_reported_paid_at && o.payment_status === 'payment_pending' && (
         <div className="alert alert-warn">
           Клиент нажал «Я оплатил» {dateTime(o.payment.customer_reported_paid_at)}. Проверьте поступление на счёт и подтвердите оплату.
@@ -293,16 +298,24 @@ type ModalProps = { order: AdminOrder; onDone: (o: AdminOrder) => void; onClose:
 
 function ConfirmPayment({ order, onDone, onClose }: ModalProps) {
   const [comment, setComment] = useState('');
+  const cod = order.payment?.method === 'cod';
   const m = useMutation({
     mutationFn: () => api<AdminOrder>(`/staff/orders/${order.id}/confirm-payment`, { method: 'POST', body: { comment: comment || undefined } }),
     onSuccess: onDone,
   });
   return (
-    <Modal title="Подтвердить оплату" onClose={onClose}>
-      <p>
-        {PAYMENT_METHOD[order.payment?.method ?? ''] ?? 'Перевод'}: деньги поступили — <strong>{money(order.payment?.amount_uzs)}</strong> за заказ {order.order_number}?
-        Резерв товара превратится в списание, заказ станет «Оплачен».
-      </p>
+    <Modal title={cod ? 'Подтвердить заказ' : 'Подтвердить оплату'} onClose={onClose}>
+      {cod ? (
+        <p>
+          Вы связались с клиентом и он подтвердил заказ {order.order_number} на <strong>{money(order.payment?.amount_uzs)}</strong>? Оплата — курьеру при получении.
+          Заказ пойдёт на сборку.
+        </p>
+      ) : (
+        <p>
+          {PAYMENT_METHOD[order.payment?.method ?? ''] ?? 'Перевод'}: деньги поступили — <strong>{money(order.payment?.amount_uzs)}</strong> за заказ {order.order_number}?
+          Резерв товара превратится в списание, заказ станет «Оплачен».
+        </p>
+      )}
       <Field label="Комментарий (необязательно)">
         <input value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} />
       </Field>
@@ -312,7 +325,7 @@ function ConfirmPayment({ order, onDone, onClose }: ModalProps) {
           Отмена
         </button>
         <button className="btn" disabled={m.isPending} onClick={() => m.mutate()}>
-          Подтвердить оплату
+          {cod ? 'Подтвердить заказ' : 'Подтвердить оплату'}
         </button>
       </div>
     </Modal>

@@ -3,6 +3,8 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useI18n } from '../lib/i18n';
 import { useCartCount } from '../lib/queries';
 import { telegram } from '../lib/telegram';
+import { FloatingCart } from './FloatingCart';
+import { BrandBlock, LangSwitch } from './HeaderParts';
 import { BackIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, UserIcon } from './Icons';
 import { Logo } from './Logo';
 import { NetworkBanner } from './NetworkBanner';
@@ -52,8 +54,10 @@ export function Layout() {
   const cartCount = useCartCount();
   const isTab = TABS.includes(pathname);
   const showNav = !NO_NAV.some((re) => re.test(pathname));
-  const count = cartCount.data ?? 0;
+  const count = cartCount.data?.items_count ?? 0;
   const bump = useBump(count);
+  // Floating cart bar: only where the bottom menu is, and not on the cart screen itself (it has its own big button)
+  const showFloatCart = showNav && count > 0 && pathname !== '/cart';
 
   useTelegramBackButton(!isTab);
   useEffect(() => {
@@ -62,28 +66,34 @@ export function Layout() {
   }, [pathname]);
 
   return (
-    <div className={`app ${showNav ? 'with-nav' : ''} ${BUY_PANEL.test(pathname) ? 'has-buy-panel' : ''}`}>
+    <div className={`app ${showNav ? 'with-nav' : ''} ${BUY_PANEL.test(pathname) ? 'has-buy-panel' : ''} ${showFloatCart ? 'has-float-cart' : ''}`}>
       <ToastProvider>
       <header className="topbar">
-        {!isTab && !telegram() ? (
-          <button className="icon-btn" aria-label={t('common.back')} onClick={() => navigate(-1)}>
-            <BackIcon />
-          </button>
-        ) : (
+        <div className="topbar-left">
+          {!isTab && !telegram() && (
+            <button className="icon-btn" aria-label={t('common.back')} onClick={() => navigate(-1)}>
+              <BackIcon />
+            </button>
+          )}
           <Link to="/" className="logo-link">
-            <Logo />
+            <BrandBlock logo={<Logo />} />
           </Link>
-        )}
-        <Link to="/cart" className="icon-btn cart-btn" aria-label={t('nav.cart')}>
-          <CartIcon />
-          {count > 0 && <span className={`badge ${bump ? 'is-bump' : ''}`}>{count > 99 ? '99+' : count}</span>}
-        </Link>
+        </div>
+        <div className="topbar-right">
+          <LangSwitch />
+          <Link to="/cart" className="icon-btn cart-btn" aria-label={t('nav.cart')}>
+            <CartIcon />
+            {count > 0 && <span className={`badge ${bump ? 'is-bump' : ''}`}>{count > 99 ? '99+' : count}</span>}
+          </Link>
+        </div>
       </header>
 
       <NetworkBanner />
       <main className="content">
         <Outlet />
       </main>
+
+      {showFloatCart && <FloatingCart count={count} total={cartCount.data?.goods_total_uzs ?? 0} />}
 
       {showNav && (
         <nav className="bottom-nav">

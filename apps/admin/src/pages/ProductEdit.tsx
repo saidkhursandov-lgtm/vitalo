@@ -6,7 +6,7 @@ import { DictionarySelect, type DictionaryKind } from '../components/DictionaryS
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
-import { dateTime, PRODUCT_STATUS } from '../lib/format';
+import { dateTime, discountAboveLimit, MAX_SHOWN_DISCOUNT, PRODUCT_STATUS } from '../lib/format';
 import { BackIcon } from '../components/Icons';
 
 interface CategoryNode {
@@ -161,6 +161,8 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     setSaved(false);
   };
   /** The VITALO price is applied in the shop at once; only a changed Yandex price asks about Yandex Market. */
+  // D-09: a discount above 25% is not shown to customers; saving is still allowed
+  const bigDiscount = discountAboveLimit(toInt(f.price_uzs), toInt(f.old_price_uzs));
   const yandexPriceChanged = yandexView && (toInt(f.yandex_price_uzs) ?? null) !== (product?.yandex_price_uzs ?? null);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -275,6 +277,11 @@ function ProductForm({ product }: { product?: AdminProduct }) {
               {input('min_stock', { inputMode: 'numeric' })}
             </Field>
           </div>
+          {bigDiscount !== null && (
+            <div className="alert alert-warn">
+              Скидка {bigDiscount}% больше {MAX_SHOWN_DISCOUNT}%: в магазине зачёркнутая цена и процент для этого товара показываться не будут. Сохранить можно.
+            </div>
+          )}
           {product && (
             <table className="table">
               <thead>

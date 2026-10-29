@@ -3,6 +3,7 @@ import { Route, Routes, useNavigate } from 'react-router-dom';
 import { trackAppOpen } from './lib/analytics';
 import { Layout } from './components/Layout';
 import { ConfirmProvider } from './components/Confirm';
+import { BrandBlock, LangSwitch } from './components/HeaderParts';
 import { BackIcon } from './components/Icons';
 import { Logo } from './components/Logo';
 import { Empty, ErrorState } from './components/ui';
@@ -65,8 +66,8 @@ function LegalStandalone() {
         <button className="icon-btn" aria-label={t('common.back')} onClick={() => navigate('/', { replace: true })}>
           <BackIcon />
         </button>
-        <Logo />
-        <span style={{ width: 44 }} />
+        <BrandBlock logo={<Logo />} />
+        <LangSwitch />
       </header>
       <main className="content">
         <LegalDocument />
