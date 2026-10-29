@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { money, shortNameOf } from '../lib/format';
+import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { track } from '../lib/analytics';
 import type { OnlineProvider, ShortNamed } from '../lib/types';
@@ -32,7 +32,7 @@ export function OrderItems({ items, note }: { items: OrderItemLine[]; note?: (it
             </Link>
             <span className="hint small">
               × {i.qty}
-              {i.form && ` · ${i.form}`}
+              {i.form && ` · ${formLabel(i.form, lang)}`}
             </span>
             {note?.(i)}
           </div>

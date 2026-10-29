@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronIcon, CloseIcon, FilterIcon } from '../components/Icons';
 import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
-import { nameOf } from '../lib/format';
+import { formLabel, nameOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useBrands, useCategories, useForms, useProducts, useProductsCount, type ProductFilters, type Sort } from '../lib/queries';
 import type { CategoryNode } from '../lib/types';
@@ -180,7 +180,7 @@ export function ProductList() {
 
 /** Bottom sheet: price, brand, form, availability; the main button shows how many products will be shown. */
 function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; onApply: (f: ProductFilters) => void; onClose: () => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const brands = useBrands();
   const forms = useForms();
   const [draft, setDraft] = useState<ProductFilters>(filters);
@@ -237,7 +237,7 @@ function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; o
           {forms.data?.map(({ form }) => (
             <label key={form} className="check-row">
               <input type="checkbox" checked={draft.form?.includes(form) ?? false} onChange={() => toggle('form', form)} />
-              {form}
+              {formLabel(form, lang)}
             </label>
           ))}
 

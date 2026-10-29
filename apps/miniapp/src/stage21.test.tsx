@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OnlineSoon, OrderItems, OrderTotals } from './components/OrderItems';
 import * as analytics from './lib/analytics';
-import { shortNameOf } from './lib/format';
+import { formLabel, shortNameOf } from './lib/format';
 import { I18nProvider } from './lib/i18n';
 import type { Lang } from './lib/types';
 
@@ -47,6 +47,28 @@ describe('short name (2.1)', () => {
     expect(screen.getByText('Бесплатно').className).toBe('free-accent');
     expect(text).toContain('Первый заказ');
     expect(container.querySelector('.sum-row.total')?.textContent).toContain('Итого');
+  });
+});
+
+describe('product form in Uzbek (2.1)', () => {
+  it('every form in the database is translated; Russian stays as is', () => {
+    expect(formLabel('Капсулы', 'uz')).toBe('Kapsula');
+    expect(formLabel('Таблетки', 'uz')).toBe('Tabletka');
+    expect(formLabel('Порошок', 'uz')).toBe('Kukun');
+    expect(formLabel('Капсулы и таблетки (набор)', 'uz')).toBe('Kapsula va tabletka (to‘plam)');
+    expect(formLabel('Порошок (саше)', 'uz')).toBe('Kukun (sashe)');
+    expect(formLabel('Капсулы', 'ru')).toBe('Капсулы');
+  });
+
+  it('case and extra spaces do not matter; a non-standard form is shown as it is', () => {
+    expect(formLabel('  жевательные   таблетки ', 'uz')).toBe('Chaynaladigan tabletka');
+    expect(formLabel('ЖИДКОСТЬ', 'uz')).toBe('Suyuqlik');
+    expect(formLabel('Масло в флаконе 30 мл', 'uz')).toBe('Масло в флаконе 30 мл');
+  });
+
+  it('«Ваш заказ» in Uzbek shows the form in Uzbek', () => {
+    const { container } = wrap('uz', <OrderItems items={[{ product_id: 'p1', name_ru: 'Витамин D3', qty: 1, line_total_uzs: 76_000, form: 'Капсулы' }]} />);
+    expect(plain(container)).toContain('× 1 · Kapsula');
   });
 });
 

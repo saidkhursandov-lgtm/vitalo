@@ -5,7 +5,7 @@ import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { QuoteTerm } from '../components/Delivery';
 import { EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
 import { OrderTotals } from '../components/OrderItems';
-import { money, shortNameOf } from '../lib/format';
+import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useAddresses, useCart, useCartActions, useRegions, type CityRef } from '../lib/queries';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
@@ -104,7 +104,7 @@ export function Cart() {
               <Link to={`/product/${l.product_id}`} className="cart-name">
                 {shortNameOf(l, lang)}
               </Link>
-              <div className="hint small">{[l.brand, l.form].filter(Boolean).join(' · ')}</div>
+              <div className="hint small">{[l.brand, l.form && formLabel(l.form, lang)].filter(Boolean).join(' · ')}</div>
               {l.status === 'unavailable' ? (
                 <div className="error-text small">{t('cart.unavailable')}</div>
               ) : (

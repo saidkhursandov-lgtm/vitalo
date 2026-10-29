@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
-import { money, nameOf, textOf } from '../lib/format';
+import { formLabel, money, nameOf, textOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
@@ -91,7 +91,7 @@ export function Product() {
           {p.form && (
             <>
               <dt>{t('product.form')}</dt>
-              <dd>{p.form}</dd>
+              <dd>{formLabel(p.form, lang)}</dd>
             </>
           )}
         </dl>

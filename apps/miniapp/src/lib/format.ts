@@ -34,6 +34,48 @@ export function shortNameOf(item: ShortNamed, lang: Lang): string {
   return item.short_name_ru || item.name_ru;
 }
 
+/**
+ * Product form (products.form is stored in Russian only). Standard forms are shown in Uzbek in the UZ version;
+ * a form that is not in the list is shown as it is. Lookup ignores case and extra spaces.
+ */
+const FORM_UZ: Record<string, string> = {
+  'капсулы': 'Kapsula',
+  'капсула': 'Kapsula',
+  'мягкие капсулы': 'Yumshoq kapsula',
+  'таблетки': 'Tabletka',
+  'таблетка': 'Tabletka',
+  'жевательные таблетки': 'Chaynaladigan tabletka',
+  'шипучие таблетки': 'Eruvchan tabletka',
+  'растворимые таблетки': 'Eruvchan tabletka',
+  'таблетки для рассасывания': 'So‘riladigan tabletka',
+  'пастилки': 'Pastilka',
+  'жевательные пастилки': 'Chaynaladigan pastilka',
+  'жевательный мармелад': 'Chaynaladigan marmelad',
+  'мармелад': 'Marmelad',
+  'жевательные': 'Chaynaladigan',
+  'порошок': 'Kukun',
+  'порошок (саше)': 'Kukun (sashe)',
+  'саше': 'Sashe',
+  'гранулы': 'Granula',
+  'жидкость': 'Suyuqlik',
+  'капли': 'Tomchi',
+  'сироп': 'Sirop',
+  'раствор': 'Eritma',
+  'спрей': 'Sprey',
+  'ампулы': 'Ampula',
+  'гель': 'Gel',
+  'крем': 'Krem',
+  'чай': 'Choy',
+  'батончик': 'Batonchik',
+  'капсулы и таблетки (набор)': 'Kapsula va tabletka (to‘plam)',
+  'набор': 'To‘plam',
+};
+
+export function formLabel(form: string, lang: Lang): string {
+  if (lang !== 'uz') return form;
+  return FORM_UZ[form.trim().toLowerCase().replace(/\s+/g, ' ')] ?? form;
+}
+
 /** Localized long text field (e.g. composition_ru / composition_uz) with Russian fallback. */
 export function textOf<T extends object>(item: T, field: string, lang: Lang): string | null {
   const rec = item as Record<string, unknown>;
