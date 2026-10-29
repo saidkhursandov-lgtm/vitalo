@@ -132,5 +132,10 @@ describe('cash on delivery order status', () => {
     expect(wrap('ru', <StatusPill status="new" />).container.textContent).toBe('Ожидает оплаты');
     cleanup();
     expect(wrap('ru', <StatusPill status="paid" cod />).container.textContent).toBe('Оплачен');
+    cleanup();
+    // Uzbek: the same rule
+    expect(wrap('uz', <StatusPill status="new" cod />).container.textContent).toBe('Tasdiqlash kutilmoqda');
+    cleanup();
+    expect(wrap('uz', <StatusPill status="new" />).container.textContent).toBe('To‘lov kutilmoqda');
   });
 });
