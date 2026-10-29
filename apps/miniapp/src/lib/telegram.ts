@@ -29,7 +29,7 @@ export function telegram(): TelegramWebApp | null {
 }
 
 /** Brand colours for Telegram's own header and background (the Mini App is light only). */
-export const BRAND_COLORS = { header: '#ffffff', background: '#f3f5f4', bottomBar: '#ffffff' } as const;
+export const BRAND_COLORS = { header: '#ffffff', background: '#f5f7fa', bottomBar: '#ffffff' } as const;
 
 export function initTelegram() {
   const app = telegram();

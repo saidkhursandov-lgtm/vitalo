@@ -25,6 +25,10 @@ export interface ProductListItem {
   sku: string;
   name_ru: string;
   name_uz: string | null;
+  /** 2.1: short name for the cart, checkout and orders (null = use the full name) */
+  short_name_ru: string | null;
+  short_name_uz: string | null;
+  form: string | null;
   brand: string;
   price_uzs: number;
   old_price_uzs: number | null;
@@ -65,6 +69,9 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     sku: p.sku,
     name_ru: p.name_ru,
     name_uz: p.name_uz,
+    short_name_ru: p.short_name_ru,
+    short_name_uz: p.short_name_uz,
+    form: p.form,
     brand: p.brand,
     price_uzs: Number(p.price_uzs),
     old_price_uzs: p.old_price_uzs == null ? null : Number(p.old_price_uzs),

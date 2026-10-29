@@ -23,6 +23,8 @@ import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService } from '../settings/settings.service';
+import { OnlinePaymentsService } from '../payments/online/online-payments.service';
+import { ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
 
@@ -143,6 +145,13 @@ export class PaymentTimeoutDto {
   timeout_minutes!: number;
 }
 
+/** 2.1: one mode per online payment system. */
+export class OnlineModesDto {
+  @ApiProperty({ enum: ONLINE_MODES }) @IsIn(ONLINE_MODES) payme!: OnlineMode;
+  @ApiProperty({ enum: ONLINE_MODES }) @IsIn(ONLINE_MODES) click!: OnlineMode;
+  @ApiProperty({ enum: ONLINE_MODES }) @IsIn(ONLINE_MODES) uzum!: OnlineMode;
+}
+
 /** Release 1: checkout switches (Настройки → Оплата). cod_max_total_uzs: null or empty = no limit. */
 export class CheckoutOptionsDto {
   @ApiPropertyOptional({ nullable: true, example: 2000000, description: 'Максимальная сумма заказа для оплаты при получении; пусто = без ограничения' })
@@ -152,8 +161,15 @@ export class CheckoutOptionsDto {
   @Max(1_000_000_000)
   cod_max_total_uzs!: number | null;
 
-  @ApiProperty({ description: 'Показывать Payme / Click / Uzum в оформлении как «Скоро»' }) @IsBoolean() show_online_soon!: boolean;
+  /** Release 1 switch, kept for old clients: used only when `online` is not sent (true = all «Скоро», false = all hidden). */
+  @ApiPropertyOptional({ description: 'Старый общий переключатель «Скоро» (если не передан online)' }) @IsOptional() @IsBoolean() show_online_soon?: boolean;
   @ApiProperty({ description: 'Бесплатная доставка первого заказа клиента' }) @IsBoolean() first_order_free_delivery!: boolean;
+
+  @ApiPropertyOptional({ description: 'Payme / Click / Uzum: hidden — скрыта, soon — «Скоро», live — работает (только с ключами и модулем)', type: OnlineModesDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OnlineModesDto)
+  online?: OnlineModesDto;
 }
 
 /** Physical ID label paper, mm. XP-365B prints up to 76 mm wide. Default 58×40. */
@@ -239,6 +255,7 @@ export class AdminSettingsService {
     private readonly audit: AuditService,
     private readonly staffAuth: StaffAuthService,
     private readonly settings: SettingsService,
+    private readonly online: OnlinePaymentsService,
   ) {}
 
   /** Saves one settings row and writes before/after to the audit log. */
@@ -367,12 +384,23 @@ export class AdminSettingsService {
     return this.labelSize();
   }
 
-  checkoutOptions() {
-    return this.settings.getOrDefault('checkout_options');
+  /** Saved switches plus, per online system, whether «Работает» is possible (keys in .env and a module; no key values). */
+  async checkoutOptions() {
+    const saved = await this.settings.getOrDefault('checkout_options');
+    const online = onlineModes(saved);
+    return { ...saved, online, show_online_soon: Object.values(online).includes('soon'), online_status: this.online.providersStatus() };
   }
 
   async setCheckoutOptions(staffId: string, dto: CheckoutOptionsDto) {
-    const value = { cod_max_total_uzs: dto.cod_max_total_uzs ?? null, show_online_soon: dto.show_online_soon, first_order_free_delivery: dto.first_order_free_delivery };
+    const legacy = dto.show_online_soon === false ? 'hidden' : 'soon';
+    const online: OnlineModes = dto.online ? { payme: dto.online.payme, click: dto.online.click, uzum: dto.online.uzum } : { payme: legacy, click: legacy, uzum: legacy };
+    this.online.assertModesAllowed(online);
+    const value = {
+      cod_max_total_uzs: dto.cod_max_total_uzs ?? null,
+      show_online_soon: Object.values(online).includes('soon'),
+      first_order_free_delivery: dto.first_order_free_delivery,
+      online,
+    };
     await this.saveSetting(staffId, SETTING_KEYS.checkoutOptions, value, 'settings.checkout_options_updated');
     return this.checkoutOptions();
   }

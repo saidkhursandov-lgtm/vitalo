@@ -11,6 +11,21 @@ import {
   CircleX,
   ClipboardList,
   BadgeCheck,
+  Bone,
+  Brain,
+  Droplet,
+  Dumbbell,
+  Fish,
+  Gem,
+  HeartPulse,
+  Leaf,
+  Mars,
+  Moon,
+  Pill,
+  ShieldPlus,
+  Sparkles,
+  Venus,
+  Zap,
   CalendarClock,
   Clock,
   FileText,
@@ -83,6 +98,28 @@ export const StarIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => 
 );
 export const DoctorIcon = make(Stethoscope);
 export const ShieldIcon = make(ShieldCheck);
+
+/**
+ * Category icons on the home screen, by category slug (both trees). An unknown slug gets the neutral leaf,
+ * so a category added in the admin panel never breaks the screen.
+ */
+export const CATEGORY_ICONS: Record<string, Icon> = {
+  immunity: make(ShieldPlus),
+  beauty: make(Sparkles),
+  joints: make(Bone),
+  energy: make(Zap),
+  sleep: make(Moon),
+  heart: make(HeartPulse),
+  memory: make(Brain),
+  women: make(Venus),
+  men: make(Mars),
+  sport: make(Dumbbell),
+  vitamins: make(Pill),
+  minerals: make(Gem),
+  omega: make(Fish),
+  collagen: make(Droplet),
+};
+export const categoryIcon = (slug: string): Icon => CATEGORY_ICONS[slug] ?? make(Leaf);
 
 /** Home trust tiles. */
 export const TRUST_ICONS: Record<'original' | 'delivery' | 'documents' | 'payments', Icon> = {

@@ -67,7 +67,7 @@ describe('top bar (release 1, item 2)', () => {
   it('RU | UZ: one tap switches the language and reports language_change; the current one does nothing', () => {
     const setLang = vi.fn();
     wrap('ru', <LangSwitch />, setLang);
-    expect(screen.getByText('RU').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('RU').closest('button')!.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByText('RU'));
     expect(setLang).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('UZ'));
@@ -106,9 +106,9 @@ describe('home (release 1, item 3)', () => {
     expect(wrap('ru', <HomeCarousel firstOrderFree={false} freeFromUzs={null} />).container.querySelectorAll('.hero-slide')).toHaveLength(1);
   });
 
-  it('three trust chips under the search', () => {
+  it('2.1: two trust markers under the search (no «Ташкент 1–3 дня»)', () => {
     const { container } = wrap('ru', <TrustChips />);
-    expect(Array.from(container.querySelectorAll('.chip')).map((c) => c.textContent)).toEqual(['100% оригинал', 'Отбор врачом', 'Ташкент 1–3 дня']);
+    expect(Array.from(container.querySelectorAll('.chip')).map((c) => c.textContent)).toEqual(['Отбор врачом', 'Оригинальная продукция']);
   });
 });
 

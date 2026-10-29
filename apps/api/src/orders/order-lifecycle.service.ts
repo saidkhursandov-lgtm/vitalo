@@ -137,6 +137,35 @@ export class OrderLifecycleService {
   }
 
   /**
+   * Stage 2.1, online payments (Payme / Click / Uzum): the payment system confirmed the money -> order Paid.
+   * The same stock steps as a manager's confirmation, done by the system: reservation -> write-off (by quantity) or
+   * units reserved by FEFO (unit-tracked lines). Already paid -> no-op, so a repeated confirmation changes nothing.
+   * A cancelled order is never revived: the caller gets ORDER_CANCELLED and the money must be returned.
+   */
+  async confirmOnlinePayment(tx: Tx, order: LockedOrder, paymentId: string): Promise<'paid' | 'already_paid'> {
+    if (order.payment_status === 'payment_success') return 'already_paid';
+    if (order.status === 'cancelled') {
+      throw new ConflictException({ code: 'ORDER_CANCELLED', message: 'Order is cancelled; the online payment has to be refunded' });
+    }
+    assertTransition(order.status, 'paid');
+
+    const now = new Date();
+    await this.stock.deduct(tx, order.id, undefined, await this.units.trackedProductIds(tx, order.id));
+    await tx.payments.update({ where: { id: paymentId }, data: { status: 'payment_success', paid_at: now } });
+    await tx.payment_attempts.updateMany({ where: { payment_id: paymentId, status: 'pending' }, data: { status: 'success' } });
+    await tx.orders.update({
+      where: { id: order.id },
+      data: { status: 'paid', payment_status: 'payment_success', paid_at: now, reserved_until: null },
+    });
+    await tx.order_status_history.create({
+      data: { order_id: order.id, from_status: order.status, to_status: 'paid', reason: 'Online payment confirmed by the payment system', changed_by_type: 'system', changed_by_id: null, created_at: now },
+    });
+    await this.notifications.orderStatusChanged(tx, order.id, 'paid', null);
+    await this.units.reserveOnPayment(tx, { id: order.id, order_number: order.order_number, status: 'paid' }, null);
+    return 'paid';
+  }
+
+  /**
    * Staff cancels a paid order before handover. Lines by quantity (and legacy orders): what was written off returns
    * to stock. Stage 2E, unit-tracked lines: reserved units go back «На складе» and the held quantity is released
    * (nothing was written off for them yet). The order becomes

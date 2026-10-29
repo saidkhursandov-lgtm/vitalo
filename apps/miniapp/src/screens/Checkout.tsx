@@ -13,13 +13,16 @@ import { track } from '../lib/analytics';
 import { PhoneIcon } from '../components/Icons';
 import type { Order, OrderPreview, PaymentMethodCode } from '../lib/types';
 
+import { FreeShippingProgress } from './Cart';
+import { OnlineSoon, OrderItems, OrderTotals } from '../components/OrderItems';
+import type { OnlineProvider } from '../lib/types';
+
 /**
  * Release 1: «Перевод по реквизитам компании» is gone (D-06). «Оплата при получении» is added only where the server
- * says it is possible (the city of Tashkent, up to the limit). Online providers are shown as «Скоро» only while the
- * switch show_online_soon is on (Настройки → Оплата).
+ * says it is possible (the city of Tashkent, up to the limit). 2.1 (D-20): Payme / Click / Uzum each have a mode in
+ * Настройки → Оплата; «Скоро» = a logo button that explains, «Скрыта» = not shown.
  */
-const SOON_METHODS = ['Payme', 'Click', 'Uzum'] as const;
-import { FreeShippingProgress } from './Cart';
+const ONLINE: OnlineProvider[] = ['payme', 'click', 'uzum'];
 import { QuoteTerm } from '../components/Delivery';
 
 interface Form {
@@ -285,15 +288,8 @@ export function Checkout() {
             </span>
           </label>
         )}
-        {shop.data?.checkout?.show_online_soon &&
-          SOON_METHODS.map((name) => (
-            <div key={name} className="pay-option is-disabled" aria-disabled="true">
-              <input type="radio" disabled />
-              <span>{name}</span>
-              <span className="soon-badge">{t('pay.soon')}</span>
-            </div>
-          ))}
-        <p className="hint small">{t(method === 'cod' ? 'pay.codHint' : 'checkout.bankTransferHint')}</p>
+        <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : 'checkout.bankTransferHint')}</p>
+        <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon')} />
       </section>
 
       <section className="card summary">
@@ -307,29 +303,22 @@ export function Checkout() {
         ) : (
           p && (
             <>
-              {p.items.map((i) => {
-                const problem = p.problems.find((x) => x.product_id === i.product_id);
-                return (
-                  <div key={i.product_id} className="sum-row">
-                    <span>
-                      {(lang === 'uz' && i.name_uz) || i.name_ru} × {i.qty}
-                      {problem && <span className="error-text small block">{t('product.maxQty', { n: problem.available })}</span>}
-                    </span>
-                    <span>{money(i.line_total_uzs, lang)}</span>
-                  </div>
-                );
-              })}
+              <OrderItems
+                items={p.items}
+                note={(i) => {
+                  const problem = p.problems.find((x) => x.product_id === i.product_id);
+                  return problem && <span className="error-text small block">{t('product.maxQty', { n: problem.available })}</span>;
+                }}
+              />
               {p.skipped_unavailable.length > 0 && <p className="hint small">{t('checkout.skipped')}</p>}
-              <div className="sum-row">
-                <span>{t('cart.delivery')}</span>
-                <span>{p.totals.delivery_cost_uzs ? money(p.totals.delivery_cost_uzs, lang) : t('cart.free')}</span>
-              </div>
+              <OrderTotals
+                goods={p.totals.total_uzs - p.totals.delivery_cost_uzs}
+                delivery={p.totals.delivery_cost_uzs}
+                firstOrder={!!p.delivery.first_order}
+                total={p.totals.total_uzs}
+              />
               <FreeShippingProgress quote={p.delivery} />
               <QuoteTerm min={p.delivery.min_days} max={p.delivery.max_days} note={lang === 'uz' ? p.delivery.note_uz : p.delivery.note_ru} />
-              <div className="sum-row total">
-                <span>{t('cart.total')}</span>
-                <span>{money(p.totals.total_uzs, lang)}</span>
-              </div>
             </>
           )
         )}

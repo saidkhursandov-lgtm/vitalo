@@ -10,8 +10,20 @@ import { useSupportUrl } from './Support';
 
 const pick = (t: LocalizedText, lang: Lang) => (lang === 'uz' ? t.uz : t.ru);
 
+/** Quiet line art for the navy banner: two thin rings and a small cross; the orange dot is the only accent. */
+function HeroArt() {
+  return (
+    <svg className="hero-art" viewBox="0 0 120 120" width="120" height="120" aria-hidden fill="none">
+      <circle cx="78" cy="42" r="40" stroke="currentColor" strokeOpacity="0.16" strokeWidth="1.5" />
+      <circle cx="78" cy="42" r="24" stroke="currentColor" strokeOpacity="0.22" strokeWidth="1.5" />
+      <path d="M78 33v18M69 42h18" stroke="currentColor" strokeOpacity="0.55" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="104" cy="74" r="4" fill="var(--accent)" />
+    </svg>
+  );
+}
+
 /**
- * Home banner (120–140 px): two slides — «Отбор врачом • 4,9★ на Яндекс Маркете» and the delivery offer. The offer is
+ * Home banner (navy, about 116 px): two slides — «Отбор врачом • 4,9★ на Яндекс Маркете» and the delivery offer. The offer is
  * what is true for this customer (the server decides): the first order is free, or delivery is free from the tariff's threshold.
  */
 export function HomeCarousel({ firstOrderFree, freeFromUzs }: { firstOrderFree: boolean; freeFromUzs: number | null }) {
@@ -25,7 +37,7 @@ export function HomeCarousel({ firstOrderFree, freeFromUzs }: { firstOrderFree: 
       sub: (
         <>
           <strong>4,9</strong>
-          <StarIcon filled width={14} height={14} aria-label="★" />
+          <StarIcon filled className="hero-star" width={15} height={15} aria-label="★" />
           {t('home.slide1.sub')}
         </>
       ),
@@ -46,7 +58,7 @@ export function HomeCarousel({ firstOrderFree, freeFromUzs }: { firstOrderFree: 
       >
         {slides.map((s) => (
           <div key={s.key} className="hero-slide">
-            <BadgeIcon className="banner-mark" width={96} height={96} />
+            <HeroArt />
             <h2>{s.title}</h2>
             <p>{s.sub}</p>
           </div>
@@ -63,16 +75,15 @@ export function HomeCarousel({ firstOrderFree, freeFromUzs }: { firstOrderFree: 
   );
 }
 
-/** Three short trust chips under the search field. */
+/** Two trust markers under the search field (ТЗ 2.1): they wrap instead of running off the screen edge. */
 export function TrustChips() {
   const { t } = useI18n();
   const chips = [
-    { key: 'original', Icon: ShieldIcon, text: t('home.chip.original') },
     { key: 'doctor', Icon: DoctorIcon, text: t('home.chip.doctor') },
-    { key: 'delivery', Icon: TRUST_ICONS.delivery, text: t('home.chip.delivery') },
+    { key: 'original', Icon: ShieldIcon, text: t('home.chip.original') },
   ];
   return (
-    <div className="chips scroll-x trust-chips">
+    <div className="chips trust-chips">
       {chips.map(({ key, Icon, text }) => (
         <span key={key} className="chip chip-static">
           <Icon width={16} height={16} />

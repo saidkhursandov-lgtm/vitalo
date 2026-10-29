@@ -4,7 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { QuoteTerm } from '../components/Delivery';
 import { EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
-import { money, nameOf } from '../lib/format';
+import { OrderTotals } from '../components/OrderItems';
+import { money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useAddresses, useCart, useCartActions, useRegions, type CityRef } from '../lib/queries';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
@@ -12,7 +13,7 @@ import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/
 /** Human text for a cart warning (price changed / qty reduced / out of stock). */
 export function warningText(w: CartWarning, cart: CartData, lang: Lang, t: (k: MessageKey, p?: Record<string, string | number>) => string): string {
   const line = cart.items.find((i) => i.product_id === w.product_id);
-  const name = line ? nameOf(line, lang) : '';
+  const name = line ? shortNameOf(line, lang) : '';
   switch (w.code) {
     case 'price_changed':
       return t('cart.warn.price_changed', { name, old: money(w.old_price_uzs, lang), new: money(w.new_price_uzs, lang) });
@@ -101,9 +102,9 @@ export function Cart() {
             </Link>
             <div className="cart-info">
               <Link to={`/product/${l.product_id}`} className="cart-name">
-                {nameOf(l, lang)}
+                {shortNameOf(l, lang)}
               </Link>
-              <div className="hint small">{l.brand}</div>
+              <div className="hint small">{[l.brand, l.form].filter(Boolean).join(' · ')}</div>
               {l.status === 'unavailable' ? (
                 <div className="error-text small">{t('cart.unavailable')}</div>
               ) : (
@@ -142,20 +143,13 @@ export function Cart() {
       </section>
 
       <section className="card summary">
-        <div className="sum-row">
-          <span>{t('cart.goods', { n: data.items_count })}</span>
-          <span>{money(data.goods_total_uzs, lang)}</span>
-        </div>
-        {delivery && (
-          <div className="sum-row">
-            <span>{t('cart.delivery')}</span>
-            <span>{delivery.is_free ? t('cart.free') : money(delivery.cost_uzs, lang)}</span>
-          </div>
-        )}
-        <div className="sum-row total">
-          <span>{t('cart.total')}</span>
-          <span>{money(payable, lang)}</span>
-        </div>
+        <OrderTotals
+          goods={data.goods_total_uzs - data.discount_total_uzs}
+          goodsCount={data.items_count}
+          delivery={delivery ? (delivery.is_free ? 0 : delivery.cost_uzs) : null}
+          firstOrder={!!delivery?.first_order}
+          total={payable}
+        />
       </section>
 
       <div className="sticky-action">

@@ -10,8 +10,11 @@ import { PrismaService } from '../prisma/prisma.service';
 /** Funnel steps in order (B3). The last three are written by the server itself, never by the app. */
 export const FUNNEL_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', 'order_created', 'payment_marked', 'payment_confirmed'] as const;
 export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
-/** Release 1: extra app events outside the funnel (counted separately in «Аналитика → Воронка»). */
-export const EXTRA_EVENTS = ['language_change', 'cod_selected'] as const;
+/**
+ * Release 1: extra app events outside the funnel (counted separately in «Аналитика → Воронка»).
+ * 2.1: payment_soon_click — a tap on Payme / Click / Uzum while it is «Скоро»; props.system = payme | click | uzum.
+ */
+export const EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click'] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...EXTRA_EVENTS] as const;
 
 /** Spam protection: per user at most this many app events per minute; extra ones are dropped quietly. */
@@ -71,9 +74,19 @@ export class AnalyticsService {
       SELECT event, COUNT(DISTINCT user_id) AS users, COUNT(*) AS events FROM analytics_events
       WHERE created_at >= ${from} AND event = ANY(${[...EXTRA_EVENTS]}::text[])
       GROUP BY event`;
+    // which payment system customers wait for most: taps per system
+    const bySystem = await this.prisma.$queryRaw<{ system: string; users: bigint; events: bigint }[]>`
+      SELECT props->>'system' AS system, COUNT(DISTINCT user_id) AS users, COUNT(*) AS events FROM analytics_events
+      WHERE created_at >= ${from} AND event = 'payment_soon_click' AND props->>'system' IS NOT NULL
+      GROUP BY 1 ORDER BY 3 DESC`;
     return EXTRA_EVENTS.map((event) => {
       const r = rows.find((x) => x.event === event);
-      return { event, users: Number(r?.users ?? 0), events: Number(r?.events ?? 0) };
+      return {
+        event,
+        users: Number(r?.users ?? 0),
+        events: Number(r?.events ?? 0),
+        ...(event === 'payment_soon_click' && { by_system: bySystem.map((b) => ({ system: b.system, users: Number(b.users), events: Number(b.events) })) }),
+      };
     });
   }
 

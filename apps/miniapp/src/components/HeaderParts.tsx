@@ -8,18 +8,21 @@ const LANGS: { code: Lang; label: string }[] = [
   { code: 'uz', label: 'UZ' },
 ];
 
-/** «✚ Выбор врача» (D-03) next to the logo; the cross is an SVG icon, not an emoji. */
+/** «✚ Выбор врача» (D-03) under the logo: a quiet marker (no pill); the small orange cross is an SVG icon, not an emoji. */
 export function DoctorBadge() {
   const { t } = useI18n();
   return (
     <span className="doctor-badge">
-      <PlusIcon width={11} height={11} strokeWidth={3} />
+      <PlusIcon className="doctor-cross" width={10} height={10} strokeWidth={3.2} />
       {t('header.doctor')}
     </span>
   );
 }
 
-/** RU | UZ in one tap: the choice is applied at once on every screen and saved on the server (setLang). */
+/**
+ * RU | UZ in one tap: the choice is applied at once on every screen and saved on the server (setLang).
+ * Each button is a 44×44 tap area; the visible pill segment inside is smaller.
+ */
 export function LangSwitch() {
   const { t, lang, setLang } = useI18n();
   return (
@@ -36,7 +39,7 @@ export function LangSwitch() {
             track('language_change', { to: l.code });
           }}
         >
-          {l.label}
+          <span>{l.label}</span>
         </button>
       ))}
     </div>

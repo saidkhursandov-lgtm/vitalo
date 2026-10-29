@@ -4,24 +4,52 @@ import { ErrorBox, Field, Loading } from '../../components/ui';
 import { api } from '../../lib/api';
 import { money } from '../../lib/format';
 
+type Provider = 'payme' | 'click' | 'uzum';
+type Mode = 'hidden' | 'soon' | 'live';
+type Modes = Record<Provider, Mode>;
+
 interface Options {
   cod_max_total_uzs: number | null;
   show_online_soon: boolean;
   first_order_free_delivery: boolean;
+  online: Modes;
+  /** What is missing for «Работает» (only yes / no, never the keys themselves). */
+  online_status: Record<Provider, { keys_present: boolean; module_ready: boolean; can_go_live: boolean }>;
 }
 
-/** Release 1: «Оплата при получении» (the limit), «Скоро» for Payme / Click / Uzum, free delivery of the first order. */
+const PROVIDERS: [Provider, string][] = [
+  ['payme', 'Payme'],
+  ['click', 'Click'],
+  ['uzum', 'Uzum'],
+];
+const MODES: [Mode, string][] = [
+  ['hidden', 'Скрыта'],
+  ['soon', 'Скоро'],
+  ['live', 'Работает'],
+];
+
+/** Why «Работает» cannot be chosen yet, in plain words. */
+function liveBlocker(s: Options['online_status'][Provider]): string | null {
+  if (s.can_go_live) return null;
+  const missing = [!s.keys_present && 'ключей в файле .env на сервере', !s.module_ready && 'модуля подключения (его добавит программист)'].filter(Boolean);
+  return `«Работает» пока нельзя: нет ${missing.join(' и ')}.`;
+}
+
+/**
+ * Release 1: «Оплата при получении» (the limit) and free delivery of the first order.
+ * 2.1 (D-20): Payme / Click / Uzum each «Скрыта / Скоро / Работает»; «Работает» only with keys and a module.
+ */
 export function CheckoutOptions() {
   const client = useQueryClient();
   const q = useQuery({ queryKey: ['settings', 'checkout'], queryFn: () => api<Options>('/staff/settings/checkout-options') });
   const [limit, setLimit] = useState('');
-  const [soon, setSoon] = useState(false);
+  const [modes, setModes] = useState<Modes>({ payme: 'soon', click: 'soon', uzum: 'soon' });
   const [freeFirst, setFreeFirst] = useState(false);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     if (!q.data) return;
     setLimit(q.data.cod_max_total_uzs == null ? '' : String(q.data.cod_max_total_uzs));
-    setSoon(q.data.show_online_soon);
+    setModes(q.data.online);
     setFreeFirst(q.data.first_order_free_delivery);
   }, [q.data]);
 
@@ -32,7 +60,7 @@ export function CheckoutOptions() {
     mutationFn: () =>
       api<Options>('/staff/settings/checkout-options', {
         method: 'PUT',
-        body: { cod_max_total_uzs: digits === '' ? null : Number(digits), show_online_soon: soon, first_order_free_delivery: freeFirst },
+        body: { cod_max_total_uzs: digits === '' ? null : Number(digits), first_order_free_delivery: freeFirst, online: modes },
       }),
     onSuccess: (o) => {
       client.setQueryData(['settings', 'checkout'], o);
@@ -45,6 +73,7 @@ export function CheckoutOptions() {
     e.preventDefault();
     if (valid) save.mutate();
   };
+  const status = q.data.online_status;
 
   return (
     <form className="card narrow" onSubmit={submit}>
@@ -64,9 +93,37 @@ export function CheckoutOptions() {
       <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "8px 0" }}>
         <input type="checkbox" checked={freeFirst} onChange={(e) => (setFreeFirst(e.target.checked), setSaved(false))} /> Бесплатная доставка первого заказа клиента
       </label>
-      <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "8px 0" }}>
-        <input type="checkbox" checked={soon} onChange={(e) => (setSoon(e.target.checked), setSaved(false))} /> Показывать Payme / Click / Uzum как «Скоро» (пока нет ключей)
-      </label>
+
+      <h2 style={{ marginTop: 20 }}>Онлайн-оплата: Payme, Click, Uzum</h2>
+      <p className="muted small">
+        «Скрыта» — клиент её не видит. «Скоро» — логотип при оформлении; нажатие объясняет, что оплата скоро заработает, и считается в «Аналитика → Воронка». «Работает» — настоящая оплата, только когда есть ключи и модуль подключения.
+      </p>
+      {PROVIDERS.map(([p, name]) => {
+        const blocker = liveBlocker(status[p]);
+        return (
+          <div key={p} className="online-mode">
+            <strong>{name}</strong>
+            <div className="segmented" role="radiogroup" aria-label={name}>
+              {MODES.map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={modes[p] === m}
+                  className={modes[p] === m ? 'is-on' : ''}
+                  disabled={m === 'live' && !!blocker && modes[p] !== 'live'}
+                  title={m === 'live' && blocker ? blocker : undefined}
+                  onClick={() => (setModes({ ...modes, [p]: m }), setSaved(false))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {blocker && <p className="muted small online-mode-why">{blocker}</p>}
+          </div>
+        );
+      })}
+
       <ErrorBox error={save.error} />
       {saved && <div className="alert alert-ok">Сохранено</div>}
       <button className="btn" disabled={save.isPending || !valid}>

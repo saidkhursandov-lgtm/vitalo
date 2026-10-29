@@ -266,7 +266,7 @@ export function RegionCitySelect({
   const { t, lang } = useI18n();
   const region = regions.find((r) => r.id === regionId);
   return (
-    <div className="field-row">
+    <div className="field-row region-city">
       <label className="field">
         <span>{t('checkout.region')}</span>
         <select value={regionId} onChange={(e) => onChange({ region_id: e.target.value, city_id: '' })}>

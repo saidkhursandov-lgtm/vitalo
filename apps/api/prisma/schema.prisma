@@ -469,6 +469,9 @@ model products {
   sku                  String        @unique
   name_ru              String
   name_uz              String?
+  // 2.1: optional short name for the cart, checkout, orders and messages; the full name stays on the card and in search
+  short_name_ru        String?
+  short_name_uz        String?
   brand                String
   manufacturer         String
   country              String?
@@ -1360,6 +1363,9 @@ model payments {
   amount_uzs          BigInt
   status              PaymentStatus                  @default(payment_pending)
   provider_payment_id String?
+  // 2.1, online payments: where the customer is sent to pay, and when that link stops working
+  checkout_url        String?
+  expires_at          DateTime?
   created_at          DateTime                       @default(now())
   updated_at          DateTime                       @updatedAt
   paid_at             DateTime?

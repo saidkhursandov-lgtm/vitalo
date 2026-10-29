@@ -22,13 +22,15 @@ export const SETTING_KEYS = {
 /**
  * Release 1: checkout switches (Настройки → Оплата). Not inserted by a migration: the default is used until an admin saves one.
  * - cod_max_total_uzs: the largest order total for «Оплата при получении» (Tashkent only); null = no limit;
- * - show_online_soon: show Payme / Click / Uzum in checkout as disabled «Скоро» buttons (hidden by default);
- * - first_order_free_delivery: the customer's first order (no other orders except cancelled ones) is delivered free.
+ * - show_online_soon: release 1 switch for Payme / Click / Uzum; since 2.1 it only mirrors `online` (true = some system is «Скоро»);
+ * - first_order_free_delivery: the customer's first order (no other orders except cancelled ones) is delivered free;
+ * - online (2.1, D-20): hidden / soon / live per system; missing (saved before 2.1) = all «Скоро» (see onlineModes()).
  */
 export interface CheckoutOptions {
   cod_max_total_uzs: number | null;
   show_online_soon: boolean;
   first_order_free_delivery: boolean;
+  online?: Partial<Record<'payme' | 'click' | 'uzum', 'hidden' | 'soon' | 'live'>>;
 }
 
 /** Physical ID label paper (XP-365B: print width up to 76 mm). */

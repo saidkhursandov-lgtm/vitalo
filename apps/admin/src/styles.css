@@ -16,18 +16,21 @@
 
 /* ---------- design tokens (same values as apps/miniapp/src/styles.css) ---------- */
 :root {
-  --primary: #16a39a;
-  --primary-press: #0e8c84;
-  --primary-text: #0b7f78;
-  --primary-soft: #effaf9;
-  --dark: #202528;
-  --bg: #f3f5f4;
+  /* brand (D-19): Navy for the brand, Orange only for small accents */
+  --primary: #002d62;
+  --primary-press: #001f45;
+  --primary-text: #002d62;
+  --primary-soft: #eaf0f8;
+  --orange: #ff6600;         /* small badges and counters only; navy text on it (4.6:1), never small orange text on white */
+  --orange-soft: #fff0e6;
+  --dark: #1e293b;
+  --bg: #f5f7fa;
   --panel: #ffffff;
   --text: var(--dark);
-  --muted: #5b6569;
-  --border: #e2e7e5;
-  --border-strong: #cfd6d3;
-  --neutral-soft: #eef1f0;
+  --muted: #5b6475;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --neutral-soft: #eef2f6;
   /* semantic: statuses, errors, warnings */
   --ok: #1d7a45;
   --ok-soft: #e7f4ec;
@@ -132,7 +135,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .skeleton { display: flex; flex-direction: column; gap: 12px; padding: 20px 0; }
 .skel {
   display: block; height: 14px; border-radius: 7px;
-  background: linear-gradient(90deg, var(--neutral-soft) 0%, #f7f8f8 50%, var(--neutral-soft) 100%) 0 0 / 200% 100%;
+  background: linear-gradient(90deg, var(--neutral-soft) 0%, #f8fafc 50%, var(--neutral-soft) 100%) 0 0 / 200% 100%;
   animation: skel 1.3s ease-in-out infinite;
 }
 .card .skeleton { padding: 4px 0; }
@@ -183,7 +186,7 @@ textarea { resize: vertical; }
 
 .segmented { display: inline-flex; background: var(--neutral-soft); border-radius: 10px; padding: 3px; }
 .segmented button { border: 0; background: none; min-height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 500; }
-.segmented button.is-on { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(32 37 40 / 0.08); }
+.segmented button.is-on { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(30 41 59 / 0.08); }
 
 /* ---------- tables ---------- */
 .table { width: 100%; border-collapse: collapse; }
@@ -191,7 +194,7 @@ textarea { resize: vertical; }
 .table td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .table tfoot td { border-bottom: 0; }
 .card:not(.flush) .table th, .card:not(.flush) .table td { padding-left: 0; }
-.table-hover tbody tr:hover { background: #f7f8f8; }
+.table-hover tbody tr:hover { background: #f8fafc; }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table .ops { min-width: 250px; }
 .table .ops .btn { margin: 0 4px 4px 0; }
@@ -200,7 +203,7 @@ textarea { resize: vertical; }
 .pagination { display: flex; align-items: center; gap: 10px; }
 .thumb-cell { width: 56px; }
 .thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--bg); display: block; }
-.details-row td { background: #f7f8f8; }
+.details-row td { background: #f8fafc; }
 .diff td { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-break: break-all; }
 .diff tr.changed td { background: var(--warn-soft); }
 
@@ -220,8 +223,8 @@ textarea { resize: vertical; }
 .photo-bar { display: flex; justify-content: space-between; align-items: center; gap: 4px; padding: 6px; }
 
 /* ---------- modal ---------- */
-.modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgb(32 37 40 / 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px; overflow-y: auto; }
-.modal { width: 100%; max-width: 520px; background: var(--panel); border-radius: 16px; padding: 18px 22px 20px; box-shadow: 0 12px 40px rgb(32 37 40 / 0.18); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgb(30 41 59 / 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px; overflow-y: auto; }
+.modal { width: 100%; max-width: 520px; background: var(--panel); border-radius: 16px; padding: 18px 22px 20px; box-shadow: 0 12px 40px rgb(30 41 59 / 0.18); }
 .modal-wide { max-width: 760px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .modal-head h2 { margin: 0; }
@@ -331,3 +334,10 @@ textarea { resize: vertical; }
 /* Alternative SKUs in the product card */
 .plain-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .plain-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 2.1: Payme / Click / Uzum modes; extra events under the funnel */
+.online-mode { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.online-mode .segmented button:disabled { opacity: 0.45; cursor: not-allowed; }
+.online-mode-why { flex-basis: 100%; margin: 0; }
+.funnel-extra-title { margin: 20px 0 4px; font-size: 15px; }
+.funnel-sub td { color: var(--muted); font-size: 13px; }

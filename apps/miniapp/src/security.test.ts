@@ -72,3 +72,15 @@ describe('DEV login endpoint rules', () => {
     expect(isLocalRequest({ headers: {} })).toBe(false);
   });
 });
+
+describe('architecture (ТЗ v3, раздел 2)', () => {
+  it('only the adapter lib/telegram.ts touches window.Telegram', () => {
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
+    const offenders = walk(join(ROOT, 'src'))
+      .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.split(/[\\/]/).join('/').endsWith('lib/telegram.ts'))
+      // code only: comments may mention Telegram.WebApp
+      .filter((f) => /window\.Telegram|Telegram\.WebApp/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')));
+    expect(offenders).toEqual([]);
+  });
+});

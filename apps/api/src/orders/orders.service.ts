@@ -15,6 +15,7 @@ import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockLine, StockService } from '../inventory/stock.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { listImage, listInclude } from '../catalog/product.mapper';
 import { BankTransferDetails, COD_METHOD, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
 import { formatOrderNumber } from './order-number';
 import { CUSTOMER_CANCELLABLE } from './order-state';
@@ -37,6 +38,10 @@ interface PricedLine {
   sku: string;
   name_ru: string;
   name_uz: string | null;
+  short_name_ru: string | null;
+  short_name_uz: string | null;
+  form: string | null;
+  image_url: string | null;
   qty: number;
   unit_price_uzs: number;
   line_total_uzs: number;
@@ -391,13 +396,25 @@ export class OrdersService {
   }
 
   private async priceLines(db: Tx | PrismaService, lines: StockLine[]): Promise<PricedLine[]> {
-    const products = await db.products.findMany({ where: { id: { in: lines.map((l) => l.product_id) }, status: 'active' } });
+    const products = await db.products.findMany({ where: { id: { in: lines.map((l) => l.product_id) }, status: 'active' }, include: { media: listInclude.media } });
     const byId = new Map(products.map((p) => [p.id, p]));
     return lines.map((l) => {
       const p = byId.get(l.product_id);
       if (!p) throw new ConflictException({ code: 'PRODUCT_UNAVAILABLE', message: 'Product is no longer sold', product_id: l.product_id });
       const price = Number(p.price_uzs);
-      return { product_id: p.id, sku: p.sku, name_ru: p.name_ru, name_uz: p.name_uz, qty: l.qty, unit_price_uzs: price, line_total_uzs: price * l.qty };
+      return {
+        product_id: p.id,
+        sku: p.sku,
+        name_ru: p.name_ru,
+        name_uz: p.name_uz,
+        short_name_ru: p.short_name_ru,
+        short_name_uz: p.short_name_uz,
+        form: p.form,
+        image_url: listImage(p.media[0])?.webp ?? null,
+        qty: l.qty,
+        unit_price_uzs: price,
+        line_total_uzs: price * l.qty,
+      };
     });
   }
 

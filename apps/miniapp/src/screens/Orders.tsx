@@ -11,6 +11,7 @@ import { haptic } from '../lib/telegram';
 import { useConfirm } from '../components/Confirm';
 import { SupportButton } from '../components/Support';
 import { PayBy } from '../components/PayBy';
+import { OrderItems, OrderTotals } from '../components/OrderItems';
 import type { Order, OrderListItem } from '../lib/types';
 
 /** The same status twice in a row (e.g. "new" -> "awaiting_payment" shown as "Ожидает оплаты" twice) is shown once. */
@@ -113,22 +114,8 @@ export function OrderDetail() {
       {unpaid && reported && <div className="notice notice-ok">{t('orders.payWaiting')}</div>}
 
       <section className="card summary">
-        {o.items.map((i) => (
-          <div key={i.product_id} className="sum-row">
-            <Link to={`/product/${i.product_id}`}>
-              {(lang === 'uz' && i.name_uz) || i.name_ru} × {i.qty}
-            </Link>
-            <span>{money(i.line_total_uzs, lang)}</span>
-          </div>
-        ))}
-        <div className="sum-row">
-          <span>{t('cart.delivery')}</span>
-          <span>{o.totals.delivery_cost_uzs ? money(o.totals.delivery_cost_uzs, lang) : t('cart.free')}</span>
-        </div>
-        <div className="sum-row total">
-          <span>{t('cart.total')}</span>
-          <span>{money(o.totals.total_uzs, lang)}</span>
-        </div>
+        <OrderItems items={o.items} />
+        <OrderTotals goods={o.totals.total_uzs - o.totals.delivery_cost_uzs} delivery={o.totals.delivery_cost_uzs} total={o.totals.total_uzs} />
       </section>
 
       <section className="card">

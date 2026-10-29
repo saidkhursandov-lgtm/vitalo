@@ -7,6 +7,17 @@ export interface Named {
   name_uz: string | null;
 }
 
+/** 2.1: optional short name (admin product card) for the cart, checkout and orders. */
+export interface ShortNamed {
+  name_ru: string;
+  name_uz?: string | null;
+  short_name_ru?: string | null;
+  short_name_uz?: string | null;
+}
+
+export type OnlineProvider = 'payme' | 'click' | 'uzum';
+export type OnlineMode = 'hidden' | 'soon' | 'live';
+
 export interface UserProfile {
   id: string;
   telegram_user_id: number;
@@ -101,6 +112,8 @@ export interface DeliveryQuote {
   max_days?: number | null;
   note_ru?: string | null;
   note_uz?: string | null;
+  /** free because it is the customer's first order */
+  first_order?: boolean;
 }
 
 /** Delivery term in working days (null = not set for this city). */
@@ -127,7 +140,7 @@ export interface ShopInfo {
   home_content?: HomeContent;
   bonus_teaser?: { enabled: boolean; text: LocalizedText };
   /** Release 1 switches from Настройки → Оплата. */
-  checkout?: { cod_max_total_uzs: number | null; show_online_soon: boolean; first_order_free_delivery: boolean };
+  checkout?: { cod_max_total_uzs: number | null; show_online_soon: boolean; first_order_free_delivery: boolean; online?: Record<OnlineProvider, OnlineMode> };
 }
 
 export type TrustKey = 'original' | 'delivery' | 'documents' | 'payments';
@@ -159,6 +172,9 @@ export type CartWarning =
   | { code: 'out_of_stock'; product_id: string };
 
 export interface CartLine extends Named {
+  short_name_ru?: string | null;
+  short_name_uz?: string | null;
+  form?: string | null;
   product_id: string;
   sku: string;
   brand: string;
@@ -224,7 +240,7 @@ export interface Order {
   recipient: { name: string; phone: string };
   delivery: { region: Named; city: Named; address_text: string; cost_uzs: number };
   customer_comment: string | null;
-  items: { product_id: string; sku: string; name_ru: string; name_uz?: string | null; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
+  items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null })[];
   totals: Totals;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null } | null;
   can_cancel: boolean;
@@ -244,7 +260,7 @@ export interface OrderListItem {
 }
 
 export interface OrderPreview {
-  items: { product_id: string; name_ru: string; name_uz?: string | null; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
+  items: (ShortNamed & { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null })[];
   skipped_unavailable: string[];
   totals: Totals;
   delivery: DeliveryQuote;

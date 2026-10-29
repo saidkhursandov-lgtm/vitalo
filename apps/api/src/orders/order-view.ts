@@ -1,8 +1,12 @@
 import { Prisma } from '@prisma/client';
+import { listImage, listInclude } from '../catalog/product.mapper';
 import { CUSTOMER_CANCELLABLE } from './order-state';
 
 export const orderViewInclude = {
-  items: { orderBy: { name_ru_snapshot: 'asc' }, include: { product: { select: { name_uz: true } } } },
+  items: {
+    orderBy: { name_ru_snapshot: 'asc' },
+    include: { product: { select: { name_uz: true, short_name_ru: true, short_name_uz: true, form: true, media: listInclude.media } } },
+  },
   region: true,
   city: true,
   history: { orderBy: { created_at: 'asc' } },
@@ -43,6 +47,10 @@ export function toOrderView(o: OrderForView) {
       sku: i.sku_snapshot,
       name_ru: i.name_ru_snapshot,
       name_uz: i.product.name_uz, // current Uzbek name (the order keeps only the Russian snapshot)
+      short_name_ru: i.product.short_name_ru,
+      short_name_uz: i.product.short_name_uz,
+      form: i.product.form,
+      image_url: listImage(i.product.media[0])?.webp ?? null,
       qty: i.qty,
       unit_price_uzs: num(i.unit_price_uzs),
       line_total_uzs: num(i.line_total_uzs),

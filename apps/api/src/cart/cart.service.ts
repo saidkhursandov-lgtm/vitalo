@@ -12,6 +12,9 @@ export interface CartLineView {
   sku: string;
   name_ru: string;
   name_uz: string | null;
+  short_name_ru: string | null;
+  short_name_uz: string | null;
+  form: string | null;
   brand: string;
   image_url: string | null;
   status: 'available' | 'unavailable';
@@ -73,6 +76,9 @@ export class CartService {
         sku: product.sku,
         name_ru: product.name_ru,
         name_uz: product.name_uz,
+        short_name_ru: product.short_name_ru,
+        short_name_uz: product.short_name_uz,
+        form: product.form,
         brand: product.brand,
         image_url: product.image_url,
         status: r.status,

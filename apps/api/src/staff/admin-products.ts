@@ -60,6 +60,8 @@ const textOrNull = ({ value }: { value: unknown }) => (typeof value === 'string'
 
 const TEXT_FIELDS = [
   'name_uz',
+  'short_name_ru',
+  'short_name_uz',
   'country',
   'form',
   'short_description_ru',
@@ -92,6 +94,9 @@ export class ProductInput {
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) category_ids?: string[];
 
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(200) name_uz?: string | null;
+  @ApiPropertyOptional({ description: 'Короткое название для корзины, оформления и заказов (пусто — полное)' })
+  @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(60) short_name_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(60) short_name_uz?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) country?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) form?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) short_description_ru?: string | null;

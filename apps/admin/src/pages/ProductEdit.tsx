@@ -48,7 +48,7 @@ const TEXTS = [
   ['warnings', 'Противопоказания и предупреждения', 3],
 ] as const;
 
-const PLAIN = ['sku', 'name_ru', 'name_uz', 'search_keywords'] as const;
+const PLAIN = ['sku', 'name_ru', 'name_uz', 'short_name_ru', 'short_name_uz', 'search_keywords'] as const;
 /** Dictionary fields: the text column the shop shows + the dictionary link. */
 const DICTS: [DictionaryKind, string, string, boolean][] = [
   ['brands', 'brand', 'Бренд', true],
@@ -239,6 +239,12 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             <Field label="Название (RU)">{input('name_ru', { required: true })}</Field>
             <Field label="Название (UZ)" hint="Если пусто — в магазине покажется русское">
               {input('name_uz')}
+            </Field>
+            <Field label="Короткое название (RU)" hint="Для корзины, оформления и заказов, до 60 знаков. Если пусто — полное">
+              {input('short_name_ru', { maxLength: 60, placeholder: 'Например: Витамин D3, 60 капсул' })}
+            </Field>
+            <Field label="Короткое название (UZ)" hint="Если пусто — полное узбекское">
+              {input('short_name_uz', { maxLength: 60, placeholder: 'Masalan: Vitamin D3, 60 kapsula' })}
             </Field>
             {DICTS.map(([kind, text, label, required]) => (
               <Field key={kind} label={label}>

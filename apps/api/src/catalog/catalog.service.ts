@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { onlineModes } from '../payments/online/online-providers';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeliveryService } from '../delivery/delivery.service';
@@ -61,6 +62,13 @@ export class CatalogService {
     return { total: await this.prisma.products.count({ where: q.in_stock ? { AND: [where, inStock] } : where }) };
   }
 
+  /** Checkout switches for the Mini App: the online modes are always filled in (2.1); show_online_soon mirrors them. */
+  private async checkoutForApp() {
+    const saved = await this.settings.getOrDefault('checkout_options');
+    const online = onlineModes(saved);
+    return { cod_max_total_uzs: saved.cod_max_total_uzs, first_order_free_delivery: saved.first_order_free_delivery, online, show_online_soon: Object.values(online).includes('soon') };
+  }
+
   /** Everything the Mini App shows from settings: texts, support contact, payment hours, delivery terms. */
   async texts() {
     const support = await this.settings.getOrDefault('support_contact');
@@ -74,7 +82,7 @@ export class CatalogService {
       home_content: await this.settings.getOrDefault('home_content'),
       bonus_teaser: await this.settings.getOrDefault('bonus_teaser'),
       // Release 1: what checkout and the home page may show (the server re-checks everything on order creation)
-      checkout: await this.settings.getOrDefault('checkout_options'),
+      checkout: await this.checkoutForApp(),
     };
   }
 

@@ -1,4 +1,4 @@
-import type { Lang, Named } from './types';
+import type { Lang, Named, ShortNamed } from './types';
 
 const NBSP = ' ';
 
@@ -23,6 +23,15 @@ export function dateTime(iso: string, lang: Lang): string {
 /** Uzbek name with Russian fallback (Master TZ §19). */
 export function nameOf(item: Named, lang: Lang): string {
   return (lang === 'uz' && item.name_uz) || item.name_ru;
+}
+
+/**
+ * 2.1: the short name for the cart, checkout and orders; the full name stays on the card and in search.
+ * Uzbek: short UZ, then the full UZ name, then the Russian ones.
+ */
+export function shortNameOf(item: ShortNamed, lang: Lang): string {
+  if (lang === 'uz') return item.short_name_uz || item.name_uz || item.short_name_ru || item.name_ru;
+  return item.short_name_ru || item.name_ru;
 }
 
 /** Localized long text field (e.g. composition_ru / composition_uz) with Russian fallback. */

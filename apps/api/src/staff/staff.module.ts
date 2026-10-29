@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { AdminLegalController, LegalModule } from '../legal/legal.module';
 import { OrdersModule } from '../orders/orders.module';
+import { OnlinePaymentsModule } from '../payments/online/online-payments.module';
 import { AdminCustomersController, AdminCustomersService } from './admin-customers';
 import { AdminDictionariesController, AdminDictionariesService } from './admin-dictionaries';
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
@@ -35,7 +36,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
  * YandexWebhookController (/api/yandex/notifications/<secret>): off by default, secret path + Yandex networks only.
  */
 @Module({
-  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule],
+  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule, OnlinePaymentsModule],
   controllers: [
     StaffAuthController,
     DashboardController,

@@ -136,10 +136,14 @@ describe('Release 1 (e2e)', () => {
         first_order_free_delivery: true,
       });
       await put({ ...defaults }).expect(200); // empty limit
-      expect((await http().get('/api/staff/settings/checkout-options').set(bearer(admin)).expect(200)).body).toEqual(defaults);
+      // 2.1: the answer also has the per-system modes (old switch false = all hidden) and what is missing for «Работает»
+      expect((await http().get('/api/staff/settings/checkout-options').set(bearer(admin)).expect(200)).body).toMatchObject({
+        ...defaults,
+        online: { payme: 'hidden', click: 'hidden', uzum: 'hidden' },
+      });
       await put({ ...defaults, cod_max_total_uzs: 0 }).expect(400);
       await put({ ...defaults, cod_max_total_uzs: 'abc' }).expect(400);
-      await put({ cod_max_total_uzs: 1 }).expect(400); // the two switches are required too
+      await put({ cod_max_total_uzs: 1 }).expect(400); // first_order_free_delivery is required too
       await put({ ...defaults, cod_max_total_uzs: 1 }, manager).expect(403);
     });
   });

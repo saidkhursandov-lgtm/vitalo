@@ -31,6 +31,26 @@ function useTelegramBackButton(visible: boolean) {
   }, [visible, navigate]);
 }
 
+/** A text field has focus = the on-screen keyboard is up (ТЗ v3 §3.4): the bottom menu and the floating cart hide. */
+const isTextField = (el: Element | null) =>
+  !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((el as HTMLInputElement).type)));
+
+export function useKeyboardOpen(): boolean {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onIn = (e: FocusEvent) => setOpen(isTextField(e.target as Element));
+    // focus may jump straight to the next field: check after the browser has moved it
+    const onOut = () => setTimeout(() => setOpen(isTextField(document.activeElement)), 0);
+    document.addEventListener('focusin', onIn);
+    document.addEventListener('focusout', onOut);
+    return () => {
+      document.removeEventListener('focusin', onIn);
+      document.removeEventListener('focusout', onOut);
+    };
+  }, []);
+  return open;
+}
+
 /** The cart badge "jumps" a little when the number grows. */
 function useBump(count: number): boolean {
   const prev = useRef(count);
@@ -56,6 +76,7 @@ export function Layout() {
   const showNav = !NO_NAV.some((re) => re.test(pathname));
   const count = cartCount.data?.items_count ?? 0;
   const bump = useBump(count);
+  const keyboard = useKeyboardOpen();
   // Floating cart bar: only where the bottom menu is, and not on the cart screen itself (it has its own big button)
   const showFloatCart = showNav && count > 0 && pathname !== '/cart';
 
@@ -66,7 +87,7 @@ export function Layout() {
   }, [pathname]);
 
   return (
-    <div className={`app ${showNav ? 'with-nav' : ''} ${BUY_PANEL.test(pathname) ? 'has-buy-panel' : ''} ${showFloatCart ? 'has-float-cart' : ''}`}>
+    <div className={`app ${showNav ? 'with-nav' : ''} ${BUY_PANEL.test(pathname) ? 'has-buy-panel' : ''} ${showFloatCart ? 'has-float-cart' : ''} ${keyboard ? 'kb-open' : ''}`}>
       <ToastProvider>
       <header className="topbar">
         <div className="topbar-left">

@@ -18,6 +18,19 @@ const STEP_NAMES: Record<string, string> = {
   payment_marked: 'Нажали «Я оплатил(а)»',
   payment_confirmed: 'Оплата подтверждена',
 };
+/** Single actions outside the funnel (release 1, 2.1). */
+interface ExtraEvent {
+  event: string;
+  users: number;
+  events: number;
+  by_system?: { system: string; users: number; events: number }[];
+}
+const EXTRA_NAMES: Record<string, string> = {
+  language_change: 'Сменили язык',
+  cod_selected: 'Выбрали «Оплата при получении»',
+  payment_soon_click: 'Нажали Payme / Click / Uzum «Скоро»',
+};
+const SYSTEM_NAMES: Record<string, string> = { payme: 'Payme', click: 'Click', uzum: 'Uzum' };
 const PERIODS = [
   ['today', 'Сегодня'],
   ['7', '7 дней'],
@@ -27,7 +40,7 @@ const PERIODS = [
 /** Funnel for the period: unique customers on each step and the share that came from the previous step (B3). */
 export function FunnelCard() {
   const [period, setPeriod] = useState<(typeof PERIODS)[number][0]>('7');
-  const q = useQuery({ queryKey: ['funnel', period], queryFn: () => api<{ steps: FunnelStep[] }>(`/staff/dashboard/funnel?period=${period}`) });
+  const q = useQuery({ queryKey: ['funnel', period], queryFn: () => api<{ steps: FunnelStep[]; extra?: ExtraEvent[] }>(`/staff/dashboard/funnel?period=${period}`) });
   const top = Math.max(1, ...(q.data?.steps.map((s) => s.users) ?? [1]));
   return (
     <section className="card">
@@ -61,6 +74,37 @@ export function FunnelCard() {
             ))}
           </tbody>
         </table>
+      )}
+      {q.data?.extra && q.data.extra.length > 0 && (
+        <>
+          <h3 className="funnel-extra-title">Отдельные действия</h3>
+          <p className="muted small">Покупатели — сколько разных людей; нажатия — сколько раз всего.</p>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Действие</th>
+                <th className="num">Покупатели</th>
+                <th className="num">Нажатия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {q.data.extra.flatMap((e) => [
+                <tr key={e.event}>
+                  <td>{EXTRA_NAMES[e.event] ?? e.event}</td>
+                  <td className="num strong">{e.users}</td>
+                  <td className="num">{e.events}</td>
+                </tr>,
+                ...(e.by_system ?? []).map((b) => (
+                  <tr key={`${e.event}-${b.system}`} className="funnel-sub">
+                    <td>— {SYSTEM_NAMES[b.system] ?? b.system}</td>
+                    <td className="num">{b.users}</td>
+                    <td className="num">{b.events}</td>
+                  </tr>
+                )),
+              ])}
+            </tbody>
+          </table>
+        </>
       )}
     </section>
   );
