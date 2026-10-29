@@ -6,7 +6,7 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { SettingsService, supportLink } from '../settings/settings.service';
 import { buildCategoryTrees, CategoryTrees, collectDescendantIds, pruneEmpty } from './category-tree';
 import { ListProductsQuery, ProductSort, SearchQuery } from './catalog.dto';
-import { cardInclude, listInclude, ProductListItem, toProductCard, toProductListItem } from './product.mapper';
+import { availableQty, cardInclude, listInclude, ProductListItem, toProductCard, toProductListItem } from './product.mapper';
 
 export const PAGE_SIZE = 24;
 
@@ -26,6 +26,26 @@ export interface Page<T> {
   page_size: number;
   total: number;
   total_pages: number;
+}
+
+export interface BrandCardView {
+  id: string;
+  slug: string;
+  name: string;
+  name_uz: string | null;
+  logo_url: string | null;
+  product_count: number;
+}
+
+export interface BrandPageView extends BrandCardView {
+  country_ru: string | null;
+  country_uz: string | null;
+  why_vitalo_ru: string | null;
+  why_vitalo_uz: string | null;
+}
+
+function toBrandCard(b: { id: string; slug: string | null; name_ru: string; name_uz: string | null; logo_url: string | null }, count: number): BrandCardView {
+  return { id: b.id, slug: b.slug!, name: b.name_ru, name_uz: b.name_uz, logo_url: b.logo_url, product_count: count };
 }
 
 function toPage<T>(items: T[], total: number, page: number): Page<T> {
@@ -96,6 +116,45 @@ export class CatalogService {
     return rows.map((r) => ({ brand: r.brand, count: r._count._all }));
   }
 
+  /**
+   * An active category by its address. A hidden old one («Кожа», «Витамин D» …, 2.2) leads to the category that
+   * replaced it, so old links and banners keep working; a hidden one without a replacement is «not found».
+   */
+  async resolveCategory(slug: string): Promise<{ id: string; slug: string }> {
+    let cat = await this.prisma.categories.findUnique({ where: { slug }, select: { id: true, slug: true, status: true, merged_into_id: true } });
+    for (let hops = 0; cat && cat.status !== 'active' && cat.merged_into_id && hops < 5; hops++) {
+      cat = await this.prisma.categories.findUnique({ where: { id: cat.merged_into_id }, select: { id: true, slug: true, status: true, merged_into_id: true } });
+    }
+    if (!cat || cat.status !== 'active') throw new NotFoundException('Category not found');
+    return { id: cat.id, slug: cat.slug };
+  }
+
+  /**
+   * «Проверенные бренды» (2.2): brands switched on for the showcase that have at least one product in stock,
+   * in the order set in the admin panel.
+   */
+  async brandShowcase(): Promise<BrandCardView[]> {
+    const brands = await this.prisma.brands.findMany({
+      where: { status: 'active', show_in_showcase: true, slug: { not: null } },
+      orderBy: [{ sort_order: 'asc' }, { name_ru: 'asc' }],
+      include: { products: { where: { status: 'active' }, select: { inventory: { select: { actual_qty: true, reserved_qty: true } } } } },
+    });
+    return brands
+      .map((b) => ({ b, inStock: b.products.filter((p) => availableQty(p.inventory) > 0).length }))
+      .filter(({ inStock }) => inStock > 0)
+      .map(({ b }) => toBrandCard(b, b.products.length));
+  }
+
+  /** The brand page: by address, or by the exact name (banners made before 2.2 link to a brand by its name). */
+  async brandPage(slugOrName: string): Promise<BrandPageView> {
+    const b =
+      (await this.prisma.brands.findUnique({ where: { slug: slugOrName } })) ??
+      (await this.prisma.brands.findFirst({ where: { name_ru: { equals: slugOrName, mode: 'insensitive' } } }));
+    if (!b || b.status !== 'active' || !b.slug) throw new NotFoundException('Brand not found');
+    const count = await this.prisma.products.count({ where: { status: 'active', brand_id: b.id } });
+    return { ...toBrandCard(b, count), country_ru: b.country_ru, country_uz: b.country_uz, why_vitalo_ru: b.why_vitalo_ru, why_vitalo_uz: b.why_vitalo_uz };
+  }
+
   async listForms(): Promise<{ form: string; count: number }[]> {
     const rows = await this.prisma.products.groupBy({
       by: ['form'],
@@ -110,12 +169,11 @@ export class CatalogService {
     const where: Prisma.productsWhereInput = { status: 'active' };
 
     if (q.category) {
+      const root = await this.resolveCategory(q.category);
       const cats = await this.prisma.categories.findMany({
         where: { status: 'active' },
         select: { id: true, parent_id: true, slug: true },
       });
-      const root = cats.find((c) => c.slug === q.category);
-      if (!root) throw new NotFoundException('Category not found');
       where.categories = { some: { category_id: { in: collectDescendantIds(cats, root.id) } } };
     }
     if (q.brand?.length) where.brand = { in: q.brand };

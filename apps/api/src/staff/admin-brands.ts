@@ -1,0 +1,173 @@
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Prisma } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { randomUUID } from 'crypto';
+import { memoryStorage } from 'multer';
+import sharp from 'sharp';
+import { availableQty } from '../catalog/product.mapper';
+import { PrismaService } from '../prisma/prisma.service';
+import { FILE_STORAGE, type FileStorage } from '../storage/file-storage';
+import { detectImage, MAX_PHOTO_BYTES } from './admin-products';
+import { AuditService } from './audit.service';
+import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
+
+/** Logo: a square, stored as 400×400 WebP; a non-square picture is fitted inside on a transparent background. */
+export const LOGO_SIZE = 400;
+
+const trimOrNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value);
+
+export class UpdateBrandDto {
+  @ApiPropertyOptional({ description: 'Адрес страницы бренда: латиница, цифры и «-», например now-foods' })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, { message: 'Адрес: только латинские буквы, цифры и «-» (например now-foods)' })
+  @MaxLength(80)
+  slug?: string;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(trimOrNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(80) country_ru?: string | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(trimOrNull) @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(80) country_uz?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: '«Почему [бренд] в VITALO», RU' })
+  @IsOptional()
+  @Transform(trimOrNull)
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(2000)
+  why_vitalo_ru?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: '«Почему [бренд] в VITALO», UZ' })
+  @IsOptional()
+  @Transform(trimOrNull)
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(2000)
+  why_vitalo_uz?: string | null;
+  @ApiPropertyOptional({ description: 'Показывать в ленте «Проверенные бренды»' }) @IsOptional() @IsBoolean() show_in_showcase?: boolean;
+  @ApiPropertyOptional({ description: 'Порядок в ленте: меньше — левее' }) @IsOptional() @IsInt() @Min(0) @Max(9999) sort_order?: number;
+}
+
+export async function storeBrandLogo(storage: FileStorage, brandId: string, input: Buffer) {
+  const meta = await sharp(input, { failOn: 'error' }).metadata();
+  const webp = await sharp(input, { failOn: 'error' })
+    .rotate()
+    .resize({ width: LOGO_SIZE, height: LOGO_SIZE, fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+    .webp({ quality: 85 })
+    .toBuffer();
+  const url = await storage.save(`brands/${brandId}/${randomUUID()}.webp`, webp, 'image/webp');
+  const square = !!meta.width && !!meta.height && Math.abs(meta.width - meta.height) <= Math.max(meta.width, meta.height) * 0.05;
+  return { url, square, width: meta.width ?? null, height: meta.height ?? null };
+}
+
+/** Админка → Бренды (2.2): the brand dictionary plus what the showcase and the brand page need. */
+@Injectable()
+export class AdminBrandsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    @Inject(FILE_STORAGE) private readonly storage: FileStorage,
+  ) {}
+
+  async list() {
+    const rows = await this.prisma.brands.findMany({
+      orderBy: [{ status: 'asc' }, { sort_order: 'asc' }, { name_ru: 'asc' }],
+      include: { products: { select: { status: true, inventory: { select: { actual_qty: true, reserved_qty: true } } } } },
+    });
+    return rows.map(({ products, ...b }) => {
+      const active = products.filter((p) => p.status === 'active');
+      const inStock = active.filter((p) => availableQty(p.inventory) > 0).length;
+      // What the shop shows: switched on, an address, and something to buy.
+      const shown = b.status === 'active' && b.show_in_showcase && !!b.slug && inStock > 0;
+      return { ...b, products: products.length, products_active: active.length, products_in_stock: inStock, shown_in_showcase: shown };
+    });
+  }
+
+  private async get(id: string) {
+    const b = await this.prisma.brands.findUnique({ where: { id } });
+    if (!b) throw new NotFoundException('Brand not found');
+    return b;
+  }
+
+  async update(staffId: string, id: string, dto: UpdateBrandDto) {
+    const before = await this.get(id);
+    try {
+      const b = await this.prisma.brands.update({ where: { id }, data: dto });
+      await this.audit.log({ staffId, action: 'brand.updated', entityType: 'brands', entityId: id, before, after: b });
+      return b;
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException({ code: 'BRAND_SLUG_TAKEN', message: `Адрес «${dto.slug}» уже занят другим брендом` });
+      }
+      throw e;
+    }
+  }
+
+  async uploadLogo(staffId: string, id: string, file: Pick<Express.Multer.File, 'buffer'> | undefined) {
+    const before = await this.get(id);
+    if (!file) throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Send the image in the "file" field' });
+    if (!detectImage(file.buffer)) throw new BadRequestException({ code: 'UNSUPPORTED_IMAGE', message: 'Только JPG, PNG или WebP' });
+    const stored = await storeBrandLogo(this.storage, id, file.buffer).catch(() => {
+      throw new BadRequestException({ code: 'UNSUPPORTED_IMAGE', message: 'Картинку не удалось прочитать' });
+    });
+    const b = await this.prisma.brands.update({ where: { id }, data: { logo_url: stored.url } });
+    if (before.logo_url) await this.storage.remove(before.logo_url).catch(() => undefined);
+    await this.audit.log({ staffId, action: 'brand.logo_uploaded', entityType: 'brands', entityId: id, after: { url: stored.url } });
+    return { ...b, logo_square: stored.square, logo_source: { width: stored.width, height: stored.height } };
+  }
+
+  async removeLogo(staffId: string, id: string) {
+    const before = await this.get(id);
+    const b = await this.prisma.brands.update({ where: { id }, data: { logo_url: null } });
+    if (before.logo_url) await this.storage.remove(before.logo_url).catch(() => undefined);
+    await this.audit.log({ staffId, action: 'brand.logo_removed', entityType: 'brands', entityId: id, before: { url: before.logo_url } });
+    return b;
+  }
+}
+
+@ApiTags('staff: brands')
+@ApiBearerAuth()
+@UseGuards(StaffGuard)
+@RequirePermission('settings.dictionaries')
+@Controller('staff/brands')
+export class AdminBrandsController {
+  constructor(private readonly brands: AdminBrandsService) {}
+
+  @Get()
+  list() {
+    return this.brands.list().then((items) => ({ items, logo: { width: LOGO_SIZE, height: LOGO_SIZE } }));
+  }
+
+  @Patch(':id')
+  update(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: UpdateBrandDto) {
+    return this.brands.update(me.staff.id, id, dto);
+  }
+
+  @Post(':id/logo')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1 } }))
+  upload(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @UploadedFile() file?: Express.Multer.File) {
+    return this.brands.uploadLogo(me.staff.id, id, file);
+  }
+
+  @Delete(':id/logo')
+  removeLogo(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.brands.removeLogo(me.staff.id, id);
+  }
+}

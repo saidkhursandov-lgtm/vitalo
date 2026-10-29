@@ -12,7 +12,7 @@ import { LegalDocument, Welcome } from './screens/Legal';
 import { useI18n } from './lib/i18n';
 import { AddressEdit, Addresses } from './screens/Addresses';
 import { Cart } from './screens/Cart';
-import { Catalog, ProductList } from './screens/Catalog';
+import { BrandScreen, Catalog, ProductList } from './screens/Catalog';
 import { Checkout } from './screens/Checkout';
 import { Favorites } from './screens/Favorites';
 import { Home } from './screens/Home';
@@ -85,6 +85,7 @@ function Shop() {
         <Route path="search" element={<Search />} />
         <Route path="catalog" element={<Catalog />} />
         <Route path="catalog/products" element={<ProductList />} />
+        <Route path="brand/:slug" element={<BrandScreen />} />
         <Route path="product/:id" element={<Product />} />
         <Route path="favorites" element={<Favorites />} />
         <Route path="cart" element={<Cart />} />

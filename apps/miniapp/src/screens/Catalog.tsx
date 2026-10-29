@@ -1,29 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { BrandLogo, BrandStrip, CategoryLink } from '../components/CatalogLayers';
 import { ChevronIcon, CloseIcon, FilterIcon } from '../components/Icons';
 import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { formLabel, nameOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
-import { useBrands, useCategories, useForms, useProducts, useProductsCount, type ProductFilters, type Sort } from '../lib/queries';
+import { useBrandPage, useBrands, useCategories, useForms, useProducts, useProductsCount, type ProductFilters, type Sort } from '../lib/queries';
 import type { CategoryNode } from '../lib/types';
 
-/** Catalog root: the two independent trees (need / product type), up to 3 levels. */
+/**
+ * Catalog root (ТЗ v3 §4.1, подэтап 2.2): three layers on one screen — «По потребности», «По типу», «Проверенные
+ * бренды». One level: every card opens its product list in one tap.
+ */
 export function Catalog() {
   const { t } = useI18n();
   const categories = useCategories();
-  const [tree, setTree] = useState<'need' | 'product_type'>('need');
 
   return (
-    <div className="page">
+    <div className="page catalog-root">
       <h1>{t('catalog.title')}</h1>
-      <div className="segmented">
-        <button className={tree === 'need' ? 'is-on' : ''} onClick={() => setTree('need')}>
-          {t('home.byNeed')}
-        </button>
-        <button className={tree === 'product_type' ? 'is-on' : ''} onClick={() => setTree('product_type')}>
-          {t('home.byType')}
-        </button>
-      </div>
       <Link to="/catalog/products" className="list-row">
         <span>{t('catalog.allProducts')}</span>
         <ChevronIcon width={18} height={18} />
@@ -33,29 +28,66 @@ export function Catalog() {
       ) : categories.isError ? (
         <ErrorState error={categories.error} onRetry={() => void categories.refetch()} />
       ) : (
-        <CategoryList nodes={categories.data[tree]} depth={0} />
+        (['need', 'product_type'] as const).map(
+          (tree) =>
+            categories.data[tree].length > 0 && (
+              <section key={tree} className="section">
+                <div className="section-head">
+                  <h2>{t(tree === 'need' ? 'home.byNeed' : 'home.byType')}</h2>
+                </div>
+                <div className="type-grid">
+                  {categories.data[tree].map((c) => (
+                    <CategoryLink key={c.id} c={c} className="type-card" />
+                  ))}
+                </div>
+              </section>
+            ),
+        )
       )}
+      <BrandStrip />
     </div>
   );
 }
 
-function CategoryList({ nodes, depth }: { nodes: CategoryNode[]; depth: number }) {
-  const { lang } = useI18n();
+/** Brand page (2.2): logo, name, country, «Почему [бренд] в VITALO» when filled in, then the brand's products. */
+export function BrandScreen() {
+  const { t, lang } = useI18n();
+  const { slug = '' } = useParams();
+  const brand = useBrandPage(slug);
+
+  if (brand.isPending) return <div className="page"><Loading variant="list" count={2} /></div>;
+  if (brand.isError) {
+    return (
+      <div className="page">
+        {(brand.error as { status?: number }).status === 404 ? <EmptyState title={t('brand.notFound')} /> : <ErrorState error={brand.error} onRetry={() => void brand.refetch()} />}
+      </div>
+    );
+  }
+  const b = brand.data;
+  const country = (lang === 'uz' && b.country_uz) || b.country_ru;
+  const why = (lang === 'uz' && b.why_vitalo_uz) || b.why_vitalo_ru;
   return (
-    <ul className="cat-list">
-      {nodes.map((c) => (
-        <li key={c.id}>
-          <Link to={`/catalog/products?category=${c.slug}`} className="list-row" style={{ paddingLeft: 16 + depth * 16 }}>
-            <span className={depth ? '' : 'strong'}>{nameOf(c, lang)}</span>
-            <span className="row-end">
-              <span className="hint small">{c.product_count}</span>
-              <ChevronIcon width={18} height={18} />
-            </span>
-          </Link>
-          {c.children.length > 0 && <CategoryList nodes={c.children} depth={depth + 1} />}
-        </li>
-      ))}
-    </ul>
+    <ProductList
+      brand={b.name}
+      header={
+        <>
+          <div className="brand-head">
+            <BrandLogo brand={b} size={72} />
+            <div className="brand-head-text">
+              <h1>{b.name}</h1>
+              {country && <span className="hint">{country}</span>}
+            </div>
+          </div>
+          {why && (
+            <section className="card brand-why">
+              <h2>{t('brand.why', { brand: b.name })}</h2>
+              <p>{why}</p>
+            </section>
+          )}
+          <h2 className="brand-products-title">{t('brand.products')}</h2>
+        </>
+      }
+    />
   );
 }
 
@@ -73,28 +105,29 @@ const list = (v: string | null) => (v ? v.split(',').filter(Boolean) : undefined
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : undefined);
 
 /** Product list with filters (price, brand, form, in stock) and sorting; state lives in the URL. */
-export function ProductList() {
+export function ProductList({ brand, header }: { brand?: string; header?: ReactNode } = {}) {
   const { t, lang } = useI18n();
   const [params, setParams] = useSearchParams();
   const categories = useCategories();
   const [showFilters, setShowFilters] = useState(false);
 
+  // The brand page (2.2) shows only that brand: its brand is fixed, not a filter.
   const filters: ProductFilters = useMemo(
     () => ({
       category: params.get('category') ?? undefined,
-      brand: list(params.get('brand')),
+      brand: brand ? [brand] : list(params.get('brand')),
       form: list(params.get('form')),
       price_min: num(params.get('price_min')),
       price_max: num(params.get('price_max')),
       in_stock: params.get('in_stock') === 'true' || undefined,
       sort: (SORTS.find((s) => s === params.get('sort')) ?? 'popular') as Sort,
     }),
-    [params],
+    [params, brand],
   );
   const products = useProducts(filters);
 
   const category = filters.category && categories.data ? findCategory([...categories.data.need, ...categories.data.product_type], filters.category) : null;
-  const activeFilters = [filters.brand?.length, filters.form?.length, filters.price_min, filters.price_max, filters.in_stock].filter(Boolean).length;
+  const activeFilters = [!brand && filters.brand?.length, filters.form?.length, filters.price_min, filters.price_max, filters.in_stock].filter(Boolean).length;
   const items = products.data?.pages.flatMap((p) => p.items) ?? [];
 
   const update = (patch: Record<string, string | undefined>) => {
@@ -108,7 +141,7 @@ export function ProductList() {
 
   return (
     <div className="page">
-      <h1>{category ? nameOf(category, lang) : t('catalog.allProducts')}</h1>
+      {header ?? <h1>{category ? nameOf(category, lang) : t('catalog.allProducts')}</h1>}
       {category && category.children.length > 0 && (
         <div className="chips scroll-x">
           {category.children.map((c) => (
@@ -161,10 +194,11 @@ export function ProductList() {
       {showFilters && (
         <FilterSheet
           filters={filters}
+          fixedBrand={!!brand}
           onClose={() => setShowFilters(false)}
           onApply={(f) => {
             update({
-              brand: f.brand?.join(',') || undefined,
+              brand: brand ? undefined : f.brand?.join(',') || undefined,
               form: f.form?.join(',') || undefined,
               price_min: f.price_min?.toString(),
               price_max: f.price_max?.toString(),
@@ -179,7 +213,7 @@ export function ProductList() {
 }
 
 /** Bottom sheet: price, brand, form, availability; the main button shows how many products will be shown. */
-function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; onApply: (f: ProductFilters) => void; onClose: () => void }) {
+function FilterSheet({ filters, fixedBrand, onApply, onClose }: { filters: ProductFilters; fixedBrand: boolean; onApply: (f: ProductFilters) => void; onClose: () => void }) {
   const { t, lang } = useI18n();
   const brands = useBrands();
   const forms = useForms();
@@ -190,7 +224,7 @@ function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; o
     const id = setTimeout(() => setCounted(draft), 300);
     return () => clearTimeout(id);
   }, [draft]);
-  const count = useProductsCount({ ...counted, category: filters.category });
+  const count = useProductsCount({ ...counted, category: filters.category, ...(fixedBrand && { brand: filters.brand }) });
 
   const toggle = (key: 'brand' | 'form', value: string) => {
     const current = new Set(draft[key] ?? []);
@@ -225,8 +259,8 @@ function FilterSheet({ filters, onApply, onClose }: { filters: ProductFilters; o
             </label>
           </div>
 
-          <h3>{t('catalog.brand')}</h3>
-          {brands.data?.map(({ brand }) => (
+          {!fixedBrand && <h3>{t('catalog.brand')}</h3>}
+          {!fixedBrand && brands.data?.map(({ brand }) => (
             <label key={brand} className="check-row">
               <input type="checkbox" checked={draft.brand?.includes(brand) ?? false} onChange={() => toggle('brand', brand)} />
               {brand}

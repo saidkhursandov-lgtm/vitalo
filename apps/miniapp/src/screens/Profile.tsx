@@ -8,11 +8,10 @@ import { api } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
 import { useOrders } from '../lib/queries';
-import type { Lang } from '../lib/types';
 import { OrderRow } from './Orders';
 
 export function Profile() {
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
   const user = useUser();
   const orders = useOrders();
   const supportUrl = useSupportUrl();
@@ -38,16 +37,7 @@ export function Profile() {
 
       <BonusTeaser />
 
-      <section className="card">
-        <h2>{t('profile.language')}</h2>
-        <div className="segmented">
-          {(['ru', 'uz'] as Lang[]).map((l) => (
-            <button key={l} className={lang === l ? 'is-on' : ''} onClick={() => setLang(l)}>
-              {l === 'ru' ? 'Русский' : 'O‘zbekcha'}
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* 2.2: no «Язык» block here — the language is switched with RU | UZ in the header (saved on the server). */}
 
       <section className="card">
         <h2>{t('profile.notifications')}</h2>

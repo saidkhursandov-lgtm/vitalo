@@ -352,20 +352,50 @@ function ProductForm({ product }: { product?: AdminProduct }) {
 
       <section className="card">
         <h2>Категории</h2>
+        {/* 2.2: one level; several needs, exactly one type (the server checks it too) */}
         {categories.data && (
           <div className="grid-2">
-            {(['need', 'product_type'] as const).map((tree) => (
-              <div key={tree}>
-                <h3>{tree === 'need' ? 'По потребности' : 'По типу продукта'}</h3>
-                <CategoryChecks nodes={categories.data[tree]} selected={cats} disabled={!editable} onToggle={(cid) => {
-                  const next = new Set(cats);
-                  if (next.has(cid)) next.delete(cid);
-                  else next.add(cid);
-                  setCats(next);
-                  setSaved(false);
-                }} />
-              </div>
-            ))}
+            <div className="check-col">
+              <h3>По потребности</h3>
+              <p className="muted small">Можно несколько</p>
+              {categories.data.need.map((n) => (
+                <label key={n.id} className="check">
+                  <input
+                    type="checkbox"
+                    checked={cats.has(n.id)}
+                    disabled={!editable}
+                    onChange={() => {
+                      const next = new Set(cats);
+                      if (next.has(n.id)) next.delete(n.id);
+                      else next.add(n.id);
+                      setCats(next);
+                      setSaved(false);
+                    }}
+                  />
+                  {n.name_ru}
+                </label>
+              ))}
+            </div>
+            <div className="check-col">
+              <h3>По типу</h3>
+              <p className="muted small">Один тип на товар</p>
+              {categories.data.product_type.map((n) => (
+                <label key={n.id} className="check">
+                  <input
+                    type="radio"
+                    name="product_type"
+                    checked={cats.has(n.id)}
+                    disabled={!editable}
+                    onChange={() => {
+                      const types = new Set(categories.data.product_type.map((c) => c.id));
+                      setCats(new Set([...cats].filter((id) => !types.has(id)).concat(n.id)));
+                      setSaved(false);
+                    }}
+                  />
+                  {n.name_ru}
+                </label>
+              ))}
+            </div>
           </div>
         )}
       </section>
@@ -394,22 +424,6 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     {product && <LabelCard product={product} />}
     {product && <SkuAliases productId={product.id} sku={product.sku} />}
     {product ? <Photos product={product} editable={editable} /> : <p className="muted">Фото можно добавить после первого сохранения.</p>}
-    </>
-  );
-}
-
-function CategoryChecks({ nodes, selected, disabled, onToggle, depth = 0 }: { nodes: CategoryNode[]; selected: Set<string>; disabled: boolean; onToggle: (id: string) => void; depth?: number }) {
-  return (
-    <>
-      {nodes.map((n) => (
-        <div key={n.id}>
-          <label className="check" style={{ paddingLeft: depth * 20 }}>
-            <input type="checkbox" checked={selected.has(n.id)} disabled={disabled} onChange={() => onToggle(n.id)} />
-            {n.name_ru}
-          </label>
-          <CategoryChecks nodes={n.children} selected={selected} disabled={disabled} onToggle={onToggle} depth={depth + 1} />
-        </div>
-      ))}
     </>
   );
 }

@@ -447,19 +447,23 @@ model staff_sessions {
 
 // ───────────── CATALOG ─────────────
 model categories {
-  id            String                @id @default(uuid()) @db.Uuid
-  parent_id     String?               @db.Uuid
-  tree_type     TreeType
-  name_ru       String
-  name_uz       String
-  slug          String                @unique
-  sort_order    Int                   @default(0)
-  status        EntityStatus          @default(active)
-  parent        categories?           @relation("CatTree", fields: [parent_id], references: [id])
-  children      categories[]          @relation("CatTree")
-  products      product_categories[]
-  promo_targets promotion_targets[]
-  block_items   content_block_items[]
+  id             String                @id @default(uuid()) @db.Uuid
+  parent_id      String?               @db.Uuid
+  tree_type      TreeType
+  name_ru        String
+  name_uz        String
+  slug           String                @unique
+  sort_order     Int                   @default(0)
+  status         EntityStatus          @default(active)
+  /// 2.2: a hidden old category points to the one that replaced it (old links and banners keep working)
+  merged_into_id String?               @db.Uuid
+  parent         categories?           @relation("CatTree", fields: [parent_id], references: [id])
+  children       categories[]          @relation("CatTree")
+  merged_into    categories?           @relation("CatMerge", fields: [merged_into_id], references: [id])
+  merged_from    categories[]          @relation("CatMerge")
+  products       product_categories[]
+  promo_targets  promotion_targets[]
+  block_items    content_block_items[]
 
   @@index([parent_id, tree_type])
 }
@@ -556,13 +560,22 @@ model products {
 /// Stage 1 dictionaries: unique name_ru ignoring case and extra spaces (expression index in the migration).
 /// Never deleted (trigger), only archived; an archived value is not offered for new choices.
 model brands {
-  id         String       @id @default(uuid()) @db.Uuid
-  name_ru    String
-  name_uz    String?
-  status     EntityStatus @default(active)
-  created_at DateTime     @default(now())
-  updated_at DateTime     @updatedAt
-  products   products[]
+  id               String       @id @default(uuid()) @db.Uuid
+  name_ru          String
+  name_uz          String?
+  status           EntityStatus @default(active)
+  // 2.2: brand showcase and the brand page
+  slug             String?      @unique
+  logo_url         String?
+  country_ru       String?
+  country_uz       String?
+  why_vitalo_ru    String?
+  why_vitalo_uz    String?
+  show_in_showcase Boolean      @default(true)
+  sort_order       Int          @default(0)
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+  products         products[]
 }
 
 model manufacturers {

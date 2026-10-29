@@ -10,6 +10,7 @@ export const cardInclude = {
   media: { orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }] },
   inventory: { select: { actual_qty: true, reserved_qty: true } },
   categories: { include: { category: true } },
+  brand_entry: { select: { slug: true } },
   relations: {
     where: { related: { status: 'active' } },
     orderBy: { sort_order: 'asc' },
@@ -88,6 +89,8 @@ export function toProductCard(p: ProductForCard) {
   return {
     ...toProductListItem(p),
     available_qty: Math.min(availableQty(p.inventory), 99), // upper bound for the qty stepper
+    /** 2.2: the brand page address (null = the brand is not in the dictionary) */
+    brand_slug: p.brand_entry?.slug ?? null,
     manufacturer: p.manufacturer,
     country: p.country,
     form: p.form,

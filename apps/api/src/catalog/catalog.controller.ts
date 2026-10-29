@@ -19,6 +19,17 @@ export class CatalogController {
     return this.catalog.listBrands();
   }
 
+  /** 2.2: «Проверенные бренды» — only brands with products in stock. Must stay before brands/:slug. */
+  @Get('brands/showcase')
+  brandShowcase() {
+    return this.catalog.brandShowcase();
+  }
+
+  @Get('brands/:slug')
+  brand(@Param('slug') slug: string) {
+    return this.catalog.brandPage(slug);
+  }
+
   @Get('forms')
   forms() {
     return this.catalog.listForms();

@@ -499,8 +499,12 @@ export class AdminProductsService {
 
   private async assertCategories(tx: Prisma.TransactionClient, ids?: string[]) {
     if (!ids?.length) return;
-    const found = await tx.categories.count({ where: { id: { in: ids } } });
-    if (found !== new Set(ids).size) throw new BadRequestException({ code: 'UNKNOWN_CATEGORY', message: 'Unknown category id' });
+    const found = await tx.categories.findMany({ where: { id: { in: ids } }, select: { tree_type: true, status: true } });
+    if (found.length !== new Set(ids).size) throw new BadRequestException({ code: 'UNKNOWN_CATEGORY', message: 'Unknown category id' });
+    // 2.2: several needs, but exactly one product type (hidden old types are not counted).
+    if (found.filter((c) => c.tree_type === 'product_type' && c.status === 'active').length > 1) {
+      throw new BadRequestException({ code: 'ONE_PRODUCT_TYPE', message: 'У товара может быть только один тип («По типу»).' });
+    }
   }
 
   private async write<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {

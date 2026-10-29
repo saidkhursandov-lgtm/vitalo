@@ -70,7 +70,7 @@ describe('import:catalog — the single catalog table (e2e)', () => {
     'Форма / дозировка': 'Таблетки; Капсулы',
     'Цена VITALO, сум *': '180 000',
     'Старая цена VITALO, сум': 315000,
-    'Категории по потребности (через ;)': 'Красота → Кожа; Иммунитет; Несуществующая',
+    'Категории по потребности (через ;)': 'Красота; Иммунитет; Несуществующая',
     'Категории по типу (через ;)': 'Витамины',
     'Описание (RU)': 'Строка 1\\nСтрока 2',
     'Описание (UZ)': 'Qator 1',
@@ -163,7 +163,7 @@ describe('import:catalog — the single catalog table (e2e)', () => {
       yandex_commission_percent: 18.5,
       label_composition_uz: 'Kollagen, C vitamini',
     });
-    expect(n.categoryNames).toEqual(['Красота → Кожа', 'Иммунитет', 'Витамины']);
+    expect(n.categoryNames).toEqual(['Красота', 'Иммунитет', 'Витамины']);
     expect(n.photos.map((x) => [x.name, !!x.path])).toEqual([['e2e-cat-1.png', true], ['missing.png', false], ['E2E-CAT-2.PNG', true]]);
     expect(p.newValues.manufacturers ?? []).not.toContain(`ООО "Тест ${RUN}"`);
 
@@ -199,7 +199,7 @@ describe('import:catalog — the single catalog table (e2e)', () => {
     expect(Number(n.yandex_commission_percent)).toBe(18.5);
     expect(n.manufacturer_id).toBe((await prisma.manufacturers.findFirstOrThrow({ where: { name_ru: MANUFACTURER } })).id);
     expect(n.form_id).not.toBeNull();
-    expect(n.categories.map((c) => c.category.name_ru).sort()).toEqual(['Витамины', 'Иммунитет', 'Кожа']);
+    expect(n.categories.map((c) => c.category.name_ru).sort()).toEqual(['Витамины', 'Иммунитет', 'Красота']);
     expect(n.media.map((m) => [m.title, m.is_main])).toEqual([['e2e-cat-1.png', true], ['E2E-CAT-2.PNG', false]]);
     expect(n.media[0].url).toMatch(/\.webp$/);
     expect(n.media[0].thumb_url_jpeg).toMatch(/-400\.jpg$/);

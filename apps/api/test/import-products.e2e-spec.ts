@@ -35,7 +35,7 @@ const row = (over: Row = {}): Row => ({
   'Себестоимость, сум': 90000,
   'Остаток, шт *': 10,
   'Мин. остаток': 2,
-  'Категории по потребности': 'Кожа; Красота → Волосы и ногти; Несуществующая',
+  'Категории по потребности': 'Красота; Энергия и мозг; Несуществующая',
   'Категории по типу': 'коллаген',
   'Краткое описание (RU)': 'Коротко.',
   'Состав (RU)': 'Коллаген, витамин C',
@@ -101,7 +101,7 @@ describe('Excel product import (e2e)', () => {
     expect(p.errors).toEqual([]);
     expect(p.skipped).toEqual([expect.objectContaining({ row: 2, sku: 'VTL-EXAMPLE' })]); // yellow example row
     expect(p.rows.map((r) => [r.sku, r.action])).toEqual([['E2E-IMP-1', 'create'], ['E2E-IMP-2', 'create']]);
-    expect(p.rows[0].categoryNames.sort()).toEqual(['Волосы и ногти', 'Кожа', 'Коллаген'].sort());
+    expect(p.rows[0].categoryNames.sort()).toEqual(['Красота', 'Энергия и мозг', 'Коллаген'].sort());
     const warnings = p.warnings.map((w) => w.message).join('\n');
     expect(warnings).toContain('категория «Несуществующая»');
     expect(warnings).toContain('фото «missing.jpg» не найдено');
@@ -122,7 +122,7 @@ describe('Excel product import (e2e)', () => {
     const p = await product();
     expect(p).toMatchObject({ status: 'active', name_uz: 'Import: kollagen', price_uzs: 150000n, old_price_uzs: null, cost_uzs: 90000n, min_stock: 2, shipping_weight_g: 250 });
     expect(p.directions_ru).toBe(DIRECTIONS); // line breaks kept
-    expect(p.categories.map((c) => c.category.slug).sort()).toEqual(['beauty-hair', 'beauty-skin', 'collagen']);
+    expect(p.categories.map((c) => c.category.slug).sort()).toEqual(['beauty', 'collagen', 'energy']);
 
     const warehouse = await prisma.warehouses.findFirstOrThrow({ where: { address: { contains: 'Ташкент' } } });
     expect(p.inventory).toEqual([expect.objectContaining({ warehouse_id: warehouse.id, actual_qty: 10, reserved_qty: 0 })]);
@@ -157,7 +157,7 @@ describe('Excel product import (e2e)', () => {
     const p = await product();
     expect(p.price_uzs).toBe(140000n);
     expect(p.composition_ru).toBe('Коллаген, витамин C');
-    expect(p.categories.map((c) => c.category.slug).sort()).toEqual(['beauty-hair', 'beauty-skin', 'collagen']);
+    expect(p.categories.map((c) => c.category.slug).sort()).toEqual(['beauty', 'collagen', 'energy']);
     expect(p.inventory[0].actual_qty).toBe(10);
     expect(await movements()).toHaveLength(1);
   });

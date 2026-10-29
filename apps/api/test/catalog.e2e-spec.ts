@@ -19,18 +19,15 @@ describe('Catalog (e2e)', () => {
   afterAll(() => app.close());
 
   describe('GET /categories', () => {
-    it('returns two separate trees with nested children (admin: include_empty=true)', async () => {
+    it('returns two separate one-level layers (admin: include_empty=true)', async () => {
       const { body } = await get('/categories?include_empty=true').expect(200);
       const need: Node[] = body.need;
       const types: Node[] = body.product_type;
 
-      expect(need.map((n) => n.slug)).toEqual([
-        'immunity', 'beauty', 'joints', 'energy', 'sleep', 'heart', 'memory', 'women', 'men', 'sport',
-      ]);
-      expect(need.find((n) => n.slug === 'beauty')!.children.map((n) => n.slug)).toEqual(['beauty-skin', 'beauty-hair']);
-      expect(types.find((n) => n.slug === 'vitamins')!.children.map((n) => n.slug)).toEqual(
-        ['vitamin-d', 'vitamin-c', 'vitamin-b', 'vitamin-k'],
-      );
+      // 2.2: one level — 8 needs and 7 types, no subcategories
+      expect(need.map((n) => n.slug)).toEqual(['sleep', 'immunity', 'joints', 'energy', 'beauty', 'women', 'men', 'sport']);
+      expect(types.map((n) => n.slug)).toEqual(['vitamins', 'minerals', 'omega', 'collagen', 'creatine-amino', 'protein', 'other']);
+      expect([...need, ...types].every((n) => n.children.length === 0)).toBe(true);
       expect(types.map((n) => n.slug)).not.toContain('immunity');
     });
 
@@ -180,7 +177,7 @@ describe('Catalog (e2e)', () => {
       expect(body).toMatchObject({ sku: 'VTL-D3-2000', brand: 'SunVita', price_uzs: 89000, form: 'Капсулы', in_stock: true });
       expect(body.short_description_ru).toBeTruthy();
       expect(body.media).toHaveLength(1);
-      expect(body.categories.map((c: { slug: string }) => c.slug).sort()).toEqual(['immunity', 'joints', 'vitamin-d']);
+      expect(body.categories.map((c: { slug: string }) => c.slug).sort()).toEqual(['immunity', 'joints', 'vitamins']);
       expect(skus(body.similar)).toEqual(['VTL-K2-MK7']);
     });
 

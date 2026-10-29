@@ -62,8 +62,29 @@ export interface ProductListItem extends Named {
   in_stock: boolean;
 }
 
+/** 2.2: a card in «Проверенные бренды». `name` is the brand as written on the products. */
+export interface BrandCard {
+  id: string;
+  slug: string;
+  name: string;
+  name_uz: string | null;
+  /** Square WebP 400×400; null — the card shows the first letter. */
+  logo_url: string | null;
+  product_count: number;
+}
+
+/** 2.2: the brand page: logo, name, country and «Почему [бренд] в VITALO» on top, products below. */
+export interface BrandPage extends BrandCard {
+  country_ru: string | null;
+  country_uz: string | null;
+  why_vitalo_ru: string | null;
+  why_vitalo_uz: string | null;
+}
+
 export interface ProductCard extends ProductListItem {
   available_qty: number;
+  /** 2.2: the brand page address; null — the brand has no page yet */
+  brand_slug?: string | null;
   manufacturer: string;
   country: string | null;
   form: string | null;

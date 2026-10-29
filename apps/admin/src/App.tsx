@@ -14,6 +14,7 @@ import { OrderDetail } from './pages/OrderDetail';
 import { Orders } from './pages/Orders';
 import { ProductEdit } from './pages/ProductEdit';
 import { Products } from './pages/Products';
+import { Brands } from './pages/Brands';
 import { PurchaseDetail, PurchaseNew, Purchases } from './pages/Purchases';
 import { Settings } from './pages/Settings';
 import { YandexOrderDetail, YandexOrderNew, YandexOrders } from './pages/YandexOrders';
@@ -42,6 +43,7 @@ export function App() {
         <Route path="yandex-orders/:id" element={<Guard perm="yandex.orders.view"><YandexOrderDetail /></Guard>} />
         <Route path="yandex-sync" element={<Guard perm="yandex.sync"><YandexSync /></Guard>} />
         <Route path="products" element={<Guard perm="products.view"><Products /></Guard>} />
+        <Route path="brands" element={<Guard perm="settings.dictionaries"><Brands /></Guard>} />
         <Route path="products/new" element={<Guard perm="products.edit"><ProductEdit /></Guard>} />
         <Route path="products/:id" element={<Guard perm="products.view"><ProductEdit /></Guard>} />
         <Route path="inventory" element={<Guard perm="inventory.view"><Inventory /></Guard>} />

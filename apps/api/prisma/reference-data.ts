@@ -4,6 +4,7 @@
  */
 import { createHash } from 'crypto';
 import type { TreeType } from '@prisma/client';
+import { NEED_TARGETS, TYPE_TARGETS } from '../src/catalog/stage22-transfer';
 
 /** Deterministic UUID (v5-shaped) from a stable key. */
 export function uid(key: string): string {
@@ -14,38 +15,13 @@ export function uid(key: string): string {
 
 export interface CategorySeed { slug: string; ru: string; uz: string; children?: CategorySeed[] }
 
+/**
+ * Stage 2.2: one level, «По потребности» (8) and «По типу» (7). The old trees with «Кожа», «Витамин D» … are kept
+ * hidden on existing databases (npm run catalog:stage22); a fresh database gets only the new ones.
+ */
 export const CATEGORIES: Record<TreeType, CategorySeed[]> = {
-  need: [
-    { slug: 'immunity', ru: 'Иммунитет', uz: 'Immunitet' },
-    { slug: 'beauty', ru: 'Красота', uz: 'Go‘zallik', children: [
-      { slug: 'beauty-skin', ru: 'Кожа', uz: 'Teri' },
-      { slug: 'beauty-hair', ru: 'Волосы и ногти', uz: 'Soch va tirnoqlar' },
-    ] },
-    { slug: 'joints', ru: 'Суставы и кости', uz: 'Bo‘g‘imlar va suyaklar' },
-    { slug: 'energy', ru: 'Энергия', uz: 'Energiya' },
-    { slug: 'sleep', ru: 'Сон и стресс', uz: 'Uyqu va stress' },
-    { slug: 'heart', ru: 'Сердце и сосуды', uz: 'Yurak va qon tomirlar' },
-    { slug: 'memory', ru: 'Память и концентрация', uz: 'Xotira va diqqat' },
-    { slug: 'women', ru: 'Женское здоровье', uz: 'Ayollar salomatligi' },
-    { slug: 'men', ru: 'Мужское здоровье', uz: 'Erkaklar salomatligi' },
-    { slug: 'sport', ru: 'Спорт и восстановление', uz: 'Sport va tiklanish' },
-  ],
-  product_type: [
-    { slug: 'vitamins', ru: 'Витамины', uz: 'Vitaminlar', children: [
-      { slug: 'vitamin-d', ru: 'Витамин D', uz: 'D vitamini' },
-      { slug: 'vitamin-c', ru: 'Витамин C', uz: 'C vitamini' },
-      { slug: 'vitamin-b', ru: 'Витамины группы B', uz: 'B guruhi vitaminlari' },
-      { slug: 'vitamin-k', ru: 'Витамин K', uz: 'K vitamini' },
-    ] },
-    { slug: 'minerals', ru: 'Минералы', uz: 'Minerallar', children: [
-      { slug: 'magnesium', ru: 'Магний', uz: 'Magniy' },
-      { slug: 'zinc', ru: 'Цинк', uz: 'Rux' },
-    ] },
-    { slug: 'omega', ru: 'Омега-3', uz: 'Omega-3' },
-    { slug: 'collagen', ru: 'Коллаген', uz: 'Kollagen' },
-    { slug: 'probiotics', ru: 'Пробиотики', uz: 'Probiotiklar' },
-    { slug: 'other', ru: 'Другие добавки', uz: 'Boshqa qo‘shimchalar' },
-  ],
+  need: NEED_TARGETS,
+  product_type: TYPE_TARGETS,
 };
 
 // Online providers stay disabled until the payments stage; timeouts per Master TZ §10.

@@ -137,8 +137,13 @@ const ru = {
   'home.popular': 'Популярное',
   'home.new': 'Новинки',
   'home.byNeed': 'По потребности',
-  'home.byType': 'По типу продукта',
+  'home.byType': 'По типу',
+  'home.brands': 'Проверенные бренды',
   'home.all': 'Все',
+
+  'brand.why': 'Почему {brand} в VITALO',
+  'brand.products': 'Товары бренда',
+  'brand.notFound': 'Бренд не найден',
 
   'catalog.title': 'Каталог',
   'catalog.allProducts': 'Все товары',
@@ -270,7 +275,6 @@ const ru = {
   'status.return': 'Возврат',
 
   'profile.title': 'Профиль',
-  'profile.language': 'Язык',
   'profile.orders': 'Мои заказы',
   'profile.recentOrders': 'Последние заказы',
   'profile.favorites': 'Избранное',
@@ -446,8 +450,13 @@ const uz: Record<MessageKey, string> = {
   'home.popular': 'Ommabop',
   'home.new': 'Yangi mahsulotlar',
   'home.byNeed': 'Ehtiyoj bo‘yicha',
-  'home.byType': 'Mahsulot turi bo‘yicha',
+  'home.byType': 'Turi bo‘yicha',
+  'home.brands': 'Ishonchli brendlar',
   'home.all': 'Barchasi',
+
+  'brand.why': 'Nega {brand} VITALOda',
+  'brand.products': 'Brend mahsulotlari',
+  'brand.notFound': 'Brend topilmadi',
 
   'catalog.title': 'Katalog',
   'catalog.allProducts': 'Barcha mahsulotlar',
@@ -579,7 +588,6 @@ const uz: Record<MessageKey, string> = {
   'status.return': 'Qaytarish',
 
   'profile.title': 'Profil',
-  'profile.language': 'Til',
   'profile.orders': 'Buyurtmalarim',
   'profile.recentOrders': 'So‘nggi buyurtmalar',
   'profile.favorites': 'Sevimlilar',

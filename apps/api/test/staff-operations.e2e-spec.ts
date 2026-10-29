@@ -191,7 +191,7 @@ describe('Admin panel operations (e2e)', () => {
     let id: string;
 
     it('admin creates a product with RU/UZ texts and categories (audited)', async () => {
-      const vitamins = await prisma.categories.findUniqueOrThrow({ where: { slug: 'vitamin-d' } });
+      const vitamins = await prisma.categories.findUniqueOrThrow({ where: { slug: 'vitamins' } });
       const { body } = await as(t.admin)
         .post('/staff/products', {
           sku,

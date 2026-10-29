@@ -19,6 +19,7 @@ import { EntityStatus, Prisma } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { cleanName, DICTIONARY_COLUMNS, DICTIONARY_KINDS, DictionaryKind, matchKey } from '../dictionaries/dictionary-names';
+import { uniqueSlug } from '../catalog/brand-names';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
 import { can } from './permissions';
@@ -51,7 +52,7 @@ export interface DictionaryRow {
 interface DictionaryTable {
   findMany(args?: object): Promise<(DictionaryRow & { _count?: { products: number } })[]>;
   findUnique(args: { where: { id: string } }): Promise<DictionaryRow | null>;
-  create(args: { data: { name_ru: string; name_uz?: string | null } }): Promise<DictionaryRow>;
+  create(args: { data: { name_ru: string; name_uz?: string | null; slug?: string } }): Promise<DictionaryRow>;
   update(args: { where: { id: string }; data: Partial<Pick<DictionaryRow, 'name_ru' | 'name_uz' | 'status'>> }): Promise<DictionaryRow>;
 }
 
@@ -103,9 +104,15 @@ export async function ensureDictionaryValue(
 ): Promise<{ row: DictionaryRow; created: boolean }> {
   const same = (await findSame(db, kind, name)) as DictionaryRow | null;
   if (same) return { row: same, created: false };
-  const row = await dictionaryTable(db, kind).create({ data: { name_ru: cleanName(name) } });
+  const row = await dictionaryTable(db, kind).create({ data: { name_ru: cleanName(name), ...(kind === 'brands' && { slug: await freeBrandSlug(db, name) }) } });
   await audit.log({ staffId, action: 'dictionary.created', entityType: kind, entityId: row.id, after: row }, db);
   return { row, created: true };
+}
+
+/** 2.2: every new brand gets its page address at once («NOW Foods» -> now-foods). */
+export async function freeBrandSlug(db: Db, name: string): Promise<string> {
+  const taken = new Set((await db.brands.findMany({ where: { slug: { not: null } }, select: { slug: true } })).map((b) => b.slug!));
+  return uniqueSlug(name, taken);
 }
 
 const clean = ({ value }: { value: unknown }) => (typeof value === 'string' ? cleanName(value) : value);
@@ -175,7 +182,7 @@ export class AdminDictionariesService {
       if (same) throw duplicate(kind, same);
       const data = isPurchaseKind(kind)
         ? { name: dto.name_ru, ...(kind === 'suppliers' && { note: dto.note ?? null }) }
-        : { name_ru: dto.name_ru, name_uz: dto.name_uz ?? null };
+        : { name_ru: dto.name_ru, name_uz: dto.name_uz ?? null, ...(kind === 'brands' && { slug: await freeBrandSlug(tx, dto.name_ru) }) };
       const row = await anyTable(tx, kind).create({ data });
       await this.audit.log({ staffId, action: 'dictionary.created', entityType: kind, entityId: row.id, after: row }, tx);
       return toView(kind, row);

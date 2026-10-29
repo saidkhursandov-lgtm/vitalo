@@ -1,32 +1,14 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { categoryIcon, SearchIcon } from '../components/Icons';
+import { SearchIcon } from '../components/Icons';
 import { ErrorState, Loading, ProductStrip } from '../components/ui';
-import { nameOf } from '../lib/format';
-import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
+import { useI18n } from '../lib/i18n';
 import { useBanners, useCategories, useFreeShipping, useProducts, useShopTexts } from '../lib/queries';
 import { HelpButton, HomeCarousel, HowToOrder, TrustChips } from '../components/HomeBlocks';
-import type { CategoryNode } from '../lib/types';
-
-/** Category on the home screen: icon, name, and the number of products customers can see — small and grey. */
-function CategoryLink({ c, className }: { c: CategoryNode; className: string }) {
-  const { t, lang } = useI18n();
-  const Icon = categoryIcon(c.slug);
-  return (
-    <Link className={className} to={`/catalog/products?category=${c.slug}`}>
-      <span className="cat-icon">
-        <Icon width={20} height={20} />
-      </span>
-      <span className="cat-text">
-        <span className="cat-name">{nameOf(c, lang)}</span>
-        <span className="cat-count">{t(`home.count.${pluralForm(c.product_count)}` as MessageKey, { n: c.product_count })}</span>
-      </span>
-    </Link>
-  );
-}
+import { BrandStrip, CategoryLink } from '../components/CatalogLayers';
 
 /**
- * Home (Flow §3, ТЗ 2.1): search, two trust markers, the navy banner, needs, then «Популярное» already on the first
- * screen, product types, new arrivals.
+ * Home (Flow §3, ТЗ 2.1 and 2.2): search, two trust markers, the navy banner, needs, then «Популярное» already on the
+ * first screen, product types, «Проверенные бренды», new arrivals.
  */
 export function Home() {
   const { t, lang } = useI18n();
@@ -88,6 +70,8 @@ export function Home() {
           </div>
         </section>
       )}
+
+      <BrandStrip />
 
       <ProductStrip
         title={t('home.new')}

@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, qs } from './api';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, BankTransfer, Cart, CartCount, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
+import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -27,6 +27,10 @@ const nextPage = <T,>(last: Page<T>) => (last.page < last.total_pages ? last.pag
 
 export const useCategories = () => useQuery({ queryKey: ['categories'], queryFn: () => api<CategoryTrees>('/catalog/categories'), staleTime: 300_000 });
 export const useBrands = () => useQuery({ queryKey: ['brands'], queryFn: () => api<{ brand: string }[]>('/catalog/brands'), staleTime: 300_000 });
+/** 2.2: «Проверенные бренды» — only brands with products in stock (the server decides). */
+export const useBrandShowcase = () => useQuery({ queryKey: ['brands', 'showcase'], queryFn: () => api<BrandCard[]>('/catalog/brands/showcase'), staleTime: 300_000 });
+export const useBrandPage = (slug: string) =>
+  useQuery({ queryKey: ['brands', 'page', slug], queryFn: () => api<BrandPage>(`/catalog/brands/${encodeURIComponent(slug)}`), staleTime: 300_000 });
 export const useForms = () => useQuery({ queryKey: ['forms'], queryFn: () => api<{ form: string }[]>('/catalog/forms'), staleTime: 300_000 });
 export const useRegions = () => useQuery({ queryKey: ['regions'], queryFn: () => api<Region[]>('/delivery/regions'), staleTime: 300_000 });
 

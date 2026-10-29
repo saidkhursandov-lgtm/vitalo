@@ -37,7 +37,8 @@ export function bannerHref(link: ShopBanner['link']): string | null {
   if (!link) return null;
   if (link.type === 'product') return `/product/${link.value}`;
   if (link.type === 'category') return `/catalog/products?category=${encodeURIComponent(link.value)}`;
-  return `/catalog/products?brand=${encodeURIComponent(link.value)}`;
+  // 2.2: a brand banner opens the brand page (the server finds the brand by its name too)
+  return `/brand/${encodeURIComponent(link.value)}`;
 }
 
 /**

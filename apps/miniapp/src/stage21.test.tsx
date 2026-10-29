@@ -135,7 +135,7 @@ describe('home banners from the admin panel (2.1)', () => {
 
   it('links: product, category, brand, none', () => {
     expect(bannerHref({ type: 'product', value: 'p-1' })).toBe('/product/p-1');
-    expect(bannerHref({ type: 'brand', value: 'Now Foods' })).toBe('/catalog/products?brand=Now%20Foods');
+    expect(bannerHref({ type: 'brand', value: 'Now Foods' })).toBe('/brand/Now%20Foods');
     expect(bannerHref(null)).toBeNull();
   });
 });

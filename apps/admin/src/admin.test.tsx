@@ -32,6 +32,12 @@ describe('menu by role', () => {
     expect(homeFor(PERMS.warehouse)).toBe('/orders');
   });
 
+  it('«Бренды» (2.2) — only with the dictionaries permission (admin), right after «Товары»', () => {
+    const nav = navFor(['products.view', 'settings.dictionaries']).map((n) => n.label);
+    expect(nav).toEqual(['Товары', 'Бренды']);
+    for (const role of ['warehouse', 'marketer', 'manager']) expect(labels(role)).not.toContain('Бренды');
+  });
+
   it('marketer: dashboard and products only', () => {
     expect(labels('marketer')).toEqual(['Дашборд', 'Товары']);
   });

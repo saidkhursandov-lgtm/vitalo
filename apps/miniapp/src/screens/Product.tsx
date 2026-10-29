@@ -65,7 +65,14 @@ export function Product() {
         </div>
       )}
 
-      <div className="hint small">{p.brand}</div>
+      {/* 2.2: the brand opens its page (logo, «Почему … в VITALO», all its products) */}
+      {p.brand_slug ? (
+        <Link className="small brand-link" to={`/brand/${p.brand_slug}`}>
+          {p.brand}
+        </Link>
+      ) : (
+        <div className="hint small">{p.brand}</div>
+      )}
       <h1 className="product-title">{nameOf(p, lang)}</h1>
       <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" />
       <div className={`stock ${p.in_stock ? 'is-in' : 'is-out'}`}>{p.in_stock ? t('product.inStock') : t('product.outOfStock')}</div>

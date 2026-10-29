@@ -16,7 +16,9 @@ import {
   Droplet,
   Dumbbell,
   Fish,
+  FlaskConical,
   Gem,
+  Milk,
   HeartPulse,
   Leaf,
   Mars,
@@ -25,7 +27,6 @@ import {
   ShieldPlus,
   Sparkles,
   Venus,
-  Zap,
   CalendarClock,
   Clock,
   FileText,
@@ -107,7 +108,8 @@ export const CATEGORY_ICONS: Record<string, Icon> = {
   immunity: make(ShieldPlus),
   beauty: make(Sparkles),
   joints: make(Bone),
-  energy: make(Zap),
+  // 2.2: «Энергия и мозг» (old «Энергия» and «Память» together)
+  energy: make(Brain),
   sleep: make(Moon),
   heart: make(HeartPulse),
   memory: make(Brain),
@@ -118,6 +120,9 @@ export const CATEGORY_ICONS: Record<string, Icon> = {
   minerals: make(Gem),
   omega: make(Fish),
   collagen: make(Droplet),
+  'creatine-amino': make(FlaskConical),
+  protein: make(Milk),
+  other: make(Leaf),
 };
 export const categoryIcon = (slug: string): Icon => CATEGORY_ICONS[slug] ?? make(Leaf);
 
