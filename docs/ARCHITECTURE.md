@@ -38,7 +38,7 @@
 | Группа | Таблицы | Связи |
 | --- | --- | --- |
 | Покупатели | `users`, `user_sessions`, `addresses`, `favorites`, `bonus_accounts`, `bonus_ledger`, `referrals` | адрес → `regions`/`cities` |
-| Каталог | `products`, `brands`, `manufacturers`, `countries`, `forms`, `categories`, `product_categories`, `product_media`, `product_relations`, `product_sku_aliases` | товар → бренд, форма; товар ↔ категории |
+| Каталог | `products`, `brands`, `manufacturers`, `countries`, `forms`, `categories`, `product_categories`, `product_media`, `product_relations`, `product_sku_aliases` | товар → бренд, форма; товар ↔ категории; бренд — адрес (`slug`), логотип, страна, «Почему в VITALO» (2.2); скрытая категория → замена (`categories.merged_into_id`, 2.2) |
 | Склад | `warehouses`, `inventory`, `inventory_batches`, `inventory_movements`, `physical_units` (банки), `physical_unit_events` | остаток на товар и склад; доступно = факт − резерв |
 | Закупки | `suppliers`, `purchases`, `purchase_lines`, `receiving_sessions`, `receiving_session_lines`, `purchase_events` | закупка → строки → приёмка → банки |
 | Корзина и заказы | `carts`, `cart_items`, `orders`, `order_items`, `order_item_units`, `order_status_history`, `order_edit_log`, `shipments`, `cancel_requests`, `returns` | заказ → позиции → банки; история статусов |
@@ -54,7 +54,7 @@
 Все адреса начинаются с `/api`. Полный список — Swagger `http://localhost:3000/api/docs` (локально).
 
 - Вход: `POST /auth/telegram`, `GET /auth/me`; сотрудники — `POST /staff/auth/telegram`.
-- Каталог: `/catalog/products`, `/catalog/products/:id`, `/catalog/search`, `/catalog/categories`, `/catalog/brands`.
+- Каталог: `/catalog/products`, `/catalog/products/:id`, `/catalog/search`, `/catalog/categories`, `/catalog/brands`, `/catalog/brands/showcase` (лента «Проверенные бренды», 2.2), `/catalog/brands/:slug` (страница бренда, 2.2).
 - Корзина и заказы: `/cart`, `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`.
 - Доставка: `/delivery/regions`, `/delivery/quote`.
 - Админка: `/staff/...` (заказы, товары, склад, закупки, финансы, настройки, аналитика, сотрудники, аудит).
