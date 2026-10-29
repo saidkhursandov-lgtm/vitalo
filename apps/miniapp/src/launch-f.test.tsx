@@ -32,7 +32,7 @@ beforeEach(() => {
     if (method === 'POST') server.qty = Math.min(server.qty + body.qty, server.available);
     if (method === 'PATCH') server.qty = Math.min(body.qty, server.available);
     if (method === 'DELETE') server.qty = 0;
-    if (url.endsWith('/cart/count')) return new Response(JSON.stringify({ items_count: server.qty }));
+    if (url.endsWith('/cart/count')) return new Response(JSON.stringify({ items_count: server.qty, goods_total_uzs: 1000 * server.qty }));
     return new Response(JSON.stringify(cart(server.qty, server.available)));
   });
 });
@@ -64,13 +64,13 @@ describe('quick cart (F1)', () => {
     const notices: QuickNotice[] = [];
     const { result } = renderHook(() => useQuickCart('p1', (n) => notices.push(n)), { wrapper });
     await vi.waitFor(() => expect(result.current.ready).toBe(true));
-    client.setQueryData(['cart', 'count'], 0);
+    client.setQueryData(['cart', 'count'], { items_count: 0, goods_total_uzs: 0 });
 
     act(() => result.current.set(1));
     act(() => result.current.set(2));
     act(() => result.current.set(3));
     expect(result.current.qty).toBe(3); // optimistic, nothing sent yet
-    expect(client.getQueryData(['cart', 'count'])).toBe(3);
+    expect(client.getQueryData(['cart', 'count'])).toMatchObject({ items_count: 3 });
     expect(writes()).toHaveLength(0);
 
     await act(async () => {

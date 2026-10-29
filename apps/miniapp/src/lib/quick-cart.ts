@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import { api, ApiError } from './api';
 import { applyCart } from './cart-cache';
 import { useCart } from './queries';
-import type { Cart } from './types';
+import type { Cart, CartCount } from './types';
 
 /**
  * Quick cart (F1): the quantity a customer wants for each product, shown at once on every card
@@ -42,7 +42,8 @@ function syncCount(client: QueryClient) {
   if (!cart) return;
   let pending = 0;
   for (const [id, qty] of desired) pending += qty - (serverLine(cart, id)?.qty ?? 0);
-  client.setQueryData(['cart', 'count'], Math.max(0, cart.items_count + pending));
+  // the sum of the server cart; it is exact again as soon as the pending changes are sent (applyCart)
+  client.setQueryData<CartCount>(['cart', 'count'], { items_count: Math.max(0, cart.items_count + pending), goods_total_uzs: cart.goods_total_uzs });
 }
 
 async function flush(client: QueryClient, productId: string, notify: Notify) {
@@ -94,7 +95,7 @@ function change(client: QueryClient, productId: string, next: number, notify: No
   if (next === prev) return;
   desired.set(productId, next);
   // badge = sum of quantities, updated at once
-  client.setQueryData<number>(['cart', 'count'], (c) => Math.max(0, (c ?? 0) + (next - prev)));
+  client.setQueryData<CartCount>(['cart', 'count'], (c) => ({ goods_total_uzs: c?.goods_total_uzs ?? 0, items_count: Math.max(0, (c?.items_count ?? 0) + (next - prev)) }));
   emit();
   clearTimeout(timers.get(productId));
   timers.set(productId, setTimeout(() => void flush(client, productId, notify), QUICK_DEBOUNCE_MS));

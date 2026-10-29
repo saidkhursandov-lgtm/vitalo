@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { Cart, CartWarning } from './types';
+import type { Cart, CartCount, CartWarning } from './types';
 
 /**
  * The API reports cart warnings (price changed, less in stock…) once. Whichever screen loads the cart
@@ -18,6 +18,6 @@ export function rememberWarnings(client: QueryClient, warnings: CartWarning[], s
 export function applyCart(client: QueryClient, cart: Cart, skipWarning?: (w: CartWarning) => boolean) {
   rememberWarnings(client, cart.warnings, skipWarning);
   client.setQueryData(['cart', null], cart);
-  client.setQueryData(['cart', 'count'], cart.items_count);
+  client.setQueryData<CartCount>(['cart', 'count'], { items_count: cart.items_count, goods_total_uzs: cart.goods_total_uzs });
   void client.invalidateQueries({ queryKey: ['cart'], predicate: (q) => q.queryKey[1] !== null && q.queryKey[1] !== 'count' });
 }

@@ -278,3 +278,9 @@ export interface CheckoutDefaults {
   city_id: string;
   address_text: string;
 }
+
+/** The read-only cart counter: the badge in the top bar and the floating cart bar. */
+export interface CartCount {
+  items_count: number;
+  goods_total_uzs: number;
+}
