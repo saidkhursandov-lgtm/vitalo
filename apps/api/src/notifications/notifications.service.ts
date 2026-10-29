@@ -70,6 +70,22 @@ export class NotificationsService {
     });
   }
 
+  /** Release 1 (D-18): a «Оплата при получении» order is still not confirmed after N hours -> admins and managers (no customer data). */
+  async codConfirmOverdue(db: Db, orderId: string, hours: number): Promise<void> {
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId } });
+    const staff = await db.staff_users.findMany({ where: { status: 'active', role: { in: [...ORDER_STAFF_ROLES] } } });
+    if (!staff.length) return;
+    await db.notifications.createMany({
+      data: staff.map((s) => ({
+        staff_user_id: s.id,
+        chat_id: s.telegram_user_id,
+        kind: 'service',
+        template: 'staff.cod_confirm_overdue',
+        payload: { order_number: order.order_number, total_uzs: Number(order.total_uzs), hours, admin_path: `/orders/${order.id}`, lang: 'ru' },
+      })),
+    });
+  }
+
   /**
    * Stage 2D: one message to every active employee with one of the roles (Yandex orders: warehouse and admin for a
    * new order, admin for a problem). Never to customers: only staff_users are read here.

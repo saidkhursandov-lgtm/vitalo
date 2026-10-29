@@ -57,7 +57,8 @@ export class CardTransferDto {
   @Matches(/^\d{16}$/, { message: 'card_number: 16 digits' })
   card_number!: string;
 
-  @ApiProperty({ example: 'ALISHER KARIMOV' }) @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) recipient!: string;
+  /** Release 1 (D-04): the card holder's name is never shown to customers, so it is optional (kept only for staff). */
+  @ApiPropertyOptional({ example: 'ALISHER KARIMOV' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100) recipient?: string;
 }
 
 /** Customer-facing texts editable by the admin. */
@@ -255,7 +256,7 @@ export class AdminSettingsService {
   }
 
   async setCardTransfer(staffId: string, dto: CardTransferDto) {
-    await this.saveSetting(staffId, SETTING_KEYS.cardTransferDetails, { card_number: dto.card_number, recipient: dto.recipient }, 'settings.card_transfer_updated');
+    await this.saveSetting(staffId, SETTING_KEYS.cardTransferDetails, { card_number: dto.card_number, recipient: dto.recipient ?? '' }, 'settings.card_transfer_updated');
     return this.cardTransfer();
   }
 

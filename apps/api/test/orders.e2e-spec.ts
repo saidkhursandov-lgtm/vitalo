@@ -337,7 +337,8 @@ describe('Orders (e2e)', () => {
       expect(cardOrder.payment).toMatchObject({ method: 'card_transfer', status: 'payment_pending' });
       const { body } = await http().get(`/api/orders/${cardOrder.id}/payment/bank-transfer`).set(bearer(buyer)).expect(200);
       expect(body).toMatchObject({ method: 'card_transfer', requisites: null, card: { card_number: expect.stringMatching(/^[0-9]{16}$/) } });
-      expect(body.card.recipient).toContain('ТЕСТ');
+      // Release 1 (D-04): the card holder's name is never shown to customers
+      expect(body.card).not.toHaveProperty('recipient');
 
       await http().post(`/api/orders/${cardOrder.id}/payment/bank-transfer/paid`).set(bearer(buyer)).send({}).expect(200);
       const list = (await http().get('/api/orders').set(bearer(buyer)).expect(200)).body;

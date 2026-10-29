@@ -16,6 +16,7 @@ export type TemplateName =
   | 'staff.new_order'
   | 'staff.customer_paid'
   | 'staff.payment_check_overdue'
+  | 'staff.cod_confirm_overdue'
   | 'staff.order_units_attention'
   | 'staff.yandex_new_order'
   | 'staff.yandex_attention'
@@ -153,6 +154,13 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
       `⏳ Оплата заказа ${p.order_number} на ${sum(p.total_uzs, 'ru')} ждёт проверки уже ${p.hours ?? '?'} ч.\nКлиент нажал «Я оплатил(а)», платёж ещё не подтверждён. Заказ не отменяется, товар остаётся в резерве.`,
     uz: (p) =>
       `⏳ ${p.order_number} buyurtmasi uchun ${sum(p.total_uzs, 'uz')} to‘lov ${p.hours ?? '?'} soatdan beri tekshiruvni kutmoqda.\nMijoz «To‘ladim» tugmasini bosgan, to‘lov hali tasdiqlanmagan.`,
+  },
+  // Release 1 (D-18): «Оплата при получении» waits for the manager; no customer name or phone here.
+  'staff.cod_confirm_overdue': {
+    ru: (p) =>
+      `⏳ Заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')} (оплата при получении) ждёт подтверждения уже ${p.hours ?? '?'} ч.\nПозвоните клиенту и подтвердите заказ в админке. Заказ не отменяется, товар остаётся в резерве.`,
+    uz: (p) =>
+      `⏳ ${p.order_number} buyurtmasi (${sum(p.total_uzs, 'uz')}, qabul qilganda to‘lash) ${p.hours ?? '?'} soatdan beri tasdiqlanishini kutmoqda.\nMijozga qo‘ng‘iroq qilib, buyurtmani admin panelda tasdiqlang.`,
   },
   // Stage 2E: a paid Mini App order whose units could not be reserved. No customer data.
   'staff.order_units_attention': {
