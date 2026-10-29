@@ -17,6 +17,7 @@ interface OrderRow {
   /** Stage 2E/3: paid, but the jars are not reserved («Нужно внимание склада») */
   units_attention: string | null;
   customer_reported_paid: boolean;
+  payment_method?: string | null;
   customer: { name: string; username: string | null };
   recipient_name: string;
   recipient_phone: string;
@@ -165,6 +166,7 @@ export function Orders() {
                   </td>
                   <td>
                     <PaymentStatus status={o.payment_status} />
+                    {o.payment_method === 'cod' && o.payment_status === 'payment_pending' && <div className="small text-warn">При получении — позвоните и подтвердите</div>}
                     {o.customer_reported_paid && o.payment_status === 'payment_pending' && <div className="small text-warn">Клиент: «Я оплатил»</div>}
                   </td>
                   <td className="num">{money(o.total_uzs)}</td>

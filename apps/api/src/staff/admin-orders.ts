@@ -25,6 +25,7 @@ import { OrderUnitsService } from '../orders/order-units.service';
 import { orderViewInclude, toOrderView } from '../orders/order-view';
 import { normalizeUzPhone } from '../orders/orders.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { auditJson, AuditService } from './audit.service';
 import { can, type Permission } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
@@ -118,6 +119,7 @@ export class AdminOrdersService {
     private readonly audit: AuditService,
     private readonly analytics: AnalyticsService,
     private readonly units: OrderUnitsService,
+    private readonly settings: SettingsService,
   ) {}
 
   async list(q: StaffOrdersQuery) {
@@ -128,10 +130,11 @@ export class AdminOrdersService {
     if (q.date_from) and.push({ created_at: { gte: new Date(`${q.date_from}T00:00:00+05:00`) } });
     if (q.date_to) and.push({ created_at: { lt: new Date(new Date(`${q.date_to}T00:00:00+05:00`).getTime() + 86_400_000) } });
     if (q.awaiting_confirmation) {
+      // «Я оплатил(а)» pressed, or «Оплата при получении» (nothing to press: the manager confirms by phone)
       and.push({
         status: { in: ['new', 'awaiting_payment'] },
         payment_status: 'payment_pending',
-        payments: { some: { manual: { some: { customer_confirmed_at: { not: null } } } } },
+        OR: [{ payments: { some: { manual: { some: { customer_confirmed_at: { not: null } } } } } }, { payments: { some: { method: { code: 'cod' } } } }],
       });
     }
     if (q.hide_test) and.push({ is_test: false });
@@ -156,7 +159,7 @@ export class AdminOrdersService {
         orderBy: { created_at: 'desc' },
         skip: (q.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        include: { user: true, payments: { include: { manual: true } } },
+        include: { user: true, payments: { include: { manual: true, method: { select: { code: true } } } } },
       }),
     ]);
     return {
@@ -171,6 +174,7 @@ export class AdminOrdersService {
         units_attention: ATTENTION_STATUSES.includes(o.status) ? o.units_attention : null,
         reserved_until: o.reserved_until,
         customer_reported_paid: o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at)),
+        payment_method: o.payments[0]?.method.code ?? null,
         customer: { id: o.user.id, name: [o.user.first_name, o.user.last_name].filter(Boolean).join(' '), username: o.user.username },
         recipient_name: o.recipient_name,
         recipient_phone: o.recipient_phone,
@@ -358,9 +362,20 @@ export class AdminOrdersService {
         if (order.payment_status !== 'payment_pending') {
           throw new ConflictException({ code: 'PAID_ORDER_CITY_LOCKED', message: 'The delivery city of a paid order cannot be changed' });
         }
+        // Release 1: «Оплата при получении» exists only in Tashkent.
+        const cod = await tx.payments.count({ where: { order_id: id, method: { code: 'cod' } } });
+        if (cod && !(await this.delivery.isTashkent(regionId, tx))) {
+          throw new ConflictException({ code: 'COD_REGION', message: 'Оплата при получении — только для г. Ташкент: отмените заказ или оставьте город' });
+        }
         const goods = Number(order.goods_total_uzs - order.discount_total_uzs);
-        const quote = await this.delivery.quote(regionId, cityId, goods, tx);
+        const quote = await this.delivery.quote(regionId, cityId, goods, tx, { userId: order.user_id, exceptOrderId: id });
         const total = Number(order.goods_paid_uzs) + quote.cost_uzs;
+        if (cod) {
+          const max = (await this.settings.getOrDefault('checkout_options')).cod_max_total_uzs;
+          if (max != null && total > max) {
+            throw new ConflictException({ code: 'COD_LIMIT', message: 'Сумма заказа с новой доставкой превышает лимит оплаты при получении: отмените заказ или оставьте город' });
+          }
+        }
         Object.assign(before, { region_id: order.region_id, city_id: order.city_id, delivery_cost_uzs: order.delivery_cost_uzs, total_uzs: order.total_uzs });
         Object.assign(after, { region_id: regionId, city_id: cityId, delivery_cost_uzs: quote.cost_uzs, total_uzs: total });
         Object.assign(data, { region_id: regionId, city_id: cityId, delivery_cost_uzs: BigInt(quote.cost_uzs), total_uzs: BigInt(total) });

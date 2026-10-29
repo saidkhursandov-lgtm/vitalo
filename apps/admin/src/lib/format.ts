@@ -124,6 +124,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'customer.unblocked': 'Клиент разблокирован',
   'settings.bank_transfer_updated': 'Изменены реквизиты',
   'settings.card_transfer_updated': 'Изменены данные карты',
+  'settings.checkout_options_updated': 'Изменены настройки оплаты (при получении, «Скоро», бесплатная доставка)',
   'settings.texts_updated': 'Изменены тексты магазина',
   'settings.contacts_updated': 'Изменены контакты и часы',
   'settings.label_size_updated': 'Изменён размер этикетки',
@@ -147,9 +148,20 @@ export const AUDIT_ACTION: Record<string, string> = {
   'inventory.unit_tracking_override': 'Операция в обход учёта по единицам',
 };
 
+/** D-09: the shop shows a crossed-out price and a percent only up to this discount. */
+export const MAX_SHOWN_DISCOUNT = 25;
+
+/** Discount in percent when it is above the limit (the shop will not show it), otherwise null. */
+export function discountAboveLimit(price: number | undefined, oldPrice: number | undefined): number | null {
+  if (!price || !oldPrice || oldPrice <= price) return null;
+  const pct = Math.round((1 - price / oldPrice) * 100);
+  return pct > MAX_SHOWN_DISCOUNT ? pct : null;
+}
+
 export const PAYMENT_METHOD: Record<string, string> = {
   card_transfer: 'Перевод на карту',
   bank_transfer: 'Перевод по реквизитам',
+  cod: 'При получении',
   payme: 'Payme',
   click: 'Click',
   uzum: 'Uzum',

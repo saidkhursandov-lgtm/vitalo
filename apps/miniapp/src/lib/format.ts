@@ -32,9 +32,13 @@ export function textOf<T extends object>(item: T, field: string, lang: Lang): st
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
+/** D-09: a crossed-out price and a percent are shown only for discounts up to this many percent. */
+export const MAX_SHOWN_DISCOUNT = 25;
+
 export function discountPercent(price: number, oldPrice: number | null): number | null {
   if (!oldPrice || oldPrice <= price) return null;
-  return Math.round((1 - price / oldPrice) * 100);
+  const pct = Math.round((1 - price / oldPrice) * 100);
+  return pct > MAX_SHOWN_DISCOUNT ? null : pct;
 }
 
 /** "90 123-45-67" / "+998 90 123 45 67" -> "+998901234567"; null when it is not an Uzbek mobile number. */

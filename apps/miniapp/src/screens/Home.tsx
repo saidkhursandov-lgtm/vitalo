@@ -3,8 +3,8 @@ import { SearchIcon } from '../components/Icons';
 import { ErrorState, Loading, ProductStrip } from '../components/ui';
 import { nameOf } from '../lib/format';
 import { useI18n } from '../lib/i18n';
-import { useCategories, useProducts, useShopTexts } from '../lib/queries';
-import { HomeBanner, HowToOrder, TrustTiles } from '../components/HomeBlocks';
+import { useCategories, useFreeShipping, useProducts, useShopTexts } from '../lib/queries';
+import { HelpButton, HomeCarousel, HowToOrder, TrustChips } from '../components/HomeBlocks';
 import type { CategoryNode, Lang } from '../lib/types';
 
 /** "Коллаген · 8" — number of products customers can see in the category. */
@@ -18,6 +18,7 @@ export function Home() {
   const popular = useProducts({ sort: 'popular', in_stock: true });
   const fresh = useProducts({ sort: 'new', in_stock: true });
   const shop = useShopTexts();
+  const freeShipping = useFreeShipping();
 
   return (
     <div className="page">
@@ -27,7 +28,8 @@ export function Home() {
         <span>{t('home.search')}</span>
       </button>
 
-      {shop.data?.home_content && <HomeBanner content={shop.data.home_content} />}
+      <TrustChips />
+      <HomeCarousel firstOrderFree={freeShipping.data?.first_order_free ?? false} freeFromUzs={freeShipping.data?.from_uzs ?? null} />
 
       {categories.isPending ? (
         <>
@@ -75,15 +77,16 @@ export function Home() {
         products={popular.data?.pages[0].items.slice(0, 10) ?? []}
         more={<Link to="/catalog/products?sort=popular" className="link">{t('home.all')}</Link>}
       />
-      {shop.data && <TrustTiles shop={shop.data} />}
-      {shop.data?.home_content && <HowToOrder content={shop.data.home_content} />}
-
       <ProductStrip
         title={t('home.new')}
         products={fresh.data?.pages[0].items.slice(0, 10) ?? []}
         more={<Link to="/catalog/products?sort=new" className="link">{t('home.all')}</Link>}
       />
       {popular.isPending && <Loading variant="strip" />}
+
+      <HelpButton />
+      {/* «Как заказать» is the last block of the page */}
+      {shop.data?.home_content && <HowToOrder content={shop.data.home_content} />}
     </div>
   );
 }

@@ -6,6 +6,12 @@ export function tashkentDateString(at: Date): string {
   return new Date(at.getTime() + TASHKENT_UTC_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/** Staff working hours in Tashkent: 8:00 (inclusive) to 22:00 (exclusive). Reminders to staff are sent only then (D-07, D-18). */
+export function isTashkentWorkingHours(at: Date): boolean {
+  const hour = new Date(at.getTime() + TASHKENT_UTC_OFFSET_MS).getUTCHours();
+  return hour >= 8 && hour < 22;
+}
+
 /** 1234567 -> "1 234 567" (UZS amounts in user-facing messages). */
 export function formatUzs(amount: number): string {
   return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');

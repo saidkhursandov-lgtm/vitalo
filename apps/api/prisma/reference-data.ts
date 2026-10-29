@@ -55,6 +55,7 @@ export const PAYMENT_METHODS = [
   { code: 'payme', name_ru: 'Payme', name_uz: 'Payme', status: 'disabled' as const, timeout_minutes: 30 },
   { code: 'click', name_ru: 'Click', name_uz: 'Click', status: 'disabled' as const, timeout_minutes: 30 },
   { code: 'uzum', name_ru: 'Uzum', name_uz: 'Uzum', status: 'disabled' as const, timeout_minutes: 30 },
+  { code: 'cod', name_ru: 'Оплата при получении', name_uz: 'Qabul qilganda to‘lash', status: 'enabled' as const, timeout_minutes: 0 },
 ];
 
 // Clearly fake requisites for dev/test; real ones are entered by the admin.

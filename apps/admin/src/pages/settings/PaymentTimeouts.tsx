@@ -26,7 +26,8 @@ export function PaymentTimeouts() {
       <p className="muted">
         Сколько товар держится за заказом, пока клиент не оплатил. Потом заказ отменяется автоматически. Новый срок действует только для новых заказов.
       </p>
-      {q.data.map((m) => (
+      {/* «Перевод по реквизитам» is no longer offered to customers (D-06): its reserve time is not edited any more */}
+      {q.data.filter((m) => m.code !== 'bank_transfer').map((m) => (
         <TimeoutRow key={m.code} method={m} />
       ))}
     </section>

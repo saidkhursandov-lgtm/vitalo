@@ -32,6 +32,8 @@ import {
   Search,
   SearchX,
   ShoppingBag,
+  Star,
+  Stethoscope,
   SlidersHorizontal,
   Trash2,
   Truck,
@@ -76,6 +78,11 @@ export const SupportIcon = make(MessageCircle);
 export const GiftIcon = make(Gift);
 export const PhoneIcon = make(Phone);
 export const BadgeIcon = make(BadgeCheck);
+export const StarIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
+  <Star strokeWidth={STROKE} aria-hidden fill={filled ? 'currentColor' : 'none'} {...p} />
+);
+export const DoctorIcon = make(Stethoscope);
+export const ShieldIcon = make(ShieldCheck);
 
 /** Home trust tiles. */
 export const TRUST_ICONS: Record<'original' | 'delivery' | 'documents' | 'payments', Icon> = {

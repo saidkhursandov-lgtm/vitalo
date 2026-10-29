@@ -1,0 +1,101 @@
+# VITALO — архитектура
+
+Кратко и просто. Подробности выкладки — [DEPLOY_RUNBOOK.md](DEPLOY_RUNBOOK.md), решения — [DECISIONS.md](DECISIONS.md)
+и [operations/DECISIONS.md](operations/DECISIONS.md).
+
+## Стек
+
+| Часть | Технологии | Где код |
+| --- | --- | --- |
+| API | Node.js 24, NestJS 11, Prisma 6, TypeScript; фото — sharp | `apps/api` |
+| База | PostgreSQL 16 (расширения `pg_trgm`, `unaccent` для поиска) | `apps/api/prisma/schema.prisma`, `migrations/` |
+| Mini App | React 19, Vite 7, React Query, React Router 7; шрифт Montserrat | `apps/miniapp` |
+| Админка | React 19, Vite 7, React Query | `apps/admin` |
+| Бот | grammY (long polling), tsx | `apps/bot` |
+| Тесты | Jest (API, e2e на базе `vitalo_test`), Vitest (Mini App, админка, бот) | `apps/*/test`, `*.test.ts` |
+
+## Как части связаны
+
+```
+Покупатель → Telegram → @vitalo_uz_bot ──(кнопка «Магазин»)──► Mini App (vitalo.uz)
+                                │                                   │
+                                │ /api/internal/bot/* (X-Bot-Secret) │ /api/* (вход по Telegram initData)
+                                ▼                                   ▼
+Сотрудник → admin.vitalo.uz ──────────────────────────────► API (api.vitalo.uz) ──► PostgreSQL
+                                                              │  фоновые задачи: резервы, напоминания,
+                                                              │  уведомления (очередь notifications), опрос Яндекса
+                                                              └─► Яндекс Маркет (опрос раз в 5 мин + вебхук)
+```
+
+- Вход покупателя и сотрудника — через Telegram (initData того же бота); сотрудник должен быть в `staff_users`.
+- Права ролей проверяет сервер (`apps/api/src/staff/permissions.ts`); меню админки только скрывает разделы.
+- Уведомления пишутся в таблицу `notifications` в той же транзакции, что и изменение заказа, и отправляются ботом
+  каждые 3 секунды с повторами.
+- Фото товаров: на ноутбуке `apps/api/uploads/products/<id>/…`, на сервере `/var/lib/vitalo`; адрес `/uploads/...`.
+
+## База: основные таблицы
+
+| Группа | Таблицы | Связи |
+| --- | --- | --- |
+| Покупатели | `users`, `user_sessions`, `addresses`, `favorites`, `bonus_accounts`, `bonus_ledger`, `referrals` | адрес → `regions`/`cities` |
+| Каталог | `products`, `brands`, `manufacturers`, `countries`, `forms`, `categories`, `product_categories`, `product_media`, `product_relations`, `product_sku_aliases` | товар → бренд, форма; товар ↔ категории |
+| Склад | `warehouses`, `inventory`, `inventory_batches`, `inventory_movements`, `physical_units` (банки), `physical_unit_events` | остаток на товар и склад; доступно = факт − резерв |
+| Закупки | `suppliers`, `purchases`, `purchase_lines`, `receiving_sessions`, `receiving_session_lines`, `purchase_events` | закупка → строки → приёмка → банки |
+| Корзина и заказы | `carts`, `cart_items`, `orders`, `order_items`, `order_item_units`, `order_status_history`, `order_edit_log`, `shipments`, `cancel_requests`, `returns` | заказ → позиции → банки; история статусов |
+| Оплата | `payment_methods` (`card_transfer`, `bank_transfer`, `cod`, …), `payments`, `payment_attempts`, `manual_payment_confirmations` | платёж → заказ; ручное подтверждение менеджером |
+| Доставка | `regions`, `cities`, `delivery_tariffs` | тариф по городу, порог бесплатной доставки |
+| Маркетплейсы | `marketplace_orders`, `marketplace_order_lines`, `marketplace_order_units`, `marketplace_external_orders`, `yandex_sync_runs`, `ozon_accounts` | заказ Яндекса → строки → банки |
+| Финансы | `expenses`, `expense_categories`, `tax_payments`, `payroll_*`, `finance_reminders`, `sales_daily` | — |
+| Маркетинг и контент | `promotions`, `promo_codes`, `marketing_campaigns`, `content_blocks`, `settings`, `analytics_events` | настройки — пары ключ/значение в `settings` |
+| Сотрудники и аудит | `staff_users`, `staff_sessions`, `audit_logs`, `system_errors`, `legal_documents`, `legal_acceptances` | — |
+
+## API (основное)
+
+Все адреса начинаются с `/api`. Полный список — Swagger `http://localhost:3000/api/docs` (локально).
+
+- Вход: `POST /auth/telegram`, `GET /auth/me`; сотрудники — `POST /staff/auth/telegram`.
+- Каталог: `/catalog/products`, `/catalog/products/:id`, `/catalog/search`, `/catalog/categories`, `/catalog/brands`.
+- Корзина и заказы: `/cart`, `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`.
+- Доставка: `/delivery/regions`, `/delivery/quote`.
+- Админка: `/staff/...` (заказы, товары, склад, закупки, финансы, настройки, аналитика, сотрудники, аудит).
+- Бот: `/internal/bot/...` (по секрету `BOT_API_SECRET`). Мониторинг: `GET /health` (200 / 503).
+
+## Домены
+
+| Адрес | Что |
+| --- | --- |
+| `vitalo.uz` | основной: сейчас Mini App (`apps/miniapp/dist`); позже лендинг/сайт |
+| `admin.vitalo.uz` | админка (`apps/admin/dist`) |
+| `api.vitalo.uz` | API (nginx → `vitalo-api` на порту 3000, наружу порт не открыт) |
+| `vitalostore.uz` | должен перенаправлять на `vitalo.uz` (29.10 не ответил — проверить) |
+
+Один сертификат Let's Encrypt на три адреса `vitalo.uz`, `admin.`, `api.` (`certbot.timer`).
+
+## Сервер
+
+- VPS Hostmaster в Узбекистане, Ubuntu 24.04, IP `91.213.99.230`; данные должны храниться в Узбекистане.
+- Службы: `nginx`, `postgresql` (база `vitalo`, вход через локальный сокет), `vitalo-api`, `vitalo-bot`,
+  `vitalo-backup.timer`, `certbot.timer`, `fail2ban`, `ufw` (открыты только 22/80/443).
+- Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `.env` в `apps/api`.
+- Файлы настроек сервера в репозитории: `deploy/nginx`, `deploy/systemd`, `deploy/sudoers-vitalo`.
+
+## Деплой
+
+1. Работа сливается в `main`, на ноутбуке: `git push server main` (только пользователь).
+2. На сервере: `sudo -iu vitalo /opt/vitalo/app/deploy/scripts/update.sh --check` — что придёт, ничего не меняет.
+3. `update.sh` — бэкап → новый код → сборка → перезапуск → проверка. Если есть новые миграции — останавливается;
+   применить их можно только `update.sh --migrate` после решения пользователя.
+4. `sudo /opt/vitalo/app/scripts/server/healthcheck.sh` — проверка.
+
+## Бэкапы
+
+- Сервер: `scripts/server/backup.sh` каждую ночь в 03:30 (таймер) и перед каждым `update.sh`: база (сразу
+  проверяется), фото, `.env`; хранение 14 дней. Проверка восстановления — `restore-check.sh`.
+- Ноутбук: копии `vitalo_dev` в папке `backups\` (в git не попадают). Копии с сервера забирать к себе по
+  [DEPLOY_RUNBOOK](DEPLOY_RUNBOOK.md), фаза 7.3.
+
+## Разработка на ноутбуке
+
+`start.bat` поднимает Docker (postgres, redis), окна API (3000), Mini App (5173), админки (5174), бота и туннеля
+cloudflared. Туннель даёт временные адреса `https://…trycloudflare.com` для телефона; бот переставляет на них кнопку.
+Подробно — [CLAUDE.md](../CLAUDE.md) и [MIGRATION.md](../MIGRATION.md).

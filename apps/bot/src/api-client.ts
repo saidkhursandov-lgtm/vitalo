@@ -9,7 +9,7 @@ export interface UserSummary {
   orders_total?: number;
   favorites_count?: number;
   addresses_count?: number;
-  orders?: { id: string; order_number: string; status: string; payment_reported?: boolean; total_uzs: number; created_at: string }[];
+  orders?: { id: string; order_number: string; status: string; payment_reported?: boolean; payment_method?: string | null; total_uzs: number; created_at: string }[];
 }
 
 export interface StaffInfo {

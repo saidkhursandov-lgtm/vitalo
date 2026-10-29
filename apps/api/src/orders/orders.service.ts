@@ -15,7 +15,7 @@ import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockLine, StockService } from '../inventory/stock.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
+import { BankTransferDetails, COD_METHOD, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
 import { formatOrderNumber } from './order-number';
 import { CUSTOMER_CANCELLABLE } from './order-state';
 import { OrderLifecycleService } from './order-lifecycle.service';
@@ -78,9 +78,26 @@ export class OrdersService {
       .filter((l) => (available.get(l.product_id) ?? 0) < l.qty)
       .map((l) => ({ code: 'INSUFFICIENT_STOCK', product_id: l.product_id, requested: l.qty, available: available.get(l.product_id) ?? 0 }));
     await this.resolvePaymentMethod(this.prisma, dto.payment_method);
-    const { totals, delivery } = await this.computeTotals(this.prisma, priced, dto);
+    const { totals, delivery } = await this.computeTotals(this.prisma, priced, dto, userId);
+    const cod = await this.codAvailable(this.prisma, dto.region_id, totals.total_uzs);
+    // «Оплата при получении» is offered only when it is possible for this address and total (Tashkent, the limit).
+    const payment_options = { cod: cod === 'ok', cod_unavailable: cod === 'ok' ? null : cod };
+    const codBlocked = dto.payment_method === COD_METHOD && cod !== 'ok';
 
-    return { items: priced, skipped_unavailable: skipped, totals, delivery, problems, can_place: problems.length === 0 };
+    return { items: priced, skipped_unavailable: skipped, totals, delivery, problems, payment_options, can_place: problems.length === 0 && !codBlocked };
+  }
+
+  /**
+   * Release 1: «Оплата при получении» — only for the city of Tashkent and up to the limit from the settings (none by
+   * default). Returns 'ok' or why not: 'region' / 'limit' / 'off' (the payment method row is missing or disabled).
+   */
+  private async codAvailable(db: Tx | PrismaService, regionId: string, totalUzs: number): Promise<'ok' | 'region' | 'limit' | 'off'> {
+    const method = await db.payment_methods.findUnique({ where: { code: COD_METHOD } });
+    if (!method || method.status !== 'enabled') return 'off';
+    if (!(await this.delivery.isTashkent(regionId, db))) return 'region';
+    const max = (await this.settings.getOrDefault('checkout_options')).cod_max_total_uzs;
+    if (max != null && totalUzs > max) return 'limit';
+    return 'ok';
   }
 
   /**
@@ -126,7 +143,7 @@ export class OrdersService {
         orderBy: { created_at: 'desc' },
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        include: { _count: { select: { items: true } }, payments: { include: { manual: true } } },
+        include: { _count: { select: { items: true } }, payments: { orderBy: { created_at: 'desc' }, include: { manual: true, method: { select: { code: true } } } } },
       }),
     ]);
     return {
@@ -138,6 +155,7 @@ export class OrdersService {
         payment_status: o.payment_status,
         total_uzs: Number(o.total_uzs),
         items_count: o._count.items,
+        payment_method: o.payments[0]?.method.code ?? null,
         // "Я оплатил(а)" pressed and not confirmed yet -> shown as "🔵 Оплата проверяется"
         payment_reported: o.payment_status === 'payment_pending' && o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at)),
       })),
@@ -207,7 +225,8 @@ export class OrdersService {
       amount_uzs: order.totals.total_uzs,
       purpose,
       requisites,
-      card: card && { card_number: card.card_number, recipient: card.recipient },
+      // Release 1: the card holder's name is never shown to customers, only the number.
+      card: card && { card_number: card.card_number },
       hint: await this.settings.getOrDefault('payment_hint'),
       pay_until: order.reserved_until,
       customer_reported_paid_at: order.payment!.customer_reported_paid_at,
@@ -264,7 +283,7 @@ export class OrdersService {
 
     // 2. Prices are read on the server, inside the transaction, and frozen into the order.
     const priced = await this.priceLines(tx, lines);
-    const { totals } = await this.computeTotals(tx, priced, dto);
+    const { totals } = await this.computeTotals(tx, priced, dto, userId);
     if (dto.expected_total_uzs != null && dto.expected_total_uzs !== totals.total_uzs) {
       throw new ConflictException({
         code: 'PRICE_CHANGED',
@@ -274,6 +293,16 @@ export class OrdersService {
       });
     }
 
+    // Cash on delivery: no transfer to wait for, so no payment deadline — the order waits for the manager's
+    // confirmation in «Новый» («Ожидает подтверждения менеджером») and is never cancelled automatically.
+    const cod = method.code === COD_METHOD;
+    if (cod) {
+      const why = await this.codAvailable(tx, dto.region_id, totals.total_uzs);
+      if (why !== 'ok') {
+        throw new UnprocessableEntityException({ code: 'COD_UNAVAILABLE', reason: why, message: 'Cash on delivery is available only in Tashkent (and up to the limit)' });
+      }
+    }
+
     const now = new Date();
     const orderNumber = await this.nextOrderNumber(tx, now);
     await tx.orders.create({
@@ -281,7 +310,7 @@ export class OrdersService {
         id: orderId,
         order_number: orderNumber,
         user_id: userId,
-        status: 'awaiting_payment',
+        status: cod ? 'new' : 'awaiting_payment',
         payment_status: 'payment_pending',
         recipient_name: dto.recipient_name,
         recipient_phone: dto.recipient_phone,
@@ -299,7 +328,7 @@ export class OrdersService {
         goods_paid_uzs: BigInt(totals.goods_paid_uzs),
         total_uzs: BigInt(totals.total_uzs),
         created_at: now,
-        reserved_until: new Date(now.getTime() + method.timeout_minutes * 60_000),
+        reserved_until: cod ? null : new Date(now.getTime() + method.timeout_minutes * 60_000),
         items: {
           create: priced.map((l) => ({
             product_id: l.product_id,
@@ -323,8 +352,12 @@ export class OrdersService {
     });
 
     const customer = { type: 'customer' as const, id: userId };
-    await this.lifecycle.addHistory(tx, orderId, null, 'new', customer, 'Order created', now);
-    await this.lifecycle.addHistory(tx, orderId, 'new', 'awaiting_payment', customer, `Payment method: ${method.code}`, new Date(now.getTime() + 1));
+    if (cod) {
+      await this.lifecycle.addHistory(tx, orderId, null, 'new', customer, `Order created. Payment method: ${method.code}`, now);
+    } else {
+      await this.lifecycle.addHistory(tx, orderId, null, 'new', customer, 'Order created', now);
+      await this.lifecycle.addHistory(tx, orderId, 'new', 'awaiting_payment', customer, `Payment method: ${method.code}`, new Date(now.getTime() + 1));
+    }
     await this.notifications.toOrderStaff(tx, 'staff.new_order', orderId);
 
     // "Купить сейчас" never touches the cart; a cart checkout removes only the ordered lines.
@@ -369,11 +402,11 @@ export class OrdersService {
   }
 
   /** No promos/bonuses yet: discount = 0, bonus = 0. Free shipping uses goods after discounts (TZ §9). */
-  private async computeTotals(db: Tx | PrismaService, lines: PricedLine[], dto: OrderPreviewDto): Promise<{ totals: Totals; delivery: DeliveryQuote }> {
+  private async computeTotals(db: Tx | PrismaService, lines: PricedLine[], dto: OrderPreviewDto, userId: string): Promise<{ totals: Totals; delivery: DeliveryQuote }> {
     const goods = lines.reduce((s, l) => s + l.line_total_uzs, 0);
     const discount = 0;
     const bonus = 0;
-    const delivery = await this.delivery.quote(dto.region_id, dto.city_id, goods - discount, db);
+    const delivery = await this.delivery.quote(dto.region_id, dto.city_id, goods - discount, db, { userId });
     const goodsPaid = goods - discount - bonus;
     return {
       totals: {
@@ -390,8 +423,8 @@ export class OrdersService {
 
   private async resolvePaymentMethod(db: Tx | PrismaService, code: string) {
     const method = await db.payment_methods.findUnique({ where: { code } });
-    if (!method || method.status !== 'enabled' || !isManualMethod(code)) {
-      // Online providers (Payme/Click/Uzum) and cash on delivery come in the payments stage.
+    if (!method || method.status !== 'enabled' || !(isManualMethod(code) || code === COD_METHOD)) {
+      // Online providers (Payme/Click/Uzum) come in the payments stage.
       throw new UnprocessableEntityException({ code: 'PAYMENT_METHOD_UNAVAILABLE', message: `Payment method ${code} is not available` });
     }
     return method;

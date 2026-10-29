@@ -73,6 +73,8 @@ export class CatalogService {
       delivery_terms: await this.delivery.terms(),
       home_content: await this.settings.getOrDefault('home_content'),
       bonus_teaser: await this.settings.getOrDefault('bonus_teaser'),
+      // Release 1: what checkout and the home page may show (the server re-checks everything on order creation)
+      checkout: await this.settings.getOrDefault('checkout_options'),
     };
   }
 

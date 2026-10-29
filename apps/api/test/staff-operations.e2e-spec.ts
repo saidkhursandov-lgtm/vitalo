@@ -353,13 +353,15 @@ describe('Admin panel operations (e2e)', () => {
       const before = (await as(t.admin).get('/staff/settings/card-transfer').expect(200)).body;
       try {
         await as(t.admin).put('/staff/settings/card-transfer', { ...before, card_number: '8600 1234' }).expect(400);
-        await as(t.admin).put('/staff/settings/card-transfer', { ...before, recipient: '' }).expect(400);
+        // Release 1 (D-04): the card holder's name is optional (customers never see it)
+        await as(t.admin).put('/staff/settings/card-transfer', { ...before, recipient: 'x'.repeat(101) }).expect(400);
         const saved = (await as(t.admin).put('/staff/settings/card-transfer', { card_number: '8600 1234 5678 9012', recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' }).expect(200)).body;
         expect(saved).toEqual({ card_number: '8600123456789012', recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' });
 
         const { order, customer } = await placeOrder(1, 10, 50_000, 'card_transfer');
         const shown = (await http().get(`/api/orders/${order.id}/payment/bank-transfer`).set(bearer(customer)).expect(200)).body;
-        expect(shown).toMatchObject({ method: 'card_transfer', requisites: null, card: saved });
+        expect(shown).toMatchObject({ method: 'card_transfer', requisites: null, card: { card_number: saved.card_number } });
+        expect(shown.card).not.toHaveProperty('recipient'); // the card holder's name is never shown to customers
         expect(await prisma.audit_logs.count({ where: { action: 'settings.card_transfer_updated' } })).toBeGreaterThan(0);
       } finally {
         await as(t.admin).put('/staff/settings/card-transfer', before).expect(200);

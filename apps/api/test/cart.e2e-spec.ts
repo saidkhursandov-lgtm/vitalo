@@ -145,7 +145,8 @@ describe('Cart (e2e)', () => {
     await prisma.products.update({ where: { id: p.id }, data: { price_uzs: 90_000n } });
 
     const count = await http().get('/api/cart/count').set(bearer(token)).expect(200);
-    expect(count.body).toEqual({ items_count: 2 }); // 3 wanted, 2 available; the out-of-stock line is not counted
+    // 3 wanted, 2 available; the out-of-stock line is not counted; the sum is at the current price (for the floating cart bar)
+    expect(count.body).toEqual({ items_count: 2, goods_total_uzs: 180_000 });
 
     const { body } = await cart.get().expect(200); // warnings are still there for the cart screen
     expect(body.warnings.map((w: { code: string }) => w.code).sort()).toEqual(['out_of_stock', 'price_changed', 'qty_reduced']);

@@ -5,6 +5,7 @@ import { Badge, ErrorBox, Field, Loading, Modal, PageHead } from '../components/
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, ROLE } from '../lib/format';
+import { CheckoutOptions } from './settings/CheckoutOptions';
 import { ContactsForm } from './settings/Contacts';
 import { PaymentTimeouts } from './settings/PaymentTimeouts';
 import { DeliverySettings } from './settings/Delivery';
@@ -32,11 +33,10 @@ export function Settings() {
       </PageHead>
       {tab === 'bank' && (
         <>
+          <CheckoutOptions />
           <PaymentTimeouts />
           <CardTransfer />
           <TextsForm fields={['payment_hint']} />
-          <h2 className="section-title">Перевод по реквизитам</h2>
-          <BankTransfer />
         </>
       )}
       {tab === 'texts' && (
@@ -56,23 +56,10 @@ export function Settings() {
   );
 }
 
-// ---------------------------------------------------------------- bank transfer
-
-interface Bank {
-  recipient: string;
-  bank_name: string;
-  account: string;
-  mfo: string;
-  inn: string;
-  purpose_template: string;
-}
-const EMPTY_BANK: Bank = { recipient: '', bank_name: '', account: '', mfo: '', inn: '', purpose_template: 'Оплата заказа {order_number}' };
-
 // ---------------------------------------------------------------- card transfer
 
 interface Card {
   card_number: string;
-  recipient: string;
 }
 
 const isTestValue = (s: string) => /ТЕСТ/i.test(s) || /^8600(0{12})$/.test(s);
@@ -80,10 +67,10 @@ const isTestValue = (s: string) => /ТЕСТ/i.test(s) || /^8600(0{12})$/.test(s
 function CardTransfer() {
   const client = useQueryClient();
   const q = useQuery({ queryKey: ['settings', 'card'], queryFn: () => api<Card>('/staff/settings/card-transfer') });
-  const [f, setF] = useState<Card>({ card_number: '', recipient: '' });
+  const [f, setF] = useState<Card>({ card_number: '' });
   const [saved, setSaved] = useState(false);
   useEffect(() => {
-    if (q.data) setF({ ...q.data, card_number: q.data.card_number.replace(/(\d{4})(?=\d)/g, '$1 ') });
+    if (q.data) setF({ card_number: q.data.card_number.replace(/(\d{4})(?=\d)/g, '$1 ') });
   }, [q.data]);
   const save = useMutation({
     mutationFn: () => api<Card>('/staff/settings/card-transfer', { method: 'PUT', body: f }),
@@ -93,7 +80,7 @@ function CardTransfer() {
     },
   });
   if (q.isPending) return <Loading />;
-  const test = q.data && (isTestValue(q.data.card_number) || isTestValue(q.data.recipient));
+  const test = q.data && isTestValue(q.data.card_number);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     save.mutate();
@@ -103,13 +90,10 @@ function CardTransfer() {
     <form className="card narrow" onSubmit={submit}>
       <h2>Перевод на карту</h2>
       {test && <div className="alert alert-warn">Сейчас здесь ТЕСТОВЫЕ данные — замените их на настоящие перед запуском.</div>}
-      <p className="muted">Клиент видит номер карты и имя получателя с кнопкой «Копировать».</p>
+      <p className="muted">Клиент видит только номер карты — его можно скопировать одним нажатием. Имя владельца карты не показывается и не сохраняется.</p>
       <div className="form-grid">
         <Field label="Номер карты" hint="16 цифр, можно с пробелами">
           <input value={f.card_number} inputMode="numeric" onChange={(e) => (setF({ ...f, card_number: e.target.value }), setSaved(false))} required />
-        </Field>
-        <Field label="Имя получателя">
-          <input value={f.recipient} onChange={(e) => (setF({ ...f, recipient: e.target.value }), setSaved(false))} required />
         </Field>
       </div>
       <ErrorBox error={save.error} />
@@ -170,63 +154,6 @@ function TextsForm({ fields }: { fields: TextKey[] }) {
           </Field>
         </div>
       ))}
-      <ErrorBox error={save.error} />
-      {saved && <div className="alert alert-ok">Сохранено</div>}
-      <button className="btn" disabled={save.isPending}>
-        Сохранить
-      </button>
-    </form>
-  );
-}
-
-function BankTransfer() {
-  const client = useQueryClient();
-  const q = useQuery({ queryKey: ['settings', 'bank'], queryFn: () => api<Bank | null>('/staff/settings/bank-transfer') });
-  const [f, setF] = useState<Bank>(EMPTY_BANK);
-  const [saved, setSaved] = useState(false);
-  useEffect(() => {
-    if (q.data) setF(q.data);
-  }, [q.data]);
-  const save = useMutation({
-    mutationFn: () => api<Bank>('/staff/settings/bank-transfer', { method: 'PUT', body: f }),
-    onSuccess: (b) => {
-      client.setQueryData(['settings', 'bank'], b);
-      setSaved(true);
-    },
-  });
-  if (q.isPending) return <Loading />;
-  const set = (k: keyof Bank, v: string) => {
-    setF({ ...f, [k]: v });
-    setSaved(false);
-  };
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    save.mutate();
-  };
-
-  return (
-    <form className="card narrow" onSubmit={submit}>
-      <p className="muted">Эти реквизиты клиент видит на экране «Оплата переводом» в Mini App.</p>
-      <Field label="Получатель">
-        <input value={f.recipient} onChange={(e) => set('recipient', e.target.value)} required />
-      </Field>
-      <Field label="Банк">
-        <input value={f.bank_name} onChange={(e) => set('bank_name', e.target.value)} required />
-      </Field>
-      <div className="form-grid">
-        <Field label="Расчётный счёт" hint="20 цифр">
-          <input value={f.account} onChange={(e) => set('account', e.target.value)} inputMode="numeric" required />
-        </Field>
-        <Field label="МФО" hint="5 цифр">
-          <input value={f.mfo} onChange={(e) => set('mfo', e.target.value)} inputMode="numeric" required />
-        </Field>
-        <Field label="ИНН" hint="9 цифр">
-          <input value={f.inn} onChange={(e) => set('inn', e.target.value)} inputMode="numeric" required />
-        </Field>
-      </div>
-      <Field label="Назначение платежа" hint="{order_number} заменится номером заказа">
-        <input value={f.purpose_template} onChange={(e) => set('purpose_template', e.target.value)} required />
-      </Field>
       <ErrorBox error={save.error} />
       {saved && <div className="alert alert-ok">Сохранено</div>}
       <button className="btn" disabled={save.isPending}>

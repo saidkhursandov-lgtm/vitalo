@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { isTashkentWorkingHours } from '../common/tashkent';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemErrorsService } from '../notifications/system-errors';
 import { PrismaService } from '../prisma/prisma.service';
@@ -7,6 +8,7 @@ import { SettingsService } from '../settings/settings.service';
 import { OrderLifecycleService } from './order-lifecycle.service';
 
 const BATCH = 100;
+const COD_REMINDER_HOURS = 3;
 
 /**
  * Background job (every minute): cancels unpaid orders whose reservation expired and releases stock.
@@ -36,6 +38,8 @@ export class ReservationExpiryService {
       if (reminded) this.logger.log(`Payment reminder for ${reminded} order(s)`);
       const overdue = await this.remindStaffOnce();
       if (overdue) this.logger.log(`Payment check overdue: staff reminded about ${overdue} order(s)`);
+      const codOverdue = await this.remindCodOnce();
+      if (codOverdue) this.logger.log(`Cash on delivery not confirmed: staff reminded about ${codOverdue} order(s)`);
       const cancelled = await this.runOnce();
       if (cancelled) this.logger.log(`Cancelled ${cancelled} expired order(s)`);
       await this.prisma.idempotency_keys.deleteMany({ where: { expires_at: { lt: new Date() } } });
@@ -128,6 +132,43 @@ export class ReservationExpiryService {
           reportedAt <= reportedBefore;
         if (!due) return false;
         await this.notifications.paymentCheckOverdue(tx, id, Math.floor((now.getTime() - reportedAt.getTime()) / 3600_000));
+        await tx.orders.update({ where: { id }, data: { payment_check_reminder_sent_at: now } });
+        return true;
+      });
+      if (queued) sent++;
+    }
+    return sent;
+  }
+
+  /**
+   * Release 1 (D-18): a «Оплата при получении» order has no deadline and is never cancelled automatically. If the
+   * manager has not confirmed it 3 hours after it was placed, admins and managers get one reminder — only during
+   * working hours (8:00–22:00 Tashkent); an order whose 3 hours end at night is reminded at 8:00. At most once per
+   * order (payment_check_reminder_sent_at, re-checked under the order row lock). Returns how many orders were reminded.
+   */
+  async remindCodOnce(now = new Date()): Promise<number> {
+    if (!isTashkentWorkingHours(now)) return 0;
+    const placedBefore = new Date(now.getTime() - COD_REMINDER_HOURS * 3600_000);
+    const candidates = await this.prisma.orders.findMany({
+      where: {
+        status: 'new',
+        payment_status: 'payment_pending',
+        payment_check_reminder_sent_at: null,
+        created_at: { lte: placedBefore },
+        payments: { some: { status: 'payment_pending', method: { code: 'cod' } } },
+      },
+      select: { id: true },
+      orderBy: { created_at: 'asc' },
+      take: BATCH,
+    });
+    let sent = 0;
+    for (const { id } of candidates) {
+      const queued = await this.prisma.$transaction(async (tx) => {
+        const order = await this.lifecycle.lockOrder(tx, id);
+        const fresh = await tx.orders.findUniqueOrThrow({ where: { id }, select: { payment_check_reminder_sent_at: true, created_at: true } });
+        const due = order.status === 'new' && order.payment_status === 'payment_pending' && !fresh.payment_check_reminder_sent_at && fresh.created_at <= placedBefore;
+        if (!due) return false;
+        await this.notifications.codConfirmOverdue(tx, id, Math.floor((now.getTime() - fresh.created_at.getTime()) / 3600_000));
         await tx.orders.update({ where: { id }, data: { payment_check_reminder_sent_at: now } });
         return true;
       });
