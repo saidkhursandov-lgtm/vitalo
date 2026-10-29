@@ -46,7 +46,7 @@
 | Доставка | `regions`, `cities`, `delivery_tariffs` | тариф по городу, порог бесплатной доставки |
 | Маркетплейсы | `marketplace_orders`, `marketplace_order_lines`, `marketplace_order_units`, `marketplace_external_orders`, `yandex_sync_runs`, `ozon_accounts` | заказ Яндекса → строки → банки |
 | Финансы | `expenses`, `expense_categories`, `tax_payments`, `payroll_*`, `finance_reminders`, `sales_daily` | — |
-| Маркетинг и контент | `promotions`, `promo_codes`, `marketing_campaigns`, `content_blocks`, `home_banners`, `settings`, `analytics_events` | баннеры главной — `home_banners` (до 5, миграция `20261030100000`, ещё не применена); настройки — пары ключ/значение в `settings` |
+| Маркетинг и контент | `promotions`, `promo_codes`, `marketing_campaigns`, `content_blocks`, `home_banners`, `settings`, `analytics_events` | баннеры главной — `home_banners` (до 5, миграция `20261030100000`, на `vitalo_dev` с 29.10, на сервере ещё нет); настройки — пары ключ/значение в `settings` |
 | Сотрудники и аудит | `staff_users`, `staff_sessions`, `audit_logs`, `system_errors`, `legal_documents`, `legal_acceptances` | — |
 
 ## API (основное)
