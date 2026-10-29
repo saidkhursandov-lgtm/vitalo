@@ -485,8 +485,6 @@ model products {
   cost_uzs             BigInt?
   min_stock            Int           @default(0)
   status               ProductStatus @default(active)
-  short_name_ru        String?
-  short_name_uz        String?
   short_description_ru String?
   short_description_uz String?
   composition_ru       String?
