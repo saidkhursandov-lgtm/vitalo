@@ -106,7 +106,7 @@ export class DashboardController {
   @RequirePermission('dashboard.view')
   async funnel(@Query() q: FunnelQuery) {
     const from = periodStart(q.period);
-    return { period: q.period, from, steps: await this.analytics.funnel(from) };
+    return { period: q.period, from, steps: await this.analytics.funnel(from), extra: await this.analytics.extraEvents(from) };
   }
 
   @Get()

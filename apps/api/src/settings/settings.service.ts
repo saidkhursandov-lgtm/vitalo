@@ -16,7 +16,20 @@ export const SETTING_KEYS = {
   homeContent: 'home_content',
   bonusTeaser: 'bonus_teaser',
   labelSize: 'label_size',
+  checkoutOptions: 'checkout_options',
 } as const;
+
+/**
+ * Release 1: checkout switches (Настройки → Оплата). Not inserted by a migration: the default is used until an admin saves one.
+ * - cod_max_total_uzs: the largest order total for «Оплата при получении» (Tashkent only); null = no limit;
+ * - show_online_soon: show Payme / Click / Uzum in checkout as disabled «Скоро» buttons (hidden by default);
+ * - first_order_free_delivery: the customer's first order (no other orders except cancelled ones) is delivered free.
+ */
+export interface CheckoutOptions {
+  cod_max_total_uzs: number | null;
+  show_online_soon: boolean;
+  first_order_free_delivery: boolean;
+}
 
 /** Physical ID label paper (XP-365B: print width up to 76 mm). */
 export interface LabelSize {
@@ -44,6 +57,11 @@ export interface CardTransferDetails {
 export const MANUAL_PAYMENT_METHODS = ['card_transfer', 'bank_transfer'] as const;
 export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
 
+/** Release 1: «Оплата при получении» (cash or a transfer to the courier), Tashkent only; confirmed by a manager, no «Я оплатил(а)». */
+export const COD_METHOD = 'cod';
+/** Methods a manager confirms in the admin panel: the manual transfers and cash on delivery. */
+export const CONFIRMABLE_PAYMENT_METHODS = [...MANUAL_PAYMENT_METHODS, COD_METHOD] as const;
+
 /** Initial values (also inserted by migration 20261003120000 "add if missing"). Card details are TEST values. */
 export const SETTING_DEFAULTS = {
   product_disclaimer: { ru: 'БАД. НЕ ЯВЛЯЕТСЯ ЛЕКАРСТВЕННЫМ СРЕДСТВОМ.', uz: 'BFQ. DORI VOSITASI EMAS.' } as LocalizedText,
@@ -63,6 +81,7 @@ export const SETTING_DEFAULTS = {
   bonus_teaser: BONUS_TEASER_DEFAULT,
   /** Physical ID label 58×40 mm. Not inserted by a migration: the default is used until an admin saves one. */
   label_size: { width_mm: 58, height_mm: 40 } as LabelSize,
+  checkout_options: { cod_max_total_uzs: null, show_online_soon: false, first_order_free_delivery: false } as CheckoutOptions,
 };
 
 /** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */

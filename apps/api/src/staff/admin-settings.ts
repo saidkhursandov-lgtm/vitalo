@@ -142,6 +142,19 @@ export class PaymentTimeoutDto {
   timeout_minutes!: number;
 }
 
+/** Release 1: checkout switches (Настройки → Оплата). cod_max_total_uzs: null or empty = no limit. */
+export class CheckoutOptionsDto {
+  @ApiPropertyOptional({ nullable: true, example: 2000000, description: 'Максимальная сумма заказа для оплаты при получении; пусто = без ограничения' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000_000)
+  cod_max_total_uzs!: number | null;
+
+  @ApiProperty({ description: 'Показывать Payme / Click / Uzum в оформлении как «Скоро»' }) @IsBoolean() show_online_soon!: boolean;
+  @ApiProperty({ description: 'Бесплатная доставка первого заказа клиента' }) @IsBoolean() first_order_free_delivery!: boolean;
+}
+
 /** Physical ID label paper, mm. XP-365B prints up to 76 mm wide. Default 58×40. */
 export class LabelSizeDto {
   @ApiProperty({ example: 58, minimum: 30, maximum: 76 }) @IsInt() @Min(30) @Max(76) width_mm!: number;
@@ -351,6 +364,16 @@ export class AdminSettingsService {
   async setLabelSize(staffId: string, dto: LabelSizeDto) {
     await this.saveSetting(staffId, SETTING_KEYS.labelSize, { width_mm: dto.width_mm, height_mm: dto.height_mm }, 'settings.label_size_updated');
     return this.labelSize();
+  }
+
+  checkoutOptions() {
+    return this.settings.getOrDefault('checkout_options');
+  }
+
+  async setCheckoutOptions(staffId: string, dto: CheckoutOptionsDto) {
+    const value = { cod_max_total_uzs: dto.cod_max_total_uzs ?? null, show_online_soon: dto.show_online_soon, first_order_free_delivery: dto.first_order_free_delivery };
+    await this.saveSetting(staffId, SETTING_KEYS.checkoutOptions, value, 'settings.checkout_options_updated');
+    return this.checkoutOptions();
   }
 
   async regions() {
@@ -657,6 +680,16 @@ export class AdminSettingsController {
   @Put('label-size')
   setLabelSize(@CurrentStaff() me: StaffContext, @Body() dto: LabelSizeDto) {
     return this.settings.setLabelSize(me.staff.id, dto);
+  }
+
+  @Get('checkout-options')
+  checkoutOptions() {
+    return this.settings.checkoutOptions();
+  }
+
+  @Put('checkout-options')
+  setCheckoutOptions(@CurrentStaff() me: StaffContext, @Body() dto: CheckoutOptionsDto) {
+    return this.settings.setCheckoutOptions(me.staff.id, dto);
   }
 
   @Get('regions')

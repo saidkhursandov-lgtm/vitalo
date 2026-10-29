@@ -358,8 +358,13 @@ export class AdminOrdersService {
         if (order.payment_status !== 'payment_pending') {
           throw new ConflictException({ code: 'PAID_ORDER_CITY_LOCKED', message: 'The delivery city of a paid order cannot be changed' });
         }
+        // Release 1: «Оплата при получении» exists only in Tashkent.
+        const cod = await tx.payments.count({ where: { order_id: id, method: { code: 'cod' } } });
+        if (cod && !(await this.delivery.isTashkent(regionId, tx))) {
+          throw new ConflictException({ code: 'COD_REGION', message: 'Оплата при получении — только для г. Ташкент: отмените заказ или оставьте город' });
+        }
         const goods = Number(order.goods_total_uzs - order.discount_total_uzs);
-        const quote = await this.delivery.quote(regionId, cityId, goods, tx);
+        const quote = await this.delivery.quote(regionId, cityId, goods, tx, { userId: order.user_id, exceptOrderId: id });
         const total = Number(order.goods_paid_uzs) + quote.cost_uzs;
         Object.assign(before, { region_id: order.region_id, city_id: order.city_id, delivery_cost_uzs: order.delivery_cost_uzs, total_uzs: order.total_uzs });
         Object.assign(after, { region_id: regionId, city_id: cityId, delivery_cost_uzs: quote.cost_uzs, total_uzs: total });

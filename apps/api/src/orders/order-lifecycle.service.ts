@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ActorType, OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { StockService } from '../inventory/stock.service';
-import { MANUAL_PAYMENT_METHODS } from '../settings/settings.service';
+import { COD_METHOD, CONFIRMABLE_PAYMENT_METHODS } from '../settings/settings.service';
 import { EXPIRED_REASON_CODE } from '../notifications/notification-templates';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertTransition, CUSTOMER_CANCELLABLE } from './order-state';
@@ -78,6 +78,8 @@ export class OrderLifecycleService {
    * Stage 2E, unit-tracked lines: the reservation stays and concrete units are reserved by FEFO; the write-off
    * happens at the handover. Not enough units never fails the payment (orders.units_attention + a staff message).
    * Already paid -> no-op (idempotent), so a double click never deducts stock or reserves units twice.
+   * Release 1, «Оплата при получении»: the same step is the manager's confirmation of the order (the customer pays the
+   * courier); the order becomes «Оплачен» («Подтверждён» for the customer) and goes to the warehouse like a transfer.
    */
   async confirmBankTransfer(tx: Tx, order: LockedOrder, staffId: string, comment?: string): Promise<'paid' | 'already_paid'> {
     if (order.payment_status === 'payment_success') return 'already_paid';
@@ -87,10 +89,11 @@ export class OrderLifecycleService {
     assertTransition(order.status, 'paid');
 
     const payment = await tx.payments.findFirst({
-      where: { order_id: order.id, status: 'payment_pending', method: { code: { in: [...MANUAL_PAYMENT_METHODS] } } },
-      include: { manual: true },
+      where: { order_id: order.id, status: 'payment_pending', method: { code: { in: [...CONFIRMABLE_PAYMENT_METHODS] } } },
+      include: { manual: true, method: { select: { code: true } } },
     });
     if (!payment) throw new ConflictException({ code: 'NO_BANK_TRANSFER_PAYMENT', message: 'Order has no pending bank transfer' });
+    const cod = payment.method.code === COD_METHOD;
 
     const now = new Date();
     await this.stock.deduct(tx, order.id, staffId, await this.units.trackedProductIds(tx, order.id));
@@ -118,12 +121,12 @@ export class OrderLifecycleService {
       where: { order_id: order.id, type: 'bank_transfer_check', status: { not: 'done' } },
       data: { status: 'done', done_at: now, assigned_to: staffId },
     });
-    await this.addHistory(tx, order.id, order.status, 'paid', { type: 'staff', id: staffId }, 'Bank transfer confirmed');
+    await this.addHistory(tx, order.id, order.status, 'paid', { type: 'staff', id: staffId }, cod ? 'Order confirmed by the manager (cash on delivery)' : 'Bank transfer confirmed');
     const units = await this.units.reserveOnPayment(tx, { id: order.id, order_number: order.order_number, status: 'paid' }, staffId);
     await tx.audit_logs.create({
       data: {
         staff_user_id: staffId,
-        action: 'order.bank_transfer_confirmed',
+        action: cod ? 'order.cod_confirmed' : 'order.bank_transfer_confirmed',
         entity_type: 'order',
         entity_id: order.id,
         before_json: { status: order.status, payment_status: order.payment_status },
@@ -148,12 +151,17 @@ export class OrderLifecycleService {
     const full = await tx.orders.update({
       where: { id: order.id },
       data: { status: 'cancelled', cancelled_at: new Date(), reserved_until: null },
+      include: { payments: { include: { method: { select: { code: true } } } } },
     });
+    // Cash on delivery: the courier takes the money, so usually there is nothing to return.
+    const cod = full.payments.some((p) => p.method.code === COD_METHOD);
     await tx.manager_tasks.create({
       data: {
         type: 'refund',
         order_id: order.id,
-        note: `Вернуть клиенту ${Number(full.total_uzs)} сум: оплаченный заказ ${order.order_number} отменён. Причина: ${reason}`,
+        note: cod
+          ? `Заказ ${order.order_number} с оплатой при получении отменён после подтверждения. Если клиент уже отдал курьеру ${Number(full.total_uzs)} сум — вернуть, если нет — просто закройте задачу. Причина: ${reason}`
+          : `Вернуть клиенту ${Number(full.total_uzs)} сум: оплаченный заказ ${order.order_number} отменён. Причина: ${reason}`,
       },
     });
     await this.addHistory(tx, order.id, order.status, 'cancelled', { type: 'staff', id: staffId }, reason);

@@ -38,7 +38,7 @@ export const HOME_CONTENT_DEFAULT: HomeContent = {
     enabled: true,
     items: [
       { ru: 'Выберите товары и добавьте их в корзину', uz: 'Mahsulotlarni tanlang va savatga qo‘shing' },
-      { ru: 'Оформите заказ и переведите оплату на карту', uz: 'Buyurtma bering va to‘lovni kartaga o‘tkazing' },
+      { ru: 'Оплатите удобно: переводом на карту или наличными при получении (Ташкент)', uz: 'Qulay to‘lang: kartaga o‘tkazma yoki qabul qilganda naqd pul bilan (faqat Toshkent)' },
       { ru: 'Получите заказ — курьер привезёт его по адресу', uz: 'Buyurtmani oling — kuryer manzilingizga yetkazadi' },
     ],
   },

@@ -16,6 +16,21 @@ export interface DeliveryQuote extends Tariff {
   remaining_for_free_uzs: number;
   message_ru: string;
   message_uz: string;
+  /** Release 1: free because it is the customer's first order (setting «Бесплатная доставка первого заказа»). */
+  first_order?: boolean;
+}
+
+/** The same tariff, delivered free as the customer's first order. */
+export function firstOrderFree(quote: DeliveryQuote): DeliveryQuote {
+  return {
+    ...quote,
+    cost_uzs: 0,
+    is_free: true,
+    remaining_for_free_uzs: 0,
+    first_order: true,
+    message_ru: 'Первый заказ — доставка бесплатно',
+    message_uz: 'Birinchi buyurtma — yetkazib berish bepul',
+  };
 }
 
 /**

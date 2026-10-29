@@ -1,9 +1,20 @@
 import { BadRequestException, Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { DeliveryQuote, quoteDelivery, Tariff } from './delivery-quote';
+import { SettingsService } from '../settings/settings.service';
+import { DeliveryQuote, firstOrderFree, quoteDelivery, Tariff } from './delivery-quote';
 
 type Db = Prisma.TransactionClient | PrismaService;
+
+/** «г. Ташкент» (the city as a region), not «Ташкентская область». */
+export const isTashkentRegionName = (name: string) => /^г\.?\s*ташкент$/i.test(name.trim());
+
+/** Whose order the quote is for (first-order free delivery); exceptOrderId = an existing order being edited. */
+export interface QuoteCustomer {
+  userId: string;
+  exceptOrderId?: string;
+}
+
 export interface DaysRange {
   min_days: number;
   max_days: number;
@@ -11,7 +22,25 @@ export interface DaysRange {
 
 @Injectable()
 export class DeliveryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
+  ) {}
+
+  /** Release 1: the region is the city of Tashkent («Оплата при получении» works only there). */
+  async isTashkent(regionId: string, db: Db = this.prisma): Promise<boolean> {
+    const region = await db.regions.findUnique({ where: { id: regionId }, select: { name_ru: true } });
+    return !!region && isTashkentRegionName(region.name_ru);
+  }
+
+  /** Release 1: «Бесплатная доставка первого заказа» is on and the customer has no other orders except cancelled ones. */
+  async isFirstOrder(customer: QuoteCustomer, db: Db = this.prisma): Promise<boolean> {
+    if (!(await this.settings.getOrDefault('checkout_options')).first_order_free_delivery) return false;
+    const others = await db.orders.count({
+      where: { user_id: customer.userId, status: { not: 'cancelled' }, ...(customer.exceptOrderId && { id: { not: customer.exceptOrderId } }) },
+    });
+    return others === 0;
+  }
 
   async listRegions() {
     const regions = await this.prisma.regions.findMany({
@@ -78,11 +107,13 @@ export class DeliveryService {
     });
     const range = (list: typeof rows): DaysRange | null =>
       list.length ? { min_days: Math.min(...list.map((t) => t.min_days!)), max_days: Math.max(...list.map((t) => t.max_days!)) } : null;
-    const isTashkentCity = (name: string) => /^г\.?\s*ташкент$/i.test(name.trim());
-    return { tashkent: range(rows.filter((t) => isTashkentCity(t.region.name_ru))), regions: range(rows.filter((t) => !isTashkentCity(t.region.name_ru))) };
+    return { tashkent: range(rows.filter((t) => isTashkentRegionName(t.region.name_ru))), regions: range(rows.filter((t) => !isTashkentRegionName(t.region.name_ru))) };
   }
 
-  async quote(regionId: string, cityId: string, goodsAfterDiscountsUzs: number, db: Db = this.prisma): Promise<DeliveryQuote> {
-    return quoteDelivery(await this.resolveTariff(regionId, cityId, db), goodsAfterDiscountsUzs);
+  /** With a customer: their first order is delivered free when the setting is on (cart, checkout, order edit). */
+  async quote(regionId: string, cityId: string, goodsAfterDiscountsUzs: number, db: Db = this.prisma, customer?: QuoteCustomer): Promise<DeliveryQuote> {
+    const quote = quoteDelivery(await this.resolveTariff(regionId, cityId, db), goodsAfterDiscountsUzs);
+    if (customer && !quote.is_free && (await this.isFirstOrder(customer, db))) return firstOrderFree(quote);
+    return quote;
   }
 }

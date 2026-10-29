@@ -92,22 +92,26 @@ export class CartService {
       discount_total_uzs: 0,
       items_count: sellable.reduce((s, l) => s + l.qty, 0),
       can_checkout: sellable.length > 0,
-      delivery: address && sellable.length ? await this.delivery.quote(address.region_id, address.city_id, goodsTotal) : null,
+      delivery: address && sellable.length ? await this.delivery.quote(address.region_id, address.city_id, goodsTotal, undefined, { userId }) : null,
     };
   }
 
   /**
-   * Units that can be ordered now, for the cart badge. Read-only on purpose: unlike getCart() it does not
-   * persist price/qty corrections, so the warnings are still shown when the customer opens the cart.
+   * Units that can be ordered now and their sum at current prices, for the cart badge and the floating cart bar.
+   * Read-only on purpose: unlike getCart() it does not persist price/qty corrections, so the warnings are still
+   * shown when the customer opens the cart.
    */
-  async count(userId: string): Promise<{ items_count: number }> {
+  async count(userId: string): Promise<{ items_count: number; goods_total_uzs: number }> {
     const items = await this.prisma.cart_items.findMany({
       where: { cart: { user_id: userId, status: 'active' }, product: { status: 'active' } },
-      select: { product_id: true, qty: true },
+      select: { product_id: true, qty: true, product: { select: { price_uzs: true } } },
     });
     const available = await this.stock.availability(items.map((i) => i.product_id));
-    const count = items.reduce((s, i) => s + Math.min(i.qty, available.get(i.product_id) ?? 0, MAX_LINE_QTY), 0);
-    return { items_count: count };
+    const qty = (i: (typeof items)[number]) => Math.min(i.qty, available.get(i.product_id) ?? 0, MAX_LINE_QTY);
+    return {
+      items_count: items.reduce((s, i) => s + qty(i), 0),
+      goods_total_uzs: items.reduce((s, i) => s + qty(i) * Number(i.product.price_uzs), 0),
+    };
   }
 
   async addItem(userId: string, productId: string, qty: number): Promise<CartView> {

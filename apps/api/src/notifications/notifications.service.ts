@@ -20,9 +20,11 @@ export class NotificationsService {
 
   /** Customer message for an order status change, in the customer's language. Other statuses are ignored. */
   async orderStatusChanged(db: Db, orderId: string, status: OrderStatus, reason?: string | null): Promise<void> {
-    const template = CUSTOMER_STATUS_TEMPLATES[status as keyof typeof CUSTOMER_STATUS_TEMPLATES];
+    let template: TemplateName | undefined = CUSTOMER_STATUS_TEMPLATES[status as keyof typeof CUSTOMER_STATUS_TEMPLATES];
     if (!template) return;
-    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true } });
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, payments: { include: { method: { select: { code: true } } } } } });
+    // Release 1: cash on delivery is not «Оплачен» when the manager confirms it — the customer pays the courier.
+    if (status === 'paid' && order.payments.some((p) => p.method.code === 'cod')) template = 'order.cod_confirmed';
     await db.notifications.create({
       data: {
         user_id: order.user_id,
@@ -83,7 +85,7 @@ export class NotificationsService {
 
   /** Same message to every active admin and manager. */
   async toOrderStaff(db: Db, template: Extract<TemplateName, `staff.${string}`>, orderId: string): Promise<void> {
-    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId } });
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { payments: { orderBy: { created_at: 'desc' }, take: 1, include: { method: { select: { code: true } } } } } });
     const staff = await db.staff_users.findMany({ where: { status: 'active', role: { in: [...ORDER_STAFF_ROLES] } } });
     if (!staff.length) return;
     await db.notifications.createMany({
@@ -97,6 +99,7 @@ export class NotificationsService {
           total_uzs: Number(order.total_uzs),
           customer: order.recipient_name,
           phone: order.recipient_phone,
+          payment: order.payments[0]?.method.code,
           lang: 'ru',
         },
       })),

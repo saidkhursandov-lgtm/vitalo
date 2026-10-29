@@ -22,7 +22,8 @@ export type TemplateName =
   | 'staff.yandex_late_summary'
   | 'staff.finance_before_due'
   | 'staff.finance_due_day'
-  | 'order.payment_reminder';
+  | 'order.payment_reminder'
+  | 'order.cod_confirmed';
 
 export interface TemplatePayload {
   order_number: string;
@@ -47,6 +48,8 @@ export interface TemplatePayload {
   ship_by?: string;
   /** Stage 2D: the order was created without units (not enough stock) */
   shortage?: boolean;
+  /** Release 1: payment method code of the order (staff.new_order), e.g. "cod" */
+  payment?: string;
   /** Stage 3 (admins only): what is not marked paid yet */
   tax_uzs?: number;
   salaries_uzs?: number;
@@ -76,6 +79,8 @@ const sum = (n: number | undefined, lang: Lang) => `${formatUzs(n ?? 0)} ${lang 
 /** Status names shared with the Mini App order screen and the bot ("Мои заказы"). */
 export const STATUS_LABELS: Record<Lang, Record<string, string>> = {
   ru: {
+    new: '🕓 Ожидает подтверждения',
+    confirmed: '🟢 Подтверждён',
     awaiting_payment: '🟡 Ожидает оплаты',
     checking: '🔵 Оплата проверяется',
     paid: '🟢 Оплачен',
@@ -86,6 +91,8 @@ export const STATUS_LABELS: Record<Lang, Record<string, string>> = {
     cancelled: '⚪ Отменён',
   },
   uz: {
+    new: '🕓 Tasdiqlash kutilmoqda',
+    confirmed: '🟢 Tasdiqlandi',
     awaiting_payment: '🟡 To‘lov kutilmoqda',
     checking: '🔵 To‘lov tekshirilmoqda',
     paid: '🟢 To‘langan',
@@ -109,6 +116,10 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
     ru: (p) => `${head(p, 'ru', 'paid')}\nНачинаем собирать ваш заказ.`,
     uz: (p) => `${head(p, 'uz', 'paid')}\nBuyurtmangizni yig‘ishni boshladik.`,
   },
+  'order.cod_confirmed': {
+    ru: (p) => `${head(p, 'ru', 'confirmed')}\nНачинаем собирать ваш заказ. Оплата при получении: ${sum(p.total_uzs, 'ru')} наличными или переводом курьеру.`,
+    uz: (p) => `${head(p, 'uz', 'confirmed')}\nBuyurtmangizni yig‘ishni boshladik. Qabul qilganda to‘lash: ${sum(p.total_uzs, 'uz')} naqd yoki kuryerga o‘tkazma.`,
+  },
   'order.handed_to_delivery': {
     ru: (p) => head(p, 'ru', 'handed_to_delivery'),
     uz: (p) => head(p, 'uz', 'handed_to_delivery'),
@@ -127,7 +138,9 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   },
   // Staff messages: the admin panel is Russian-only, so are these.
   'staff.new_order': {
-    ru: (p) => `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}`,
+    ru: (p) =>
+      `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}` +
+      (p.payment === 'cod' ? '\n💵 Оплата при получении (Ташкент). Ожидает подтверждения менеджером: позвоните клиенту и подтвердите заказ в админке.' : ''),
     uz: (p) => `🆕 Yangi buyurtma ${p.order_number}: ${sum(p.total_uzs, 'uz')}\nMijoz: ${p.customer ?? '—'}, ${p.phone ?? '—'}`,
   },
   'staff.customer_paid': {

@@ -10,7 +10,9 @@ import { PrismaService } from '../prisma/prisma.service';
 /** Funnel steps in order (B3). The last three are written by the server itself, never by the app. */
 export const FUNNEL_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', 'order_created', 'payment_marked', 'payment_confirmed'] as const;
 export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
-export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start'] as const;
+/** Release 1: extra app events outside the funnel (counted separately in «Аналитика → Воронка»). */
+export const EXTRA_EVENTS = ['language_change', 'cod_selected'] as const;
+export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...EXTRA_EVENTS] as const;
 
 /** Spam protection: per user at most this many app events per minute; extra ones are dropped quietly. */
 const LIMIT_PER_MINUTE = 30;
@@ -43,7 +45,7 @@ export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Server-side events (order created, payment marked / confirmed). Never fails the business action. */
-  async track(userId: string, event: FunnelEvent, props?: Record<string, unknown>, db: Db = this.prisma): Promise<void> {
+  async track(userId: string, event: FunnelEvent | (typeof EXTRA_EVENTS)[number], props?: Record<string, unknown>, db: Db = this.prisma): Promise<void> {
     try {
       await db.analytics_events.create({ data: { user_id: userId, event, props: cleanProps(props) } });
     } catch {
@@ -61,6 +63,18 @@ export class AnalyticsService {
     if (this.recent.size > 10_000) this.recent.clear(); // memory guard
     await this.track(userId, dto.event, dto.props);
     return true;
+  }
+
+  /** Release 1: events outside the funnel since `from`: how many times and by how many users. */
+  async extraEvents(from: Date) {
+    const rows = await this.prisma.$queryRaw<{ event: string; users: bigint; events: bigint }[]>`
+      SELECT event, COUNT(DISTINCT user_id) AS users, COUNT(*) AS events FROM analytics_events
+      WHERE created_at >= ${from} AND event = ANY(${[...EXTRA_EVENTS]}::text[])
+      GROUP BY event`;
+    return EXTRA_EVENTS.map((event) => {
+      const r = rows.find((x) => x.event === event);
+      return { event, users: Number(r?.users ?? 0), events: Number(r?.events ?? 0) };
+    });
   }
 
   /** Unique users per step since `from` and the share that reached each step from the previous one. */

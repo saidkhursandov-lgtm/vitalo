@@ -34,5 +34,20 @@ apps/api/uploads/
 # Any spreadsheet with business data (prices, commissions). A template meant for git is added as !path/to/template.xlsx
 *.xlsx
 
-# Local database dumps (scripts/rename-local-db.ps1)
-/backups/
+# Local database dumps (scripts/rename-local-db.ps1) and any other database backups, in any folder.
+# Migrations (apps/api/prisma/migrations/**/migration.sql) and scripts/**/*.sql stay in git.
+backups/
+*.dump
+*.backup
+/*.sql
+
+# Reports of import scripts (contain business data: SKUs, prices, stock)
+apps/api/*_report.txt
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
