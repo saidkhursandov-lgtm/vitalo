@@ -39,7 +39,7 @@
    cd $HOME\Documents
    mkdir VITALO
    cd VITALO
-   git clone <адрес-репозитория-на-GitHub> vitalo
+   git clone https://github.com/saidkhursandov-lgtm/vitalo.git vitalo
    cd vitalo
    git checkout release-1
    ```
