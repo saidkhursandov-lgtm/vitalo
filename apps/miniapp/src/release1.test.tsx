@@ -108,7 +108,7 @@ describe('home (release 1, item 3)', () => {
 
   it('2.1: two trust markers under the search (no «Ташкент 1–3 дня»)', () => {
     const { container } = wrap('ru', <TrustChips />);
-    expect(Array.from(container.querySelectorAll('.chip')).map((c) => c.textContent)).toEqual(['Отбор врачом', 'Оригинальная продукция']);
+    expect(Array.from(container.querySelectorAll('.chip')).map((c) => c.textContent)).toEqual(['Экспертный подбор', 'Оригинальная продукция']); // 2.1: not the same words as the banner
   });
 });
 

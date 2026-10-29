@@ -4,6 +4,7 @@ import { DeliveryModule } from '../delivery/delivery.module';
 import { AdminLegalController, LegalModule } from '../legal/legal.module';
 import { OrdersModule } from '../orders/orders.module';
 import { OnlinePaymentsModule } from '../payments/online/online-payments.module';
+import { AdminBannersController, AdminBannersService } from './admin-banners';
 import { AdminCustomersController, AdminCustomersService } from './admin-customers';
 import { AdminDictionariesController, AdminDictionariesService } from './admin-dictionaries';
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
@@ -39,6 +40,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
   imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule, OnlinePaymentsModule],
   controllers: [
     StaffAuthController,
+    AdminBannersController,
     DashboardController,
     AdminOrdersController,
     OrderLabelController,
@@ -63,6 +65,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminLegalController,
   ],
   providers: [
+    AdminBannersService,
     StaffAuthService,
     StaffGuard,
     AuditService,

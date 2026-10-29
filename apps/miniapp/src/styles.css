@@ -26,7 +26,6 @@
   --primary-soft: #eaf0f8;   /* selected option, info notice; navy on it is 12.3:1 */
   --accent: #ff6600;         /* orange: rating star, cart counter, small badges — never small text on white, never big fills */
   --accent-soft: #fff0e6;
-  --accent-text: #c2410c;    /* orange for small text (Бесплатно, first-order badge): 5.2:1 on white, AA */
   --on-accent: #002d62;      /* navy on orange is 4.6:1 (white would be only 2.9:1) */
   --dark: #1e293b;           /* main text, dark blocks */
   /* surfaces */
@@ -217,11 +216,14 @@ p { margin: 0 0 8px; }
 .btn-block { display: flex; width: 100%; margin: 8px 0; }
 
 .sticky-action {
-  position: sticky; bottom: calc(var(--nav-h) + var(--safe-b)); z-index: 5;
-  margin: 12px -16px 0; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border);
+  position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + var(--safe-b)); z-index: 5; max-width: 720px; margin: 0 auto;
+  padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border);
 }
 .sticky-action .btn-block { margin: 0; }
 .app:not(.with-nav) .sticky-action { bottom: 0; padding-bottom: calc(12px + var(--safe-b)); }
+/* room for the fixed bar: its measured height (+ safe-area when there is no bottom menu under it) */
+html.has-action .content { padding-bottom: calc(var(--action-h, 72px) + 8px); }
+html.has-action .app:not(.with-nav) .content { padding-bottom: calc(var(--action-h, 72px) + 8px); }
 
 /* ---------- forms ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; flex: 1; min-width: 0; }
@@ -430,8 +432,8 @@ details.card[open] summary { margin-bottom: 4px; }
 .order-item-name { color: var(--text); font-size: 14px; font-weight: 500; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .order-item-price { white-space: nowrap; font-size: 14px; padding-top: 1px; }
 .order-totals { padding-top: 4px; }
-.free-accent { color: var(--accent-text); font-weight: 700; }
-.first-order-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); font-size: 12px; font-weight: 600; vertical-align: 1px; }
+.free-accent { color: var(--success); font-weight: 700; }
+.first-order-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-text); font-size: 12px; font-weight: 600; vertical-align: 1px; }
 .summary .sum-row.total { font-size: 20px; }
 /* Payme / Click / Uzum «Скоро» (D-20) */
 .pay-hint { margin: 10px 0 0; }
@@ -737,12 +739,16 @@ button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border)
 .hero-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: var(--radius-lg); }
 .hero-track::-webkit-scrollbar { display: none; }
 .hero-slide {
-  position: relative; overflow: hidden; flex: none; width: 100%; height: 120px; padding: 14px 18px 20px; box-sizing: border-box;
+  position: relative; overflow: hidden; flex: none; width: 100%; min-height: 120px; padding: 14px 18px 20px; box-sizing: border-box;
   scroll-snap-align: start; display: flex; flex-direction: column; justify-content: center;
   background: var(--primary); color: #ffffff;
 }
 .hero-slide h2 { position: relative; margin: 0 0 6px; font-size: clamp(17px, 5.2vw, 21px); line-height: 1.22; font-weight: 700; max-width: 80%; }
 .hero-slide p { position: relative; margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 14px; line-height: 1.4; max-width: 80%; }
+/* a picture banner from the admin panel: 3:1 (1200x400), cut to the slide; all slides of the row get the same height */
+.hero-slide.hero-image { padding: 0; aspect-ratio: 3 / 1; min-height: 0; background: var(--surface-2); }
+.hero-image picture, .hero-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+a.hero-slide { color: var(--on-primary); text-decoration: none; }
 .hero-star { color: var(--accent); }
 .hero-art { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); color: #ffffff; pointer-events: none; }
 .hero-dots { position: absolute; bottom: 8px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; pointer-events: none; }
@@ -769,14 +775,15 @@ button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border)
 .cat-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .cat-name { font-size: 14px; font-weight: 600; line-height: 1.25; color: var(--text); overflow-wrap: break-word; }
 .cat-count { font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--muted); }
-.need-list { display: flex; gap: 8px; }
+.need-list { display: flex; align-items: stretch; gap: 8px; }
 /* the last card scrolls fully into view with the same 16 px edge as the first one */
 .need-list::after { content: ''; flex: none; width: 8px; }
 .need-card {
-  flex: none; display: flex; align-items: center; gap: 10px; min-height: 60px; max-width: 220px; padding: 10px 14px 10px 10px;
+  flex: none; display: flex; align-items: center; gap: 10px; min-height: 60px; width: max-content; max-width: 196px; padding: 10px 14px 10px 10px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
 }
-.need-card .cat-name { white-space: nowrap; }
+.need-card .cat-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.need-card .cat-count { white-space: nowrap; }
 .need-card:active, .type-card:active { background: var(--surface-2); }
 .type-grid .type-card { min-height: 64px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; padding: 12px; }
 
@@ -802,4 +809,5 @@ button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border)
 /* ---------- 2.1: keyboard open (ТЗ v3 §3.4): the bottom menu and the floating cart step aside ---------- */
 .app.kb-open .bottom-nav, .app.kb-open .float-cart, .app.kb-open .disclaimer { display: none; }
 .app.kb-open.with-nav { padding-bottom: 0; }
-.app.kb-open .sticky-action { position: static; }
+.app.kb-open .sticky-action { position: static; margin: 12px -16px 0; }
+html.has-action .app.kb-open .content { padding-bottom: 0; }

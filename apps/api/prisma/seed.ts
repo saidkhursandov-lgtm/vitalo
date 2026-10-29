@@ -98,6 +98,13 @@ async function seedCheckoutSettings() {
   for (const m of PAYMENT_METHODS) {
     await prisma.payment_methods.upsert({ where: { code: m.code }, create: m, update: {} });
   }
+  // 2.1: the two built-in home banners (same ids as in the migration); never changed if they exist
+  for (const [id, kind, sort_order] of [
+    ['00000000-0000-4000-8000-00000000b001', 'doctor', 1],
+    ['00000000-0000-4000-8000-00000000b002', 'delivery', 2],
+  ] as const) {
+    await prisma.home_banners.upsert({ where: { id }, create: { id, kind, sort_order }, update: {} });
+  }
   const settings = { bank_transfer_details: BANK_TRANSFER_DETAILS, ...SETTING_DEFAULTS } as unknown as Record<string, Prisma.InputJsonValue>;
   for (const [key, value] of Object.entries(settings)) {
     await prisma.settings.upsert({ where: { key }, create: { key, value }, update: {} });

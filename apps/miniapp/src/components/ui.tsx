@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
 import { discountPercent, money, nameOf } from '../lib/format';
@@ -31,6 +31,35 @@ function SkeletonTile() {
 export type SkeletonVariant = 'grid' | 'strip' | 'list' | 'product' | 'chips' | 'block';
 
 /** Grey placeholders in the shape of the content that is loading. */
+/**
+ * Bottom action bar fixed above the menu (Корзина, Оформление, Оплата). Its real height (an error line may appear above
+ * the button) goes to --action-h, and html.has-action gives the scrolling content that much room at the bottom,
+ * so the last line (e.g. «Срок доставки») is never hidden under the button.
+ */
+export function StickyAction({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const root = document.documentElement;
+    if (!el) return;
+    const apply = () => root.style.setProperty('--action-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    apply();
+    root.classList.add('has-action');
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.classList.remove('has-action');
+      root.style.removeProperty('--action-h');
+    };
+  }, []);
+  return (
+    <div className="sticky-action" ref={ref}>
+      {children}
+    </div>
+  );
+}
+
 export function Loading({ variant = 'block', count }: { variant?: SkeletonVariant; count?: number }) {
   const { t } = useI18n();
   const n = (d: number) => Array.from({ length: count ?? d }, (_, i) => i);

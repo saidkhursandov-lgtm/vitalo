@@ -10,6 +10,7 @@ import { ContactsForm } from './settings/Contacts';
 import { PaymentTimeouts } from './settings/PaymentTimeouts';
 import { DeliverySettings } from './settings/Delivery';
 import { DictionariesSettings } from './settings/Dictionaries';
+import { BannersSettings } from './settings/Banners';
 import { BonusTeaserForm, HomeSettings } from './settings/Home';
 import { LabelSizeSettings } from './settings/LabelSize';
 import { LegalSettings } from './settings/Legal';
@@ -46,7 +47,12 @@ export function Settings() {
           <BonusTeaserForm />
         </>
       )}
-      {tab === 'home' && <HomeSettings />}
+      {tab === 'home' && (
+        <>
+          <BannersSettings />
+          <HomeSettings />
+        </>
+      )}
       {tab === 'tariffs' && <DeliverySettings />}
       {tab === 'dicts' && <DictionariesSettings />}
       {tab === 'print' && <LabelSizeSettings />}

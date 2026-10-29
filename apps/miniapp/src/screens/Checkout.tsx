@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ErrorState, Loading, RegionCitySelect } from '../components/ui';
+import { ErrorState, Loading, RegionCitySelect, StickyAction } from '../components/ui';
 import { api, ApiError, isNetworkError } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { money, normalizePhone, prettyPhone } from '../lib/format';
@@ -330,11 +330,11 @@ export function Checkout() {
         </div>
       )}
 
-      <div className="sticky-action">
+      <StickyAction>
         <button type="submit" className="btn btn-block" disabled={blocked}>
           {placeOrder.isPending ? t('common.loading') : t(method === 'cod' ? 'checkout.confirmCod' : 'checkout.confirm', { sum: p ? money(p.totals.total_uzs, lang) : '…' })}
         </button>
-      </div>
+      </StickyAction>
     </form>
   );
 }

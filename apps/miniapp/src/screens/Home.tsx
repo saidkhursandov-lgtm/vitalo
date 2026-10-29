@@ -3,7 +3,7 @@ import { categoryIcon, SearchIcon } from '../components/Icons';
 import { ErrorState, Loading, ProductStrip } from '../components/ui';
 import { nameOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
-import { useCategories, useFreeShipping, useProducts, useShopTexts } from '../lib/queries';
+import { useBanners, useCategories, useFreeShipping, useProducts, useShopTexts } from '../lib/queries';
 import { HelpButton, HomeCarousel, HowToOrder, TrustChips } from '../components/HomeBlocks';
 import type { CategoryNode } from '../lib/types';
 
@@ -29,13 +29,14 @@ function CategoryLink({ c, className }: { c: CategoryNode; className: string }) 
  * screen, product types, new arrivals.
  */
 export function Home() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const navigate = useNavigate();
   const categories = useCategories();
   const popular = useProducts({ sort: 'popular', in_stock: true });
   const fresh = useProducts({ sort: 'new', in_stock: true });
   const shop = useShopTexts();
   const freeShipping = useFreeShipping();
+  const banners = useBanners(lang);
 
   return (
     <div className="page home">
@@ -46,7 +47,7 @@ export function Home() {
       </button>
 
       <TrustChips />
-      <HomeCarousel firstOrderFree={freeShipping.data?.first_order_free ?? false} freeFromUzs={freeShipping.data?.from_uzs ?? null} />
+      <HomeCarousel firstOrderFree={freeShipping.data?.first_order_free ?? false} freeFromUzs={freeShipping.data?.from_uzs ?? null} banners={banners.data} />
 
       {categories.isPending ? (
         <Loading variant="chips" />

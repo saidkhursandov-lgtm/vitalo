@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { money } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { openSupport } from '../lib/shop';
-import type { HomeContent, Lang, LocalizedText, ShopInfo } from '../lib/types';
+import type { HomeContent, Lang, LocalizedText, ShopBanner, ShopInfo } from '../lib/types';
 import { generalTerms } from './Delivery';
 import { BadgeIcon, DoctorIcon, ShieldIcon, StarIcon, SupportIcon, TRUST_ICONS } from './Icons';
 import { useSupportUrl } from './Support';
@@ -26,29 +26,77 @@ function HeroArt() {
  * Home banner (navy, about 116 px): two slides — «Отбор врачом • 4,9★ на Яндекс Маркете» and the delivery offer. The offer is
  * what is true for this customer (the server decides): the first order is free, or delivery is free from the tariff's threshold.
  */
-export function HomeCarousel({ firstOrderFree, freeFromUzs }: { firstOrderFree: boolean; freeFromUzs: number | null }) {
+/** The two slides the shop always had: used until the admin list arrives, and in tests. */
+const BUILT_IN_BANNERS: ShopBanner[] = [
+  { id: 'doctor', kind: 'doctor', image_url: null, image_jpeg_url: null, link: null },
+  { id: 'delivery', kind: 'delivery', image_url: null, image_jpeg_url: null, link: null },
+];
+
+/** Where a tap on the banner leads (null — nowhere). */
+export function bannerHref(link: ShopBanner['link']): string | null {
+  if (!link) return null;
+  if (link.type === 'product') return `/product/${link.value}`;
+  if (link.type === 'category') return `/catalog/products?category=${encodeURIComponent(link.value)}`;
+  return `/catalog/products?brand=${encodeURIComponent(link.value)}`;
+}
+
+/**
+ * Home banners in the order set in the admin panel (Настройки → Главная → Баннеры).
+ * doctor / delivery are the navy slides; the delivery one keeps its rule: a new customer — «Первый заказ — бесплатная доставка»,
+ * everybody else — «Бесплатная доставка от {порог}» (the tariff's threshold), neither — no slide. Nothing to show — no block at all.
+ */
+export function HomeCarousel({
+  firstOrderFree,
+  freeFromUzs,
+  banners = BUILT_IN_BANNERS,
+}: {
+  firstOrderFree: boolean;
+  freeFromUzs: number | null;
+  banners?: ShopBanner[];
+}) {
   const { t, lang } = useI18n();
   const track = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
-  const slides = [
-    {
-      key: 'doctor',
-      title: t('home.slide1.title'),
-      sub: (
-        <>
-          <strong>4,9</strong>
-          <StarIcon filled className="hero-star" width={15} height={15} aria-label="★" />
-          {t('home.slide1.sub')}
-        </>
-      ),
-    },
-    // a new customer: «Первый заказ — бесплатная доставка»; everybody else: «Бесплатная доставка от {порог}» (the tariff's threshold)
-    ...(firstOrderFree
-      ? [{ key: 'free', title: t('home.slide2.title'), sub: <>{t('home.slide2.sub')}</> }]
-      : freeFromUzs
-        ? [{ key: 'free', title: t('home.slide2.from', { sum: money(freeFromUzs, lang) }), sub: <>{t('home.slide2.sub')}</> }]
-        : []),
-  ];
+  const slides = banners.flatMap((b) => {
+    const href = bannerHref(b.link);
+    if (b.kind === 'image') {
+      if (!b.image_url) return [];
+      const picture = (
+        <picture>
+          <source srcSet={b.image_url} type="image/webp" />
+          <img src={b.image_jpeg_url ?? b.image_url} alt="" width={1200} height={400} decoding="async" />
+        </picture>
+      );
+      return [{ key: b.id, className: 'hero-slide hero-image', href, body: picture }];
+    }
+    const text =
+      b.kind === 'doctor'
+        ? {
+            title: t('home.slide1.title'),
+            sub: (
+              <>
+                <strong>4,9</strong>
+                <StarIcon filled className="hero-star" width={15} height={15} aria-label="★" />
+                {t('home.slide1.sub')}
+              </>
+            ),
+          }
+        : firstOrderFree
+          ? { title: t('home.slide2.title'), sub: <>{t('home.slide2.sub')}</> }
+          : freeFromUzs
+            ? { title: t('home.slide2.from', { sum: money(freeFromUzs, lang) }), sub: <>{t('home.slide2.sub')}</> }
+            : null;
+    if (!text) return [];
+    const body = (
+      <>
+        <HeroArt />
+        <h2>{text.title}</h2>
+        <p>{text.sub}</p>
+      </>
+    );
+    return [{ key: b.id, className: 'hero-slide', href, body }];
+  });
+  if (slides.length === 0) return null;
   return (
     <section className="hero" aria-roledescription="carousel">
       <div
@@ -56,13 +104,17 @@ export function HomeCarousel({ firstOrderFree, freeFromUzs }: { firstOrderFree: 
         ref={track}
         onScroll={(e) => setIndex(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}
       >
-        {slides.map((s) => (
-          <div key={s.key} className="hero-slide">
-            <HeroArt />
-            <h2>{s.title}</h2>
-            <p>{s.sub}</p>
-          </div>
-        ))}
+        {slides.map((s) =>
+          s.href ? (
+            <Link key={s.key} to={s.href} className={s.className}>
+              {s.body}
+            </Link>
+          ) : (
+            <div key={s.key} className={s.className}>
+              {s.body}
+            </div>
+          ),
+        )}
       </div>
       {slides.length > 1 && (
         <div className="hero-dots" aria-hidden>

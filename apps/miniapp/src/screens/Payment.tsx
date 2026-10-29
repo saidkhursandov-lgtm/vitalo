@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CopyIcon } from '../components/Icons';
-import { ErrorState, Loading } from '../components/ui';
+import { ErrorState, Loading, StickyAction } from '../components/ui';
 import { api, ApiError, isNetworkError } from '../lib/api';
 import { money } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
@@ -162,7 +162,7 @@ export function Payment() {
           <p className="notice notice-info">{lang === 'uz' ? d.hint.uz : d.hint.ru}</p>
 
           {(
-            <div className="sticky-action">
+            <StickyAction>
               {reportPaid.isError && (
                 <p className="error-text" role="alert">
                   {errorText(lang, reportPaid.error instanceof ApiError ? reportPaid.error.code : undefined)}
@@ -172,7 +172,7 @@ export function Payment() {
               <button className="btn btn-block" disabled={reportPaid.isPending} onClick={() => reportPaid.mutate()}>
                 {t('pay.iPaid')}
               </button>
-            </div>
+            </StickyAction>
           )}
         </>
       )}

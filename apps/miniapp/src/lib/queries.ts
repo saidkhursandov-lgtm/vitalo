@@ -1,7 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from './api';
+import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, BankTransfer, Cart, CartCount, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopInfo } from './types';
+import type { Address, BankTransfer, Cart, CartCount, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -90,6 +91,9 @@ export function useCart(city?: CityRef | null) {
 
 /** Home slide: the free-delivery threshold (from the tariff) and the first-order offer for this customer. */
 export const useFreeShipping = () => useQuery({ queryKey: ['free-shipping'], queryFn: () => api<FreeShipping>('/delivery/free-shipping'), staleTime: 60_000 });
+/** Banners in the admin order; an empty list = no banner block on the home screen. */
+export const useBanners = (lang: Lang) =>
+  useQuery({ queryKey: ['banners', lang], queryFn: () => api<ShopBanner[]>(`/catalog/banners?lang=${lang}`), staleTime: 60_000 });
 
 /** Badge in the top bar and the floating cart bar. Uses the read-only counter so it never "eats" the cart warnings. */
 export function useCartCount() {

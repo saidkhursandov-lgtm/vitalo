@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { QuoteTerm } from '../components/Delivery';
-import { EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
+import { EmptyState, ErrorState, Loading, RegionCitySelect, StickyAction } from '../components/ui';
 import { OrderTotals } from '../components/OrderItems';
 import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
@@ -152,11 +152,11 @@ export function Cart() {
         />
       </section>
 
-      <div className="sticky-action">
+      <StickyAction>
         <button className="btn btn-block" disabled={!data.can_checkout} onClick={() => navigate('/checkout', { state: selected })}>
           {t('cart.checkout', { sum: money(payable, lang) })}
         </button>
-      </div>
+      </StickyAction>
     </div>
   );
 }

@@ -295,6 +295,15 @@ export interface CheckoutDefaults {
   address_text: string;
 }
 
+/** Home banner (Настройки → Главная → Баннеры): doctor / delivery are drawn by the Mini App, image is a picture from the admin panel. */
+export interface ShopBanner {
+  id: string;
+  kind: 'doctor' | 'delivery' | 'image';
+  image_url: string | null;
+  image_jpeg_url: string | null;
+  link: { type: 'product' | 'category' | 'brand'; value: string } | null;
+}
+
 /** Home page: from which goods total delivery is free, and whether this customer's first order is delivered free. */
 export interface FreeShipping {
   from_uzs: number | null;

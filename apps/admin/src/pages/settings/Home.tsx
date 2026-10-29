@@ -62,17 +62,7 @@ export function HomeSettings() {
 
   return (
     <form onSubmit={submit}>
-      <section className="card narrow">
-        <h2>Баннер</h2>
-        <label className="check">
-          <input type="checkbox" checked={f.banner.enabled} onChange={(e) => set({ ...f, banner: { ...f.banner, enabled: e.target.checked } })} />
-          Показывать баннер
-        </label>
-        <TextPair label="Заголовок" value={f.banner.title} onChange={(title) => set({ ...f, banner: { ...f.banner, title } })} />
-        <TextPair label="Подзаголовок" value={f.banner.subtitle} onChange={(subtitle) => set({ ...f, banner: { ...f.banner, subtitle } })} />
-        <TextPair label="Кнопка" value={f.banner.button} onChange={(button) => set({ ...f, banner: { ...f.banner, button } })} hint="Открывает каталог" />
-      </section>
-
+      {/* Старый текстовый баннер (home_content.banner) Mini App с 2.1 не показывает: баннеры теперь в «Баннеры на главной» выше. */}
       <section className="card narrow">
         <h2>Плитки доверия</h2>
         {f.trust.map((tile, i) => {
