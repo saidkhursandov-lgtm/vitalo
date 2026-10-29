@@ -359,3 +359,4 @@ textarea { resize: vertical; }
 .banner-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 12px; margin-top: 12px; }
 .banner-fields select[size] { min-height: 110px; }
 .banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-ghost.text-bad { color: var(--bad); }

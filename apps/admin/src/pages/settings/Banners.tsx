@@ -228,7 +228,7 @@ function BannerCard({ banner: b, index, onChanged, recommended }: { banner: Bann
         <label className="field">
           <span className="field-label">При нажатии</span>
           <select value={link.type} onChange={(e) => (setLink({ type: e.target.value as LinkType | '', value: '' }), setSaved(false))}>
-            <option value="">Ничего не открывать</option>
+            <option value="">Ничего</option>
             <option value="product">Открыть товар</option>
             <option value="category">Открыть категорию</option>
             <option value="brand">Открыть бренд</option>
