@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { ReservationExpiryService } from '../src/orders/reservation-expiry.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { TEST_ENV } from './test-env';
 import { archiveTestProducts, bearer, createTestApp, createTestProduct, DEV_MANAGER_TG, loginCustomer, loginStaff, seededAddresses } from './helpers';
 
 const ADMIN_TG = 222_222_221;
@@ -51,6 +52,10 @@ describe('Release 1 (e2e)', () => {
   });
   afterAll(async () => {
     await setOptions(defaults);
+    // the extra region must not stay in the shared test database (other suites count regions and cities)
+    await prisma.delivery_tariffs.deleteMany({ where: { region_id: oblast.region_id } });
+    await prisma.cities.deleteMany({ where: { region_id: oblast.region_id } });
+    await prisma.regions.delete({ where: { id: oblast.region_id } });
     await archiveTestProducts(prisma);
     await app.close();
   });
@@ -91,10 +96,11 @@ describe('Release 1 (e2e)', () => {
       expect(await prisma.orders.count({ where: { user: { telegram_user_id: BigInt(tg) } } })).toBe(0);
     });
 
-    it('a card transfer still works in the same region', async () => {
+    it('a card transfer is still possible in the same region (checked on the preview: no order is left in the region)', async () => {
       const token = await newCustomer();
       const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
-      await place(token, buyNow(p.id, 1, { ...oblast, payment_method: 'card_transfer' })).expect(201);
+      const view = (await preview(token, buyNow(p.id, 1, { ...oblast, payment_method: 'card_transfer' })).expect(200)).body;
+      expect(view.can_place).toBe(true);
     });
   });
 
@@ -160,6 +166,34 @@ describe('Release 1 (e2e)', () => {
     });
   });
 
+  describe('home: free-delivery offer (GET /delivery/free-shipping)', () => {
+    afterEach(() => setOptions(defaults));
+
+    it('the threshold is the Tashkent tariff\'s (not a number from the code); the first-order offer is per customer', async () => {
+      await http().get('/api/delivery/free-shipping').expect(401);
+      const token = await newCustomer();
+      const info = async () => (await http().get('/api/delivery/free-shipping').set(bearer(token)).expect(200)).body;
+
+      // switch off: only the threshold
+      expect(await info()).toEqual({ from_uzs: 300_000, first_order_free: false });
+      await setOptions({ ...defaults, first_order_free_delivery: true });
+      expect(await info()).toEqual({ from_uzs: 300_000, first_order_free: true });
+
+      // the admin changes the tariff: the home page follows it
+      const tariff = await prisma.delivery_tariffs.findFirstOrThrow({ where: { city_id: null, region: { name_ru: 'г. Ташкент' } } });
+      await prisma.delivery_tariffs.update({ where: { id: tariff.id }, data: { free_shipping_threshold_uzs: 250_000n } });
+      try {
+        expect(await info()).toEqual({ from_uzs: 250_000, first_order_free: true });
+        // after a real (not cancelled) order the first-order offer is gone, the threshold stays
+        const p = await createTestProduct(prisma, { price: 100_000, stock: 5 });
+        await place(token, buyNow(p.id, 1, { payment_method: 'card_transfer' })).expect(201);
+        expect(await info()).toEqual({ from_uzs: 250_000, first_order_free: false });
+      } finally {
+        await prisma.delivery_tariffs.update({ where: { id: tariff.id }, data: { free_shipping_threshold_uzs: 300_000n } });
+      }
+    });
+  });
+
   describe('analytics events', () => {
     it('accepts language_change and cod_selected; refuses an unknown event', async () => {
       const token = await newCustomer();
@@ -175,9 +209,11 @@ describe('Release 1 (e2e)', () => {
 
   describe('managers: cod orders in the list and the D-18 reminder', () => {
     let codOrder: { id: string; order_number: string };
+    let codCustomerTg = 0;
 
     beforeAll(async () => {
       const token = await newCustomer();
+      codCustomerTg = tg;
       const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
       codOrder = (await place(token, buyNow(p.id, 1)).expect(201)).body;
     });
@@ -186,6 +222,11 @@ describe('Release 1 (e2e)', () => {
       const list = (await http().get('/api/staff/orders?awaiting_confirmation=true&page_size=100').set(bearer(admin)).expect(200)).body;
       const row = list.items.find((o: { id: string }) => o.id === codOrder.id);
       expect(row).toMatchObject({ payment_method: 'cod', status: 'new' });
+    });
+
+    it('the bot gets the payment method of the last orders, so it can say «Ожидает подтверждения» instead of «Ожидает оплаты»', async () => {
+      const { body } = await http().get(`/api/internal/bot/users/${codCustomerTg}`).set('x-bot-secret', TEST_ENV.BOT_API_SECRET).expect(200);
+      expect(body.orders[0]).toMatchObject({ id: codOrder.id, status: 'new', payment_method: 'cod' });
     });
 
     it('moving a cod order out of Tashkent is refused (409 COD_REGION)', async () => {

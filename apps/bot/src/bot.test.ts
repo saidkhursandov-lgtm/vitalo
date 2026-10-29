@@ -132,6 +132,18 @@ describe('menu items', () => {
     expect(inlineUrl(msg)).toBe(`${MINI}/orders`);
   });
 
+  it('«Оплата при получении»: a new order is «Ожидает подтверждения», not «Ожидает оплаты» (RU and UZ)', async () => {
+    const cod = [
+      { id: 'c1', order_number: 'VTL-20261029-0001', status: 'new', payment_method: 'cod', total_uzs: 120000, created_at: '' },
+      { id: 'c2', order_number: 'VTL-20261029-0002', status: 'awaiting_payment', payment_method: 'card_transfer', total_uzs: 80000, created_at: '' },
+    ];
+    const [ru] = await setup({ user: { registered: true, language: 'ru', orders: cod } }).send('📦 Мои заказы');
+    expect(ru.text).toContain('№VTL-20261029-0001 — 🕓 Ожидает подтверждения');
+    expect(ru.text).toContain('№VTL-20261029-0002 — 🟡 Ожидает оплаты');
+    const [uz] = await setup({ user: { registered: true, language: 'uz', orders: cod } }).send('📦 Buyurtmalarim');
+    expect(uz.text).toContain('🕓 Tasdiqlash kutilmoqda');
+  });
+
   it('Buyurtmalarim (Uzbek button) works the same way', async () => {
     const [msg] = await setup({ user: { registered: true, language: 'uz', orders } }).send('📦 Buyurtmalarim');
     expect(msg.text).toContain('№VTL-20261003-0002 — 🚚 Yo‘lda, 310 000 so‘m');

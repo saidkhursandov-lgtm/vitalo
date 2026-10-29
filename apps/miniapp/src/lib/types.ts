@@ -279,6 +279,12 @@ export interface CheckoutDefaults {
   address_text: string;
 }
 
+/** Home page: from which goods total delivery is free, and whether this customer's first order is delivered free. */
+export interface FreeShipping {
+  from_uzs: number | null;
+  first_order_free: boolean;
+}
+
 /** The read-only cart counter: the badge in the top bar and the floating cart bar. */
 export interface CartCount {
   items_count: number;

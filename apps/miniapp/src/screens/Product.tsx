@@ -7,7 +7,6 @@ import { useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
 import { QuickAdd, useQuickNotify } from '../components/QuickAdd';
-import { useToast } from '../components/Toast';
 import { CartIcon } from '../components/Icons';
 import type { ProductCard } from '../lib/types';
 import { tapHaptic } from '../lib/telegram';
@@ -144,7 +143,6 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const notify = useQuickNotify();
-  const toast = useToast();
   const cart = useCart(null);
   const { qty, set } = useQuickCart(p.id, notify);
   const total = cart.data ? cart.data.goods_total_uzs - cart.data.discount_total_uzs : null;
@@ -173,7 +171,6 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
               tapHaptic();
               set(1);
               track('add_to_cart', { product_id: p.id, source: 'product' });
-              toast(t('product.added'), <Link to="/cart" className="toast-action">{t('quick.cart')}</Link>);
             }}
           >
             <CartIcon width={20} height={20} /> {t('product.addToCart')}

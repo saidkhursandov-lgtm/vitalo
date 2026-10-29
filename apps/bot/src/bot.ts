@@ -22,8 +22,9 @@ export interface BotDeps {
 }
 
 /** Same names as the Mini App order screen and the notifications; "Я оплатил(а)" pressed -> checking. */
-export function statusLabel(lang: Lang, o: { status: string; payment_reported?: boolean }): string {
-  const key = o.payment_reported && (o.status === 'awaiting_payment' || o.status === 'new') ? 'checking' : o.status;
+export function statusLabel(lang: Lang, o: { status: string; payment_reported?: boolean; payment_method?: string | null }): string {
+  // «Оплата при получении»: a new order waits for the manager's confirmation, not for a payment
+  const key = o.payment_reported && (o.status === 'awaiting_payment' || o.status === 'new') ? 'checking' : o.payment_method === 'cod' && o.status === 'new' ? 'codWaiting' : o.status;
   return t(lang, `status.${key}` as TextKey);
 }
 

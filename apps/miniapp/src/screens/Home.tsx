@@ -3,7 +3,7 @@ import { SearchIcon } from '../components/Icons';
 import { ErrorState, Loading, ProductStrip } from '../components/ui';
 import { nameOf } from '../lib/format';
 import { useI18n } from '../lib/i18n';
-import { useCategories, useProducts, useShopTexts } from '../lib/queries';
+import { useCategories, useFreeShipping, useProducts, useShopTexts } from '../lib/queries';
 import { HelpButton, HomeCarousel, HowToOrder, TrustChips } from '../components/HomeBlocks';
 import type { CategoryNode, Lang } from '../lib/types';
 
@@ -18,6 +18,7 @@ export function Home() {
   const popular = useProducts({ sort: 'popular', in_stock: true });
   const fresh = useProducts({ sort: 'new', in_stock: true });
   const shop = useShopTexts();
+  const freeShipping = useFreeShipping();
 
   return (
     <div className="page">
@@ -28,7 +29,7 @@ export function Home() {
       </button>
 
       <TrustChips />
-      <HomeCarousel freeFirstOrder={shop.data?.checkout?.first_order_free_delivery ?? false} />
+      <HomeCarousel firstOrderFree={freeShipping.data?.first_order_free ?? false} freeFromUzs={freeShipping.data?.from_uzs ?? null} />
 
       {categories.isPending ? (
         <>

@@ -3,12 +3,13 @@ import { useSyncExternalStore } from 'react';
 import { api, ApiError } from './api';
 import { applyCart } from './cart-cache';
 import { useCart } from './queries';
-import type { Cart, CartCount } from './types';
+import type { Cart } from './types';
 
 /**
  * Quick cart (F1): the quantity a customer wants for each product, shown at once on every card
  * (optimistic), sent to the server after a short pause so fast taps become one request, rolled back on refusal.
  * The server cart (query ['cart', null]) stays the source of truth; `desired` only holds unsent changes.
+ * The cart counter (badge, floating cart, sum) always comes from the server's answer, never from a local guess.
  */
 export const QUICK_DEBOUNCE_MS = 300;
 export const MAX_LINE_QTY = 99;
@@ -35,16 +36,6 @@ type Notify = (n: QuickNotice) => void;
 const serverLine = (cart: Cart | undefined, productId: string) => cart?.items.find((i) => i.product_id === productId && i.status === 'available');
 
 // ---------------------------------------------------------------- changes
-
-/** Badge = what the server has + changes not sent yet (other products may still be waiting). */
-function syncCount(client: QueryClient) {
-  const cart = client.getQueryData<Cart>(['cart', null]);
-  if (!cart) return;
-  let pending = 0;
-  for (const [id, qty] of desired) pending += qty - (serverLine(cart, id)?.qty ?? 0);
-  // the sum of the server cart; it is exact again as soon as the pending changes are sent (applyCart)
-  client.setQueryData<CartCount>(['cart', 'count'], { items_count: Math.max(0, cart.items_count + pending), goods_total_uzs: cart.goods_total_uzs });
-}
 
 async function flush(client: QueryClient, productId: string, notify: Notify) {
   timers.delete(productId);
@@ -77,9 +68,8 @@ async function flush(client: QueryClient, productId: string, notify: Notify) {
       const got = serverLine(res, productId)?.qty ?? 0;
       if (got < target) notify({ kind: 'left', n: got });
     }
-    syncCount(client);
   } catch (e) {
-    // refused: back to what the server has
+    // refused: the wish is dropped; the badge never moved, and it is read from the server again to be sure
     desired.delete(productId);
     void client.invalidateQueries({ queryKey: ['cart', 'count'] });
     notify({ kind: 'error', code: e instanceof ApiError ? e.code : undefined });
@@ -94,8 +84,8 @@ function change(client: QueryClient, productId: string, next: number, notify: No
   const prev = desired.get(productId) ?? serverLine(cart, productId)?.qty ?? 0;
   if (next === prev) return;
   desired.set(productId, next);
-  // badge = sum of quantities, updated at once
-  client.setQueryData<CartCount>(['cart', 'count'], (c) => ({ goods_total_uzs: c?.goods_total_uzs ?? 0, items_count: Math.max(0, (c?.items_count ?? 0) + (next - prev)) }));
+  // Only the number on the product control is optimistic. The badge in the top bar, the floating cart and its sum are
+  // never guessed: they are written from the server's answer (applyCart), so a refused add cannot leave them wrong.
   emit();
   clearTimeout(timers.get(productId));
   timers.set(productId, setTimeout(() => void flush(client, productId, notify), QUICK_DEBOUNCE_MS));

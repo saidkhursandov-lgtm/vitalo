@@ -91,6 +91,8 @@ export function OrderDetail() {
   const unpaid = o.status === 'new' || o.status === 'awaiting_payment';
   const reported = !!o.payment?.customer_reported_paid_at;
   const cod = o.payment?.method === 'cod';
+  // «Оплата при получении»: «Ожидает подтверждения» instead of «Ожидает оплаты» (status card and history)
+  const stateLabel = (s: Order['status']) => (cod && (s === 'new' || s === 'awaiting_payment') ? t('status.codWaiting') : t(statusKey(s)));
   const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
 
   async function onCancel() {
@@ -146,14 +148,14 @@ export function OrderDetail() {
       <section className="card">
         <h2>{t('orders.history')}</h2>
         <ol className="timeline">
-          {dedupeHistory(o.history, (s) => t(statusKey(s as Order['status']))).map((h, i) => {
+          {dedupeHistory(o.history, (s) => stateLabel(s as Order['status'])).map((h, i) => {
             const I = STATUS_ICONS[h.to_status];
             return (
               <li key={i}>
                 <span className="timeline-icon" aria-hidden>
                   {I && <I width={14} height={14} />}
                 </span>
-                <strong>{t(statusKey(h.to_status))}</strong>
+                <strong>{stateLabel(h.to_status)}</strong>
                 <span className="hint small">{dateTime(h.created_at, lang)}</span>
               </li>
             );

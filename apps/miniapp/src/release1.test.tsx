@@ -7,7 +7,7 @@ import { DoctorBadge, LangSwitch } from './components/HeaderParts';
 import { HomeCarousel, TrustChips } from './components/HomeBlocks';
 import { StatusPill } from './components/ui';
 import * as analytics from './lib/analytics';
-import { I18nProvider } from './lib/i18n';
+import { I18nProvider, translate } from './lib/i18n';
 import type { Lang } from './lib/types';
 
 afterEach(cleanup);
@@ -38,7 +38,9 @@ describe('floating cart (release 1, item 7)', () => {
     const { container } = wrap('ru', <FloatingCart count={n} total={245_000} />);
     expect(plain(container)).toContain(text);
     expect(plain(container)).toContain('245 000 сум');
-    expect(screen.getByText('Оформить').getAttribute('href')).toBe('/checkout');
+    // the whole bar, the «Оформить» label included, opens the cart (+/−, delete); checkout starts from the cart
+    expect(container.querySelectorAll('a')).toHaveLength(1);
+    expect(screen.getByText('Оформить').closest('a')?.getAttribute('href')).toBe('/cart');
   });
 
   it('Uzbek: «Savatda N ta mahsulot» and the sum in so‘m', () => {
@@ -75,15 +77,33 @@ describe('top bar (release 1, item 2)', () => {
 });
 
 describe('home (release 1, item 3)', () => {
-  it('carousel: the free-delivery slide is shown only while the switch is on', () => {
-    const off = wrap('ru', <HomeCarousel freeFirstOrder={false} />);
-    expect(off.container.textContent).toContain('Отбор врачом');
-    expect(off.container.textContent).toContain('4,9');
-    expect(off.container.textContent).not.toContain('Бесплатная доставка первого заказа');
-    off.unmount();
-    const on = wrap('ru', <HomeCarousel freeFirstOrder />);
-    expect(on.container.textContent).toContain('Бесплатная доставка первого заказа');
-    expect(on.container.querySelectorAll('.hero-slide')).toHaveLength(2);
+  it('carousel, 2nd slide: a new customer sees the first-order offer', () => {
+    const { container } = wrap('ru', <HomeCarousel firstOrderFree freeFromUzs={250_000} />);
+    expect(container.textContent).toContain('Отбор врачом');
+    expect(container.textContent).toContain('4,9');
+    expect(container.textContent).toContain('Первый заказ — бесплатная доставка');
+    expect(container.textContent).toContain('Доставка по всему Узбекистану');
+    expect(plain(container)).not.toContain('от 250 000');
+    expect(container.querySelectorAll('.hero-slide')).toHaveLength(2);
+  });
+
+  it('carousel, 2nd slide: everybody else sees «Бесплатная доставка от {порог}» with the threshold from the tariff', () => {
+    const ru = wrap('ru', <HomeCarousel firstOrderFree={false} freeFromUzs={250_000} />);
+    expect(plain(ru.container)).toContain('Бесплатная доставка от 250 000 сум');
+    expect(ru.container.textContent).toContain('Доставка по всему Узбекистану');
+    ru.unmount();
+    expect(plain(wrap('ru', <HomeCarousel firstOrderFree={false} freeFromUzs={300_000} />).container)).toContain('от 300 000 сум'); // not a number from the code
+  });
+
+  it('carousel, 2nd slide in Uzbek; without a threshold only the first slide', () => {
+    const first = wrap('uz', <HomeCarousel firstOrderFree freeFromUzs={250_000} />);
+    expect(first.container.textContent).toContain('Birinchi buyurtma — bepul yetkazib berish');
+    first.unmount();
+    const from = wrap('uz', <HomeCarousel firstOrderFree={false} freeFromUzs={250_000} />);
+    expect(plain(from.container)).toContain('250 000 so‘mdan bepul yetkazib berish');
+    expect(from.container.textContent).toContain('Butun O‘zbekiston bo‘ylab');
+    from.unmount();
+    expect(wrap('ru', <HomeCarousel firstOrderFree={false} freeFromUzs={null} />).container.querySelectorAll('.hero-slide')).toHaveLength(1);
   });
 
   it('three trust chips under the search', () => {
@@ -92,9 +112,22 @@ describe('home (release 1, item 3)', () => {
   });
 });
 
+describe('cash on delivery texts', () => {
+  it('the bottom button says «Подтвердить заказ • X» / «Buyurtmani tasdiqlash • X»', () => {
+    expect(translate('ru', 'checkout.confirmCod', { sum: '125 000 сум' })).toBe('Подтвердить заказ • 125 000 сум');
+    expect(translate('uz', 'checkout.confirmCod', { sum: '125 000 so‘m' })).toBe('Buyurtmani tasdiqlash • 125 000 so‘m');
+    expect(translate('ru', 'checkout.confirm', { sum: '1' })).toContain('Оплатить');
+  });
+
+  it('status «Ожидает подтверждения» / «Tasdiqlash kutilmoqda»', () => {
+    expect(translate('ru', 'status.codWaiting')).toBe('Ожидает подтверждения');
+    expect(translate('uz', 'status.codWaiting')).toBe('Tasdiqlash kutilmoqda');
+  });
+});
+
 describe('cash on delivery order status', () => {
   it('a new «при получении» order waits for the manager, not for a payment', () => {
-    expect(wrap('ru', <StatusPill status="new" cod />).container.textContent).toBe('Ожидает подтверждения менеджером');
+    expect(wrap('ru', <StatusPill status="new" cod />).container.textContent).toBe('Ожидает подтверждения');
     cleanup();
     expect(wrap('ru', <StatusPill status="new" />).container.textContent).toBe('Ожидает оплаты');
     cleanup();

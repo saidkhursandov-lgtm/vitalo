@@ -1,5 +1,4 @@
-import type { MouseEvent, ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import type { MouseEvent } from 'react';
 import { errorText, useI18n } from '../lib/i18n';
 import { useQuickCart, type QuickNotice } from '../lib/quick-cart';
 import { track } from '../lib/analytics';
@@ -13,7 +12,7 @@ const stop = (e: MouseEvent) => {
   e.stopPropagation();
 };
 
-/** Messages after the server answered (shared by cards and the product page panel). */
+/** Messages after the server answered: errors only (out of stock, only N left, network). A successful add has no toast. */
 export function useQuickNotify() {
   const { t, lang } = useI18n();
   const toast = useToast();
@@ -29,7 +28,6 @@ export function useQuickNotify() {
  */
 export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: string; inStock: boolean; variant?: 'card' | 'panel' }) {
   const { t } = useI18n();
-  const toast = useToast();
   const notify = useQuickNotify();
   const { qty, max, set } = useQuickCart(productId, notify);
 
@@ -51,7 +49,6 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
           tapHaptic();
           set(1);
           track('add_to_cart', { product_id: productId, source: variant });
-          toast(t('product.added'), <ToCart />);
         }}
       >
         <CartIcon width={18} height={18} />
@@ -78,14 +75,5 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
       </button>
       {atMax && variant === 'card' && <span className="qty-max">{t('quick.max')}</span>}
     </div>
-  );
-}
-
-function ToCart(): ReactNode {
-  const { t } = useI18n();
-  return (
-    <Link to="/cart" className="toast-action">
-      {t('quick.cart')}
-    </Link>
   );
 }

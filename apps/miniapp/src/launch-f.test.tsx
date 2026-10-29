@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuickAdd } from './components/QuickAdd';
 import { ToastProvider } from './components/Toast';
 import { I18nProvider } from './lib/i18n';
+import { useCartCount } from './lib/queries';
 import { QUICK_DEBOUNCE_MS, resetQuickCart, useQuickCart, type QuickNotice } from './lib/quick-cart';
 import type { Cart } from './lib/types';
 
@@ -29,9 +30,9 @@ beforeEach(() => {
     const body = init.body ? JSON.parse(init.body as string) : undefined;
     calls.push({ method, url, body });
     if (method !== 'GET' && server.fail) return new Response(JSON.stringify({ code: server.fail.code }), { status: server.fail.status });
-    if (method === 'POST') server.qty = Math.min(server.qty + body.qty, server.available);
-    if (method === 'PATCH') server.qty = Math.min(body.qty, server.available);
-    if (method === 'DELETE') server.qty = 0;
+    if (method === 'POST' && url.includes('/cart/items')) server.qty = Math.min(server.qty + body.qty, server.available); // not the analytics POSTs
+    if (method === 'PATCH' && url.includes('/cart/items')) server.qty = Math.min(body.qty, server.available);
+    if (method === 'DELETE' && url.includes('/cart/items')) server.qty = 0;
     if (url.endsWith('/cart/count')) return new Response(JSON.stringify({ items_count: server.qty, goods_total_uzs: 1000 * server.qty }));
     return new Response(JSON.stringify(cart(server.qty, server.available)));
   });
@@ -70,7 +71,8 @@ describe('quick cart (F1)', () => {
     act(() => result.current.set(2));
     act(() => result.current.set(3));
     expect(result.current.qty).toBe(3); // optimistic, nothing sent yet
-    expect(client.getQueryData(['cart', 'count'])).toMatchObject({ items_count: 3 });
+    // the number on the control is instant, but the badge and the sum are never guessed: still what the server said
+    expect(client.getQueryData(['cart', 'count'])).toEqual({ items_count: 0, goods_total_uzs: 0 });
     expect(writes()).toHaveLength(0);
 
     await act(async () => {
@@ -79,6 +81,8 @@ describe('quick cart (F1)', () => {
     expect(writes()).toEqual([{ method: 'POST', url: '/api/cart/items', body: { product_id: 'p1', qty: 3 } }]);
     expect(result.current.qty).toBe(3);
     expect(notices).toEqual([]);
+    // after the server's answer the badge and the sum are the server's numbers
+    expect(client.getQueryData(['cart', 'count'])).toEqual({ items_count: 3, goods_total_uzs: 3000 });
 
     // «−» down to 0 removes the line
     act(() => result.current.set(0));
@@ -120,6 +124,50 @@ describe('quick cart (F1)', () => {
   });
 });
 
+describe('cart counter after a refused add (release 1 fix)', () => {
+  it('«Нет в наличии» (409): the badge and the sum never move, not even for a moment', async () => {
+    server.fail = { status: 409, code: 'OUT_OF_STOCK' };
+    const { client, wrapper } = setup();
+    const notices: QuickNotice[] = [];
+    const quick = renderHook(() => useQuickCart('p1', (n) => notices.push(n)), { wrapper });
+    const badge = renderHook(() => useCartCount(), { wrapper });
+    await vi.waitFor(() => expect(quick.result.current.ready).toBe(true));
+    await vi.waitFor(() => expect(badge.result.current.data).toEqual({ items_count: 0, goods_total_uzs: 0 }));
+
+    act(() => quick.result.current.set(1));
+    expect(badge.result.current.data).toEqual({ items_count: 0, goods_total_uzs: 0 }); // was «1 товар • 0 сум» before the fix
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(QUICK_DEBOUNCE_MS + 50);
+    });
+    expect(notices).toEqual([{ kind: 'error', code: 'OUT_OF_STOCK' }]);
+    await vi.waitFor(() => expect(badge.result.current.data).toEqual({ items_count: 0, goods_total_uzs: 0 }));
+
+    // and later successful adds are not one too many
+    server.fail = undefined;
+    act(() => quick.result.current.set(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(QUICK_DEBOUNCE_MS + 50);
+    });
+    await vi.waitFor(() => expect(badge.result.current.data).toEqual({ items_count: 2, goods_total_uzs: 2000 }));
+    expect(client.getQueryData(['cart', 'count'])).toEqual({ items_count: 2, goods_total_uzs: 2000 });
+  });
+
+  it('«Осталось N»: the badge shows what the server really put into the cart, not what was asked for', async () => {
+    server.available = 2;
+    const { wrapper } = setup();
+    const notices: QuickNotice[] = [];
+    const quick = renderHook(() => useQuickCart('p1', (n) => notices.push(n)), { wrapper });
+    const badge = renderHook(() => useCartCount(), { wrapper });
+    await vi.waitFor(() => expect(quick.result.current.ready).toBe(true));
+    act(() => quick.result.current.set(5));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(QUICK_DEBOUNCE_MS + 50);
+    });
+    expect(notices).toEqual([{ kind: 'left', n: 2 }]);
+    expect(badge.result.current.data).toEqual({ items_count: 2, goods_total_uzs: 2000 });
+  });
+});
+
 describe('QuickAdd on a card', () => {
   it('«В корзину» -> «− 1 +», same number on two cards, a click never opens the card; sold out is grey', async () => {
     const { wrapper } = setup();
@@ -135,7 +183,9 @@ describe('QuickAdd on a card', () => {
     fireEvent.click(add[0]);
     expect(opened).not.toHaveBeenCalled();
     expect(screen.getAllByText('1')).toHaveLength(2); // both cards show the control
-    expect(await screen.findByRole('status')).toHaveProperty('textContent', expect.stringContaining('Добавлено в корзину'));
+    // a successful add has no toast any more: the floating cart shows the change; toasts are for errors only
+    await vi.advanceTimersByTimeAsync(QUICK_DEBOUNCE_MS + 50);
+    expect(screen.queryByRole('status')?.textContent ?? null).toBeNull();
     fireEvent.click(screen.getAllByRole('button', { name: 'Больше' })[1]);
     expect(screen.getAllByText('2')).toHaveLength(2);
     fireEvent.click(screen.getAllByRole('button', { name: 'Меньше' })[0]);

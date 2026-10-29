@@ -1,7 +1,9 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiProperty, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsUUID, Min } from 'class-validator';
+import { AuthContext } from '../auth/auth.types';
+import { CurrentAuth, SessionGuard } from '../auth/session.guard';
 import { DeliveryService } from './delivery.service';
 
 export class DeliveryCityQuery {
@@ -32,6 +34,14 @@ export class DeliveryController {
   @Get('terms')
   terms() {
     return this.delivery.terms();
+  }
+
+  /** Home page: the free-delivery threshold and whether this customer's first order is free. */
+  @Get('free-shipping')
+  @UseGuards(SessionGuard)
+  @ApiBearerAuth()
+  freeShipping(@CurrentAuth() auth: AuthContext) {
+    return this.delivery.freeShippingInfo(auth.user.id);
   }
 
   @Get('eta')

@@ -67,7 +67,7 @@ export class BotInternalController {
       where: { telegram_user_id: telegramId(raw) },
       include: {
         bonus_account: true,
-        orders: { orderBy: { created_at: 'desc' }, take: 5, include: { payments: { include: { manual: true } } } },
+        orders: { orderBy: { created_at: 'desc' }, take: 5, include: { payments: { include: { manual: true, method: { select: { code: true } } } } } },
         _count: { select: { orders: true, favorites: true, addresses: { where: { deleted_at: null } } } },
       },
     });
@@ -87,6 +87,8 @@ export class BotInternalController {
         status: o.status,
         // "Я оплатил(а)" pressed, manager has not confirmed yet -> the bot shows "🔵 Оплата проверяется"
         payment_reported: o.payment_status === 'payment_pending' && o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at)),
+        // «Оплата при получении»: a new order is «Ожидает подтверждения», not «Ожидает оплаты»
+        payment_method: o.payments[0]?.method.code ?? null,
         total_uzs: Number(o.total_uzs),
         created_at: o.created_at,
       })),

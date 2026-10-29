@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { money } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { openSupport } from '../lib/shop';
 import type { HomeContent, Lang, LocalizedText, ShopInfo } from '../lib/types';
@@ -10,11 +11,11 @@ import { useSupportUrl } from './Support';
 const pick = (t: LocalizedText, lang: Lang) => (lang === 'uz' ? t.uz : t.ru);
 
 /**
- * Home banner (120–140 px): two slides — «Отбор врачом • 4,9★ на Яндекс Маркете» and «Бесплатная доставка первого
- * заказа». The second one is shown only while the «first order free delivery» switch is on, so we never promise it falsely.
+ * Home banner (120–140 px): two slides — «Отбор врачом • 4,9★ на Яндекс Маркете» and the delivery offer. The offer is
+ * what is true for this customer (the server decides): the first order is free, or delivery is free from the tariff's threshold.
  */
-export function HomeCarousel({ freeFirstOrder }: { freeFirstOrder: boolean }) {
-  const { t } = useI18n();
+export function HomeCarousel({ firstOrderFree, freeFromUzs }: { firstOrderFree: boolean; freeFromUzs: number | null }) {
+  const { t, lang } = useI18n();
   const track = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const slides = [
@@ -29,7 +30,12 @@ export function HomeCarousel({ freeFirstOrder }: { freeFirstOrder: boolean }) {
         </>
       ),
     },
-    ...(freeFirstOrder ? [{ key: 'free', title: t('home.slide2.title'), sub: <>{t('home.slide2.sub')}</> }] : []),
+    // a new customer: «Первый заказ — бесплатная доставка»; everybody else: «Бесплатная доставка от {порог}» (the tariff's threshold)
+    ...(firstOrderFree
+      ? [{ key: 'free', title: t('home.slide2.title'), sub: <>{t('home.slide2.sub')}</> }]
+      : freeFromUzs
+        ? [{ key: 'free', title: t('home.slide2.from', { sum: money(freeFromUzs, lang) }), sub: <>{t('home.slide2.sub')}</> }]
+        : []),
   ];
   return (
     <section className="hero" aria-roledescription="carousel">

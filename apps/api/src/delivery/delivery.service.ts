@@ -42,6 +42,21 @@ export class DeliveryService {
     return others === 0;
   }
 
+  /**
+   * For the home page (release 1): from which goods total delivery is free (the region-wide tariff of the city of
+   * Tashkent, else the lowest one; never a number written in code) and whether THIS customer's first order is free.
+   */
+  async freeShippingInfo(userId: string): Promise<{ from_uzs: number | null; first_order_free: boolean }> {
+    const rows = await this.prisma.delivery_tariffs.findMany({
+      where: { status: 'active', city_id: null, region: { status: 'active' } },
+      include: { region: true },
+    });
+    const tashkent = rows.filter((t) => isTashkentRegionName(t.region.name_ru));
+    const pool = tashkent.length ? tashkent : rows;
+    const from = pool.length ? Math.min(...pool.map((t) => Number(t.free_shipping_threshold_uzs))) : null;
+    return { from_uzs: from, first_order_free: await this.isFirstOrder({ userId }) };
+  }
+
   async listRegions() {
     const regions = await this.prisma.regions.findMany({
       where: { status: 'active' },

@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState, Loading, RegionCitySelect } from '../components/ui';
 import { api, ApiError, isNetworkError } from '../lib/api';
 import { useUser } from '../lib/auth';
@@ -166,6 +166,7 @@ export function Checkout() {
       }
       void client.invalidateQueries({ queryKey: ['cart'] });
       void client.invalidateQueries({ queryKey: ['orders'] });
+      void client.invalidateQueries({ queryKey: ['free-shipping'] }); // the first-order offer is gone now
       // Cash on delivery has no transfer screen: the order waits for the manager's call
       navigate(order.payment?.method === 'cod' ? `/orders/${order.id}` : `/orders/${order.id}/pay`, { replace: true });
     } catch (err) {
@@ -184,6 +185,12 @@ export function Checkout() {
 
   return (
     <form className="page checkout" onSubmit={(e) => void submit(e)} noValidate>
+      {/* back to the cart (not for «Купить сейчас», which does not touch the cart) */}
+      {!buyId && (
+        <Link to="/cart" className="link back-to-cart">
+          ‹ {t('checkout.backToCart')}
+        </Link>
+      )}
       <h1>{t('checkout.title')}</h1>
 
       <section className="card">
@@ -336,7 +343,7 @@ export function Checkout() {
 
       <div className="sticky-action">
         <button type="submit" className="btn btn-block" disabled={blocked}>
-          {placeOrder.isPending ? t('common.loading') : t('checkout.confirm', { sum: p ? money(p.totals.total_uzs, lang) : '…' })}
+          {placeOrder.isPending ? t('common.loading') : t(method === 'cod' ? 'checkout.confirmCod' : 'checkout.confirm', { sum: p ? money(p.totals.total_uzs, lang) : '…' })}
         </button>
       </div>
     </form>
