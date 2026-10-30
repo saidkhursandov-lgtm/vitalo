@@ -25,17 +25,41 @@ export function nameOf(item: Named, lang: Lang): string {
   return (lang === 'uz' && item.name_uz) || item.name_ru;
 }
 
+/** 2.3 fixes: the form on one mini-card line — no brackets, «Витамин» → «Вит.» («Цитрат магния + Вит. B6»). */
+export function compactForm(form: string): string {
+  return form
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/(^|[\s+])(Витамин|Vitamin)\s+(?=[A-ZА-Я0-9])/g, (_, p: string, w: string) => `${p}${w === 'Витамин' ? 'Вит.' : 'Vit.'} `)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * 2.3 fixes: the mini-card line in two variants — `full` «Цитрат магния + Вит. B6 • 50 дн.» and `days` «На 50 дней»,
+ * shown when the full one does not fit one line. Null when there is neither form nor days.
+ */
+export function tileMeta(
+  item: { substance_form_ru?: string | null; substance_form_uz?: string | null; course_days?: number | null },
+  lang: Lang,
+  daysShort: (n: number) => string,
+  daysLong: (n: number) => string,
+): { full: string; days: string | null } | null {
+  const raw = (lang === 'uz' && item.substance_form_uz) || item.substance_form_ru;
+  const form = raw ? compactForm(raw) : '';
+  const n = item.course_days;
+  if (!form && !n) return null;
+  return { full: [form, n ? daysShort(n) : null].filter(Boolean).join(' • '), days: n ? daysLong(n) : null };
+}
+
+/** 2.3 fixes: price per day of the course, rounded down to tens: 98 000 / 30 → 3 260. */
+export function pricePerDay(price: number, courseDays: number): number {
+  return Math.floor(price / courseDays / 10) * 10;
+}
+
 /**
  * 2.1: the short name for the cart, checkout and orders; the full name stays on the card and in search.
  * Uzbek: short UZ, then the full UZ name, then the Russian ones.
  */
-/** 2.3: «Цитрат + B6 • На 50 дней» under the name on a mini-card; null when both are empty. */
-export function productMeta(item: { substance_form_ru?: string | null; substance_form_uz?: string | null; course_days?: number | null }, lang: Lang, daysText: (n: number) => string): string | null {
-  const form = (lang === 'uz' && item.substance_form_uz) || item.substance_form_ru;
-  const parts = [form, item.course_days ? daysText(item.course_days) : null].filter(Boolean);
-  return parts.length ? parts.join(' • ') : null;
-}
-
 export function shortNameOf(item: ShortNamed, lang: Lang): string {
   if (lang === 'uz') return item.short_name_uz || item.name_uz || item.short_name_ru || item.name_ru;
   return item.short_name_ru || item.name_ru;

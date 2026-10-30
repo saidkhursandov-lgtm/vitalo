@@ -1,4 +1,4 @@
-import { buildCardPlan, halalVegeRule, shellRule } from './card-content';
+import { BRAND_WHY, buildCardPlan, halalVegeRule, shellRule } from './card-content';
 import { ContentSheet, DbProduct, SheetCard, SheetProduct } from './content-sheet';
 import { courseDays } from './product.mapper';
 
@@ -108,5 +108,25 @@ describe('2.3: card plan', () => {
     expect(plan.warnings.some((w) => /MP-COLL-90.*Леч/.test(w))).toBe(true);
     // a softening phrase that is not in the text is reported, not guessed
     expect(plan.warnings.some((w) => /MP-COLL-90.*не найдена/.test(w))).toBe(true);
+  });
+});
+
+describe('2.3 fixes: «Почему VitaMeal в VITALO» replaced as a whole', () => {
+  it('the owner text instead of the sheet one; the plan shows what is in the database now → the new text', () => {
+    const brand = (dbName: string, why: string) => ({ row: 2, dbName, country_ru: null, country_uz: null, why_ru: why, why_uz: why, showcase: null, order: null, logo: null });
+    const plan = buildCardPlan(
+      { brands: [brand('VitaMeal', 'Текст из файла.'), brand('MioPharm', 'Текст MioPharm.')], products: [] },
+      { ...db, brands: [...db.brands, { id: 'b-vm', name_ru: 'VitaMeal', why_vitalo_ru: 'Старый текст.', why_vitalo_uz: 'Eski matn.' }] },
+    );
+    const vm = plan.brands.find((b) => b.brand.id === 'b-vm')!;
+    expect(vm.why_ru).toBe(BRAND_WHY.VitaMeal.ru);
+    expect(vm.why_uz).toBe(BRAND_WHY.VitaMeal.uz);
+    expect(vm.why_ru).toMatch(/^Российский производитель функциональных комплексов\./);
+    expect(plan.softened.filter((s) => s.key === 'VitaMeal').map((s) => [s.field, s.from])).toEqual([
+      ['why_ru', 'Старый текст.'],
+      ['why_uz', 'Eski matn.'],
+    ]);
+    // a brand without its own text is not touched
+    expect(plan.brands.some((b) => b.brand.id === 'b-mio')).toBe(false);
   });
 });

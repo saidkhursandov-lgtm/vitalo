@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
-import { formLabel, money, nameOf, shortNameOf, textOf } from '../lib/format';
+import { formLabel, money, nameOf, pricePerDay, shortNameOf, textOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
 import { QuickAdd, useQuickNotify } from '../components/QuickAdd';
-import { BioIcon, CartIcon, DoctorIcon, LeafIcon, ShieldIcon, SupportIcon, TestedIcon, type Icon } from '../components/Icons';
+import { BioIcon, CartIcon, ChevronIcon, DoctorIcon, LeafIcon, PlusIcon, ShieldIcon, SupportIcon, TestedIcon, type Icon } from '../components/Icons';
 import { useSupportUrl } from '../components/Support';
 import { useToast } from '../components/Toast';
 import { copyText, openSupport } from '../lib/shop';
@@ -17,7 +17,9 @@ import { DeliveryTerm } from '../components/Delivery';
 import { Picture } from '../components/Picture';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip } from '../components/ui';
 
+/** Accordions; «Описание» comes first and is folded — the expert text on the first screen is the verdict (2.3 fixes). */
 const SECTIONS: [field: string, title: MessageKey][] = [
+  ['short_description', 'product.description'],
   ['composition', 'product.composition'],
   ['nutrition', 'product.nutrition'],
   ['directions', 'product.directions'],
@@ -44,7 +46,6 @@ export function Product() {
   const p = product.data;
   const images = p.media.filter((m) => m.type === 'image');
   const documents = p.media.filter((m) => m.type === 'document');
-  const description = textOf(p, 'short_description', lang);
   const short = shortNameOf(p, lang);
   const substance = textOf(p, 'substance_form', lang);
   const dayWord = (n: number) => t(`card.day.${pluralForm(n)}` as MessageKey);
@@ -92,7 +93,7 @@ export function Product() {
       </div>
       {p.course_days ? (
         <p className="lasts">
-          {t('card.lasts', { n: p.course_days, d: dayWord(p.course_days), price: money(Math.round(p.price_uzs / p.course_days / 100) * 100, lang) })}
+          {t('card.lasts', { n: p.course_days, d: dayWord(p.course_days), price: money(pricePerDay(p.price_uzs, p.course_days), lang) })}
         </p>
       ) : null}
       {p.market_advantage_percent ? <span className="market-badge">{t('card.market', { n: p.market_advantage_percent })}</span> : null}
@@ -105,23 +106,25 @@ export function Product() {
           <p className="pre">{verdict}</p>
         </section>
       )}
+      <AskSpecialist name={short} />
 
-      {description && (
-        <section className="card">
-          <h2>{t('product.description')}</h2>
-          <p className="pre">{description}</p>
+      {/* «Почему [бренд] отобран в VITALO» — its own navy card right before «О товаре»; no text, no card */}
+      {brandWhy && (
+        <section className="why-brand">
+          <p className="why-brand-mark">
+            <PlusIcon width={11} height={11} strokeWidth={3.4} aria-hidden /> {t('card.brandMark')}
+          </p>
+          <h2>{t('card.whyBrand', { brand: brandName })}</h2>
+          <p className="pre">{brandWhy}</p>
         </section>
       )}
 
+      {/* the full name is not shown here any more: it stays for search (2.3 fixes) */}
       <section className="card">
         <h2>{t('product.about')}</h2>
         <dl className="props">
-          {short !== nameOf(p, lang) && (
-            <>
-              <dt>{t('card.fullName')}</dt>
-              <dd>{nameOf(p, lang)}</dd>
-            </>
-          )}
+          <dt>{t('card.brand')}</dt>
+          <dd>{brandName}</dd>
           <dt>{t('product.manufacturer')}</dt>
           <dd>{p.manufacturer}</dd>
           {p.country && (
@@ -143,12 +146,6 @@ export function Product() {
             </>
           )}
         </dl>
-        {brandWhy && (
-          <div className="why-brand">
-            <h3>{t('card.whyBrand', { brand: brandName })}</h3>
-            <p className="pre">{brandWhy}</p>
-          </div>
-        )}
       </section>
 
       {SECTIONS.map(([field, title]) => {
@@ -173,8 +170,6 @@ export function Product() {
         </section>
       )}
 
-      <AskSpecialist name={short} />
-
       <section className="card">
         <h2>{t('product.delivery')}</h2>
         <DeliveryTerm />
@@ -192,8 +187,8 @@ export function Product() {
 }
 
 /**
- * Always on screen (F2): price and «Купить сейчас» on top, the main action below — «В корзину», or once
- * the product is in the cart: «− n +» and «Перейти в корзину · сумма». At most 88 px plus the iPhone safe area.
+ * Always on screen (F2, 2.3 fixes): a small price line on top, then one row of 48 px buttons — «В корзину» (filled, ~60%)
+ * and «Купить сейчас» (outlined, ~40%); once the product is in the cart: «− n +» and «Перейти в корзину · сумма».
  */
 function BuyPanel({ product: p }: { product: ProductCard }) {
   const { t, lang } = useI18n();
@@ -208,11 +203,6 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
     <div className="buy-panel" role="region" aria-label={t('product.addToCart')}>
       <div className="buy-panel-top">
         <Price price={p.price_uzs} old={p.old_price_uzs} />
-        {!soldOut && (
-          <button type="button" className="buy-now" onClick={() => navigate(`/checkout?buy=${p.id}&qty=${Math.max(qty, 1)}`)}>
-            {t('product.buyNow')}
-          </button>
-        )}
       </div>
       <div className="buy-panel-main">
         {soldOut ? (
@@ -220,17 +210,23 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
             {t('product.outOfStock')}
           </button>
         ) : qty === 0 ? (
-          <button
-            type="button"
-            className="btn btn-block"
-            onClick={() => {
-              tapHaptic();
-              set(1);
-              track('add_to_cart', { product_id: p.id, source: 'product' });
-            }}
-          >
-            <CartIcon width={20} height={20} /> {t('product.addToCart')}
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn buy-add"
+              onClick={() => {
+                tapHaptic();
+                set(1);
+                track('add_to_cart', { product_id: p.id, source: 'product' });
+              }}
+            >
+              <CartIcon width={20} height={20} />
+              <span>{t('product.addToCart')}</span>
+            </button>
+            <button type="button" className="btn btn-secondary buy-now" onClick={() => navigate(`/checkout?buy=${p.id}&qty=1`)}>
+              <span>{t('product.buyNow')}</span>
+            </button>
+          </>
         ) : (
           <>
             <QuickAdd productId={p.id} inStock={p.in_stock} variant="panel" />
@@ -245,7 +241,7 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
   );
 }
 
-/** 2.3: «Стандарт VITALO» — only the badges the product has; Halal / VEGE by D-32 (never for «Нет» / «Не знаю»). */
+/** 2.3: «Стандарт VITALO» — a 2-column grid (2.3 fixes), only the badges the product has; Halal / VEGE by D-32 (never for «Нет» / «Не знаю»). */
 function StandardStrip({ product: p }: { product: ProductCard }) {
   const { t } = useI18n();
   const chips: [Icon, MessageKey][] = [];
@@ -258,7 +254,7 @@ function StandardStrip({ product: p }: { product: ProductCard }) {
   return (
     <>
       <p className="std-title">{t('card.standard')}</p>
-      <div className="std-strip">
+      <div className="std-grid">
         {chips.map(([I, key]) => (
           <span key={key} className="std-chip">
             <I width={16} height={16} /> {t(key)}
@@ -274,7 +270,10 @@ export function supportLinkWithText(url: string, text: string): string {
   return `${url}${url.includes('?') ? '&' : '?'}text=${encodeURIComponent(text)}`;
 }
 
-/** 2.3: «Спросить специалиста об этом товаре» — the support chat with the product's short name ready. */
+/**
+ * 2.3 fixes: «Сомневаетесь, подойдёт ли вам препарат?» — a widget right under the verdict, the whole card is the button;
+ * opens the support chat with the product's short name ready.
+ */
 function AskSpecialist({ name }: { name: string }) {
   const { t } = useI18n();
   const url = useSupportUrl();
@@ -282,14 +281,21 @@ function AskSpecialist({ name }: { name: string }) {
   return (
     <button
       type="button"
-      className="btn btn-secondary btn-block ask-btn"
+      className="ask-card"
       onClick={() => {
         const text = t('card.askText', { name });
         void copyText(text).then((ok) => ok && toast(t('card.askCopied')));
         openSupport(supportLinkWithText(url, text));
       }}
     >
-      <SupportIcon width={20} height={20} /> {t('card.ask')}
+      <span className="ask-icon" aria-hidden>
+        <SupportIcon width={20} height={20} />
+      </span>
+      <span className="ask-text">
+        <strong>{t('card.askTitle')}</strong>
+        <span>{t('card.askSub')}</span>
+      </span>
+      <ChevronIcon className="ask-chevron" width={20} height={20} aria-hidden />
     </button>
   );
 }

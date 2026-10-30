@@ -49,6 +49,9 @@
   --neutral-soft: #eef2f6;
   --verdict-bg: #f4f7fa;     /* 2.3: «Вердикт врача» (owner's colour), with a navy stripe on the left */
   --meta: #4a5a75;           /* 2.3: grey-blue «Цитрат + B6 • На 50 дней», 6.6:1 on white */
+  --ask-bg: #fff7ed;         /* 2.3 fixes: «Спросить специалиста» widget */
+  --ask-border: #fed7aa;
+  --accent-text: #c2410c;    /* dark orange for small text: 4.9:1 on --ask-bg (#ff6600 would be only 2.8:1) */
 
   --font: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   --radius: 14px;
@@ -660,10 +663,9 @@ button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border)
   border: 0; padding: 0; background: none; color: var(--primary-text); cursor: pointer; border-radius: var(--radius-sm);
 }
 .qty-control button:active { background: color-mix(in srgb, var(--primary) 14%, transparent); }
-.qty-control button:disabled { color: var(--border-strong); cursor: default; }
-.qty-control > span:not(.qty-max) { text-align: center; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-.qty-control.at-max { margin-bottom: 14px; }
-.qty-max { position: absolute; left: 0; right: 0; top: calc(100% + 2px); font-size: 10.5px; line-height: 1.2; text-align: center; color: var(--muted); }
+.qty-control button:disabled, .qty-control button.is-max { color: var(--border-strong); cursor: default; }
+.qty-control button.is-max:active { background: none; }
+.qty-control > span { text-align: center; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 @keyframes qty-in { from { transform: scale(0.92); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .qty-control { animation: none; } }
 
@@ -671,29 +673,30 @@ button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border)
 .badge.is-bump { animation: badge-bump 0.45s ease-out; }
 @keyframes badge-bump { 0% { transform: scale(1); } 35% { transform: scale(1.35); } 100% { transform: scale(1); } }
 
-/* Product page: no bottom navigation, the buy panel is the fixed bottom (2 + 36 + 4 + 44 + 2 = 88 px + safe area). */
-.app.has-buy-panel .page.product { padding-bottom: calc(88px + var(--safe-b) + 20px); }
-.app.has-buy-panel .toast { bottom: calc(88px + var(--safe-b) + 12px); }
+/* Product page: no bottom navigation, the buy panel is the fixed bottom (4 + 22 + 4 + 48 + 8 = 86 px + safe area). */
+.app.has-buy-panel .page.product { padding-bottom: calc(86px + var(--safe-b) + 20px); }
+.app.has-buy-panel .toast { bottom: calc(86px + var(--safe-b) + 12px); }
 .buy-panel {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  padding: 2px 12px calc(2px + var(--safe-b)); background: var(--surface); border-top: 1px solid var(--border);
+  padding: 4px 12px calc(8px + var(--safe-b)); background: var(--surface); border-top: 1px solid var(--border);
   box-shadow: 0 -2px 10px rgb(30 41 59 / 0.06);
 }
 .buy-panel > div { max-width: 696px; margin: 0 auto; }
-.buy-panel-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 36px; }
+/* the price once, small, above the buttons (the big one is in the page) */
+.buy-panel-top { display: flex; align-items: center; height: 22px; }
 .buy-panel-top .price { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
-.buy-panel-top .price-now { font-size: 18px; }
-/* secondary: quiet text button; its tap area reaches 44 px using the gaps above and below */
-.buy-now {
-  position: relative; flex: none; height: 36px; padding: 0 2px; border: 0; background: none; cursor: pointer;
-  color: var(--primary-text); font: inherit; font-size: 14px; font-weight: 600; text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--primary) 45%, transparent); text-underline-offset: 4px; white-space: nowrap;
-}
-.buy-now::after { content: ''; position: absolute; inset: -4px 0; }
-.buy-panel-main { display: flex; gap: 8px; height: 44px; margin-top: 4px; }
-.buy-panel-main .btn { min-height: 44px; margin: 0; }
+.buy-panel-top .price-now { font-size: 15px; }
+.buy-panel-main { display: flex; gap: 8px; height: 48px; margin-top: 4px; }
+.buy-panel-main .btn { min-height: 48px; height: 48px; margin: 0; white-space: nowrap; }
+/* «В корзину» filled ~55–60%, «Купить сейчас» outlined ~40–45%: «Hozir sotib olish» needs 45% to stay one line at 320 px */
+.buy-panel-main .buy-add { flex: 11 1 0; min-width: 0; gap: 6px; padding: 0 8px; }
+.buy-panel-main .buy-now { flex: 9 1 0; min-width: 0; padding: 0 4px; background: var(--surface); color: var(--primary-text); border-color: var(--primary); }
+.buy-panel-main .buy-now:active { background: var(--primary-soft); }
+@media (min-width: 400px) { .buy-panel-main .buy-add { flex-grow: 3; } .buy-panel-main .buy-now { flex-grow: 2; } }
+@media (max-width: 360px) { .buy-panel-main .btn { font-size: 14px; } .buy-panel-main .buy-add svg { width: 18px; height: 18px; } }
 .buy-panel-main .btn.is-out { background: var(--neutral-soft); color: var(--muted); border-color: var(--border); }
-.buy-panel-main .qty-control { flex: none; width: 132px; }
+.buy-panel-main .qty-control { flex: none; width: 132px; min-height: 48px; }
+.buy-panel-main .qty-control button { height: 46px; }
 .buy-panel-main .to-cart { flex: 1; min-width: 0; flex-direction: column; gap: 0; padding: 0 8px; line-height: 1.15; }
 .to-cart span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 @media (max-width: 340px) { .to-cart span { font-size: 13px; letter-spacing: -0.01em; } }
@@ -850,18 +853,38 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 .brand-link { display: inline-flex; align-items: center; min-height: var(--tap); margin: -12px 0; font-weight: 600; color: var(--primary-text); text-decoration: none; }
 
 /* ---------- 2.3: mini-card (short name, meta line, round [+] opposite the price) ---------- */
-.tile-name { min-height: 0; margin-bottom: 2px; }
+/* 2.3 fixes: every part has a fixed place — name exactly 2 lines, meta exactly 1, price 1, button row 44 px —
+   so in a row of cards the prices and the [+] / «− 1 +» are always on one level, and nothing jumps after a tap */
+.tile-name { height: 2.7em; min-height: 0; margin: 0 0 2px; }
 /* narrow phones: long words like «Мультивитамины» fit a line without breaking */
-@media (max-width: 360px) { .tile-body { padding: 10px 10px 12px; } .tile-name { font-size: 12.5px; } }
-.tile-meta { font-size: 12px; line-height: 1.3; color: var(--meta); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 4px; margin-top: auto; padding-top: 4px; }
-.tile-foot .price { margin-top: 0; min-width: 0; flex: 1 1 auto; }
-.tile-body .tile-foot .qty-control { margin-top: 0; flex: 1 1 100%; min-height: 40px; }
-.tile-foot .qty-control button { height: 40px; }
+@media (max-width: 360px) { .tile-body { padding: 10px 10px 10px; } .tile-name { font-size: 12.5px; } }
+.tile-meta {
+  position: relative; height: 1.3em; font-size: 12px; line-height: 1.3; color: var(--meta); margin-bottom: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* the full line, measured out of sight: if it is wider than the card, «На N дней» is shown instead */
+.tile-meta-probe { position: absolute; left: 0; top: 0; visibility: hidden; white-space: nowrap; pointer-events: none; }
+.tile-foot { display: flex; flex-direction: column; margin-top: auto; }
+.tile-price { font-size: 15px; line-height: 22px; height: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.tile-action { display: flex; align-items: center; justify-content: flex-end; height: var(--tap); margin: 2px 0 -4px; }
+.tile-discount {
+  position: absolute; left: 8px; top: 8px; padding: 2px 6px; border-radius: 6px;
+  background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700;
+}
+/* the compact «− 1 +» pill: as tall as the circle (40 px), at most 104 px wide; − and + keep 44×44 tap areas */
+.tile-action .qty-control {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; width: 104px; min-height: 40px; height: 40px; margin: 0;
+  border-radius: 20px; overflow: visible; animation: pill-in 0.2s ease-out;
+}
+.tile-action .qty-control button { position: relative; width: 34px; height: 40px; border-radius: 20px; }
+.tile-action .qty-control button::after { content: ''; position: absolute; inset: -2px -5px; }
+.tile-action .qty-control > span { font-size: 14px; }
+@keyframes pill-in { from { width: 40px; opacity: 0.6; } to { width: 104px; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tile-action .qty-control { animation: none; } }
 /* 40×40 visible circle inside a 44×44 tap area */
 .quick-round {
   flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--tap); height: var(--tap);
-  margin: -2px -4px -2px auto; padding: 0; border: 0; background: none; cursor: pointer;
+  margin: 0 -2px 0 auto; padding: 0; border: 0; background: none; cursor: pointer;
 }
 .quick-round-dot {
   display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;
@@ -900,11 +923,11 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
   display: inline-flex; align-items: center; margin-top: 8px; padding: 3px 10px; border-radius: 8px;
   background: var(--primary-soft); color: var(--primary-text); font-size: 12.5px; font-weight: 700;
 }
-.std-strip { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 12px -16px 4px; padding: 0 16px 2px; }
-.std-strip::-webkit-scrollbar { display: none; }
+/* 2.3 fixes: a 2-column grid instead of a scrolling strip; text in 1–2 lines, never cut; an odd last one stays left */
+.std-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
 .std-chip {
-  flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border-radius: 10px;
-  background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 10px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 12px; font-weight: 600; line-height: 1.25;
 }
 .std-chip svg { color: var(--primary); flex: none; }
 .std-title { margin: 14px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
@@ -914,11 +937,30 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 }
 .verdict h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 15px; color: var(--primary-text); }
 .verdict p { margin: 0; font-size: 14px; line-height: 1.45; }
-.why-brand { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.why-brand h3 { margin: 0 0 4px; font-size: 14px; }
-.why-brand p { margin: 0; font-size: 14px; line-height: 1.45; }
+/* 2.3 fixes: «Почему [бренд] отобран в VITALO» — a navy card of its own before «О товаре» */
+.why-brand { margin: 12px 0; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--primary); color: var(--on-primary); }
+.why-brand-mark {
+  display: flex; align-items: center; gap: 4px; margin: 0 0 6px; color: var(--accent);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.why-brand h2 { margin: 0 0 6px; font-size: 16px; line-height: 1.3; color: var(--on-primary); }
+.why-brand p.pre { margin: 0; font-size: 14px; line-height: 1.5; color: rgb(255 255 255 / 0.9); }
 /* compact accordions: 14 px inside */
 .product details.card { padding-top: 10px; padding-bottom: 10px; }
 .product details.card summary { font-size: 15px; }
 .product details.card .pre { font-size: 14px; line-height: 1.45; margin: 4px 0 0; }
-.ask-btn { margin: 4px 0 12px; }
+/* 2.3 fixes: «Сомневаетесь, подойдёт ли вам препарат?» right under the verdict; the whole card is the button */
+.ask-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; margin: 0 0 12px; padding: 10px 8px 10px 12px;
+  border: 1px solid var(--ask-border); border-radius: var(--radius-sm); background: var(--ask-bg);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.ask-card:active { background: color-mix(in srgb, var(--ask-border) 40%, var(--ask-bg)); }
+.ask-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent); color: var(--on-primary);
+}
+.ask-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ask-text strong { color: var(--primary-text); font-size: 13.5px; line-height: 1.3; font-weight: 700; }
+.ask-text span { color: var(--accent-text); font-size: 12.5px; line-height: 1.3; font-weight: 600; }
+.ask-chevron { flex: none; color: var(--primary-text); }

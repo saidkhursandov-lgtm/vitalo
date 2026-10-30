@@ -29,6 +29,7 @@ export function useQuickNotify() {
  */
 export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: string; inStock: boolean; variant?: 'card' | 'panel' }) {
   const { t } = useI18n();
+  const toast = useToast();
   const notify = useQuickNotify();
   const { qty, max, set } = useQuickCart(productId, notify);
 
@@ -82,23 +83,30 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
     );
   }
 
+  // At the maximum «+» turns grey but stays tappable: a tap says «Максимум в наличии» instead of a line under the card
+  // (2.3 fixes: the card never grows).
   const atMax = qty >= max;
+  const icon = variant === 'card' ? 16 : 18;
   return (
-    <div className={`qty-control quick-${variant} ${atMax && variant === 'card' ? 'at-max' : ''}`} onClick={stop} role="group" aria-label={t('product.addToCart')}>
+    <div className={`qty-control quick-${variant}`} onClick={stop} role="group" aria-label={t('product.addToCart')}>
       <button type="button" aria-label={t('quick.less')} onClick={(e) => (stop(e), tapHaptic(), set(qty - 1))}>
-        <MinusIcon width={18} height={18} />
+        <MinusIcon width={icon} height={icon} />
       </button>
       <span aria-live="polite">{qty}</span>
       <button
         type="button"
         aria-label={t('quick.more')}
-        disabled={atMax}
-        title={atMax ? t('quick.max') : undefined}
-        onClick={(e) => (stop(e), tapHaptic(), set(qty + 1))}
+        aria-disabled={atMax || undefined}
+        className={atMax ? 'is-max' : undefined}
+        onClick={(e) => {
+          stop(e);
+          if (atMax) return toast(t('quick.max'));
+          tapHaptic();
+          set(qty + 1);
+        }}
       >
-        <PlusIcon width={18} height={18} />
+        <PlusIcon width={icon} height={icon} />
       </button>
-      {atMax && variant === 'card' && <span className="qty-max">{t('quick.max')}</span>}
     </div>
   );
 }

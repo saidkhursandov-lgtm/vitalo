@@ -175,6 +175,9 @@ export const MATCH_MIN = 0.6;
 export interface DbBrand {
   id: string;
   name_ru: string;
+  /** what is in the database now (2.3 fixes: the plan shows «было → стало» for a replaced text) */
+  why_vitalo_ru?: string | null;
+  why_vitalo_uz?: string | null;
 }
 export interface DbProduct {
   id: string;
@@ -304,7 +307,7 @@ export function buildContentPlan(
 
 export async function loadDbForContent(db: PrismaClient) {
   const [brands, categories, products] = await Promise.all([
-    db.brands.findMany({ select: { id: true, name_ru: true } }),
+    db.brands.findMany({ select: { id: true, name_ru: true, why_vitalo_ru: true, why_vitalo_uz: true } }),
     db.categories.findMany({ where: { status: 'active' }, select: { id: true, name_ru: true, tree_type: true } }),
     db.products.findMany({
       where: { status: { not: 'archived' } },

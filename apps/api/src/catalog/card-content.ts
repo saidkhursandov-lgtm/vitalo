@@ -151,6 +151,17 @@ export const SOFTEN: SoftenRule[] = [
   { kind: 'product', key: 'VM-DUO-120', field: 'memo_uz', from: 'Har куни', to: 'Har kuni' },
 ];
 
+/**
+ * 2.3 fixes (owner, 30.10.2026): «Почему [бренд] в VITALO» replaced as a whole — the sheet text is not used.
+ * Key: the brand name in the sheet.
+ */
+export const BRAND_WHY: Record<string, { ru: string; uz: string }> = {
+  VitaMeal: {
+    ru: 'Российский производитель функциональных комплексов. В VITALO попадают только позиции VitaMeal с прозрачным составом и рабочими дозировками — каждую мы проверяем по этикетке перед добавлением в каталог.',
+    uz: 'Rossiyalik funksional komplekslar ishlab chiqaruvchisi. VITALO katalogiga faqat tarkibi shaffof va dozalari samarali boʻlgan VitaMeal mahsulotlari kiritiladi — har birini katalogga qoʻshishdan oldin yorligʻi boʻyicha tekshiramiz.',
+  },
+};
+
 /** Words that should not be left in customer texts (D-33); a hit is a warning in the plan, the owner decides. */
 export const RISKY = /(леч[иау]|излеч|гарант|100\s?%|№\s?1|золот|защищ|мигрен|кальцификац|профилакт|предотвращ|избав|устраня|исцел|без побочн|клиническ|davola|kafolat|himoya|oldini ol|profilakt|klinik)/i;
 
@@ -337,8 +348,14 @@ export function buildCardPlan(
   }
 
   for (const b of matched.brands) {
-    const why_ru = soften(b.sheet.why_ru, 'brand', b.sheet.dbName, 'why_ru', plan);
-    const why_uz = soften(b.sheet.why_uz, 'brand', b.sheet.dbName, 'why_uz', plan);
+    const own = BRAND_WHY[b.sheet.dbName];
+    if (own) {
+      // compared with what is in the database now, so the plan shows the real «было → стало»
+      for (const [field, from, to] of [['why_ru', b.brand.why_vitalo_ru, own.ru], ['why_uz', b.brand.why_vitalo_uz, own.uz]] as const)
+        if (from !== to) plan.softened.push({ key: b.sheet.dbName, field, from: from ?? '—', to });
+    }
+    const why_ru = own ? own.ru : soften(b.sheet.why_ru, 'brand', b.sheet.dbName, 'why_ru', plan);
+    const why_uz = own ? own.uz : soften(b.sheet.why_uz, 'brand', b.sheet.dbName, 'why_uz', plan);
     if (why_ru !== b.sheet.why_ru || why_uz !== b.sheet.why_uz) plan.brands.push({ brand: b.brand, why_ru, why_uz });
     for (const [label, text] of [['RU', why_ru], ['UZ', why_uz]] as const) {
       const hit = text ? RISKY.exec(text) : null;
