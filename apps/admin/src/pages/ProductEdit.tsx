@@ -46,9 +46,41 @@ const TEXTS = [
   ['nutrition', 'Пищевая ценность / дозировка', 3],
   ['directions', 'Способ применения', 3],
   ['warnings', 'Противопоказания и предупреждения', 3],
+  ['doctor_verdict', 'Вердикт врача (2–3 предложения, до 400 знаков)', 3],
+  ['intake_memo', 'Памятка приёма (покупатель увидит с релиза 3)', 3],
 ] as const;
 
-const PLAIN = ['sku', 'name_ru', 'name_uz', 'short_name_ru', 'short_name_uz', 'search_keywords'] as const;
+const PLAIN = [
+  'sku',
+  'name_ru',
+  'name_uz',
+  'short_name_ru',
+  'short_name_uz',
+  'search_keywords',
+  'substance_form_ru',
+  'substance_form_uz',
+  'shell_ru',
+  'shell_uz',
+  'halal_vege_source',
+  'halal_vege',
+  'admin_note',
+] as const;
+/** 2.3: numbers of the card; course days = pack / per day. */
+const INTS = ['pack_count', 'servings_per_day', 'market_advantage_percent'] as const;
+/** 2.3: «Стандарт VITALO» checkboxes */
+const STANDARDS = [
+  ['std_bioavailability', 'Высокая биодоступность'],
+  ['std_tested', 'Проверенный состав'],
+  ['std_original', '100% оригинал'],
+] as const;
+const HALAL_VEGE: [string, string][] = [
+  ['', '— не заполнено —'],
+  ['halal', 'Halal'],
+  ['vege', 'VEGE'],
+  ['halal_vege', 'Halal и VEGE'],
+  ['none', 'Нет'],
+  ['unknown', 'Не знаю'],
+];
 /** Dictionary fields: the text column the shop shows + the dictionary link. */
 const DICTS: [DictionaryKind, string, string, boolean][] = [
   ['brands', 'brand', 'Бренд', true],
@@ -68,6 +100,8 @@ type Form = Record<string, string> & { status: string };
 function toForm(p?: AdminProduct): Form {
   const f: Form = { status: (p?.status as string) ?? 'active' };
   for (const k of PLAIN) f[k] = (p?.[k] as string | null) ?? '';
+  for (const k of INTS) f[k] = p?.[k] == null ? '' : String(p[k]);
+  for (const [k] of STANDARDS) f[k] = p?.[k] ? '1' : '';
   for (const [k] of TEXTS) for (const l of ['ru', 'uz']) f[`${k}_${l}`] = (p?.[`${k}_${l}`] as string | null) ?? '';
   f.price_uzs = p ? String(p.price_uzs) : '';
   f.old_price_uzs = p?.old_price_uzs == null ? '' : String(p.old_price_uzs);
@@ -111,6 +145,9 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     mutationFn: (alreadyChanged?: boolean) => {
       const body: Record<string, unknown> = { status: f.status, category_ids: [...cats] };
       for (const k of PLAIN) body[k] = f[k].trim();
+      body.halal_vege = f.halal_vege || null;
+      for (const k of INTS) body[k] = toInt(f[k]) ?? null;
+      for (const [k] of STANDARDS) body[k] = f[k] === '1';
       for (const [, text, , required] of DICTS) {
         body[text] = f[text].trim() || (required ? f[text] : null);
         body[`${text}_id`] = f[`${text}_id`] || null;
@@ -177,6 +214,10 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     <input value={f[k]} disabled={!editable} onChange={(e) => set(k, e.target.value)} {...props} />
   );
 
+  const pack = toInt(f.pack_count);
+  const perDay = toInt(f.servings_per_day);
+  const days = pack && perDay ? Math.floor(pack / perDay) : null;
+
   return (
     <>
     <form onSubmit={submit}>
@@ -202,6 +243,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       </PageHead>
       {!editable && <div className="alert alert-info">Только просмотр: менять товары может администратор.</div>}
       {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине. Удалять товары нельзя — только архивировать.</div>}
+      {product?.admin_note ? <div className="alert alert-warn">Комментарий: {product.admin_note as string}</div> : null}
       {saved && <div className="alert alert-ok">Сохранено</div>}
       <ErrorBox error={save.error ?? archive.error ?? markSynced.error} />
       {askSync && (
@@ -398,6 +440,55 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             </div>
           </div>
         )}
+      </section>
+
+      <section className="card">
+        <h2>Карточка в магазине: экспертиза</h2>
+        <p className="muted small">Пустые поля покупатель не видит — блок просто не показывается.</p>
+        <div className="form-grid">
+          <Field label="Форма вещества (RU)" hint="Под названием: «Цитрат + B6»">
+            {input('substance_form_ru', { maxLength: 60, placeholder: 'Например: Цитрат + B6' })}
+          </Field>
+          <Field label="Форма вещества (UZ)">{input('substance_form_uz', { maxLength: 60, placeholder: 'Masalan: Sitrat + B6' })}</Field>
+          <Field label="Количество в банке" hint="Капсул / таблеток / порций">
+            {input('pack_count', { inputMode: 'numeric' })}
+          </Field>
+          <Field
+            label="Порций в день"
+            hint={days ? (days >= 7 ? `Хватит на ${days} дн.` : `${days} дн. — меньше 7, «Хватит на…» не покажется`) : 'По этикетке'}
+          >
+            {input('servings_per_day', { inputMode: 'numeric' })}
+          </Field>
+          <Field label="Выгоднее Маркета, %" hint="0–50, только если правда. Пусто — плашки нет">
+            {input('market_advantage_percent', { inputMode: 'numeric' })}
+          </Field>
+          <Field label="Halal / VEGE" hint="Halal — только с сертификатом, VEGE — только по этикетке (D-32)">
+            <select value={f.halal_vege} disabled={!editable} onChange={(e) => set('halal_vege', e.target.value)}>
+              {HALAL_VEGE.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Оболочка (RU)" hint="Строка «Оболочка: …»">{input('shell_ru', { maxLength: 100, placeholder: 'Например: говяжий желатин' })}</Field>
+          <Field label="Оболочка (UZ)">{input('shell_uz', { maxLength: 100, placeholder: 'Masalan: mol jelatini' })}</Field>
+          <Field label="Откуда данные Halal / VEGE" hint="Видно только в админке">
+            {input('halal_vege_source', { maxLength: 300 })}
+          </Field>
+        </div>
+        <div className="check-col">
+          <h3>Стандарт VITALO</h3>
+          {STANDARDS.map(([k, label]) => (
+            <label key={k} className="check">
+              <input type="checkbox" checked={f[k] === '1'} disabled={!editable} onChange={(e) => set(k, e.target.checked ? '1' : '')} />
+              {label}
+            </label>
+          ))}
+        </div>
+        <Field label="Комментарий сотрудникам" hint="Покупатель не видит. Например: «сверить при следующей поставке»">
+          <textarea rows={2} maxLength={1000} value={f.admin_note} disabled={!editable} onChange={(e) => set('admin_note', e.target.value)} />
+        </Field>
       </section>
 
       <section className="card">

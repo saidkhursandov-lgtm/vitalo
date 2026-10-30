@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
-import { discountPercent, money, nameOf } from '../lib/format';
-import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
+import { discountPercent, money, nameOf, productMeta, shortNameOf } from '../lib/format';
+import { errorText, pluralForm, shownStatus, statusKey, useI18n, type MessageKey } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, Region } from '../lib/types';
 import { Picture } from './Picture';
@@ -221,6 +221,7 @@ export function FavoriteButton({ productId, className = '' }: { productId: strin
 
 export function ProductTile({ product }: { product: ProductListItem }) {
   const { t, lang } = useI18n();
+  const meta = productMeta(product, lang, (n) => t('card.days', { n, d: t(`card.day.${pluralForm(n)}` as MessageKey) }));
   return (
     <Link to={`/product/${product.id}`} className={`tile ${product.in_stock ? '' : 'is-out'}`}>
       <div className="tile-img">
@@ -230,9 +231,13 @@ export function ProductTile({ product }: { product: ProductListItem }) {
       </div>
       <div className="tile-body">
         <div className="tile-brand">{product.brand}</div>
-        <div className="tile-name">{nameOf(product, lang)}</div>
-        <Price price={product.price_uzs} old={product.old_price_uzs} />
-        <QuickAdd productId={product.id} inStock={product.in_stock} />
+        {/* 2.3: the short name, 2 lines, whole words; the full one stays on the card and in search */}
+        <div className="tile-name">{shortNameOf(product, lang)}</div>
+        {meta && <div className="tile-meta">{meta}</div>}
+        <div className="tile-foot">
+          <Price price={product.price_uzs} old={product.old_price_uzs} />
+          <QuickAdd productId={product.id} inStock={product.in_stock} />
+        </div>
       </div>
     </Link>
   );

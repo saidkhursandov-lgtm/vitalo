@@ -27,6 +27,7 @@
     "brand:icons": "ts-node scripts/brand-icons.ts",
     "catalog:stage22": "ts-node scripts/catalog-stage22.ts",
     "content:load": "ts-node scripts/content-load.ts",
+    "content:card": "ts-node scripts/card-load.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

@@ -23,13 +23,38 @@ export function useQuickNotify() {
 }
 
 /**
- * One-tap add (F1): «В корзину» -> «− 1 +» on every product card. The number is the same on all cards of the
+ * One-tap add (F1): on a card (add-on v3.1) a round [+] 40×40 with a 44×44 tap area opposite the price, then a compact
+ * «− 1 +»; on the product page the wide «В корзину». The number is the same on all cards of the
  * product and in the cart; «−» at 1 removes the product. Out of stock: a grey disabled «Нет в наличии».
  */
 export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: string; inStock: boolean; variant?: 'card' | 'panel' }) {
   const { t } = useI18n();
   const notify = useQuickNotify();
   const { qty, max, set } = useQuickCart(productId, notify);
+
+  if (variant === 'card' && qty === 0) {
+    // sold out: a grey disabled [+]; the photo already says «Нет в наличии»
+    const out = !inStock;
+    return (
+      <button
+        type="button"
+        className={`quick-round ${out ? 'is-out' : ''}`}
+        disabled={out}
+        aria-label={out ? t('product.outOfStock') : t('product.addToCart')}
+        onClick={(e) => {
+          stop(e);
+          if (out) return;
+          tapHaptic();
+          set(1);
+          track('add_to_cart', { product_id: productId, source: variant });
+        }}
+      >
+        <span className="quick-round-dot">
+          <PlusIcon width={20} height={20} />
+        </span>
+      </button>
+    );
+  }
 
   if (!inStock && qty === 0) {
     return (

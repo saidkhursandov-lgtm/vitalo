@@ -53,6 +53,12 @@ export interface CategoryTrees {
 export interface ProductListItem extends Named {
   id: string;
   sku: string;
+  short_name_ru?: string | null;
+  short_name_uz?: string | null;
+  /** 2.3: «Цитрат + B6» under the name; course_days — null when not filled or under 7 days */
+  substance_form_ru?: string | null;
+  substance_form_uz?: string | null;
+  course_days?: number | null;
   brand: string;
   price_uzs: number;
   old_price_uzs: number | null;
@@ -85,6 +91,22 @@ export interface ProductCard extends ProductListItem {
   available_qty: number;
   /** 2.2: the brand page address; null — the brand has no page yet */
   brand_slug?: string | null;
+  /** 2.3: «Почему [бренд] отобран в VITALO» */
+  brand_name_ru?: string | null;
+  brand_name_uz?: string | null;
+  brand_why_ru?: string | null;
+  brand_why_uz?: string | null;
+  /** 2.3: expertise blocks; empty ones are not shown */
+  pack_count?: number | null;
+  std_bioavailability?: boolean;
+  std_tested?: boolean;
+  std_original?: boolean;
+  halal_vege?: 'halal' | 'vege' | 'halal_vege' | 'none' | 'unknown' | null;
+  shell_ru?: string | null;
+  shell_uz?: string | null;
+  market_advantage_percent?: number | null;
+  doctor_verdict_ru?: string | null;
+  doctor_verdict_uz?: string | null;
   manufacturer: string;
   country: string | null;
   form: string | null;

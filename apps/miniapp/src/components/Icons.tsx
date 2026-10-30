@@ -47,7 +47,7 @@ import {
   Plus,
   Search,
   SearchX,
-  ShoppingBag,
+  ShoppingCart,
   Star,
   Stethoscope,
   SlidersHorizontal,
@@ -73,7 +73,8 @@ const make = (C: LucideIcon): Icon => {
 export const HomeIcon = make(House);
 export const GridIcon = make(LayoutGrid);
 export const UserIcon = make(User);
-export const CartIcon = make(ShoppingBag);
+/** Add-on v3.1: a trolley, not a bag (header, floating cart, buttons). */
+export const CartIcon = make(ShoppingCart);
 export const SearchIcon = make(Search);
 export const SearchEmptyIcon = make(SearchX);
 export const BackIcon = make(ChevronLeft);
@@ -99,6 +100,10 @@ export const StarIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => 
 );
 export const DoctorIcon = make(Stethoscope);
 export const ShieldIcon = make(ShieldCheck);
+/** 2.3: «Стандарт VITALO» badges */
+export const BioIcon = make(Droplet);
+export const TestedIcon = make(FlaskConical);
+export const LeafIcon = make(Leaf);
 
 /**
  * Category icons on the home screen, by category slug (both trees). An unknown slug gets the neutral leaf,

@@ -34,6 +34,26 @@ export interface SheetProduct {
   short_uz: string | null;
   needs: string[];
   type: string | null;
+  /** 2.3: columns J–Z, as typed in the sheet (rules and checks — card-content.ts) */
+  card?: SheetCard;
+}
+
+export interface SheetCard {
+  substance_ru: string | null;
+  substance_uz: string | null;
+  pack: string | null;
+  per_day: string | null;
+  std_bio: string | null;
+  std_tested: string | null;
+  std_original: string | null;
+  halal_vege: string | null;
+  shell: string | null;
+  source: string | null;
+  market: string | null;
+  verdict_ru: string | null;
+  verdict_uz: string | null;
+  memo_ru: string | null;
+  memo_uz: string | null;
 }
 
 export interface ContentSheet {
@@ -105,6 +125,23 @@ export async function readContentSheet(file: string): Promise<ContentSheet> {
       short_uz: c(5),
       needs: [c(6), c(7), c(8)].filter((x): x is string => !!x),
       type: c(9),
+      card: {
+        substance_ru: c(10),
+        substance_uz: c(11),
+        pack: c(13),
+        per_day: c(14),
+        std_bio: c(16),
+        std_tested: c(17),
+        std_original: c(18),
+        halal_vege: c(19),
+        shell: c(20),
+        source: c(21),
+        market: c(22),
+        verdict_ru: c(23),
+        verdict_uz: c(24),
+        memo_ru: c(25),
+        memo_uz: c(26),
+      },
     });
   });
   return { brands, products };

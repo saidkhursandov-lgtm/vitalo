@@ -78,7 +78,15 @@ export function Layout() {
   const bump = useBump(count);
   const keyboard = useKeyboardOpen();
   // Floating cart bar: only where the bottom menu is, and not on the cart screen itself (it has its own big button)
-  const showFloatCart = showNav && count > 0 && pathname !== '/cart';
+  // 2.3 (D-24): [✕] hides the bar until the next add — it comes back when the cart sum grows again
+  // (a new product or one more of the same); removing something only lowers the mark
+  const total = cartCount.data?.goods_total_uzs ?? 0;
+  const [hiddenAt, setHiddenAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (hiddenAt !== null && total < hiddenAt) setHiddenAt(total);
+  }, [total, hiddenAt]);
+  const hidden = hiddenAt !== null && total <= hiddenAt;
+  const showFloatCart = showNav && count > 0 && pathname !== '/cart' && !hidden;
 
   useTelegramBackButton(!isTab);
   useEffect(() => {
@@ -114,7 +122,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      {showFloatCart && <FloatingCart count={count} total={cartCount.data?.goods_total_uzs ?? 0} />}
+      {showFloatCart && <FloatingCart count={count} total={total} onHide={() => setHiddenAt(total)} />}
 
       {showNav && (
         <nav className="bottom-nav">

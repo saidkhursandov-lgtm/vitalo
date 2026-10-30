@@ -525,6 +525,25 @@ model products {
   label_composition_ru String? // short composition for the 75×120 label (not the full one from the card)
   label_composition_uz String?
 
+  // 2.3: product card. Course days = pack_count / servings_per_day (calculated, not stored).
+  substance_form_ru        String? // «Цитрат + B6» — shown under the short name
+  substance_form_uz        String?
+  pack_count               Int? // capsules / tablets / servings in the pack
+  servings_per_day         Int?
+  std_bioavailability      Boolean @default(false) // «Стандарт VITALO» badges
+  std_tested               Boolean @default(false)
+  std_original             Boolean @default(false)
+  halal_vege               String? // halal | vege | halal_vege | none | unknown (D-32)
+  shell_ru                 String? // «Оболочка: …» fact line
+  shell_uz                 String?
+  halal_vege_source        String? // admin only: label, maker's site, certificate
+  market_advantage_percent Int? // «На X% выгоднее Маркета», 0–50 (D-10)
+  doctor_verdict_ru        String?
+  doctor_verdict_uz        String?
+  intake_memo_ru           String? // not shown to customers until release 3
+  intake_memo_uz           String?
+  admin_note               String? // staff comment, e.g. «сверить при следующей поставке»
+
   brand_entry        brands?        @relation(fields: [brand_id], references: [id])
   manufacturer_entry manufacturers? @relation(fields: [manufacturer_id], references: [id])
   country_entry      countries?     @relation(fields: [country_id], references: [id])

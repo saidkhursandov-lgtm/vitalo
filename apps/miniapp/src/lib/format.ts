@@ -29,6 +29,13 @@ export function nameOf(item: Named, lang: Lang): string {
  * 2.1: the short name for the cart, checkout and orders; the full name stays on the card and in search.
  * Uzbek: short UZ, then the full UZ name, then the Russian ones.
  */
+/** 2.3: «Цитрат + B6 • На 50 дней» under the name on a mini-card; null when both are empty. */
+export function productMeta(item: { substance_form_ru?: string | null; substance_form_uz?: string | null; course_days?: number | null }, lang: Lang, daysText: (n: number) => string): string | null {
+  const form = (lang === 'uz' && item.substance_form_uz) || item.substance_form_ru;
+  const parts = [form, item.course_days ? daysText(item.course_days) : null].filter(Boolean);
+  return parts.length ? parts.join(' • ') : null;
+}
+
 export function shortNameOf(item: ShortNamed, lang: Lang): string {
   if (lang === 'uz') return item.short_name_uz || item.name_uz || item.short_name_ru || item.name_ru;
   return item.short_name_ru || item.name_ru;

@@ -10,13 +10,24 @@ export const cardInclude = {
   media: { orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }] },
   inventory: { select: { actual_qty: true, reserved_qty: true } },
   categories: { include: { category: true } },
-  brand_entry: { select: { slug: true } },
+  brand_entry: { select: { slug: true, name_ru: true, name_uz: true, why_vitalo_ru: true, why_vitalo_uz: true } },
   relations: {
     where: { related: { status: 'active' } },
     orderBy: { sort_order: 'asc' },
     include: { related: { include: listInclude } },
   },
 } satisfies Prisma.productsInclude;
+
+/** 2.3: Halal / VEGE (D-32): Halal only with a certificate, VEGE only from the label. */
+export const HALAL_VEGE = ['halal', 'vege', 'halal_vege', 'none', 'unknown'] as const;
+export type HalalVege = (typeof HALAL_VEGE)[number];
+
+/** «Хватит на N дней» — only from 7 days on (shorter courses are not shown). */
+export function courseDays(packCount: number | null, perDay: number | null): number | null {
+  if (!packCount || !perDay) return null;
+  const days = Math.floor(packCount / perDay);
+  return days >= 7 ? days : null;
+}
 
 type ProductForList = Prisma.productsGetPayload<{ include: typeof listInclude }>;
 type ProductForCard = Prisma.productsGetPayload<{ include: typeof cardInclude }>;
@@ -30,6 +41,11 @@ export interface ProductListItem {
   short_name_ru: string | null;
   short_name_uz: string | null;
   form: string | null;
+  /** 2.3: «Цитрат + B6» under the short name */
+  substance_form_ru: string | null;
+  substance_form_uz: string | null;
+  /** 2.3: days the pack lasts (null = not filled or under 7) */
+  course_days: number | null;
   brand: string;
   price_uzs: number;
   old_price_uzs: number | null;
@@ -73,6 +89,9 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     short_name_ru: p.short_name_ru,
     short_name_uz: p.short_name_uz,
     form: p.form,
+    substance_form_ru: p.substance_form_ru,
+    substance_form_uz: p.substance_form_uz,
+    course_days: courseDays(p.pack_count, p.servings_per_day),
     brand: p.brand,
     price_uzs: Number(p.price_uzs),
     old_price_uzs: p.old_price_uzs == null ? null : Number(p.old_price_uzs),
@@ -91,6 +110,22 @@ export function toProductCard(p: ProductForCard) {
     available_qty: Math.min(availableQty(p.inventory), 99), // upper bound for the qty stepper
     /** 2.2: the brand page address (null = the brand is not in the dictionary) */
     brand_slug: p.brand_entry?.slug ?? null,
+    // 2.3: «Почему [бренд] отобран в VITALO»
+    brand_name_ru: p.brand_entry?.name_ru ?? null,
+    brand_name_uz: p.brand_entry?.name_uz ?? null,
+    brand_why_ru: p.brand_entry?.why_vitalo_ru ?? null,
+    brand_why_uz: p.brand_entry?.why_vitalo_uz ?? null,
+    // 2.3: expertise blocks; the Halal source, intake memo and staff note stay in the admin
+    pack_count: p.pack_count,
+    std_bioavailability: p.std_bioavailability,
+    std_tested: p.std_tested,
+    std_original: p.std_original,
+    halal_vege: p.halal_vege as HalalVege | null,
+    shell_ru: p.shell_ru,
+    shell_uz: p.shell_uz,
+    market_advantage_percent: p.market_advantage_percent || null,
+    doctor_verdict_ru: p.doctor_verdict_ru,
+    doctor_verdict_uz: p.doctor_verdict_uz,
     manufacturer: p.manufacturer,
     country: p.country,
     form: p.form,

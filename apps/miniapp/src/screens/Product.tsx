@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
-import { formLabel, money, nameOf, textOf } from '../lib/format';
-import { useI18n, type MessageKey } from '../lib/i18n';
+import { formLabel, money, nameOf, shortNameOf, textOf } from '../lib/format';
+import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
 import { QuickAdd, useQuickNotify } from '../components/QuickAdd';
-import { CartIcon } from '../components/Icons';
+import { BioIcon, CartIcon, DoctorIcon, LeafIcon, ShieldIcon, SupportIcon, TestedIcon, type Icon } from '../components/Icons';
+import { useSupportUrl } from '../components/Support';
+import { useToast } from '../components/Toast';
+import { copyText, openSupport } from '../lib/shop';
 import type { ProductCard } from '../lib/types';
 import { tapHaptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
@@ -42,6 +45,13 @@ export function Product() {
   const images = p.media.filter((m) => m.type === 'image');
   const documents = p.media.filter((m) => m.type === 'document');
   const description = textOf(p, 'short_description', lang);
+  const short = shortNameOf(p, lang);
+  const substance = textOf(p, 'substance_form', lang);
+  const dayWord = (n: number) => t(`card.day.${pluralForm(n)}` as MessageKey);
+  const verdict = textOf(p, 'doctor_verdict', lang);
+  const shell = textOf(p, 'shell', lang);
+  const brandName = (lang === 'uz' && p.brand_name_uz) || p.brand_name_ru || p.brand;
+  const brandWhy = (lang === 'uz' && p.brand_why_uz) || p.brand_why_ru;
 
   return (
     <div className="page product">
@@ -65,17 +75,36 @@ export function Product() {
         </div>
       )}
 
-      {/* 2.2: the brand opens its page (logo, «Почему … в VITALO», all its products) */}
+      {/* 2.2 / 2.3: the brand is a chip that opens its page (logo, «Почему … в VITALO», all its products) */}
       {p.brand_slug ? (
-        <Link className="small brand-link" to={`/brand/${p.brand_slug}`}>
+        <Link className="brand-chip" to={`/brand/${p.brand_slug}`}>
           {p.brand}
         </Link>
       ) : (
         <div className="hint small">{p.brand}</div>
       )}
-      <h1 className="product-title">{nameOf(p, lang)}</h1>
-      <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" />
-      <div className={`stock ${p.in_stock ? 'is-in' : 'is-out'}`}>{p.in_stock ? t('product.inStock') : t('product.outOfStock')}</div>
+      {/* 2.3: the short name and the substance form; the full name is in «О товаре» and in search */}
+      <h1 className="product-title">{short}</h1>
+      {substance && <p className="product-sub">{substance}</p>}
+      <div className="price-line">
+        <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" />
+        <div className={`stock ${p.in_stock ? 'is-in' : 'is-out'}`}>{p.in_stock ? t('product.inStock') : t('product.outOfStock')}</div>
+      </div>
+      {p.course_days ? (
+        <p className="lasts">
+          {t('card.lasts', { n: p.course_days, d: dayWord(p.course_days), price: money(Math.round(p.price_uzs / p.course_days / 100) * 100, lang) })}
+        </p>
+      ) : null}
+      {p.market_advantage_percent ? <span className="market-badge">{t('card.market', { n: p.market_advantage_percent })}</span> : null}
+      <StandardStrip product={p} />
+      {verdict && (
+        <section className="verdict">
+          <h2>
+            <DoctorIcon width={18} height={18} /> {t('card.verdict')}
+          </h2>
+          <p className="pre">{verdict}</p>
+        </section>
+      )}
 
       {description && (
         <section className="card">
@@ -87,6 +116,12 @@ export function Product() {
       <section className="card">
         <h2>{t('product.about')}</h2>
         <dl className="props">
+          {short !== nameOf(p, lang) && (
+            <>
+              <dt>{t('card.fullName')}</dt>
+              <dd>{nameOf(p, lang)}</dd>
+            </>
+          )}
           <dt>{t('product.manufacturer')}</dt>
           <dd>{p.manufacturer}</dd>
           {p.country && (
@@ -101,7 +136,19 @@ export function Product() {
               <dd>{formLabel(p.form, lang)}</dd>
             </>
           )}
+          {shell && (
+            <>
+              <dt>{t('card.shell')}</dt>
+              <dd>{shell}</dd>
+            </>
+          )}
         </dl>
+        {brandWhy && (
+          <div className="why-brand">
+            <h3>{t('card.whyBrand', { brand: brandName })}</h3>
+            <p className="pre">{brandWhy}</p>
+          </div>
+        )}
       </section>
 
       {SECTIONS.map(([field, title]) => {
@@ -125,6 +172,8 @@ export function Product() {
           ))}
         </section>
       )}
+
+      <AskSpecialist name={short} />
 
       <section className="card">
         <h2>{t('product.delivery')}</h2>
@@ -193,5 +242,54 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** 2.3: «Стандарт VITALO» — only the badges the product has; Halal / VEGE by D-32 (never for «Нет» / «Не знаю»). */
+function StandardStrip({ product: p }: { product: ProductCard }) {
+  const { t } = useI18n();
+  const chips: [Icon, MessageKey][] = [];
+  if (p.std_bioavailability) chips.push([BioIcon, 'card.stdBio']);
+  if (p.std_tested) chips.push([TestedIcon, 'card.stdTested']);
+  if (p.std_original) chips.push([ShieldIcon, 'card.stdOriginal']);
+  const hv = { halal: 'card.halal', vege: 'card.vege', halal_vege: 'card.halalVege' } as const;
+  if (p.halal_vege && p.halal_vege in hv) chips.push([LeafIcon, hv[p.halal_vege as keyof typeof hv]]);
+  if (!chips.length) return null;
+  return (
+    <>
+      <p className="std-title">{t('card.standard')}</p>
+      <div className="std-strip">
+        {chips.map(([I, key]) => (
+          <span key={key} className="std-chip">
+            <I width={16} height={16} /> {t(key)}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** Telegram fills the chat box from ?text= for public usernames; just in case, the text is also copied. */
+export function supportLinkWithText(url: string, text: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}text=${encodeURIComponent(text)}`;
+}
+
+/** 2.3: «Спросить специалиста об этом товаре» — the support chat with the product's short name ready. */
+function AskSpecialist({ name }: { name: string }) {
+  const { t } = useI18n();
+  const url = useSupportUrl();
+  const toast = useToast();
+  return (
+    <button
+      type="button"
+      className="btn btn-secondary btn-block ask-btn"
+      onClick={() => {
+        const text = t('card.askText', { name });
+        void copyText(text).then((ok) => ok && toast(t('card.askCopied')));
+        openSupport(supportLinkWithText(url, text));
+      }}
+    >
+      <SupportIcon width={20} height={20} /> {t('card.ask')}
+    </button>
   );
 }

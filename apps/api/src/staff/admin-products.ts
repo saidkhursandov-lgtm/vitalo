@@ -28,6 +28,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsNotEmpty,
@@ -42,6 +43,7 @@ import {
 import { randomUUID } from 'crypto';
 import { memoryStorage } from 'multer';
 import { PageQuery } from '../catalog/catalog.dto';
+import { HALAL_VEGE, type HalalVege } from '../catalog/product.mapper';
 import { DICTIONARY_COLUMNS, DICTIONARY_KINDS, matchKey } from '../dictionaries/dictionary-names';
 import { dictionaryTable } from './admin-dictionaries';
 import { PrismaService } from '../prisma/prisma.service';
@@ -75,6 +77,16 @@ const TEXT_FIELDS = [
   'warnings_ru',
   'warnings_uz',
   'search_keywords',
+  'substance_form_ru',
+  'substance_form_uz',
+  'shell_ru',
+  'shell_uz',
+  'halal_vege_source',
+  'doctor_verdict_ru',
+  'doctor_verdict_uz',
+  'intake_memo_ru',
+  'intake_memo_uz',
+  'admin_note',
 ] as const;
 
 export class ProductInput {
@@ -110,6 +122,26 @@ export class ProductInput {
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(5000) warnings_ru?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(5000) warnings_uz?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) search_keywords?: string | null;
+
+  // 2.3: product card (release-2.3.md). Course days = pack_count / servings_per_day.
+  @ApiPropertyOptional({ description: 'Форма вещества, напр. «Цитрат + B6»' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(60) substance_form_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(60) substance_form_uz?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Количество в банке' }) @IsOptional() @IsInt() @Min(1) @Max(10000) pack_count?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Порций в день' }) @IsOptional() @IsInt() @Min(1) @Max(50) servings_per_day?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() std_bioavailability?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() std_tested?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() std_original?: boolean;
+  @ApiPropertyOptional({ nullable: true, enum: HALAL_VEGE, description: 'Halal только с сертификатом, VEGE только по этикетке (D-32)' })
+  @IsOptional() @IsIn([...HALAL_VEGE, null]) halal_vege?: HalalVege | null;
+  @ApiPropertyOptional({ description: 'Оболочка, напр. «говяжий желатин»' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) shell_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) shell_uz?: string | null;
+  @ApiPropertyOptional({ description: 'Откуда данные Halal/VEGE (только админка)' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) halal_vege_source?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'На X% выгоднее Маркета, 0–50' }) @IsOptional() @IsInt() @Min(0) @Max(50) market_advantage_percent?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(400) doctor_verdict_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(400) doctor_verdict_uz?: string | null;
+  @ApiPropertyOptional({ description: 'Памятка приёма (покупателю — с релиза 3)' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) intake_memo_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) intake_memo_uz?: string | null;
+  @ApiPropertyOptional({ description: 'Комментарий сотрудникам' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) admin_note?: string | null;
 
   // Stage 1.1: dictionary values. Their names are copied into brand / manufacturer / country / form.
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() brand_id?: string | null;
