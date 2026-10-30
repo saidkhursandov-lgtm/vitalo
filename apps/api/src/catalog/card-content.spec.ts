@@ -1,4 +1,4 @@
-import { BRAND_WHY, buildCardPlan, halalVegeRule, shellRule } from './card-content';
+import { BRAND_WHY, RISKY, buildCardPlan, halalVegeRule, shellRule } from './card-content';
 import { ContentSheet, DbProduct, SheetCard, SheetProduct } from './content-sheet';
 import { courseDays } from './product.mapper';
 
@@ -81,10 +81,13 @@ describe('2.3: card plan', () => {
     expect(plan.errors).toEqual([]);
     const d = plan.products[0].data;
     expect(plan.products[0].product.sku).toBe('OZN-A022');
-    expect(d).toMatchObject({ pack_count: 200, servings_per_day: 4, std_bioavailability: true, std_original: false, market_advantage_percent: 15, halal_vege: 'unknown', shell_ru: null });
+    // owner: 180 tablets as on the photo, 4 a day → 45 days; the staff note asks to check the stock
+    expect(d).toMatchObject({ pack_count: 180, servings_per_day: 4, std_bioavailability: true, std_original: false, market_advantage_percent: 15, halal_vege: 'unknown', shell_ru: null });
+    expect(d).toMatchObject({ short_name_ru: 'Магний Цитрат + B6, 180 таб.', short_name_uz: 'Magniy Sitrat + B6, 180 tab.' });
+    expect(courseDays(Number(d.pack_count), Number(d.servings_per_day))).toBe(45);
     expect(d.doctor_verdict_ru).toBe('Цитрат магния усваивается значительно лучше оксида магния и мягче для желудка.');
     expect(plan.softened).toHaveLength(1);
-    expect(d.admin_note).toMatch(/сверить при следующей поставке/);
+    expect(d.admin_note).toBe('На фото 180 таблеток, в полном названии 200 — сверить количество на складе.');
     // needs and types are not part of the card load
     expect(Object.keys(d)).not.toContain('needs');
   });
@@ -111,12 +114,15 @@ describe('2.3: card plan', () => {
   });
 });
 
-describe('2.3 fixes: «Почему VitaMeal в VITALO» replaced as a whole', () => {
+describe('2.3 fixes: «Почему [бренд] в VITALO» replaced as a whole (D-34)', () => {
   it('the owner text instead of the sheet one; the plan shows what is in the database now → the new text', () => {
     const brand = (dbName: string, why: string) => ({ row: 2, dbName, country_ru: null, country_uz: null, why_ru: why, why_uz: why, showcase: null, order: null, logo: null });
     const plan = buildCardPlan(
-      { brands: [brand('VitaMeal', 'Текст из файла.'), brand('MioPharm', 'Текст MioPharm.')], products: [] },
-      { ...db, brands: [...db.brands, { id: 'b-vm', name_ru: 'VitaMeal', why_vitalo_ru: 'Старый текст.', why_vitalo_uz: 'Eski matn.' }] },
+      { brands: [brand('VitaMeal', 'Текст из файла.'), brand('Другой бренд', 'Текст из файла.')], products: [] },
+      {
+        ...db,
+        brands: [...db.brands, { id: 'b-vm', name_ru: 'VitaMeal', why_vitalo_ru: 'Старый текст.', why_vitalo_uz: 'Eski matn.' }, { id: 'b-x', name_ru: 'Другой бренд' }],
+      },
     );
     const vm = plan.brands.find((b) => b.brand.id === 'b-vm')!;
     expect(vm.why_ru).toBe(BRAND_WHY.VitaMeal.ru);
@@ -127,6 +133,17 @@ describe('2.3 fixes: «Почему VitaMeal в VITALO» replaced as a whole', (
       ['why_uz', 'Eski matn.'],
     ]);
     // a brand without its own text is not touched
-    expect(plan.brands.some((b) => b.brand.id === 'b-mio')).toBe(false);
+    expect(plan.brands.some((b) => b.brand.id === 'b-x')).toBe(false);
+  });
+
+  it('all five owner texts are about the brand and the selection: no product names, doses or risky words except «профилакт» (D-34)', () => {
+    expect(Object.keys(BRAND_WHY).sort()).toEqual(['Bai Altai', 'GreenGo', 'MioPharm', 'OVER', 'VitaMeal']);
+    for (const [name, t] of Object.entries(BRAND_WHY)) {
+      for (const text of [t.ru, t.uz]) {
+        expect(text).toContain(name);
+        expect(text).not.toMatch(/d+s?(мг|мкг|mg|mkg|МЕ)|омега|коллаген|магни|йод|D3|kollagen|magniy/i);
+        expect(text.replace(/профилакт|profilakt/gi, '')).not.toMatch(RISKY);
+      }
+    }
   });
 });

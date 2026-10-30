@@ -41,7 +41,13 @@ export const PHOTO_FIXES: Record<string, { short_ru?: string; short_uz?: string;
     shell_uz: 'jelatin kapsula',
     note: `На фото 120 капсул (в таблице было «таб., 90»). Вид желатина и порций в день — ${RECHECK}.`,
   },
-  'OZN-A022': { note: `Фото такое же, как у OZN-A014 (180 таблеток), в названии 200 — ${RECHECK}: 180 или 200 таблеток, нужно своё фото.` },
+  // owner 30.10.2026: 180 tablets as on the photo (4 a day → 45 days); the full name with «200» stays for search
+  'OZN-A022': {
+    short_ru: 'Магний Цитрат + B6, 180 таб.',
+    short_uz: 'Magniy Sitrat + B6, 180 tab.',
+    pack_count: 180,
+    note: 'На фото 180 таблеток, в полном названии 200 — сверить количество на складе.',
+  },
 };
 
 /** D-33: «было → стало». Exact pieces of the sheet texts; a piece that is not found is reported, never guessed. */
@@ -159,6 +165,23 @@ export const BRAND_WHY: Record<string, { ru: string; uz: string }> = {
   VitaMeal: {
     ru: 'Российский производитель функциональных комплексов. В VITALO попадают только позиции VitaMeal с прозрачным составом и рабочими дозировками — каждую мы проверяем по этикетке перед добавлением в каталог.',
     uz: 'Rossiyalik funksional komplekslar ishlab chiqaruvchisi. VITALO katalogiga faqat tarkibi shaffof va dozalari samarali boʻlgan VitaMeal mahsulotlari kiritiladi — har birini katalogga qoʻshishdan oldin yorligʻi boʻyicha tekshiramiz.',
+  },
+  // D-34: about the brand and the selection — no particular products, no unchecked facts
+  OVER: {
+    ru: 'Российский производитель базовых витаминов и минералов на каждый день. В VITALO отбираются позиции OVER с лаконичным составом и профилактическими дозировками — каждую мы проверяем по этикетке.',
+    uz: 'Har kungi asosiy vitamin va minerallarning rossiyalik ishlab chiqaruvchisi. VITALO katalogiga tarkibi sodda va dozalari profilaktik boʻlgan OVER mahsulotlari kiritiladi — har birini yorligʻi boʻyicha tekshiramiz.',
+  },
+  MioPharm: {
+    ru: 'Российский производитель нутрицевтиков с фармацевтическим подходом (линейка Blueline). В VITALO попадают позиции MioPharm с понятным составом и хорошо усваиваемыми формами веществ — каждую мы проверяем по этикетке.',
+    uz: 'Farmatsevtik yondashuvga ega rossiyalik nutrisevtika ishlab chiqaruvchisi (Blueline liniyasi). VITALO katalogiga tarkibi tushunarli va yaxshi oʻzlashtiriladigan shakldagi MioPharm mahsulotlari kiritiladi — har birini yorligʻi boʻyicha tekshiramiz.',
+  },
+  'Bai Altai': {
+    ru: 'Российский бренд нутрицевтиков на основе природного и морского сырья. В VITALO отбираются позиции Bai Altai с прозрачным составом и рабочими дозировками.',
+    uz: 'Tabiiy va dengiz xomashyosiga asoslangan rossiyalik nutrisevtika brendi. VITALO katalogiga tarkibi shaffof va dozalari samarali boʻlgan Bai Altai mahsulotlari tanlanadi.',
+  },
+  GreenGo: {
+    ru: 'Российский бренд растительного питания. В VITALO отобраны позиции GreenGo на растительном белке — для тех, кто не употребляет молочные продукты или придерживается растительного рациона.',
+    uz: 'Oʻsimlik ozuqasi boʻyicha rossiyalik brend. VITALO katalogiga oʻsimlik oqsiliga asoslangan GreenGo mahsulotlari tanlangan — sut mahsulotlarini isteʼmol qilmaydigan yoki oʻsimlik ratsioniga amal qiladiganlar uchun.',
   },
 };
 
