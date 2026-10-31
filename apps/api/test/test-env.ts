@@ -3,6 +3,8 @@ export const TEST_ENV = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgresql://vitalo:vitalo@localhost:5432/vitalo_test',
   TELEGRAM_BOT_TOKEN: '123456:E2E_TEST_TOKEN',
+  // 3.1: the bot link «Отправить скриншот чека» never asks the real Telegram for the bot name in tests
+  TELEGRAM_BOT_USERNAME: 'vitalo_e2e_bot',
   SESSION_TTL_HOURS: '720',
   STAFF_SESSION_TTL_HOURS: '12',
   INIT_DATA_MAX_AGE_SECONDS: '3600',
@@ -20,4 +22,5 @@ export const TEST_ENV = {
   YANDEX_WEBHOOK_ENABLED: 'false',
   YANDEX_WEBHOOK_SECRET: '',
   UPLOAD_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
+  RECEIPTS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-receipts'),
 };

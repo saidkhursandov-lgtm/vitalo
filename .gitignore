@@ -24,6 +24,7 @@ Thumbs.db
 
 # Uploaded files (LocalFileStorage)
 apps/api/uploads/
+apps/api/receipts/
 
 # Runtime files of the dev tunnel (current public URLs)
 .runtime/

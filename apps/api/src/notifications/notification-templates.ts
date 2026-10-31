@@ -26,6 +26,7 @@ export type TemplateName =
   | 'staff.waitlist_new'
   | 'order.payment_reminder'
   | 'order.cod_confirmed'
+  | 'order.receipt_rejected'
   | 'waitlist.back_in_stock';
 
 export interface TemplatePayload {
@@ -120,6 +121,11 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   'order.payment_reminder': {
     ru: (p) => `⏰ Заказ №${p.order_number} ждёт оплаты до ${p.until}.\nЕсли вы уже перевели деньги, нажмите «Я оплатил(а)».`,
     uz: (p) => `⏰ №${p.order_number} buyurtma ${p.until} gacha to‘lovni kutmoqda.\nAgar pulni allaqachon o‘tkazgan bo‘lsangiz, «To‘ladim» tugmasini bosing.`,
+  },
+  // 3.1: a manager rejected the receipt sent to the bot; the order waits for the payment again
+  'order.receipt_rejected': {
+    ru: (p) => `Чек по заказу №${p.order_number} не принят.\nПричина: ${p.reason ?? '—'}\nПроверьте перевод и пришлите чек ещё раз или напишите в поддержку.`,
+    uz: (p) => `№${p.order_number} buyurtma cheki qabul qilinmadi.\nSabab: ${p.reason ?? '—'}\nO‘tkazmani tekshirib, chekni qayta yuboring yoki qo‘llab-quvvatlash xizmatiga yozing.`,
   },
   'order.paid': {
     ru: (p) => `${head(p, 'ru', 'paid')}\nНачинаем собирать ваш заказ.`,

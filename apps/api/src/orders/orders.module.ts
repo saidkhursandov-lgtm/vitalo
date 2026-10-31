@@ -8,12 +8,13 @@ import { OrderUnitsService } from './order-units.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { ReservationExpiryService } from './reservation-expiry.service';
+import { BotInfoService } from './receipts';
 import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
   imports: [AuthModule, InventoryModule, DeliveryModule, LegalModule, AnalyticsModule],
   controllers: [OrdersController],
-  providers: [OrdersService, OrderLifecycleService, OrderUnitsService, ReservationExpiryService],
-  exports: [OrderLifecycleService, OrderUnitsService, ReservationExpiryService],
+  providers: [OrdersService, OrderLifecycleService, OrderUnitsService, ReservationExpiryService, BotInfoService],
+  exports: [OrdersService, OrderLifecycleService, OrderUnitsService, ReservationExpiryService, BotInfoService],
 })
 export class OrdersModule {}

@@ -23,6 +23,7 @@ import { OrderLifecycleService } from './order-lifecycle.service';
 import { orderViewInclude, OrderView, toOrderView } from './order-view';
 import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
 import { AnalyticsService } from '../analytics/analytics.module';
+import { BotInfoService } from './receipts';
 
 type Tx = Prisma.TransactionClient;
 
@@ -72,6 +73,7 @@ export class OrdersService {
     private readonly notifications: NotificationsService,
     private readonly legal: LegalService,
     private readonly analytics: AnalyticsService,
+    private readonly botInfo: BotInfoService,
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
@@ -221,6 +223,8 @@ export class OrdersService {
     const purpose = (details?.purpose_template ?? 'Оплата заказа {order_number}').replace('{order_number}', order.order_number);
     const requisites = method === 'bank_transfer' && details ? (({ purpose_template: _, ...r }) => r)(details) : null;
     const card = method === 'card_transfer' ? await this.settings.getOrDefault('card_transfer_details') : null;
+    // 3.1: «Отправить скриншот чека в бот» (card transfer only) and the last receipt's fate (a rejection shows its reason)
+    const last = await this.prisma.payment_receipts.findFirst({ where: { order_id: orderId }, orderBy: { created_at: 'desc' } });
 
     return {
       method,
@@ -236,11 +240,15 @@ export class OrdersService {
       pay_until: order.reserved_until,
       customer_reported_paid_at: order.payment!.customer_reported_paid_at,
       delivery_eta: order.delivery_eta,
+      receipt: {
+        bot_url: method === 'card_transfer' ? await this.botInfo.receiptLink(orderId) : null,
+        last: last && { status: last.status, reject_reason: last.reject_reason, created_at: last.created_at },
+      },
     };
   }
 
   /** "Я оплатил": records the claim and creates a manager task. Repeated clicks change nothing. */
-  async reportBankTransferPaid(userId: string, orderId: string, receiptUrl?: string): Promise<OrderView> {
+  async reportBankTransferPaid(userId: string, orderId: string, receiptUrl?: string, opts: { notifyStaff?: boolean } = {}): Promise<OrderView> {
     let marked = false;
     const result = await this.prisma.$transaction(async (tx) => {
       const order = await this.lifecycle.lockOrder(tx, orderId);
@@ -270,7 +278,8 @@ export class OrdersService {
           note: `Клиент сообщил об оплате заказа ${order.order_number} на ${formatUzs(Number(payment.amount_uzs))} сум`,
         },
       });
-      await this.notifications.toOrderStaff(tx, 'staff.customer_paid', orderId);
+      // 3.1: a receipt sent to the bot reaches the staff with its own buttons, so no second text message
+      if (opts.notifyStaff !== false) await this.notifications.toOrderStaff(tx, 'staff.customer_paid', orderId);
       marked = true;
       return view();
     }, TX_OPTIONS);

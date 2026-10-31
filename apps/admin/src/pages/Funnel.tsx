@@ -34,6 +34,11 @@ const EXTRA_NAMES: Record<string, string> = {
   waitlist_subscribe: 'Записались в лист ожидания',
   waitlist_unsubscribe: 'Отключили «Сообщить о поступлении»',
   waitlist_notified: 'Получили «снова в наличии»',
+  upsell_shown: 'Увидели допродажу в корзине',
+  upsell_add: 'Добавили товар из допродажи',
+  receipt_sent: 'Прислали чек в бот',
+  receipt_confirmed: 'Оплата подтверждена по чеку',
+  receipt_rejected: 'Чек отклонён',
 };
 const SYSTEM_NAMES: Record<string, string> = { payme: 'Payme', click: 'Click', uzum: 'Uzum' };
 const PERIODS = [

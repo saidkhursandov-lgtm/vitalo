@@ -15,9 +15,11 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
  * 2.1: payment_soon_click — a tap on Payme / Click / Uzum while it is «Скоро»; props.system = payme | click | uzum.
  * 2.4: manifest_open (props.source = home | ai_sheet), ai_tab_click — from the app; waitlist_subscribe,
  * waitlist_unsubscribe and waitlist_notified (props.product_id) — written by the server only.
+ * 3.1: upsell_shown (props.count, props.source = auto | manual), upsell_add (props.product_id) — from the app;
+ * receipt_sent, receipt_confirmed, receipt_rejected (props.order_id, props.reason) — written by the server only.
  */
-export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click'] as const;
-export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified'] as const;
+export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add'] as const;
+export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected'] as const;
 export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;
 

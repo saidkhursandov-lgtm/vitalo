@@ -344,6 +344,7 @@ model users {
   notifications     notifications[]
   cancel_requests   cancel_requests[]
   waitlist          product_waitlist[]
+  payment_receipts  payment_receipts[]
 
   @@index([status])
 }
@@ -432,6 +433,7 @@ model staff_users {
   receiving          receiving_sessions[]
   unit_events        physical_unit_events[]
   marketplace_orders marketplace_orders[]
+  reviewed_receipts  payment_receipts[]
 }
 
 model staff_sessions {
@@ -1313,6 +1315,7 @@ model orders {
   ledger          bonus_ledger[]
   cancel_requests cancel_requests[]
   tasks           manager_tasks[]
+  receipts        payment_receipts[]
 
   @@index([user_id, status, created_at])
   @@index([status, reserved_until]) // reservation-expiry job
@@ -1671,6 +1674,32 @@ model product_waitlist {
 
   @@unique([product_id, user_id])
   @@index([notified_at])
+}
+
+/// 3.1: a receipt (screenshot or PDF) the customer sent to the bot for a card transfer. Never deleted: a rejected one
+/// stays with its reason. The file lives in the private receipts folder (RECEIPTS_DIR), not in the public uploads.
+model payment_receipts {
+  id                      String       @id @default(uuid()) @db.Uuid
+  order_id                String       @db.Uuid
+  user_id                 String       @db.Uuid
+  file_key                String // path inside RECEIPTS_DIR: <order id>/<receipt id>.<ext>
+  mime                    String
+  size_bytes              Int
+  /// Telegram's id of the file: the same picture sent twice for one order is stored once
+  telegram_file_unique_id String
+  /// Telegram's file id for this bot: staff get the receipt from the bot without uploading it again
+  telegram_file_id        String
+  status                  String       @default("pending") // pending | confirmed | rejected
+  reject_reason           String?
+  reviewed_by             String?      @db.Uuid
+  reviewed_at             DateTime?
+  created_at              DateTime     @default(now())
+  order                   orders       @relation(fields: [order_id], references: [id])
+  user                    users        @relation(fields: [user_id], references: [id])
+  reviewer                staff_users? @relation(fields: [reviewed_by], references: [id])
+
+  @@unique([order_id, telegram_file_unique_id])
+  @@index([order_id, created_at])
 }
 
 model marketing_campaigns {
