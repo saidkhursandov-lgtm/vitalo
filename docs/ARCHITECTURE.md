@@ -43,7 +43,7 @@
 | Склад | `warehouses`, `inventory`, `inventory_batches`, `inventory_movements`, `physical_units` (банки), `physical_unit_events` | остаток на товар и склад; доступно = факт − резерв |
 | Закупки | `suppliers`, `purchases`, `purchase_lines`, `receiving_sessions`, `receiving_session_lines`, `purchase_events` | закупка → строки → приёмка → банки |
 | Корзина и заказы | `carts`, `cart_items`, `orders`, `order_items`, `order_item_units`, `order_status_history`, `order_edit_log`, `shipments`, `cancel_requests`, `returns` | заказ → позиции → банки; история статусов |
-| Оплата | `payment_methods` (`card_transfer`, `bank_transfer`, `cod`, …), `payments`, `payment_attempts`, `manual_payment_confirmations` | платёж → заказ; ручное подтверждение менеджером |
+| Оплата | `payment_methods` (`card_transfer`, `bank_transfer`, `cod`, …), `payments`, `payment_attempts`, `manual_payment_confirmations`, `payment_receipts` | платёж → заказ; ручное подтверждение менеджером; `payment_receipts` — чеки из бота (3.1, миграция `20261101100000`, только добавляющая; на `vitalo_test` есть, на сервере — нет) |
 | Доставка | `regions`, `cities`, `delivery_tariffs` | тариф по городу, порог бесплатной доставки |
 | Маркетплейсы | `marketplace_orders`, `marketplace_order_lines`, `marketplace_order_units`, `marketplace_external_orders`, `yandex_sync_runs`, `ozon_accounts` | заказ Яндекса → строки → банки |
 | Финансы | `expenses`, `expense_categories`, `tax_payments`, `payroll_*`, `finance_reminders`, `sales_daily` | — |
@@ -79,7 +79,7 @@
 - VPS Hostmaster в Узбекистане, Ubuntu 24.04, IP `91.213.99.230`; данные должны храниться в Узбекистане.
 - Службы: `nginx`, `postgresql` (база `vitalo`, вход через локальный сокет), `vitalo-api`, `vitalo-bot`,
   `vitalo-backup.timer`, `certbot.timer`, `fail2ban`, `ufw` (открыты только 22/80/443).
-- Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `.env` в `apps/api`.
+- Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `/var/lib/vitalo/receipts` (чеки клиентов, закрытая папка `RECEIPTS_DIR`, nginx её не раздаёт; с 3.1, на сервере ещё нет), `.env` в `apps/api`.
 - Файлы настроек сервера в репозитории: `deploy/nginx`, `deploy/systemd`, `deploy/sudoers-vitalo`.
 
 ## Деплой
@@ -93,7 +93,7 @@
 ## Бэкапы
 
 - Сервер: `scripts/server/backup.sh` каждую ночь в 03:30 (таймер) и перед каждым `update.sh`: база (сразу
-  проверяется), фото, `.env`; хранение 14 дней. Проверка восстановления — `restore-check.sh`.
+  проверяется), фото, чеки (`receipts-*.tar.gz`, с 3.1), `.env`; хранение 14 дней. Проверка восстановления — `restore-check.sh`.
 - Ноутбук: копии `vitalo_dev` в папке `backups\` (в git не попадают). Копии с сервера забирать к себе по
   [DEPLOY_RUNBOOK](DEPLOY_RUNBOOK.md), фаза 7.3.
 
