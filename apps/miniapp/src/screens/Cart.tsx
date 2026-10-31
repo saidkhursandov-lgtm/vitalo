@@ -3,11 +3,12 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { QuoteTerm } from '../components/Delivery';
-import { EmptyState, ErrorState, Loading, RegionCitySelect, StickyAction } from '../components/ui';
+import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui';
+import { RegionCitySelect } from '../components/PlacePicker';
 import { OrderTotals } from '../components/OrderItems';
 import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import { useAddresses, useCart, useCartActions, useRegions, type CityRef } from '../lib/queries';
+import { useCart, useCartActions, useDeliveryCity, useRegions } from '../lib/queries';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
 
 /** Human text for a cart warning (price changed / qty reduced / out of stock). */
@@ -54,9 +55,18 @@ export function Cart() {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const regions = useRegions();
-  const addresses = useAddresses();
-  const [city, setCity] = useState<{ region_id: string; city_id: string }>({ region_id: '', city_id: '' });
-  const selected: CityRef | null = city.region_id && city.city_id ? city : null;
+  // 3.1: one delivery city for the cart and checkout (starts as the primary saved address); a region picked without
+  // its district yet is only a draft here, so the quote never shows a district the customer did not choose.
+  const [shared, setShared] = useDeliveryCity();
+  const [draftRegion, setDraftRegion] = useState('');
+  const selected = draftRegion ? null : shared;
+  const city = { region_id: draftRegion || (shared?.region_id ?? ''), city_id: selected?.city_id ?? '' };
+  const setCity = (v: { region_id: string; city_id: string }) => {
+    if (v.city_id) {
+      setShared(v);
+      setDraftRegion('');
+    } else setDraftRegion(v.region_id);
+  };
   const cart = useCart(selected);
   const { setQty, remove } = useCartActions();
   // The API reports each warning once (then stores the correction). Any screen may have loaded the cart
@@ -64,12 +74,6 @@ export function Cart() {
   const client = useQueryClient();
   const warnings = useQuery({ queryKey: ['cart-warnings'], queryFn: () => [] as CartWarning[], enabled: false, initialData: [] as CartWarning[] }).data;
   useEffect(() => () => void client.setQueryData(['cart-warnings'], []), [client]);
-
-  // Default delivery city = the primary saved address.
-  useEffect(() => {
-    const primary = addresses.data?.find((a) => a.is_primary);
-    if (primary && !city.region_id) setCity({ region_id: primary.region.id, city_id: primary.city.id });
-  }, [addresses.data, city.region_id]);
 
   if (cart.isPending && !cart.data) return <div className="page"><Loading variant="list" count={3} /></div>;
   if (cart.isError) return <ErrorState error={cart.error} onRetry={() => void cart.refetch()} />;
@@ -153,7 +157,7 @@ export function Cart() {
       </section>
 
       <StickyAction>
-        <button className="btn btn-block" disabled={!data.can_checkout} onClick={() => navigate('/checkout', { state: selected })}>
+        <button className="btn btn-block" disabled={!data.can_checkout} onClick={() => navigate('/checkout')}>
           {t('cart.checkout', { sum: money(payable, lang) })}
         </button>
       </StickyAction>

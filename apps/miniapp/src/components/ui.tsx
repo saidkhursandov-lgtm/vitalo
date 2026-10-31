@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
-import { discountPercent, money, nameOf, shortNameOf, tileLine } from '../lib/format';
+import { discountPercent, money, shortNameOf, tileLine } from '../lib/format';
 import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
-import type { OrderStatus, ProductListItem, Region } from '../lib/types';
+import type { OrderStatus, ProductListItem } from '../lib/types';
 import { Picture } from './Picture';
 import { QuickAdd } from './QuickAdd';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
@@ -312,48 +312,6 @@ export function Stepper({ value, min = 1, max, onChange, disabled }: { value: nu
       <button type="button" aria-label="+" disabled={disabled || value >= max} onClick={() => onChange(value + 1)}>
         <PlusIcon width={18} height={18} />
       </button>
-    </div>
-  );
-}
-
-/** Region + city dropdowns; changing the region resets the city. */
-export function RegionCitySelect({
-  regions,
-  regionId,
-  cityId,
-  onChange,
-}: {
-  regions: Region[];
-  regionId: string;
-  cityId: string;
-  onChange: (v: { region_id: string; city_id: string }) => void;
-}) {
-  const { t, lang } = useI18n();
-  const region = regions.find((r) => r.id === regionId);
-  return (
-    <div className="field-row region-city">
-      <label className="field">
-        <span>{t('checkout.region')}</span>
-        <select value={regionId} onChange={(e) => onChange({ region_id: e.target.value, city_id: '' })}>
-          <option value="">{t('checkout.choose')}</option>
-          {[...regions].sort((a, b) => nameOf(a, lang).localeCompare(nameOf(b, lang), lang)).map((r) => (
-            <option key={r.id} value={r.id}>
-              {nameOf(r, lang)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>{t('checkout.city')}</span>
-        <select value={cityId} disabled={!region} onChange={(e) => onChange({ region_id: regionId, city_id: e.target.value })}>
-          <option value="">{t('checkout.choose')}</option>
-          {[...(region?.cities ?? [])].sort((a, b) => nameOf(a, lang).localeCompare(nameOf(b, lang), lang)).map((c) => (
-            <option key={c.id} value={c.id}>
-              {nameOf(c, lang)}
-            </option>
-          ))}
-        </select>
-      </label>
     </div>
   );
 }

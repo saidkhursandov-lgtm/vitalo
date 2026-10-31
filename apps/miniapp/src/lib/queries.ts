@@ -221,3 +221,15 @@ export const useOrder = (id: string) => useQuery({ queryKey: ['order', id], quer
 
 export const useBankTransfer = (id: string) =>
   useQuery({ queryKey: ['order', id, 'bank-transfer'], queryFn: () => api<BankTransfer>(`/orders/${id}/payment/bank-transfer`) });
+
+/**
+ * 3.1: the delivery city chosen in the cart or at checkout, shared by both screens (and kept while the Mini App is
+ * open), so the district picked in the cart is the one checkout uses. Starts as the primary saved address.
+ */
+export function useDeliveryCity(): [CityRef | null, (c: CityRef | null) => void] {
+  const client = useQueryClient();
+  const primary = useAddresses().data?.find((a) => a.is_primary);
+  const chosen = useQuery({ queryKey: ['delivery-city'], queryFn: () => null as CityRef | null, enabled: false, initialData: null as CityRef | null, staleTime: Infinity, gcTime: Infinity }).data;
+  const city = chosen ?? (primary ? { region_id: primary.region.id, city_id: primary.city.id } : null);
+  return [city, (c) => client.setQueryData(['delivery-city'], c)];
+}

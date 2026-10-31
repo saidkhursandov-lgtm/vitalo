@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PinIcon } from '../components/Icons';
-import { Empty, EmptyState, ErrorState, Loading, RegionCitySelect } from '../components/ui';
+import { Empty, EmptyState, ErrorState, Loading } from '../components/ui';
+import { RegionCitySelect } from '../components/PlacePicker';
 import { ApiError } from '../lib/api';
 import { nameOf } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';

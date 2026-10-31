@@ -1049,3 +1049,28 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .waitlist-btn { gap: 8px; }
 .buy-panel-main .waitlist-btn { flex: 1 1 auto; }
 .waitlist-btn.is-on, .waitlist-btn.is-on:active { background: var(--primary-soft); color: var(--primary-text); border-color: var(--primary-soft); }
+
+/* ---------- 3.1: region / district picker (bottom sheet with search) ---------- */
+.picker-btn {
+  display: flex; align-items: center; width: 100%; min-height: 48px; padding: 12px 40px 12px 14px; text-align: left;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-strong); color: var(--text); font-size: 16px; line-height: 1.3;
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%235b6475' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center;
+}
+.picker-btn > span { white-space: normal; overflow-wrap: anywhere; }
+.picker-btn.is-empty { color: var(--placeholder); }
+.picker-btn:focus-visible { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); outline: none; }
+.picker-btn:disabled { color: var(--muted); background-color: var(--surface-2); }
+.place-sheet { height: 80vh; height: 80dvh; }
+.place-search { position: relative; display: block; margin: 8px 0 4px; flex: none; }
+.place-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.place-search input.place-input { padding-left: 42px; }
+.place-list { list-style: none; margin: 0 -16px; padding: 0 0 calc(12px + var(--safe-b)); flex: 1; min-height: 0; }
+.place-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px;
+  padding: 10px 16px; text-align: left; font-size: 16px; line-height: 1.35; color: var(--text); background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
+}
+.place-row > span { white-space: normal; overflow-wrap: anywhere; }
+.place-row.is-on { color: var(--primary); font-weight: 600; background: var(--primary-soft); }
+.place-row svg { flex: none; color: var(--primary); }
+.place-group { padding: 14px 16px 6px; font-weight: 600; text-transform: none; }
+.place-empty { padding: 20px 16px; text-align: center; }

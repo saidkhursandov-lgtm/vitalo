@@ -1,13 +1,14 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ErrorState, Loading, RegionCitySelect, StickyAction } from '../components/ui';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ErrorState, Loading, StickyAction } from '../components/ui';
+import { RegionCitySelect } from '../components/PlacePicker';
 import { api, ApiError, isNetworkError } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { money, normalizePhone, prettyPhone } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { createIdempotencyKeys } from '../lib/idempotency';
-import { useAddressActions, useAddresses, useCheckoutDefaults, useRegions, useShopTexts, type CityRef } from '../lib/queries';
+import { useAddressActions, useAddresses, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
 import { canRequestPhone, haptic, requestPhone } from '../lib/telegram';
 import { track } from '../lib/analytics';
 import { PhoneIcon } from '../components/Icons';
@@ -47,12 +48,12 @@ export function Checkout() {
   const user = useUser();
   const navigate = useNavigate();
   const client = useQueryClient();
-  const location = useLocation();
   const [params] = useSearchParams();
   const regions = useRegions();
   const addresses = useAddresses();
   const defaults = useCheckoutDefaults();
   const shop = useShopTexts();
+  const [deliveryCity, setDeliveryCity] = useDeliveryCity();
   const { create: saveAddress } = useAddressActions();
   const keys = useRef(createIdempotencyKeys()).current;
   useEffect(() => track('checkout_start', { source: params.get('buy') ? 'buy_now' : 'cart' }), [params]);
@@ -69,23 +70,28 @@ export function Checkout() {
   const [errors, setErrors] = useState<Partial<Record<keyof Form, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Prefill once: last order's recipient, the primary address, or the city chosen in the cart.
+  // Prefill once: last order's recipient; the address = the delivery city chosen in the cart (3.1: shared with the
+  // cart, starts as the primary address). A saved address in that city is selected (the primary one first);
+  // otherwise «Новый адрес» opens with that region and district already filled in.
   useEffect(() => {
     if (form || !addresses.data || defaults.isPending) return;
-    const primary = addresses.data.find((a) => a.is_primary);
-    const fromCart = location.state as CityRef | null;
     const d = defaults.data;
+    const inCity = deliveryCity ? addresses.data.filter((a) => a.city.id === deliveryCity.city_id) : [];
+    const savedInCity = inCity.find((a) => a.is_primary) ?? inCity[0];
+    const region_id = deliveryCity?.region_id ?? d?.region_id ?? '';
+    const city_id = deliveryCity?.city_id ?? d?.city_id ?? '';
     setForm({
       name: d?.recipient_name ?? [user.first_name, user.last_name].filter(Boolean).join(' '),
       phone: d?.recipient_phone ? prettyPhone(d.recipient_phone) : user.phone ? prettyPhone(user.phone) : '',
-      addressId: primary ? primary.id : 'new',
-      region_id: fromCart?.region_id ?? d?.region_id ?? '',
-      city_id: fromCart?.city_id ?? d?.city_id ?? '',
-      address_text: d?.address_text ?? '',
+      addressId: savedInCity ? savedInCity.id : 'new',
+      region_id,
+      city_id,
+      // the last order's street only when it was in this same district
+      address_text: d?.address_text && d.city_id === city_id ? d.address_text : '',
       comment: '',
       saveAddress: true,
     });
-  }, [form, addresses.data, defaults.isPending, defaults.data, location.state, user]);
+  }, [form, addresses.data, defaults.isPending, defaults.data, deliveryCity, user]);
 
   const saved = addresses.data?.find((a) => a.id === form?.addressId);
   const city: CityRef | null = saved
@@ -221,7 +227,11 @@ export function Checkout() {
           <div className="radio-list">
             {addresses.data.map((a) => (
               <label key={a.id} className="radio-row">
-                <input type="radio" name="address" checked={form.addressId === a.id} onChange={() => set('addressId', a.id)} />
+                <input type="radio" name="address" checked={form.addressId === a.id} onChange={() => {
+                    set('addressId', a.id);
+                    setDeliveryCity({ region_id: a.region.id, city_id: a.city.id });
+                  }}
+                />
                 <span>
                   {a.label && <strong>{a.label}: </strong>}
                   {a.address_text}
@@ -230,14 +240,23 @@ export function Checkout() {
               </label>
             ))}
             <label className="radio-row">
-              <input type="radio" name="address" checked={form.addressId === 'new'} onChange={() => set('addressId', 'new')} />
+              <input type="radio" name="address" checked={form.addressId === 'new'} onChange={() => {
+                  set('addressId', 'new');
+                  if (form.region_id && form.city_id) setDeliveryCity({ region_id: form.region_id, city_id: form.city_id });
+                }}
+              />
               <span>{t('checkout.newAddress')}</span>
             </label>
           </div>
         )}
         {form.addressId === 'new' && (
           <>
-            <RegionCitySelect regions={regions.data} regionId={form.region_id} cityId={form.city_id} onChange={(v) => setForm({ ...form, ...v })} />
+            <RegionCitySelect regions={regions.data} regionId={form.region_id} cityId={form.city_id} onChange={(v) => {
+                setForm({ ...form, ...v });
+                setErrors({ ...errors, city_id: undefined });
+                if (v.city_id) setDeliveryCity(v);
+              }}
+            />
             {errors.city_id && <small className="error-text">{errors.city_id}</small>}
             <label className="field">
               <span>{t('checkout.addressText')}</span>
