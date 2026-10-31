@@ -238,6 +238,12 @@ export class ManifestDto {
 }
 
 /** Profile card "VITALO Bonus — скоро" (B4). */
+/** 3.1: «Настройки → Корзина». Up to 12 hand-picked products; an empty list = picked automatically. */
+export class CartUpsellDto {
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+  @ApiProperty({ type: [String] }) @IsArray() @ArrayMaxSize(12) @IsUUID('all', { each: true }) product_ids!: string[];
+}
+
 export class BonusTeaserDto {
   @ApiProperty() @IsBoolean() enabled!: boolean;
   @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) text!: LocalizedTextDto;
@@ -407,6 +413,34 @@ export class AdminSettingsService {
     };
     await this.saveSetting(staffId, SETTING_KEYS.manifest, value, 'settings.manifest_updated');
     return this.manifest();
+  }
+
+  /** The saved switch and list, with each listed product's name, price and stock (so the admin sees what is offered). */
+  async cartUpsell() {
+    const saved = await this.settings.getOrDefault('cart_upsell');
+    const rows = saved.product_ids.length
+      ? await this.prisma.products.findMany({ where: { id: { in: saved.product_ids } }, select: { id: true, sku: true, name_ru: true, short_name_ru: true, price_uzs: true, status: true, inventory: { select: { actual_qty: true, reserved_qty: true } } } })
+      : [];
+    const products = saved.product_ids
+      .map((id) => rows.find((r) => r.id === id))
+      .filter((r): r is (typeof rows)[number] => !!r)
+      .map((r) => ({
+        id: r.id,
+        sku: r.sku,
+        name: r.short_name_ru || r.name_ru,
+        price_uzs: Number(r.price_uzs),
+        active: r.status === 'active',
+        in_stock: r.inventory.some((i) => i.actual_qty - i.reserved_qty > 0),
+      }));
+    return { enabled: saved.enabled, product_ids: products.map((p) => p.id), products };
+  }
+
+  async setCartUpsell(staffId: string, dto: CartUpsellDto) {
+    const ids = [...new Set(dto.product_ids)];
+    const known = await this.prisma.products.count({ where: { id: { in: ids } } });
+    if (known !== ids.length) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT', message: 'Some products do not exist' });
+    await this.saveSetting(staffId, SETTING_KEYS.cartUpsell, { enabled: dto.enabled, product_ids: ids }, 'settings.cart_upsell_updated');
+    return this.cartUpsell();
   }
 
   async setBonusTeaser(staffId: string, dto: BonusTeaserDto) {
@@ -749,6 +783,16 @@ export class AdminSettingsController {
   @Put('bonus-teaser')
   setBonusTeaser(@CurrentStaff() me: StaffContext, @Body() dto: BonusTeaserDto) {
     return this.settings.setBonusTeaser(me.staff.id, dto);
+  }
+
+  @Get('cart-upsell')
+  cartUpsell() {
+    return this.settings.cartUpsell();
+  }
+
+  @Put('cart-upsell')
+  setCartUpsell(@CurrentStaff() me: StaffContext, @Body() dto: CartUpsellDto) {
+    return this.settings.setCartUpsell(me.staff.id, dto);
   }
 
   @Get('label-size')

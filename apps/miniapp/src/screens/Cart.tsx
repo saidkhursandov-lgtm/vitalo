@@ -1,14 +1,16 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { QuoteTerm } from '../components/Delivery';
+import { QuickAdd } from '../components/QuickAdd';
+import { track } from '../lib/analytics';
 import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui';
 import { RegionCitySelect } from '../components/PlacePicker';
 import { OrderTotals } from '../components/OrderItems';
 import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import { useCart, useCartActions, useDeliveryCity, useRegions } from '../lib/queries';
+import { useCart, useCartActions, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
 
 /** Human text for a cart warning (price changed / qty reduced / out of stock). */
@@ -47,6 +49,45 @@ export function FreeShippingProgress({ quote }: { quote: DeliveryQuote }) {
       <div className="progress" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
         <div style={{ width: `${pct}%` }} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * 3.1: 2–3 products under the free-delivery bar with a [+]. The server decides when there is a strip (see
+ * CartService.upsell); upsell_shown is reported once per set of products, upsell_add on each [+].
+ */
+export function UpsellStrip({ city, goodsTotal }: { city: CityRef | null; goodsTotal: number }) {
+  const { t, lang } = useI18n();
+  const upsell = useUpsell(city, goodsTotal);
+  const items = upsell.data?.items ?? [];
+  const shown = useRef('');
+  const key = items.map((p) => p.id).join(',');
+  useEffect(() => {
+    if (!key || shown.current === key) return;
+    shown.current = key;
+    track('upsell_shown', { count: items.length, source: upsell.data?.source ?? 'auto' });
+  }, [key, items.length, upsell.data?.source]);
+  if (!city || items.length < 2) return null;
+  return (
+    <div className="upsell">
+      <h3 className="upsell-title">{t('upsell.title')}</h3>
+      <ul className="upsell-list">
+        {items.map((p) => (
+          <li key={p.id}>
+            <Link to={`/product/${p.id}`} className="upsell-item">
+              <span className="upsell-img">{p.image_url && <img src={p.image_url} alt="" width={56} height={56} loading="lazy" decoding="async" />}</span>
+              <span className="upsell-info">
+                <span className="upsell-name">{shortNameOf(p, lang)}</span>
+                <strong className="upsell-price">{money(p.price_uzs, lang)}</strong>
+              </span>
+              <span className="upsell-add tile-action">
+                <QuickAdd productId={p.id} inStock={p.in_stock} onAdd={() => track('upsell_add', { product_id: p.id, source: upsell.data?.source ?? 'auto' })} />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -140,6 +181,7 @@ export function Cart() {
           <>
             <QuoteTerm min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />
             <FreeShippingProgress quote={delivery} />
+            <UpsellStrip city={selected} goodsTotal={data.goods_total_uzs} />
           </>
         ) : (
           <p className="hint small">{t('cart.chooseCity')}</p>

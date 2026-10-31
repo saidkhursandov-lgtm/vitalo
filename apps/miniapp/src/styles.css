@@ -1082,3 +1082,25 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .receipt-btn > span { white-space: normal; text-align: center; line-height: 1.25; }
 .receipt-btn svg { flex: none; }
 .receipt-sent { margin: 0; font-weight: 600; color: var(--success); }
+
+/* ---------- 3.1: products under «Добавьте ещё X сум — доставка бесплатна» ---------- */
+.upsell { margin-top: 12px; }
+.upsell-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--text); }
+.upsell-list {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(232px, 78%); gap: 8px; overflow-x: auto;
+  margin: 0 -16px; padding: 0 16px 2px; list-style: none; scrollbar-width: none; scroll-snap-type: x proximity;
+}
+.upsell-list::-webkit-scrollbar { display: none; }
+.upsell-list > li { min-width: 0; scroll-snap-align: start; }
+.upsell-item {
+  display: flex; align-items: center; gap: 10px; height: 100%; padding: 8px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none;
+}
+.upsell-img { flex: none; width: 56px; height: 56px; border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+.upsell-img img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.upsell-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.upsell-name {
+  font-size: 13px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.upsell-price { font-size: 14px; }
+.upsell-add.tile-action { flex: none; margin: 0; }

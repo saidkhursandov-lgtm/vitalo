@@ -1,6 +1,7 @@
 import { Global, Injectable, Module } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BONUS_TEASER_DEFAULT, HOME_CONTENT_DEFAULT, MANIFEST_DEFAULT } from './home-content';
+import { CART_UPSELL_DEFAULT } from '../cart/upsell';
 
 /** Business settings editable by admins (table `settings`, JSON values). */
 export const SETTING_KEYS = {
@@ -18,6 +19,7 @@ export const SETTING_KEYS = {
   labelSize: 'label_size',
   checkoutOptions: 'checkout_options',
   manifest: 'home_manifest',
+  cartUpsell: 'cart_upsell',
 } as const;
 
 /**
@@ -87,6 +89,8 @@ export const SETTING_DEFAULTS = {
   checkout_options: { cod_max_total_uzs: null, show_online_soon: false, first_order_free_delivery: false } as CheckoutOptions,
   /** 2.4: «Как VITALO отбирает добавки». Not inserted by a migration: the default is used until an admin saves one. */
   home_manifest: MANIFEST_DEFAULT,
+  /** 3.1: «Настройки → Корзина» — products under the free-delivery bar. Not inserted by a migration: on by default. */
+  cart_upsell: CART_UPSELL_DEFAULT,
 };
 
 /** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */

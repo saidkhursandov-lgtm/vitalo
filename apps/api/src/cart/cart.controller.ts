@@ -40,6 +40,13 @@ export class CartController {
     return this.cart.getCart(auth.user.id, address);
   }
 
+  /** 3.1: 2–3 products to reach free delivery (empty when not needed). */
+  @Get('upsell')
+  upsell(@CurrentAuth() auth: AuthContext, @Query() q: CartQuery) {
+    const address = q.region_id && q.city_id ? { region_id: q.region_id, city_id: q.city_id } : undefined;
+    return this.cart.upsell(auth.user.id, address);
+  }
+
   /** Badge counter; does not consume the "price changed / qty reduced" warnings. */
   @Get('count')
   count(@CurrentAuth() auth: AuthContext) {

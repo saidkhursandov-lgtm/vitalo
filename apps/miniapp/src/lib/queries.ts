@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, qs } from './api';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
+import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CartUpsell, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -92,6 +92,18 @@ export function useCart(city?: CityRef | null) {
     },
   });
 }
+
+/**
+ * 3.1: 2–3 products under «Добавьте ещё X сум — доставка бесплатна». Asked again when the cart total or the district
+ * changes; an empty list = no strip (block off, threshold reached, free first order, not enough products).
+ */
+export const useUpsell = (city: CityRef | null, goodsTotal: number) =>
+  useQuery({
+    queryKey: ['upsell', city, goodsTotal],
+    queryFn: () => api<CartUpsell>(`/cart/upsell${qs({ ...city })}`),
+    enabled: !!city && goodsTotal > 0,
+    placeholderData: (prev) => prev,
+  });
 
 /** Home slide: the free-delivery threshold (from the tariff) and the first-order offer for this customer. */
 export const useFreeShipping = () => useQuery({ queryKey: ['free-shipping'], queryFn: () => api<FreeShipping>('/delivery/free-shipping'), staleTime: 60_000 });

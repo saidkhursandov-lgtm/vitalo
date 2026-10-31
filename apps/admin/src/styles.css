@@ -374,3 +374,8 @@ textarea { resize: vertical; }
 .receipts li:first-child { padding-top: 0; border-top: 0; }
 .receipt-meta { display: flex; flex-direction: column; gap: 6px; min-width: 200px; flex: 1; }
 .receipt-img { display: block; max-width: 240px; max-height: 320px; border-radius: 8px; border: 1px solid var(--border); object-fit: contain; background: #fff; }
+
+/* 3.1: «Настройки → Корзина» — search results to add a product */
+.pick-list { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); max-height: 280px; overflow-y: auto; }
+.pick-list li + li { border-top: 1px solid var(--border); }
+.pick-list .btn { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; height: auto; min-height: 40px; }

@@ -5,7 +5,9 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockService } from '../inventory/stock.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { CartWarning, MAX_LINE_QTY, reconcileCartLine } from './cart-reconcile';
+import { rankUpsell, UPSELL_MIN_COUNT } from './upsell';
 
 export interface CartLineView {
   product_id: string;
@@ -40,7 +42,34 @@ export class CartService {
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
     private readonly delivery: DeliveryService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /**
+   * 3.1: products under «Добавьте ещё X сум — доставка бесплатна»: in stock, not in the cart, priced close to the
+   * missing amount (see rankUpsell). Nothing when the block is off, the threshold is reached, the delivery is free as
+   * the first order, no city is chosen yet, or fewer than 2 products fit. Read-only, like count().
+   */
+  async upsell(userId: string, address?: { region_id: string; city_id: string }) {
+    const none = { items: [] as ReturnType<typeof toProductListItem>[], source: null as 'auto' | 'manual' | null, remaining_uzs: 0 };
+    const cfg = await this.settings.getOrDefault('cart_upsell');
+    if (!cfg.enabled || !address) return none;
+    const { goods_total_uzs } = await this.count(userId);
+    if (!goods_total_uzs) return none;
+    const quote = await this.delivery.quote(address.region_id, address.city_id, goods_total_uzs, undefined, { userId });
+    if (quote.is_free || quote.first_order || quote.remaining_for_free_uzs <= 0) return none;
+
+    const inCart = (await this.prisma.cart_items.findMany({ where: { cart: { user_id: userId, status: 'active' } }, select: { product_id: true } })).map((i) => i.product_id);
+    const manual = (cfg.product_ids ?? []).filter((id) => !inCart.includes(id));
+    const source = cfg.product_ids?.length ? ('manual' as const) : ('auto' as const);
+    if (source === 'manual' && !manual.length) return none;
+    const products = await this.prisma.products.findMany({
+      where: { status: 'active', id: source === 'manual' ? { in: manual } : { notIn: inCart }, price_uzs: { gt: 0 } },
+      include: listInclude,
+    });
+    const items = rankUpsell(products.map(toProductListItem).filter((p) => p.in_stock), quote.remaining_for_free_uzs);
+    return items.length >= UPSELL_MIN_COUNT ? { items, source, remaining_uzs: quote.remaining_for_free_uzs } : none;
+  }
 
   /** Opening the cart re-validates every line (price, stock, product status) and persists corrections. */
   async getCart(userId: string, address?: { region_id: string; city_id: string }, extraWarnings: CartWarning[] = []): Promise<CartView> {

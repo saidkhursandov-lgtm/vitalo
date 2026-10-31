@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, ROLE } from '../lib/format';
 import { CheckoutOptions } from './settings/CheckoutOptions';
+import { CartUpsellSettings } from './settings/CartUpsell';
 import { ContactsForm } from './settings/Contacts';
 import { PaymentTimeouts } from './settings/PaymentTimeouts';
 import { DeliverySettings } from './settings/Delivery';
@@ -16,7 +17,7 @@ import { ManifestSettings } from './settings/Manifest';
 import { LabelSizeSettings } from './settings/LabelSize';
 import { LegalSettings } from './settings/Legal';
 
-const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', home: 'Главная', tariffs: 'Доставка', dicts: 'Справочники', print: 'Печать', docs: 'Документы', staff: 'Сотрудники' } as const;
+const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', home: 'Главная', cart: 'Корзина', tariffs: 'Доставка', dicts: 'Справочники', print: 'Печать', docs: 'Документы', staff: 'Сотрудники' } as const;
 type Tab = keyof typeof TABS;
 
 export function Settings() {
@@ -55,6 +56,7 @@ export function Settings() {
           <HomeSettings />
         </>
       )}
+      {tab === 'cart' && <CartUpsellSettings />}
       {tab === 'tariffs' && <DeliverySettings />}
       {tab === 'dicts' && <DictionariesSettings />}
       {tab === 'print' && <LabelSizeSettings />}

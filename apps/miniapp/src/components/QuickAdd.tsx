@@ -30,7 +30,7 @@ export function useQuickNotify() {
  * product and in the cart; «−» at 1 removes the product. Out of stock (2.4): «Сообщить о поступлении» — a bell of the
  * same size on a card, a wide button on the product page.
  */
-export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: string; inStock: boolean; variant?: 'card' | 'panel' }) {
+export function QuickAdd({ productId, inStock, variant = 'card', onAdd }: { productId: string; inStock: boolean; variant?: 'card' | 'panel'; onAdd?: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
   const notify = useQuickNotify();
@@ -49,6 +49,7 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
           tapHaptic();
           set(1);
           track('add_to_cart', { product_id: productId, source: variant });
+          onAdd?.();
         }}
       >
         <span className="quick-round-dot">

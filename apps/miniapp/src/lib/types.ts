@@ -372,3 +372,10 @@ export interface CartCount {
   items_count: number;
   goods_total_uzs: number;
 }
+
+/** 3.1: GET /cart/upsell — products close to the amount missing for free delivery. */
+export interface CartUpsell {
+  items: ProductListItem[];
+  source: 'auto' | 'manual' | null;
+  remaining_uzs: number;
+}

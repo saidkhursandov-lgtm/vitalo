@@ -197,3 +197,108 @@ describe('Stage 3.1 receipts (e2e)', () => {
     await http().get(`/uploads/receipts/${order.id}/${receipt_id}.jpg`).expect(404);
   });
 });
+
+/** 3.1: products under «Добавьте ещё X сум — доставка бесплатна», «Настройки → Корзина». */
+describe('Stage 3.1 cart upsell (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let addr: Awaited<ReturnType<typeof seededAddresses>>;
+  let admin: string;
+  let manager: string;
+  let tg = 831_200_000;
+  const http = () => request(app.getHttpServer());
+  const setUpsell = (value: object) => prisma.settings.upsert({ where: { key: 'cart_upsell' }, create: { key: 'cart_upsell', value }, update: { value } });
+  const setOptions = (value: object) => prisma.settings.upsert({ where: { key: 'checkout_options' }, create: { key: 'checkout_options', value }, update: { value } });
+  const options = { cod_max_total_uzs: null, show_online_soon: false, first_order_free_delivery: false };
+  const upsell = (token: string, where: { region_id: string; city_id: string } | null = addr.tashkent) =>
+    http().get('/api/cart/upsell').query(where ?? {}).set(bearer(token)).expect(200);
+
+  /** A customer whose cart is 200 000 in Tashkent: 100 000 is left to the free 300 000. */
+  async function customerWithCart(price = 200_000) {
+    const token = await loginCustomer(app, ++tg);
+    const p = await createTestProduct(prisma, { price, stock: 5 });
+    await http().post('/api/cart/items').set(bearer(token)).send({ product_id: p.id, qty: 1 }).expect(201);
+    return { token, inCart: p.id };
+  }
+
+  beforeAll(async () => {
+    app = await createTestApp();
+    prisma = app.get(PrismaService);
+    addr = await seededAddresses(prisma);
+    admin = await loginStaff(app, ADMIN_TG);
+    manager = await loginStaff(app, DEV_MANAGER_TG);
+    await setOptions(options);
+  });
+  afterEach(async () => {
+    await setUpsell({ enabled: true, product_ids: [] });
+    await setOptions(options);
+  });
+  afterAll(async () => {
+    await archiveTestProducts(prisma);
+    await app.close();
+  });
+
+  it('auto: 2–3 products in stock, not in the cart, priced close to the missing amount', async () => {
+    const { token, inCart } = await customerWithCart();
+    await createTestProduct(prisma, { price: 100_000, stock: 3 });
+    await createTestProduct(prisma, { price: 110_000, stock: 3 });
+    const body = (await upsell(token)).body;
+    expect(body).toMatchObject({ source: 'auto', remaining_uzs: 100_000 });
+    expect(body.items.length).toBeGreaterThanOrEqual(2);
+    expect(body.items.length).toBeLessThanOrEqual(3);
+    for (const p of body.items) {
+      expect(p.id).not.toBe(inCart);
+      expect(p.in_stock).toBe(true);
+      expect(p.price_uzs).toBeLessThanOrEqual(200_000);
+    }
+    // nothing is closer than a product that closes the gap exactly
+    expect(body.items[0].price_uzs).toBe(100_000);
+  });
+
+  it('manual list: only the listed products, in stock and not already in the cart', async () => {
+    const { token, inCart } = await customerWithCart();
+    const a = await createTestProduct(prisma, { price: 120_000, stock: 2 });
+    const b = await createTestProduct(prisma, { price: 60_000, stock: 2 });
+    const out = await createTestProduct(prisma, { price: 100_000, stock: 0 });
+    await setUpsell({ enabled: true, product_ids: [inCart, a.id, b.id, out.id] });
+    const body = (await upsell(token)).body;
+    expect(body.source).toBe('manual');
+    expect(body.items.map((p: { id: string }) => p.id)).toEqual([a.id, b.id]);
+
+    // fewer than 2 fit → no strip at all
+    await setUpsell({ enabled: true, product_ids: [inCart, a.id, out.id] });
+    expect((await upsell(token)).body).toEqual({ items: [], source: null, remaining_uzs: 0 });
+  });
+
+  it('nothing when the block is off, no district is chosen, the threshold is reached or the first order is free', async () => {
+    const { token } = await customerWithCart();
+    await createTestProduct(prisma, { price: 100_000, stock: 3 });
+    await createTestProduct(prisma, { price: 105_000, stock: 3 });
+    const none = { items: [], source: null, remaining_uzs: 0 };
+
+    await setUpsell({ enabled: false, product_ids: [] });
+    expect((await upsell(token)).body).toEqual(none);
+    await setUpsell({ enabled: true, product_ids: [] });
+    expect((await upsell(token, null)).body).toEqual(none);
+    await setOptions({ ...options, first_order_free_delivery: true });
+    expect((await upsell(token)).body).toEqual(none);
+    await setOptions(options);
+
+    const rich = await customerWithCart(320_000);
+    expect((await upsell(rich.token)).body).toEqual(none);
+  });
+
+  it('«Настройки → Корзина»: the admin saves the switch and the list, unknown products are refused, managers cannot', async () => {
+    const p = await createTestProduct(prisma, { price: 50_000, stock: 1, name: 'Допродажа E2E' });
+    const put = (token: string, body: object) => http().put('/api/staff/settings/cart-upsell').set(bearer(token)).send(body);
+
+    const saved = (await put(admin, { enabled: false, product_ids: [p.id, p.id] }).expect(200)).body;
+    expect(saved).toEqual({ enabled: false, product_ids: [p.id], products: [expect.objectContaining({ id: p.id, name: 'Допродажа E2E', price_uzs: 50_000, active: true, in_stock: true })] });
+    expect((await http().get('/api/staff/settings/cart-upsell').set(bearer(admin)).expect(200)).body).toEqual(saved);
+    expect(await prisma.audit_logs.count({ where: { action: 'settings.cart_upsell_updated' } })).toBeGreaterThan(0);
+
+    expect((await put(admin, { enabled: true, product_ids: [randomUUID()] }).expect(400)).body.code).toBe('UNKNOWN_PRODUCT');
+    await put(admin, { enabled: true, product_ids: ['not-a-uuid'] }).expect(400);
+    await put(manager, { enabled: true, product_ids: [] }).expect(403);
+  });
+});
