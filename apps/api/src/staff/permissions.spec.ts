@@ -27,7 +27,7 @@ describe('staff permissions', () => {
   });
 
   it('marketer: read-only catalog and dashboard, without revenue', () => {
-    expect(permissionsOf('marketer')).toEqual(['dashboard.view', 'products.view', 'yandex.price.view']);
+    expect(permissionsOf('marketer')).toEqual(['dashboard.view', 'products.view', 'yandex.price.view', 'promo.send']);
   });
 
   it('stage 1: Yandex price seen by admin, manager, marketer (not warehouse); synced by admin and manager', () => {

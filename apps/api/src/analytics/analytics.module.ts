@@ -17,9 +17,11 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
  * waitlist_unsubscribe and waitlist_notified (props.product_id) — written by the server only.
  * 3.1: upsell_shown (props.count, props.source = auto | manual), upsell_add (props.product_id) — from the app;
  * receipt_sent, receipt_confirmed, receipt_rejected (props.order_id, props.reason) — written by the server only.
+ * 3.2: notification_open (props.category, props.template), notification_read_all (props.count), active_order_click
+ * (props.order_id, props.action = open | pay) — from the app; intake_guide_sent (props.order_id, props.products) — server only.
  */
-export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add'] as const;
-export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected'] as const;
+export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click'] as const;
+export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent'] as const;
 export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;
 

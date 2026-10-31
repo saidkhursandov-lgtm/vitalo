@@ -27,6 +27,7 @@ import { normalizeUzPhone } from '../orders/orders.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { auditJson, AuditService } from './audit.service';
+import { renderCentre, type TemplatePayload } from '../notifications/notification-templates';
 import { can, type Permission } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 import { AnalyticsService } from '../analytics/analytics.module';
@@ -223,6 +224,24 @@ export class AdminOrdersService {
         created_at: e.created_at,
       })),
       tasks: order.tasks.map((t) => ({ type: t.type, status: t.status, note: t.note, created_at: t.created_at })),
+      // 3.2: messages the customer got about this order (bot + Mini App centre): what, when, delivered or not.
+      // Rows queued before 3.2 have no order_id and are found by the order number.
+      customer_notifications: (
+        await this.prisma.notifications.findMany({
+          where: { user_id: order.user_id, OR: [{ order_id: id }, { order_id: null, payload: { path: ['order_number'], equals: order.order_number } }] },
+          orderBy: { created_at: 'asc' },
+          take: 100,
+        })
+      ).map((n) => ({
+        id: n.id,
+        template: n.template,
+        text: renderCentre(n.template, (n.payload ?? {}) as unknown as TemplatePayload, 'ru').body,
+        status: n.status,
+        error: n.error,
+        created_at: n.created_at,
+        sent_at: n.sent_at,
+        read_at: n.read_at,
+      })),
       // Stage 2E «Сборка»: units of unit-tracked lines (null when the order has none); costs and profit only with costs.view
       assembly: await this.units.view(this.prisma, id, can(role, 'costs.view')),
       // What the current employee may do now (the server re-checks on every action).

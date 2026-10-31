@@ -55,6 +55,12 @@ export class OrdersController {
     return this.orders.list(auth.user.id, q.page);
   }
 
+  /** 3.2: the newest unfinished order for the plaque on the home screen, and how many more there are. */
+  @Get('active')
+  active(@CurrentAuth() auth: AuthContext) {
+    return this.orders.active(auth.user.id);
+  }
+
   @Get('checkout-defaults')
   checkoutDefaults(@CurrentAuth() auth: AuthContext) {
     return this.orders.checkoutDefaults(auth.user.id);

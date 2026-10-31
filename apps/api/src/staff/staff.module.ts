@@ -13,6 +13,7 @@ import { AdminOrdersController, AdminOrdersService } from './admin-orders';
 import { AdminProductsController, AdminProductsService } from './admin-products';
 import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
 import { AdminWaitlistController, AdminWaitlistService } from './admin-waitlist';
+import { PromoController, PromoService } from '../notifications/notification-centre';
 import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from './admin-receipts';
 import { BotSecretGuard } from '../bot-internal/bot-internal.module';
 import { AdminSettingsController, AdminSettingsService, AuditController, StaffUsersController } from './admin-settings';
@@ -69,6 +70,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AuditController,
     AdminLegalController,
     AdminWaitlistController,
+    PromoController,
     AdminReceiptsController,
     BotReceiptsController,
   ],
@@ -99,6 +101,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     { provide: YANDEX_CLIENT_OPTIONS, useValue: {} },
     AdminSettingsService,
     AdminWaitlistService,
+    PromoService,
     ReceiptsService,
     BotSecretGuard,
   ],

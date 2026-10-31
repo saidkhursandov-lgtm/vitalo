@@ -1,8 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { OrderStatus, Prisma, StaffRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CUSTOMER_STATUS_TEMPLATES, type TemplateName, type TemplatePayload } from './notification-templates';
+import { CUSTOMER_STATUS_TEMPLATES, type CentreCategory, type Lang, type TemplateName, type TemplatePayload } from './notification-templates';
 import { tashkentDateTime } from '../common/tashkent';
+import { SETTING_DEFAULTS, SETTING_KEYS, supportLink } from '../settings/settings.service';
+import { productTitle } from '../waitlist/waitlist';
+
+/** 3.2: «Как принимать ваш заказ» lines — one per product with a memo in the language (Russian as a fallback), no repeats. */
+export function intakeGuideItems(
+  products: { id: string; name_ru: string; name_uz: string | null; short_name_ru: string | null; short_name_uz: string | null; intake_memo_ru: string | null; intake_memo_uz: string | null }[],
+  lang: Lang,
+): { product_id: string; name: string; text: string }[] {
+  const seen = new Set<string>();
+  const out: { product_id: string; name: string; text: string }[] = [];
+  for (const p of products) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    const text = ((lang === 'uz' ? p.intake_memo_uz : null) || p.intake_memo_ru || '').trim();
+    if (text) out.push({ product_id: p.id, name: productTitle(p, lang), text });
+  }
+  return out;
+}
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -18,37 +36,90 @@ const ORDER_STAFF_ROLES = ['admin', 'manager'] as const;
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Customer message for an order status change, in the customer's language. Other statuses are ignored. */
+  /**
+   * 3.2: one customer message per order status — a bot message and an entry in the Mini App centre (the same row),
+   * in the customer's language, with «Открыть заказ». A repeated status is skipped (dedup_key). Other statuses are ignored.
+   */
   async orderStatusChanged(db: Db, orderId: string, status: OrderStatus, reason?: string | null): Promise<void> {
     let template: TemplateName | undefined = CUSTOMER_STATUS_TEMPLATES[status as keyof typeof CUSTOMER_STATUS_TEMPLATES];
     if (!template) return;
     const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, payments: { include: { method: { select: { code: true } } } } } });
+    const cod = order.payments.some((p) => p.method.code === 'cod');
+    // A card order is «new» only for a moment: it gets «Ожидает оплаты» right after.
+    if (status === 'new' && !cod) return;
     // Release 1: cash on delivery is not «Оплачен» when the manager confirms it — the customer pays the courier.
-    if (status === 'paid' && order.payments.some((p) => p.method.code === 'cod')) template = 'order.cod_confirmed';
-    await db.notifications.create({
-      data: {
-        user_id: order.user_id,
-        chat_id: order.user.telegram_user_id,
-        kind: 'service',
-        template,
-        payload: { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang: order.user.language },
-      },
-    });
+    if (status === 'paid' && cod) template = 'order.cod_confirmed';
+    const lang = order.user.language;
+    const payload: TemplatePayload = { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang, open_path: `/orders/${order.id}` };
+    if (status === 'awaiting_payment') {
+      payload.open_path = `/orders/${order.id}/pay`;
+      payload.open_button = 'pay';
+      if (order.reserved_until) payload.until = tashkentDateTime(order.reserved_until);
+    }
+    await this.toCustomer(db, { userId: order.user_id, chatId: order.user.telegram_user_id, orderId: order.id, template, payload, dedupKey: `order:${order.id}:${status}` });
+    if (status === 'paid') await this.intakeGuide(db, order.id);
+  }
+
+  /**
+   * 3.2: «Как принимать ваш заказ» — once per order, after the payment (or the cash-on-delivery confirmation).
+   * Only products with a filled intake memo; nothing is sent when no product has one.
+   */
+  async intakeGuide(db: Db, orderId: string): Promise<boolean> {
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, items: { include: { product: true } } } });
+    const lang: Lang = order.user.language === 'uz' ? 'uz' : 'ru';
+    const guide = intakeGuideItems(order.items.map((i) => i.product), lang);
+    if (!guide.length) return false;
+    const support = (await db.settings.findUnique({ where: { key: SETTING_KEYS.supportContact } }))?.value as string | undefined;
+    const payload: TemplatePayload = {
+      order_number: order.order_number,
+      lang,
+      guide,
+      open_path: `/orders/${order.id}`,
+      support_url: supportLink(support ?? SETTING_DEFAULTS.support_contact),
+    };
+    const queued = await this.toCustomer(db, { userId: order.user_id, chatId: order.user.telegram_user_id, orderId: order.id, template: 'order.intake_guide', payload, dedupKey: `order:${order.id}:intake` });
+    if (queued) await db.analytics_events.create({ data: { user_id: order.user_id, event: 'intake_guide_sent', props: { order_id: order.id, products: guide.length } } });
+    return queued;
   }
 
   /** "Заказ №… ждёт оплаты до …" with a button that opens the payment screen (D3). */
   async paymentReminder(db: Db, orderId: string): Promise<void> {
     const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true } });
     if (!order.reserved_until) return;
-    await db.notifications.create({
-      data: {
-        user_id: order.user_id,
-        chat_id: order.user.telegram_user_id,
-        kind: 'service',
-        template: 'order.payment_reminder',
-        payload: { order_number: order.order_number, until: tashkentDateTime(order.reserved_until), open_path: `/orders/${order.id}/pay`, lang: order.user.language },
-      },
+    await this.toCustomer(db, {
+      userId: order.user_id,
+      chatId: order.user.telegram_user_id,
+      orderId: order.id,
+      template: 'order.payment_reminder',
+      payload: { order_number: order.order_number, until: tashkentDateTime(order.reserved_until), open_path: `/orders/${order.id}/pay`, open_button: 'pay', lang: order.user.language },
     });
+  }
+
+  /**
+   * 3.2: the one way a customer message about an order or a product is queued: the row is the bot message and the
+   * centre entry at once. With a dedup key a second identical event is skipped. Returns false when skipped.
+   */
+  async toCustomer(
+    db: Db,
+    m: { userId: string; chatId: bigint; template: TemplateName; payload: TemplatePayload; orderId?: string; productId?: string; category?: CentreCategory; kind?: 'service' | 'marketing'; dedupKey?: string },
+  ): Promise<boolean> {
+    const res = await db.notifications.createMany({
+      data: [
+        {
+          user_id: m.userId,
+          chat_id: m.chatId,
+          kind: m.kind ?? 'service',
+          template: m.template,
+          payload: m.payload as unknown as Prisma.InputJsonObject,
+          order_id: m.orderId ?? null,
+          product_id: m.productId ?? null,
+          category: m.category ?? (m.orderId ? 'order' : null),
+          dedup_key: m.dedupKey ?? null,
+        },
+      ],
+      skipDuplicates: true,
+    });
+    return res.count > 0;
   }
 
   /**

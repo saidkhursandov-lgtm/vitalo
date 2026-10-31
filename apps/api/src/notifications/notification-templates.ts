@@ -2,9 +2,15 @@ import { formatUzs } from '../common/tashkent';
 
 export type Lang = 'ru' | 'uz';
 
-/** Customer: order status changes that are worth a message (Picking is internal, not sent). */
+/**
+ * Customer: one message per order status (3.2). «new» is sent only for cash on delivery: a card order moves to
+ * «awaiting_payment» in the same second and gets «order.accepted_pay» instead. Return is handled by the staff.
+ */
 export const CUSTOMER_STATUS_TEMPLATES = {
+  new: 'order.accepted_cod',
+  awaiting_payment: 'order.accepted_pay',
   paid: 'order.paid',
+  picking: 'order.picking',
   handed_to_delivery: 'order.handed_to_delivery',
   in_transit: 'order.in_transit',
   delivered: 'order.delivered',
@@ -27,7 +33,9 @@ export type TemplateName =
   | 'order.payment_reminder'
   | 'order.cod_confirmed'
   | 'order.receipt_rejected'
-  | 'waitlist.back_in_stock';
+  | 'order.intake_guide'
+  | 'waitlist.back_in_stock'
+  | 'promo.message';
 
 export interface TemplatePayload {
   order_number: string;
@@ -59,14 +67,55 @@ export interface TemplatePayload {
   salaries_uzs?: number;
   /** 2.4: product name for waiting-list messages */
   product?: string;
-  /** 2.4: which page the button opens (text of the button); default: the order */
-  open_button?: 'order' | 'product';
+  /** 2.4: which page the button opens (text of the button); default: the order. 3.2: 'pay', 'link' */
+  open_button?: 'order' | 'product' | 'pay' | 'link';
+  /** 3.2: «Как принимать ваш заказ» — short product name and its intake memo, in the customer's language */
+  guide?: { name: string; text: string }[];
+  /** 3.2: second button «Спросить специалиста» (support chat) */
+  support_url?: string | null;
+  /** 3.2: promo message written in the admin panel */
+  title_ru?: string;
+  title_uz?: string;
+  text_ru?: string;
+  text_uz?: string;
 }
 
 /** Text of the button under a message that has open_path. */
 export const OPEN_BUTTON: Record<Lang, string> = { ru: 'Открыть заказ', uz: 'Buyurtmani ochish' };
 /** 2.4: button under «… снова в наличии». */
 export const OPEN_PRODUCT_BUTTON: Record<Lang, string> = { ru: 'Открыть товар', uz: 'Mahsulotni ochish' };
+/** 3.2: button under «ожидает оплаты». */
+export const PAY_BUTTON: Record<Lang, string> = { ru: 'Оплатить / Отправить чек', uz: 'To‘lash / Chek yuborish' };
+/** 3.2: button under a promo message. */
+export const LINK_BUTTON: Record<Lang, string> = { ru: 'Открыть', uz: 'Ochish' };
+/** 3.2: second button under «Как принимать ваш заказ». */
+export const SUPPORT_BUTTON: Record<Lang, string> = { ru: 'Спросить специалиста', uz: 'Mutaxassisdan so‘rash' };
+
+export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang): string {
+  if (kind === 'product') return OPEN_PRODUCT_BUTTON[lang];
+  if (kind === 'pay') return PAY_BUTTON[lang];
+  if (kind === 'link') return LINK_BUTTON[lang];
+  return OPEN_BUTTON[lang];
+}
+
+/** 3.2: last line of «Как принимать ваш заказ» (bot and Mini App). */
+export const INTAKE_FOOTER: Record<Lang, string> = {
+  ru: 'Сверяйте с этикеткой. Если принимаете лекарства — уточните у специалиста.',
+  uz: 'Yorliq bilan solishtiring. Agar dori-darmon qabul qilsangiz, mutaxassisdan aniqlang.',
+};
+/** Telegram allows 4096 characters; long memos are cut off so the message is never rejected. */
+const GUIDE_LIMIT = 3500;
+
+function guideText(p: TemplatePayload, lang: Lang): string {
+  const title = lang === 'uz' ? `№${p.order_number} buyurtmangizni qanday qabul qilish kerak` : `Как принимать ваш заказ №${p.order_number}`;
+  let body = '';
+  for (const g of p.guide ?? []) {
+    const block = `\n\n${g.name}\n${g.text}`;
+    if (body.length + block.length > GUIDE_LIMIT) break;
+    body += block;
+  }
+  return `${title}${body}\n\n${INTAKE_FOOTER[lang]}`;
+}
 /** Text of the button under a staff message that has admin_path. */
 export const ADMIN_BUTTON = 'Открыть в админке';
 
@@ -127,13 +176,34 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
     ru: (p) => `Чек по заказу №${p.order_number} не принят.\nПричина: ${p.reason ?? '—'}\nПроверьте перевод и пришлите чек ещё раз или напишите в поддержку.`,
     uz: (p) => `№${p.order_number} buyurtma cheki qabul qilinmadi.\nSabab: ${p.reason ?? '—'}\nO‘tkazmani tekshirib, chekni qayta yuboring yoki qo‘llab-quvvatlash xizmatiga yozing.`,
   },
+  // 3.2: the order was just placed
+  'order.accepted_pay': {
+    ru: (p) => `Заказ №${p.order_number} принят. Ожидает оплаты: ${sum(p.total_uzs, 'ru')}${p.until ? ` до ${p.until}` : ''}. После перевода отправьте чек.`,
+    uz: (p) => `№${p.order_number} buyurtma qabul qilindi. To‘lov kutilmoqda: ${sum(p.total_uzs, 'uz')}${p.until ? `, ${p.until} gacha` : ''}. O‘tkazmadan so‘ng chekni yuboring.`,
+  },
+  'order.accepted_cod': {
+    ru: (p) => `Заказ №${p.order_number} принят. Ожидает подтверждения: менеджер позвонит вам в рабочее время (08:00–22:00).`,
+    uz: (p) => `№${p.order_number} buyurtma qabul qilindi. Tasdiqlash kutilmoqda: menejer ish vaqtida (08:00–22:00) qo‘ng‘iroq qiladi.`,
+  },
   'order.paid': {
-    ru: (p) => `${head(p, 'ru', 'paid')}\nНачинаем собирать ваш заказ.`,
-    uz: (p) => `${head(p, 'uz', 'paid')}\nBuyurtmangizni yig‘ishni boshladik.`,
+    ru: (p) => `Заказ №${p.order_number}: оплата подтверждена. Скоро начнём сборку.`,
+    uz: (p) => `№${p.order_number} buyurtma: to‘lov tasdiqlandi. Tez orada yig‘ishni boshlaymiz.`,
   },
   'order.cod_confirmed': {
-    ru: (p) => `${head(p, 'ru', 'confirmed')}\nНачинаем собирать ваш заказ. Оплата при получении: ${sum(p.total_uzs, 'ru')} наличными или переводом курьеру.`,
-    uz: (p) => `${head(p, 'uz', 'confirmed')}\nBuyurtmangizni yig‘ishni boshladik. Qabul qilganda to‘lash: ${sum(p.total_uzs, 'uz')} naqd yoki kuryerga o‘tkazma.`,
+    ru: (p) => `Заказ №${p.order_number} подтверждён. Оплата при получении: ${sum(p.total_uzs, 'ru')} наличными или переводом курьеру.`,
+    uz: (p) => `№${p.order_number} buyurtma tasdiqlandi. Qabul qilganda to‘lash: ${sum(p.total_uzs, 'uz')} naqd yoki kuryerga o‘tkazma.`,
+  },
+  'order.picking': {
+    ru: (p) => `Заказ №${p.order_number} собирается. Сообщим, когда передадим в доставку.`,
+    uz: (p) => `№${p.order_number} buyurtma yig‘ilmoqda. Yetkazib berishga topshirganimizda xabar beramiz.`,
+  },
+  'order.intake_guide': {
+    ru: (p) => guideText(p, 'ru'),
+    uz: (p) => guideText(p, 'uz'),
+  },
+  'promo.message': {
+    ru: (p) => [p.title_ru, p.text_ru].filter(Boolean).join('\n'),
+    uz: (p) => [p.title_uz || p.title_ru, p.text_uz || p.text_ru].filter(Boolean).join('\n'),
   },
   'order.handed_to_delivery': {
     ru: (p) => head(p, 'ru', 'handed_to_delivery'),
@@ -229,4 +299,37 @@ export function renderNotification(template: string, payload: TemplatePayload): 
   if (!isTemplate(template)) throw new Error(`Unknown notification template: ${template}`);
   const lang: Lang = payload.lang === 'uz' ? 'uz' : 'ru';
   return TEXTS[template][lang](payload);
+}
+
+/** 3.2: sections of the Mini App notification centre. «bonus» is reserved for release 4 and not shown yet. */
+export const CENTRE_CATEGORIES = ['order', 'waitlist', 'promo'] as const;
+export type CentreCategory = (typeof CENTRE_CATEGORIES)[number] | 'bonus';
+
+/** Short plain lines for the centre (no emoji: the Mini App draws SVG icons). */
+const CENTRE_LINES: Partial<Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>>> = {
+  'order.accepted_pay': { ru: () => 'Принят. Ожидает оплаты', uz: () => 'Qabul qilindi. To‘lov kutilmoqda' },
+  'order.accepted_cod': { ru: () => 'Принят. Ожидает подтверждения', uz: () => 'Qabul qilindi. Tasdiqlash kutilmoqda' },
+  'order.paid': { ru: () => 'Оплата подтверждена', uz: () => 'To‘lov tasdiqlandi' },
+  'order.cod_confirmed': { ru: () => 'Подтверждён, оплата при получении', uz: () => 'Tasdiqlandi, qabul qilganda to‘lash' },
+  'order.picking': { ru: () => 'Собирается', uz: () => 'Yig‘ilmoqda' },
+  'order.handed_to_delivery': { ru: () => 'Передан курьеру', uz: () => 'Kuryerga topshirildi' },
+  'order.in_transit': { ru: () => 'В пути', uz: () => 'Yo‘lda' },
+  'order.delivered': { ru: () => 'Доставлен. Спасибо, что выбрали VITALO!', uz: () => 'Yetkazildi. VITALO’ni tanlaganingiz uchun rahmat!' },
+  'order.cancelled': { ru: (p) => `Отменён${reasonLine(p, 'ru').replace('\n', '. ')}`, uz: (p) => `Bekor qilindi${reasonLine(p, 'uz').replace('\n', '. ')}` },
+  'order.payment_reminder': { ru: (p) => `Ждёт оплаты до ${p.until}`, uz: (p) => `${p.until} gacha to‘lovni kutmoqda` },
+  'order.receipt_rejected': { ru: (p) => `Чек не принят. Причина: ${p.reason ?? '—'}`, uz: (p) => `Chek qabul qilinmadi. Sabab: ${p.reason ?? '—'}` },
+  'order.intake_guide': { ru: () => 'Как принимать ваш заказ', uz: () => 'Buyurtmani qanday qabul qilish kerak' },
+  'waitlist.back_in_stock': { ru: () => 'Снова в наличии', uz: () => 'Yana sotuvda' },
+};
+
+/** Title and line of a centre entry in the customer's language. */
+export function renderCentre(template: string, payload: TemplatePayload, lang: Lang): { title: string; body: string } {
+  if (template === 'promo.message') {
+    return lang === 'uz'
+      ? { title: payload.title_uz || payload.title_ru || '', body: payload.text_uz || payload.text_ru || '' }
+      : { title: payload.title_ru || '', body: payload.text_ru || '' };
+  }
+  const line = isTemplate(template) ? CENTRE_LINES[template]?.[lang](payload) : undefined;
+  if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
+  return { title: lang === 'uz' ? `№${payload.order_number} buyurtma` : `Заказ №${payload.order_number}`, body: line ?? renderNotification(template, { ...payload, lang }) };
 }

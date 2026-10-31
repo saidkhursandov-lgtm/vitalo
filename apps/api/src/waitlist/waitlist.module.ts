@@ -107,14 +107,13 @@ export class WaitlistService {
           if (!claimed.count) return false;
           if (row.user.status !== 'active' || row.user.deleted_at) return false;
           const lang = row.user.language === 'uz' ? 'uz' : 'ru';
-          await tx.notifications.create({
-            data: {
-              user_id: row.user_id,
-              chat_id: row.user.telegram_user_id,
-              kind: 'service', // the customer asked for this message
-              template: 'waitlist.back_in_stock',
-              payload: { order_number: '', product: productTitle(p, lang), open_path: `/product/${p.id}`, open_button: 'product', lang },
-            },
+          await this.notifications.toCustomer(tx, {
+            userId: row.user_id,
+            chatId: row.user.telegram_user_id,
+            productId: p.id,
+            category: 'waitlist', // a service message: the customer asked for it
+            template: 'waitlist.back_in_stock',
+            payload: { order_number: '', product: productTitle(p, lang), open_path: `/product/${p.id}`, open_button: 'product', lang },
           });
           return true;
         });

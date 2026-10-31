@@ -106,7 +106,7 @@ describe('Telegram notifications (e2e)', () => {
       expect(rows.map((r) => r.chat_id)).toEqual(expect.arrayContaining([ADMIN_TG, MANAGER_TG]));
     });
 
-    it('the customer is notified on paid, handed over, in transit, delivered — not on picking', async () => {
+    it('3.2: one customer message per status: accepted, paid, picking, handed over, in transit, delivered', async () => {
       const { order: o, chatId } = await order('uz');
       const manager = await loginStaff(app, Number(MANAGER_TG));
       await http().post(`/api/staff/orders/${o.id}/confirm-payment`).set(bearer(manager)).send({}).expect(200);
@@ -114,14 +114,17 @@ describe('Telegram notifications (e2e)', () => {
         await http().post(`/api/staff/orders/${o.id}/status`).set(bearer(manager)).send({ status }).expect(200);
       }
       const rows = await queued({ chat_id: chatId });
-      expect(rows.map((r) => r.template)).toEqual(['order.paid', 'order.handed_to_delivery', 'order.in_transit', 'order.delivered']);
+      expect(rows.map((r) => r.template)).toEqual(['order.accepted_pay', 'order.paid', 'order.picking', 'order.handed_to_delivery', 'order.in_transit', 'order.delivered']);
+      expect(rows.every((r) => r.order_id === o.id && r.category === 'order')).toBe(true);
       expect(rows.every((r) => (r.payload as { lang: string }).lang === 'uz')).toBe(true);
 
       await drain();
       const texts = fake.sent.filter((m) => m.chatId === chatId).map((m) => m.text);
-      expect(texts[0]).toContain('🟢 To‘langan'); // Uzbek
-      expect(texts[1]).toContain('🚚 Kuryerga topshirildi');
-      expect(texts[3]).toContain('✅ Yetkazildi');
+      expect(texts[0]).toContain('qabul qilindi. To‘lov kutilmoqda'); // Uzbek
+      expect(texts[1]).toContain('to‘lov tasdiqlandi');
+      expect(texts[2]).toContain('yig‘ilmoqda');
+      expect(texts[3]).toContain('🚚 Kuryerga topshirildi');
+      expect(texts[5]).toContain('✅ Yetkazildi');
     });
 
     it('cancellation: staff reason is shown; automatic expiry gets a localized reason', async () => {
@@ -134,7 +137,7 @@ describe('Telegram notifications (e2e)', () => {
       await app.get(ReservationExpiryService).runOnce();
 
       await drain();
-      const text = (chat: bigint) => fake.sent.find((m) => m.chatId === chat)?.text;
+      const text = (chat: bigint) => fake.sent.find((m) => m.chatId === chat && m.text.includes('Отменён'))?.text;
       expect(text(a.chatId)).toBe(`Заказ №${a.order.order_number}: ⚪ Отменён\nПричина: Нет в наличии у поставщика`);
       expect(text(b.chatId)).toBe(`Заказ №${b.order.order_number}: ⚪ Отменён\nПричина: заказ не был оплачен вовремя`);
     });
@@ -219,9 +222,11 @@ describe('Telegram notifications (e2e)', () => {
       await prisma.notifications.create({ data: { ...base, kind: 'marketing', template: 'order.paid' } });
       await prisma.notifications.create({ data: { ...base, kind: 'service', template: 'order.delivered' } });
 
-      const r = await drain();
+      // daytime in Tashkent (the quiet hours 22:00–08:00 would put marketing off): tomorrow 12:00
+      const d = new Date();
+      const r = await drain(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 7)));
       expect(r.skipped).toBe(1);
-      const toUser = fake.sent.filter((m) => m.chatId === chatId).map((m) => m.text);
+      const toUser = fake.sent.filter((m) => m.chatId === chatId && m.text.startsWith('Заказ №VTL-X')).map((m) => m.text);
       expect(toUser).toEqual(['Заказ №VTL-X: ✅ Доставлен\nСпасибо, что выбрали VITALO!']);
     });
 

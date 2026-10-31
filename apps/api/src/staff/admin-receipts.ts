@@ -202,14 +202,12 @@ export class ReceiptsService {
         await tx.manual_payment_confirmations.updateMany({ where: { payment: { order_id: order.id, status: 'payment_pending' }, customer_confirmed_at: { not: null } }, data: { customer_confirmed_at: null } });
         const minUntil = new Date(now.getTime() + RESEND_WINDOW_MS);
         if (!order.reserved_until || order.reserved_until < minUntil) await tx.orders.update({ where: { id: order.id }, data: { reserved_until: minUntil } });
-        await tx.notifications.create({
-          data: {
-            user_id: receipt.user_id,
-            chat_id: receipt.user.telegram_user_id,
-            kind: 'service',
-            template: 'order.receipt_rejected',
-            payload: { order_number: order.order_number, reason: shown, open_path: `/orders/${order.id}/pay`, lang },
-          },
+        await this.notifications.toCustomer(tx, {
+          userId: receipt.user_id,
+          chatId: receipt.user.telegram_user_id,
+          orderId: order.id,
+          template: 'order.receipt_rejected',
+          payload: { order_number: order.order_number, reason: shown, open_path: `/orders/${order.id}/pay`, open_button: 'pay', lang },
         });
       }
       await this.audit.log(

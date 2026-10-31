@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 import { stableStringify } from '../common/stable-json';
 import { formatUzs, tashkentDateString } from '../common/tashkent';
@@ -13,7 +13,8 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { LegalService } from '../legal/legal.module';
 import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockLine, StockService } from '../inventory/stock.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { intakeGuideItems, NotificationsService } from '../notifications/notifications.service';
+import { INTAKE_FOOTER } from '../notifications/notification-templates';
 import { PrismaService } from '../prisma/prisma.service';
 import { listImage, listInclude } from '../catalog/product.mapper';
 import { BankTransferDetails, COD_METHOD, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
@@ -31,6 +32,12 @@ const isManualMethod = (code: string | undefined): code is ManualPaymentMethod =
   (MANUAL_PAYMENT_METHODS as readonly string[]).includes(code ?? '');
 
 const PAGE_SIZE = 20;
+/** 3.2: unfinished orders for the home-screen plaque. */
+const ACTIVE_STATUSES: OrderStatus[] = ['new', 'awaiting_payment', 'paid', 'picking', 'handed_to_delivery', 'in_transit'];
+/** 3.2: the intake memo is shown once the order is paid (or confirmed for cash on delivery). */
+const GUIDE_STATUSES: OrderStatus[] = ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'];
+type GuideLine = { product_id: string; name: string; text: string };
+export type IntakeGuide = { ru: GuideLine[]; uz: GuideLine[]; footer: Record<'ru' | 'uz', string> };
 const IDEMPOTENCY_TTL_MS = 24 * 3600_000;
 const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
 
@@ -173,11 +180,56 @@ export class OrdersService {
     };
   }
 
-  async get(userId: string, orderId: string): Promise<OrderView & { delivery_eta: Awaited<ReturnType<DeliveryService['eta']>> }> {
+  async get(userId: string, orderId: string): Promise<OrderView & { delivery_eta: Awaited<ReturnType<DeliveryService['eta']>>; intake_guide: IntakeGuide | null }> {
     const order = await this.prisma.orders.findFirst({ where: { id: orderId, user_id: userId }, include: orderViewInclude });
     if (!order) throw new NotFoundException('Order not found');
     // Current delivery term for the order's city (working days).
-    return { ...toOrderView(order), delivery_eta: await this.delivery.eta(order.region_id, order.city_id) };
+    return { ...toOrderView(order), delivery_eta: await this.delivery.eta(order.region_id, order.city_id), intake_guide: await this.intakeGuide(order) };
+  }
+
+  /**
+   * 3.2: «Как принимать ваш заказ» in the order card — after the payment (or the cash-on-delivery confirmation),
+   * the same lines the bot sends. null before that or when no product has a memo.
+   */
+  private async intakeGuide(order: { status: OrderStatus; items: { product_id: string }[] }): Promise<IntakeGuide | null> {
+    if (!GUIDE_STATUSES.includes(order.status)) return null;
+    const products = await this.prisma.products.findMany({
+      where: { id: { in: order.items.map((i) => i.product_id) } },
+      select: { id: true, name_ru: true, name_uz: true, short_name_ru: true, short_name_uz: true, intake_memo_ru: true, intake_memo_uz: true },
+    });
+    const ru = intakeGuideItems(products, 'ru');
+    return ru.length ? { ru, uz: intakeGuideItems(products, 'uz'), footer: INTAKE_FOOTER } : null;
+  }
+
+  /**
+   * 3.2: the plaque on the home screen — the newest unfinished order and how many more there are.
+   * delivery_eta: the delivery term of the order's district (working days).
+   */
+  async active(userId: string) {
+    const where = { user_id: userId, status: { in: ACTIVE_STATUSES } };
+    const [count, o] = await this.prisma.$transaction([
+      this.prisma.orders.count({ where }),
+      this.prisma.orders.findFirst({
+        where,
+        orderBy: { created_at: 'desc' },
+        include: { payments: { orderBy: { created_at: 'desc' }, include: { manual: true, method: { select: { code: true } } } } },
+      }),
+    ]);
+    if (!o) return { order: null, more: 0 };
+    const reported = o.payment_status === 'payment_pending' && o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at));
+    return {
+      order: {
+        id: o.id,
+        order_number: o.order_number,
+        status: o.status,
+        payment_method: o.payments[0]?.method.code ?? null,
+        payment_reported: reported,
+        // «Оплатить / Отправить чек»: the order waits for a transfer and the customer has not reported it yet
+        can_pay: o.status === 'awaiting_payment' && !reported,
+        delivery_eta: await this.delivery.eta(o.region_id, o.city_id),
+      },
+      more: count - 1,
+    };
   }
 
   /** Last used recipient/address, to prefill checkout (Master TZ §7). */

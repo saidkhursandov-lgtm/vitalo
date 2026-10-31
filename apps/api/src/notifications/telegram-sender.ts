@@ -21,6 +21,15 @@ export interface TelegramSender {
 /** A button under the message that opens a Mini App page (Telegram web_app button). */
 export interface SendOptions {
   webApp?: { text: string; url: string };
+  /** 3.2: an ordinary link button on its own row (e.g. «Спросить специалиста» -> support chat) */
+  link?: { text: string; url: string };
+}
+
+function keyboard(opts: SendOptions) {
+  const rows: object[][] = [];
+  if (opts.webApp) rows.push([{ text: opts.webApp.text, web_app: { url: opts.webApp.url } }]);
+  if (opts.link) rows.push([{ text: opts.link.text, url: opts.link.url }]);
+  return rows;
 }
 
 export const TELEGRAM_SENDER = Symbol('TELEGRAM_SENDER');
@@ -46,7 +55,7 @@ export class HttpTelegramSender implements TelegramSender {
           chat_id: chatId.toString(),
           text,
           link_preview_options: { is_disabled: true },
-          ...(opts.webApp && { reply_markup: { inline_keyboard: [[{ text: opts.webApp.text, web_app: { url: opts.webApp.url } }]] } }),
+          ...((opts.webApp || opts.link) && { reply_markup: { inline_keyboard: keyboard(opts) } }),
         }),
         signal: AbortSignal.timeout(15_000),
       });

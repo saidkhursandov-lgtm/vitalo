@@ -156,7 +156,7 @@ describe('Launch block D (e2e)', () => {
           if (!r.sent && !r.failed && !r.retried && !r.skipped) break;
         }
         const msg = fake.sent.find((m) => m.chatId === due.chatId && m.text.startsWith('⏰'));
-        expect(msg?.opts?.webApp).toEqual({ text: 'Buyurtmani ochish', url: `https://shop.example.com/orders/${due.order.id}/pay` });
+        expect(msg?.opts?.webApp).toEqual({ text: 'To‘lash / Chek yuborish', url: `https://shop.example.com/orders/${due.order.id}/pay` });
       } finally {
         process.env.MINIAPP_URL = '';
       }

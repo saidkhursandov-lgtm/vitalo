@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { notifications } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ADMIN_BUTTON, OPEN_BUTTON, OPEN_PRODUCT_BUTTON, renderNotification, type TemplatePayload } from './notification-templates';
+import { ADMIN_BUTTON, SUPPORT_BUTTON, openButtonText, renderNotification, type TemplatePayload } from './notification-templates';
 import { TELEGRAM_SENDER, TelegramSendError, type TelegramSender } from './telegram-sender';
 import { ConfigService } from '@nestjs/config';
 import { adminUrl, miniAppUrl } from './mini-app-url';
@@ -15,11 +15,27 @@ export const BACKOFF_SECONDS = [30, 120, 600, 1800];
 /** A "sending" row older than this was abandoned by a crashed worker and is picked up again. */
 const STUCK_MS = 5 * 60_000;
 
+/** 3.2: marketing is not sent from 22:00 to 08:00 Tashkent time (UTC+5, no daylight saving). */
+const QUIET_FROM_HOUR = 22;
+const QUIET_TO_HOUR = 8;
+const TASHKENT_OFFSET_MS = 5 * 3600_000;
+
+/** Inside the quiet hours: the next 08:00 Tashkent time; otherwise null. */
+export function quietUntil(now: Date): Date | null {
+  const local = new Date(now.getTime() + TASHKENT_OFFSET_MS);
+  const h = local.getUTCHours();
+  if (h >= QUIET_TO_HOUR && h < QUIET_FROM_HOUR) return null;
+  const morning = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), QUIET_TO_HOUR) - TASHKENT_OFFSET_MS);
+  return h >= QUIET_FROM_HOUR ? new Date(morning.getTime() + 24 * 3600_000) : morning;
+}
+
 export interface ProcessResult {
   sent: number;
   failed: number;
   retried: number;
   skipped: number;
+  /** 3.2: marketing put off until 08:00 */
+  deferred: number;
 }
 
 /**
@@ -52,7 +68,7 @@ export class NotificationWorker {
   }
 
   async processOnce(now = new Date()): Promise<ProcessResult> {
-    const result: ProcessResult = { sent: 0, failed: 0, retried: 0, skipped: 0 };
+    const result: ProcessResult = { sent: 0, failed: 0, retried: 0, skipped: 0, deferred: 0 };
     const batch = await this.prisma.$queryRaw<notifications[]>`
       UPDATE notifications SET status = 'sending'
       WHERE id IN (
@@ -76,19 +92,28 @@ export class NotificationWorker {
           result.skipped++;
           continue;
         }
+        // 3.2: no marketing at night (22:00–08:00 Tashkent): put it off until the morning, no attempt is spent
+        const morning = quietUntil(now);
+        if (morning) {
+          await this.prisma.notifications.update({ where: { id: n.id }, data: { status: 'queued', next_attempt_at: morning } });
+          result.deferred++;
+          continue;
+        }
       }
       try {
         const payload = (n.payload ?? {}) as unknown as TemplatePayload;
+        const lang = payload.lang === 'uz' ? 'uz' : 'ru';
         const text = renderNotification(n.template, payload);
         const base = miniAppUrl(this.config);
         const admin = payload.admin_path ? adminUrl(this.config) : null;
         const button =
           payload.open_path && base
-            ? { text: (payload.open_button === 'product' ? OPEN_PRODUCT_BUTTON : OPEN_BUTTON)[payload.lang === 'uz' ? 'uz' : 'ru'], url: `${base}${payload.open_path}` }
+            ? { text: openButtonText(payload.open_button, lang), url: `${base}${payload.open_path}` }
             : payload.admin_path && admin
               ? { text: ADMIN_BUTTON, url: `${admin}${payload.admin_path}` }
               : undefined;
-        await this.sender.sendMessage(n.chat_id, text, button ? { webApp: button } : {});
+        const link = payload.support_url ? { text: SUPPORT_BUTTON[lang], url: payload.support_url } : undefined;
+        await this.sender.sendMessage(n.chat_id, text, { ...(button && { webApp: button }), ...(link && { link }) });
         await this.prisma.notifications.update({ where: { id: n.id }, data: { status: 'sent', sent_at: new Date(), attempts: n.attempts + 1, error: null } });
         result.sent++;
       } catch (e) {
