@@ -5,9 +5,10 @@ import { useCartCount } from '../lib/queries';
 import { telegram } from '../lib/telegram';
 import { FloatingCart } from './FloatingCart';
 import { BrandBlock, LangSwitch } from './HeaderParts';
-import { BackIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, UserIcon } from './Icons';
+import { BackIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, SparkIcon, UserIcon } from './Icons';
 import { Logo } from './Logo';
 import { NetworkBanner } from './NetworkBanner';
+import { SheetsProvider, useSheets } from './Sheets';
 import { ToastProvider } from './Toast';
 
 const TABS = ['/', '/catalog', '/favorites', '/profile'];
@@ -67,6 +68,20 @@ function useBump(count: number): boolean {
   return bump;
 }
 
+/** 2.4: centre «Подбор» (D-30): a raised navy → orange circle; until AI (release 5) it opens the «Подбор» sheet. */
+function AiTab() {
+  const { t } = useI18n();
+  const { openAi } = useSheets();
+  return (
+    <button type="button" className="nav-ai" aria-haspopup="dialog" onClick={openAi}>
+      <span className="nav-ai-dot" aria-hidden>
+        <SparkIcon width={24} height={24} />
+      </span>
+      <span>{t('nav.ai')}</span>
+    </button>
+  );
+}
+
 export function Layout() {
   const { t } = useI18n();
   const { pathname } = useLocation();
@@ -97,6 +112,7 @@ export function Layout() {
   return (
     <div className={`app ${showNav ? 'with-nav' : ''} ${BUY_PANEL.test(pathname) ? 'has-buy-panel' : ''} ${showFloatCart ? 'has-float-cart' : ''} ${keyboard ? 'kb-open' : ''}`}>
       <ToastProvider>
+      <SheetsProvider>
       <header className="topbar">
         <div className="topbar-left">
           {!isTab && !telegram() && (
@@ -134,6 +150,7 @@ export function Layout() {
             <GridIcon />
             <span>{t('nav.catalog')}</span>
           </NavLink>
+          <AiTab />
           <NavLink to="/favorites">
             <HeartIcon />
             <span>{t('nav.favorites')}</span>
@@ -144,6 +161,7 @@ export function Layout() {
           </NavLink>
         </nav>
       )}
+    </SheetsProvider>
     </ToastProvider>
     </div>
   );

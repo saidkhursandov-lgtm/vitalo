@@ -130,6 +130,20 @@ export function useFavoriteIds() {
   return useQuery({ queryKey: ['favorites', 'ids'], queryFn: async () => new Set(await api<string[]>('/favorites/ids')) });
 }
 
+/** 2.4: products the customer waits for («Сообщить о поступлении»). */
+export function useWaitlistIds() {
+  return useQuery({ queryKey: ['waitlist', 'ids'], queryFn: async () => new Set(await api<string[]>('/waitlist/ids')) });
+}
+
+/** Subscribes once; the button turns into «Вы в списке ожидания» right after the server answered. */
+export function useSubscribeWaitlist() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<{ status: 'subscribed' | 'already' }>(`/waitlist/${id}`, { method: 'PUT' }),
+    onSuccess: (_r, id) => client.setQueryData<Set<string>>(['waitlist', 'ids'], (prev) => new Set(prev).add(id)),
+  });
+}
+
 export const useFavorites = () => useQuery({ queryKey: ['favorites', 'list'], queryFn: () => api<ProductListItem[]>('/favorites') });
 
 /** Optimistic heart toggle: the icon flips at once and rolls back if the request fails. */

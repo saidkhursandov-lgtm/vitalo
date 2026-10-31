@@ -214,6 +214,21 @@ export class HomeContentDto {
   @ApiProperty({ type: HomeStepsDto }) @IsObject() @ValidateNested() @Type(() => HomeStepsDto) steps!: HomeStepsDto;
 }
 
+/** 2.4: «Как VITALO отбирает добавки» (Настройки → Главная → Манифест): every text in RU and UZ, exactly 3 points. */
+export class ManifestPointDto {
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) title!: LocalizedTextDto;
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) text!: LocalizedTextDto;
+}
+
+export class ManifestDto {
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) title!: LocalizedTextDto;
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) subtitle!: LocalizedTextDto;
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) intro!: LocalizedTextDto;
+  @ApiProperty({ type: [ManifestPointDto] }) @IsArray() @ArrayMinSize(3) @ArrayMaxSize(3) @ValidateNested({ each: true }) @Type(() => ManifestPointDto) points!: ManifestPointDto[];
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) outro!: LocalizedTextDto;
+}
+
 /** Profile card "VITALO Bonus — скоро" (B4). */
 export class BonusTeaserDto {
   @ApiProperty() @IsBoolean() enabled!: boolean;
@@ -367,6 +382,24 @@ export class AdminSettingsService {
 
   bonusTeaser() {
     return this.settings.getOrDefault('bonus_teaser');
+  }
+
+  manifest() {
+    return this.settings.getOrDefault('home_manifest');
+  }
+
+  async setManifest(staffId: string, dto: ManifestDto) {
+    const lt = (t: { ru: string; uz: string }) => ({ ru: t.ru, uz: t.uz });
+    const value = {
+      enabled: dto.enabled,
+      title: lt(dto.title),
+      subtitle: lt(dto.subtitle),
+      intro: lt(dto.intro),
+      points: dto.points.map((p) => ({ title: lt(p.title), text: lt(p.text) })),
+      outro: lt(dto.outro),
+    };
+    await this.saveSetting(staffId, SETTING_KEYS.manifest, value, 'settings.manifest_updated');
+    return this.manifest();
   }
 
   async setBonusTeaser(staffId: string, dto: BonusTeaserDto) {
@@ -689,6 +722,16 @@ export class AdminSettingsController {
   @Put('home')
   setHome(@CurrentStaff() me: StaffContext, @Body() dto: HomeContentDto) {
     return this.settings.setHomeContent(me.staff.id, dto);
+  }
+
+  @Get('manifest')
+  manifest() {
+    return this.settings.manifest();
+  }
+
+  @Put('manifest')
+  setManifest(@CurrentStaff() me: StaffContext, @Body() dto: ManifestDto) {
+    return this.settings.setManifest(me.staff.id, dto);
   }
 
   @Get('bonus-teaser')

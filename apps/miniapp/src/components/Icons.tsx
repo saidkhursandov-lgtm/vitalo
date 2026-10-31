@@ -11,6 +11,8 @@ import {
   CircleX,
   ClipboardList,
   BadgeCheck,
+  Bell,
+  BellCheck,
   Bone,
   Brain,
   Droplet,
@@ -25,6 +27,7 @@ import {
   Moon,
   Pill,
   ShieldPlus,
+  Sparkle,
   Sparkles,
   Venus,
   CalendarClock,
@@ -99,6 +102,11 @@ export const StarIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => 
   <Star strokeWidth={STROKE} aria-hidden fill={filled ? 'currentColor' : 'none'} {...p} />
 );
 export const DoctorIcon = make(Stethoscope);
+/** 2.4: «Сообщить о поступлении» / «Вы в списке ожидания» */
+export const BellIcon = make(Bell);
+export const BellCheckIcon = make(BellCheck);
+/** 2.4: centre «Подбор» button */
+export const SparkIcon = make(Sparkle);
 export const ShieldIcon = make(ShieldCheck);
 /** 2.3: «Стандарт VITALO» badges */
 export const BioIcon = make(Droplet);

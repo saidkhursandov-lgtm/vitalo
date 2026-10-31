@@ -1,9 +1,11 @@
 import type { MouseEvent } from 'react';
 import { errorText, useI18n } from '../lib/i18n';
+import { ApiError } from '../lib/api';
+import { useSubscribeWaitlist, useWaitlistIds } from '../lib/queries';
 import { useQuickCart, type QuickNotice } from '../lib/quick-cart';
 import { track } from '../lib/analytics';
-import { tapHaptic } from '../lib/telegram';
-import { CartIcon, MinusIcon, PlusIcon } from './Icons';
+import { haptic, tapHaptic } from '../lib/telegram';
+import { BellCheckIcon, BellIcon, CartIcon, MinusIcon, PlusIcon } from './Icons';
 import { useToast } from './Toast';
 
 /** Buttons inside a product card (a link): never open the card, never move the page. */
@@ -25,7 +27,8 @@ export function useQuickNotify() {
 /**
  * One-tap add (F1): on a card (add-on v3.1) a round [+] 40×40 with a 44×44 tap area opposite the price, then a compact
  * «− 1 +»; on the product page the wide «В корзину». The number is the same on all cards of the
- * product and in the cart; «−» at 1 removes the product. Out of stock: a grey disabled «Нет в наличии».
+ * product and in the cart; «−» at 1 removes the product. Out of stock (2.4): «Сообщить о поступлении» — a bell of the
+ * same size on a card, a wide button on the product page.
  */
 export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: string; inStock: boolean; variant?: 'card' | 'panel' }) {
   const { t } = useI18n();
@@ -33,18 +36,16 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
   const notify = useQuickNotify();
   const { qty, max, set } = useQuickCart(productId, notify);
 
+  if (!inStock && qty === 0) return <WaitlistButton productId={productId} variant={variant} />;
+
   if (variant === 'card' && qty === 0) {
-    // sold out: a grey disabled [+]; the photo already says «Нет в наличии»
-    const out = !inStock;
     return (
       <button
         type="button"
-        className={`quick-round ${out ? 'is-out' : ''}`}
-        disabled={out}
-        aria-label={out ? t('product.outOfStock') : t('product.addToCart')}
+        className="quick-round"
+        aria-label={t('product.addToCart')}
         onClick={(e) => {
           stop(e);
-          if (out) return;
           tapHaptic();
           set(1);
           track('add_to_cart', { product_id: productId, source: variant });
@@ -53,14 +54,6 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
         <span className="quick-round-dot">
           <PlusIcon width={20} height={20} />
         </span>
-      </button>
-    );
-  }
-
-  if (!inStock && qty === 0) {
-    return (
-      <button type="button" className={`quick-add quick-${variant} is-out`} disabled onClick={stop}>
-        {t('product.outOfStock')}
       </button>
     );
   }
@@ -108,5 +101,43 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
         <PlusIcon width={icon} height={icon} />
       </button>
     </div>
+  );
+}
+
+/**
+ * 2.4: «Сообщить о поступлении» for a product that is out of stock. One tap subscribes (the server keeps one row per
+ * customer and product); after that the button says «Вы в списке ожидания» and a tap only repeats it.
+ */
+export function WaitlistButton({ productId, variant }: { productId: string; variant: 'card' | 'panel' }) {
+  const { t, lang } = useI18n();
+  const toast = useToast();
+  const ids = useWaitlistIds();
+  const subscribe = useSubscribeWaitlist();
+  const waiting = ids.data?.has(productId) ?? false;
+  const onClick = (e: MouseEvent) => {
+    stop(e);
+    if (waiting) return toast(t('waitlist.in'));
+    if (subscribe.isPending) return;
+    tapHaptic();
+    subscribe.mutate(productId, {
+      onSuccess: () => {
+        haptic('success');
+        toast(t('waitlist.done'));
+      },
+      onError: (err) => toast(errorText(lang, err instanceof ApiError ? err.code : undefined)),
+    });
+  };
+  if (variant === 'card') {
+    return (
+      <button type="button" className={`quick-round quick-bell ${waiting ? 'is-on' : ''}`} aria-label={t(waiting ? 'waitlist.in' : 'waitlist.notify')} aria-pressed={waiting} onClick={onClick}>
+        <span className="quick-round-dot">{waiting ? <BellCheckIcon width={20} height={20} /> : <BellIcon width={20} height={20} />}</span>
+      </button>
+    );
+  }
+  return (
+    <button type="button" className={`btn btn-block waitlist-btn ${waiting ? 'is-on' : ''}`} aria-pressed={waiting} onClick={onClick}>
+      {waiting ? <BellCheckIcon width={20} height={20} /> : <BellIcon width={20} height={20} />}
+      <span>{t(waiting ? 'waitlist.in' : 'waitlist.notify')}</span>
+    </button>
   );
 }

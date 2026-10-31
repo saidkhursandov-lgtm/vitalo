@@ -65,7 +65,7 @@ const ru = {
   'card.askTitle': 'Сомневаетесь, подойдёт ли вам препарат?',
   'card.askSub': 'Спросить специалиста VITALO об этом товаре',
   'card.askText': 'Здравствуйте! Интересует {name}, подскажите, пожалуйста…',
-  'card.askCopied': 'Текст скопирован — вставьте в чат',
+  'card.askCopied': 'Текст скопирован — если его нет в чате, вставьте',
   'floatCart.hide': 'Скрыть',
   'home.chip.original': 'Оригинальная продукция',
   'home.chip.doctor': 'Экспертный подбор',
@@ -157,6 +157,15 @@ const ru = {
   'nav.favorites': 'Избранное',
   'nav.profile': 'Профиль',
   'nav.cart': 'Корзина',
+  // 2.4: centre button of the bottom menu (D-30, add-on 3.1 module 1); AI comes in release 5
+  'nav.ai': 'Подбор',
+  'ai.title': 'Скоро здесь будет умный подбор витаминов',
+  'ask.button': 'Спросить специалиста',
+  'ask.text': 'Здравствуйте! Помогите, пожалуйста, подобрать витамины…',
+  // 2.4: «Сообщить о поступлении»
+  'waitlist.notify': 'Сообщить о поступлении',
+  'waitlist.done': 'Сообщим, когда товар появится',
+  'waitlist.in': 'Вы в списке ожидания',
 
   'home.search': 'Поиск витаминов и добавок',
   'home.popular': 'Популярное',
@@ -324,6 +333,7 @@ const ru = {
   'auth.loginFailed': 'Не удалось войти',
 
   'error.OUT_OF_STOCK': 'Товара нет в наличии',
+  'error.IN_STOCK': 'Товар уже в наличии — обновите страницу',
   'error.INSUFFICIENT_STOCK': 'Недостаточно товара на складе — корзина обновлена, проверьте количество',
   'error.PRICE_CHANGED': 'Цены или доставка изменились — проверьте сумму и подтвердите ещё раз',
   'error.EMPTY_ORDER': 'В корзине нет доступных товаров',
@@ -402,7 +412,7 @@ const uz: Record<MessageKey, string> = {
   'card.askTitle': 'Bu preparat sizga mos kelishiga ikkilanyapsizmi?',
   'card.askSub': 'Ushbu mahsulot haqida VITALO mutaxassisidan soʻrang',
   'card.askText': 'Assalomu alaykum! {name} qiziqtiradi, maslahat bering…',
-  'card.askCopied': 'Matn nusxalandi — chatga qo‘ying',
+  'card.askCopied': 'Matn nusxalandi — chatda boʻlmasa, qoʻying',
   'floatCart.hide': 'Yashirish',
   'home.chip.original': 'Original mahsulotlar',
   'home.chip.doctor': 'Ekspert tanlovi',
@@ -494,6 +504,13 @@ const uz: Record<MessageKey, string> = {
   'nav.favorites': 'Sevimlilar',
   'nav.profile': 'Profil',
   'nav.cart': 'Savat',
+  'nav.ai': 'Tanlov',
+  'ai.title': 'Tez orada bu yerda vitaminlarni aqlli tanlash ishga tushadi',
+  'ask.button': 'Mutaxassisdan soʻrash',
+  'ask.text': 'Assalomu alaykum! Vitaminlarni tanlashda yordam bering…',
+  'waitlist.notify': 'Kelganda xabar berish',
+  'waitlist.done': 'Mahsulot kelganda xabar beramiz',
+  'waitlist.in': 'Siz kutish roʻyxatidasiz',
 
   'home.search': 'Vitamin va qo‘shimchalarni qidirish',
   'home.popular': 'Ommabop',
@@ -661,6 +678,7 @@ const uz: Record<MessageKey, string> = {
   'auth.loginFailed': 'Kirib bo‘lmadi',
 
   'error.OUT_OF_STOCK': 'Mahsulot mavjud emas',
+  'error.IN_STOCK': 'Mahsulot allaqachon sotuvda — sahifani yangilang',
   'error.INSUFFICIENT_STOCK': 'Omborda mahsulot yetarli emas — savat yangilandi, miqdorni tekshiring',
   'error.PRICE_CHANGED': 'Narxlar yoki yetkazib berish o‘zgardi — summani tekshirib, qayta tasdiqlang',
   'error.EMPTY_ORDER': 'Savatda mavjud mahsulotlar yo‘q',

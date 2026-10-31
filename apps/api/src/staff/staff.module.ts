@@ -12,6 +12,7 @@ import { AdminInventoryController, AdminInventoryService } from './admin-invento
 import { AdminOrdersController, AdminOrdersService } from './admin-orders';
 import { AdminProductsController, AdminProductsService } from './admin-products';
 import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
+import { AdminWaitlistController, AdminWaitlistService } from './admin-waitlist';
 import { AdminSettingsController, AdminSettingsService, AuditController, StaffUsersController } from './admin-settings';
 import { AuditService } from './audit.service';
 import { DashboardController, DashboardService } from './dashboard';
@@ -65,6 +66,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     StaffUsersController,
     AuditController,
     AdminLegalController,
+    AdminWaitlistController,
   ],
   providers: [
     AdminBannersService,
@@ -92,6 +94,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     // real fetch and pauses; e2e tests override it with a fake fed by fixtures (never a real request to Yandex)
     { provide: YANDEX_CLIENT_OPTIONS, useValue: {} },
     AdminSettingsService,
+    AdminWaitlistService,
   ],
 })
 export class StaffModule {}

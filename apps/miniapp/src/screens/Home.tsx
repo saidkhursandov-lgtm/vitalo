@@ -5,10 +5,11 @@ import { useI18n } from '../lib/i18n';
 import { useBanners, useCategories, useFreeShipping, useProducts, useShopTexts } from '../lib/queries';
 import { HelpButton, HomeCarousel, HowToOrder, TrustChips } from '../components/HomeBlocks';
 import { BrandStrip, CategoryLink } from '../components/CatalogLayers';
+import { ManifestEntry } from '../components/Sheets';
 
 /**
  * Home (Flow §3, ТЗ 2.1 and 2.2): search, two trust markers, the navy banner, needs, then «Популярное» already on the
- * first screen, product types, «Проверенные бренды», new arrivals.
+ * first screen, «Как VITALO отбирает добавки» (2.4), product types, «Проверенные бренды», new arrivals.
  */
 export function Home() {
   const { t, lang } = useI18n();
@@ -54,6 +55,8 @@ export function Home() {
         more={<Link to="/catalog/products?sort=popular" className="link">{t('home.all')}</Link>}
       />
       {popular.isPending && <Loading variant="strip" />}
+      {/* 2.4: «Как VITALO отбирает добавки» right under «Популярное» */}
+      <ManifestEntry />
 
       {categories.data && (
         <section className="section">

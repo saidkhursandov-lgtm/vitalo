@@ -1,6 +1,6 @@
 import { Global, Injectable, Module } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BONUS_TEASER_DEFAULT, HOME_CONTENT_DEFAULT } from './home-content';
+import { BONUS_TEASER_DEFAULT, HOME_CONTENT_DEFAULT, MANIFEST_DEFAULT } from './home-content';
 
 /** Business settings editable by admins (table `settings`, JSON values). */
 export const SETTING_KEYS = {
@@ -17,6 +17,7 @@ export const SETTING_KEYS = {
   bonusTeaser: 'bonus_teaser',
   labelSize: 'label_size',
   checkoutOptions: 'checkout_options',
+  manifest: 'home_manifest',
 } as const;
 
 /**
@@ -84,6 +85,8 @@ export const SETTING_DEFAULTS = {
   /** Physical ID label 58×40 mm. Not inserted by a migration: the default is used until an admin saves one. */
   label_size: { width_mm: 58, height_mm: 40 } as LabelSize,
   checkout_options: { cod_max_total_uzs: null, show_online_soon: false, first_order_free_delivery: false } as CheckoutOptions,
+  /** 2.4: «Как VITALO отбирает добавки». Not inserted by a migration: the default is used until an admin saves one. */
+  home_manifest: MANIFEST_DEFAULT,
 };
 
 /** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */

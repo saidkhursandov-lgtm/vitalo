@@ -23,8 +23,10 @@ export type TemplateName =
   | 'staff.yandex_late_summary'
   | 'staff.finance_before_due'
   | 'staff.finance_due_day'
+  | 'staff.waitlist_new'
   | 'order.payment_reminder'
-  | 'order.cod_confirmed';
+  | 'order.cod_confirmed'
+  | 'waitlist.back_in_stock';
 
 export interface TemplatePayload {
   order_number: string;
@@ -54,10 +56,16 @@ export interface TemplatePayload {
   /** Stage 3 (admins only): what is not marked paid yet */
   tax_uzs?: number;
   salaries_uzs?: number;
+  /** 2.4: product name for waiting-list messages */
+  product?: string;
+  /** 2.4: which page the button opens (text of the button); default: the order */
+  open_button?: 'order' | 'product';
 }
 
 /** Text of the button under a message that has open_path. */
 export const OPEN_BUTTON: Record<Lang, string> = { ru: 'Открыть заказ', uz: 'Buyurtmani ochish' };
+/** 2.4: button under «… снова в наличии». */
+export const OPEN_PRODUCT_BUTTON: Record<Lang, string> = { ru: 'Открыть товар', uz: 'Mahsulotni ochish' };
 /** Text of the button under a staff message that has admin_path. */
 export const ADMIN_BUTTON = 'Открыть в админке';
 
@@ -181,6 +189,18 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
     ru: (p: TemplatePayload) =>
       `ℹ️ Синхронизация Яндекса: ${p.count ?? 0} заказ(ов) впервые увидены уже отгруженными или отменёнными. Автоматически они не создаются — посмотрите «Требует внимания» и закройте неактуальные.`,
     uz: (p: TemplatePayload) => `ℹ️ Yandex: ${p.count ?? 0} ta buyurtma.`,
+  },
+  // 2.4: a customer pressed «Сообщить о поступлении» (staff only, Russian). order_number is not used.
+  'staff.waitlist_new': {
+    ru: (p: TemplatePayload) => `🔔 Лист ожидания: ${p.product ?? ''}
+Ждут поступления: ${p.count ?? 0}`,
+    uz: (p: TemplatePayload) => `🔔 Kutish roʻyxati: ${p.product ?? ''}
+Kutmoqda: ${p.count ?? 0}`,
+  },
+  // 2.4: the product a customer waited for is available again. order_number is not used.
+  'waitlist.back_in_stock': {
+    ru: (p: TemplatePayload) => `${p.product ?? ''} снова в наличии`,
+    uz: (p: TemplatePayload) => `${p.product ?? ''} yana sotuvda`,
   },
   // Stage 3: only admins get these (money). order_number is not used.
   'staff.finance_before_due': {

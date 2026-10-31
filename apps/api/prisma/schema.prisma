@@ -343,6 +343,7 @@ model users {
   promotion_usages  promotion_usages[]
   notifications     notifications[]
   cancel_requests   cancel_requests[]
+  waitlist          product_waitlist[]
 
   @@index([status])
 }
@@ -566,6 +567,7 @@ model products {
   favorites               favorites[]
   promo_targets           promotion_targets[]
   block_items             content_block_items[]
+  waitlist                product_waitlist[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -1651,6 +1653,22 @@ model favorites {
   product    products @relation(fields: [product_id], references: [id])
 
   @@id([user_id, product_id])
+}
+
+/// 2.4: «Сообщить о поступлении». One row per customer and product; notified_at is set when the bot has written
+/// «снова в наличии» (then the row is closed; subscribing again after that reopens it).
+model product_waitlist {
+  id          String    @id @default(uuid()) @db.Uuid
+  product_id  String    @db.Uuid
+  user_id     String    @db.Uuid
+  phone       String? // from the profile at the moment of subscribing, if there was one
+  created_at  DateTime  @default(now())
+  notified_at DateTime?
+  product     products  @relation(fields: [product_id], references: [id])
+  user        users     @relation(fields: [user_id], references: [id])
+
+  @@unique([product_id, user_id])
+  @@index([notified_at])
 }
 
 model marketing_campaigns {

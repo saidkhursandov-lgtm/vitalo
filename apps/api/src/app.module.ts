@@ -19,6 +19,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthModule } from './health/health';
 import { OnlinePaymentsModule } from './payments/online/online-payments.module';
 import { BannersModule } from './banners/banners.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 
 // forRoot() loads .env into process.env synchronously, so JOBS_ENABLED from .env is visible below.
 const config = ConfigModule.forRoot({ isGlobal: true });
@@ -47,6 +48,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     HealthModule,
     OnlinePaymentsModule,
     BannersModule,
+    WaitlistModule,
   ],
 })
 export class AppModule {}

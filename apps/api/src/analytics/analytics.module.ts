@@ -13,9 +13,13 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
 /**
  * Release 1: extra app events outside the funnel (counted separately in «Аналитика → Воронка»).
  * 2.1: payment_soon_click — a tap on Payme / Click / Uzum while it is «Скоро»; props.system = payme | click | uzum.
+ * 2.4: manifest_open (props.source = home | ai_sheet), ai_tab_click — from the app; waitlist_subscribe and
+ * waitlist_notified (props.product_id) — written by the server only.
  */
-export const EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click'] as const;
-export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...EXTRA_EVENTS] as const;
+export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click'] as const;
+export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_notified'] as const;
+export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
+export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;
 
 /** Spam protection: per user at most this many app events per minute; extra ones are dropped quietly. */
 const LIMIT_PER_MINUTE = 30;

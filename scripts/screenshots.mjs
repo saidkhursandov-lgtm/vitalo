@@ -1,7 +1,8 @@
 // Screenshots of the local Mini App and admin panel (dev servers on 5173 / 5174 must be running).
 // Usage: node scripts/screenshots.mjs <out-dir> <plan.json>
 // plan.json: [{ "app": "miniapp" | "admin", "width": 320, "lang": "ru" | "uz", "path": "/catalog", "file": "320-ru-catalog.jpg",
-//              "full": true, "wait": 1500, "scrollTo": ".css-selector" }]
+//              "full": true, "wait": 1500, "scrollTo": ".css-selector", "scrollOffset": 300 }]
+// scrollOffset: after scrollTo, scroll back up this many px (the fixed top bar would cover the element otherwise)
 // Uses headless Chrome over the DevTools protocol; nothing is installed. Signs in with the dev login (test users only).
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -83,6 +84,7 @@ for (const shot of plan) {
   if (shot.lang) await setLang(shot.lang);
   if (shot.click) { await evaluate(`(() => { const b=[...document.querySelectorAll('${shot.click[0]}')].find(x=>x.textContent.includes(${JSON.stringify(shot.click[1])})); b && b.click(); })()`); await sleep(1000); }
   if (shot.scrollTo) await evaluate(`document.querySelector(${JSON.stringify(shot.scrollTo)})?.scrollIntoView({block:'start'})`);
+  if (shot.scrollOffset) await evaluate(`window.scrollBy(0, -${Number(shot.scrollOffset)})`);
   await sleep(shot.wait ?? 800);
   const params = { format: 'jpeg', quality: 80 };
   if (shot.full) {

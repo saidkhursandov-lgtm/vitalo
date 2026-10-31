@@ -12,6 +12,7 @@ import { DeliverySettings } from './settings/Delivery';
 import { DictionariesSettings } from './settings/Dictionaries';
 import { BannersSettings } from './settings/Banners';
 import { BonusTeaserForm, HomeSettings } from './settings/Home';
+import { ManifestSettings } from './settings/Manifest';
 import { LabelSizeSettings } from './settings/LabelSize';
 import { LegalSettings } from './settings/Legal';
 
@@ -50,6 +51,7 @@ export function Settings() {
       {tab === 'home' && (
         <>
           <BannersSettings />
+          <ManifestSettings />
           <HomeSettings />
         </>
       )}

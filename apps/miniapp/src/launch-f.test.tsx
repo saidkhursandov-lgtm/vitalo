@@ -195,7 +195,8 @@ describe('QuickAdd on a card', () => {
 
     cleanup();
     render(<QuickAdd productId="p2" inStock={false} />, { wrapper });
-    const out = await screen.findByRole('button', { name: 'Нет в наличии' });
-    expect(out).toHaveProperty('disabled', true);
+    // 2.4: out of stock — not a grey disabled [+] but an active bell «Сообщить о поступлении» (stage24.test.tsx)
+    const out = await screen.findByRole('button', { name: 'Сообщить о поступлении' });
+    expect(out).toHaveProperty('disabled', false);
   });
 });

@@ -173,6 +173,16 @@ export interface DaysRange {
 }
 
 /** /catalog/texts: everything editable in the admin panel that the shop shows. */
+/** 2.4: «Как VITALO отбирает добавки». */
+export interface Manifest {
+  enabled: boolean;
+  title: LocalizedText;
+  subtitle: LocalizedText;
+  intro: LocalizedText;
+  points: { title: LocalizedText; text: LocalizedText }[];
+  outro: LocalizedText;
+}
+
 export interface ShopInfo {
   product_disclaimer: LocalizedText;
   support_contact: string;
@@ -182,6 +192,8 @@ export interface ShopInfo {
   delivery_terms: { tashkent: DaysRange | null; regions: DaysRange | null };
   home_content?: HomeContent;
   bonus_teaser?: { enabled: boolean; text: LocalizedText };
+  /** 2.4: «Как VITALO отбирает добавки» (Настройки → Главная → Манифест). */
+  manifest?: Manifest;
   /** Release 1 switches from Настройки → Оплата. */
   checkout?: { cod_max_total_uzs: number | null; show_online_soon: boolean; first_order_free_delivery: boolean; online?: Record<OnlineProvider, OnlineMode> };
 }

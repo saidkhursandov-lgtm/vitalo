@@ -29,6 +29,10 @@ const EXTRA_NAMES: Record<string, string> = {
   language_change: 'Сменили язык',
   cod_selected: 'Выбрали «Оплата при получении»',
   payment_soon_click: 'Нажали Payme / Click / Uzum «Скоро»',
+  manifest_open: 'Открыли «Как VITALO отбирает добавки»',
+  ai_tab_click: 'Нажали «Подбор» в меню',
+  waitlist_subscribe: 'Записались в лист ожидания',
+  waitlist_notified: 'Получили «снова в наличии»',
 };
 const SYSTEM_NAMES: Record<string, string> = { payme: 'Payme', click: 'Click', uzum: 'Uzum' };
 const PERIODS = [

@@ -43,7 +43,7 @@ describe('menu by role', () => {
   });
 
   it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {
-    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты']);
+    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты', 'Лист ожидания']);
   });
 });
 

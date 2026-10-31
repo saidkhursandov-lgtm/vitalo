@@ -52,6 +52,7 @@
   --ask-bg: #fff7ed;         /* 2.3 fixes: «Спросить специалиста» widget */
   --ask-border: #fed7aa;
   --accent-text: #c2410c;    /* dark orange for small text: 4.9:1 on --ask-bg (#ff6600 would be only 2.8:1) */
+  --ai-gradient: linear-gradient(135deg, #002d62 0%, #002d62 35%, #ff6600 100%); /* 2.4: centre «Подбор» (add-on 3.1, module 1) */
 
   --font: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   --radius: 14px;
@@ -132,15 +133,27 @@ p { margin: 0 0 8px; }
 }
 
 .bottom-nav {
-  position: fixed; inset: auto 0 0; z-index: 10; display: grid; grid-template-columns: repeat(4, 1fr);
+  position: fixed; inset: auto 0 0; z-index: 10; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b);
   background: var(--surface); border-top: 1px solid var(--border);
 }
-.bottom-nav a {
+.bottom-nav a, .bottom-nav .nav-ai {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0;
   font-size: 11px; font-weight: 500; color: var(--muted);
 }
-.bottom-nav a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+.bottom-nav a span, .bottom-nav .nav-ai > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 1px; }
+/* 5 items on 320 px and in Uzbek («Bosh sahifa», «Sevimlilar»): a slightly smaller label keeps every one on one line */
+@media (max-width: 374px) { .bottom-nav a, .bottom-nav .nav-ai { font-size: 10px; letter-spacing: -0.1px; } }
+/* 2.4: centre «Подбор» — a raised 50 px circle, navy → orange, a white spark; the label stays on the menu's text line */
+.bottom-nav .nav-ai { position: relative; justify-content: flex-end; padding: 0 0 7px; border: 0; background: none; font-family: inherit; cursor: pointer; }
+.nav-ai-dot {
+  position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; justify-content: center; width: 50px; height: 50px; border-radius: 50%;
+  background: var(--ai-gradient); color: var(--on-primary); box-shadow: 0 0 0 4px var(--surface), 0 4px 12px rgb(0 45 98 / 0.25);
+  transition: transform 0.15s;
+}
+.nav-ai:active .nav-ai-dot { transform: translateX(-50%) scale(0.94); }
+.bottom-nav .nav-ai > span:last-child { color: var(--primary-text); font-weight: 600; }
 .bottom-nav a.active { color: var(--primary-text); font-weight: 600; }
 .bottom-nav a.active svg { color: var(--primary); }
 
@@ -964,3 +977,51 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 .ask-text strong { color: var(--primary-text); font-size: 13.5px; line-height: 1.3; font-weight: 700; }
 .ask-text span { color: var(--accent-text); font-size: 12.5px; line-height: 1.3; font-weight: 600; }
 .ask-chevron { flex: none; color: var(--primary-text); }
+
+/* ---------- 2.4: manifest «Как VITALO отбирает добавки», «Подбор» sheet, waiting list ---------- */
+.manifest-entry {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; margin: 0 0 24px; padding: 12px 8px 12px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.manifest-entry:active { background: var(--surface-2); }
+.manifest-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+  border-radius: 12px; background: var(--primary); color: var(--on-primary);
+}
+.manifest-entry-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.manifest-entry-text strong { color: var(--primary-text); font-size: 14.5px; line-height: 1.3; font-weight: 700; }
+.manifest-entry-text span { color: var(--muted); font-size: 13px; line-height: 1.3; }
+.manifest-chevron { flex: none; color: var(--primary-text); }
+
+.sheet .sheet-actions.sheet-actions-one { grid-template-columns: 1fr; }
+.sheet-actions-one .btn { margin: 0; gap: 8px; min-height: 48px; height: auto; padding-top: 8px; padding-bottom: 8px; }
+/* long titles (UZ, 320 px) wrap inside the button instead of «…» */
+.sheet-actions-one .btn > span { white-space: normal; text-align: center; line-height: 1.3; overflow: visible; }
+.manifest-sheet .sheet-head, .ai-sheet .sheet-head { margin-bottom: -8px; }
+.manifest-title { margin: 0 0 10px; font-size: 20px; line-height: 1.25; color: var(--primary-text); }
+.manifest-intro { margin: 0 0 16px; font-size: 14.5px; line-height: 1.5; }
+.manifest-points { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.manifest-points li { display: flex; align-items: flex-start; gap: 12px; }
+.manifest-points li > span:last-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 14px; line-height: 1.5; }
+.manifest-points strong { color: var(--primary-text); font-size: 15px; line-height: 1.3; }
+.manifest-num {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--primary); color: var(--on-primary); font-size: 15px; font-weight: 700;
+}
+.manifest-outro { margin: 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--primary-text); font-size: 14px; line-height: 1.45; font-weight: 500; }
+
+.ai-sheet-body { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 8px 20px; text-align: center; }
+.ai-sheet-body h2 { margin: 0; font-size: 18px; line-height: 1.35; color: var(--primary-text); }
+.ai-sheet-mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%;
+  background: var(--ai-gradient); color: var(--on-primary);
+}
+
+/* waiting list: a bell of the same size as [+] on a card, a wide button on the product page */
+.quick-bell .quick-round-dot { background: var(--surface); color: var(--primary-text); box-shadow: inset 0 0 0 1.5px var(--primary); }
+.quick-bell:active .quick-round-dot { background: var(--primary-soft); }
+.quick-bell.is-on .quick-round-dot { background: var(--primary-soft); box-shadow: none; }
+.waitlist-btn { gap: 8px; }
+.buy-panel-main .waitlist-btn { flex: 1 1 auto; }
+.waitlist-btn.is-on, .waitlist-btn.is-on:active { background: var(--primary-soft); color: var(--primary-text); border-color: var(--primary-soft); }

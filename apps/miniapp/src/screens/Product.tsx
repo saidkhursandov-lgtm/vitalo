@@ -6,11 +6,9 @@ import { formLabel, money, nameOf, pricePerDay, shortNameOf, textOf } from '../l
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
-import { QuickAdd, useQuickNotify } from '../components/QuickAdd';
+import { QuickAdd, useQuickNotify, WaitlistButton } from '../components/QuickAdd';
 import { BioIcon, CartIcon, ChevronIcon, DoctorIcon, LeafIcon, PlusIcon, ShieldIcon, SupportIcon, TestedIcon, type Icon } from '../components/Icons';
-import { useSupportUrl } from '../components/Support';
-import { useToast } from '../components/Toast';
-import { copyText, openSupport } from '../lib/shop';
+import { useAskSpecialist } from '../components/Support';
 import type { ProductCard } from '../lib/types';
 import { tapHaptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
@@ -206,9 +204,7 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
       </div>
       <div className="buy-panel-main">
         {soldOut ? (
-          <button type="button" className="btn btn-block is-out" disabled>
-            {t('product.outOfStock')}
-          </button>
+          <WaitlistButton productId={p.id} variant="panel" />
         ) : qty === 0 ? (
           <>
             <button
@@ -265,29 +261,15 @@ function StandardStrip({ product: p }: { product: ProductCard }) {
   );
 }
 
-/** Telegram fills the chat box from ?text= for public usernames; just in case, the text is also copied. */
-export function supportLinkWithText(url: string, text: string): string {
-  return `${url}${url.includes('?') ? '&' : '?'}text=${encodeURIComponent(text)}`;
-}
-
 /**
  * 2.3 fixes: «Сомневаетесь, подойдёт ли вам препарат?» — a widget right under the verdict, the whole card is the button;
  * opens the support chat with the product's short name ready.
  */
 function AskSpecialist({ name }: { name: string }) {
   const { t } = useI18n();
-  const url = useSupportUrl();
-  const toast = useToast();
+  const ask = useAskSpecialist();
   return (
-    <button
-      type="button"
-      className="ask-card"
-      onClick={() => {
-        const text = t('card.askText', { name });
-        void copyText(text).then((ok) => ok && toast(t('card.askCopied')));
-        openSupport(supportLinkWithText(url, text));
-      }}
-    >
+    <button type="button" className="ask-card" onClick={() => ask(t('card.askText', { name }))}>
       <span className="ask-icon" aria-hidden>
         <SupportIcon width={20} height={20} />
       </span>

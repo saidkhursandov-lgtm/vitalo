@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { notifications } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ADMIN_BUTTON, OPEN_BUTTON, renderNotification, type TemplatePayload } from './notification-templates';
+import { ADMIN_BUTTON, OPEN_BUTTON, OPEN_PRODUCT_BUTTON, renderNotification, type TemplatePayload } from './notification-templates';
 import { TELEGRAM_SENDER, TelegramSendError, type TelegramSender } from './telegram-sender';
 import { ConfigService } from '@nestjs/config';
 import { adminUrl, miniAppUrl } from './mini-app-url';
@@ -84,7 +84,7 @@ export class NotificationWorker {
         const admin = payload.admin_path ? adminUrl(this.config) : null;
         const button =
           payload.open_path && base
-            ? { text: OPEN_BUTTON[payload.lang === 'uz' ? 'uz' : 'ru'], url: `${base}${payload.open_path}` }
+            ? { text: (payload.open_button === 'product' ? OPEN_PRODUCT_BUTTON : OPEN_BUTTON)[payload.lang === 'uz' ? 'uz' : 'ru'], url: `${base}${payload.open_path}` }
             : payload.admin_path && admin
               ? { text: ADMIN_BUTTON, url: `${admin}${payload.admin_path}` }
               : undefined;

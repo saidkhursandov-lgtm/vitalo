@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { to: '/inventory', label: 'Склад', permission: 'inventory.view' },
   { to: '/purchases', label: 'Закупки', permission: 'purchases.view' },
   { to: '/customers', label: 'Клиенты', permission: 'customers.view' },
+  { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
   // Stage 3: money — admin only
   { to: '/analytics', label: 'Аналитика', permission: 'finance.manage' },
   { to: '/finance', label: 'Финансы', permission: 'finance.manage' },
