@@ -6,6 +6,7 @@ import { useBanners, useCategories, useFreeShipping, useProducts, useShopTexts }
 import { HelpButton, HomeCarousel, HowToOrder, TrustChips } from '../components/HomeBlocks';
 import { BrandStrip, CategoryLink } from '../components/CatalogLayers';
 import { ManifestEntry } from '../components/Sheets';
+import { ActiveOrderBar } from '../components/OrderNotices';
 
 /**
  * Home (Flow §3, ТЗ 2.1 and 2.2): search, two trust markers, the navy banner, needs, then «Популярное» already on the
@@ -28,6 +29,8 @@ export function Home() {
         <SearchIcon width={22} height={22} />
         <span>{t('home.search')}</span>
       </button>
+      {/* 3.2: the newest unfinished order right under the search */}
+      <ActiveOrderBar />
 
       <TrustChips />
       <HomeCarousel firstOrderFree={freeShipping.data?.first_order_free ?? false} freeFromUzs={freeShipping.data?.from_uzs ?? null} banners={banners.data} />

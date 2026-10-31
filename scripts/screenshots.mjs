@@ -1,7 +1,10 @@
 // Screenshots of the local Mini App and admin panel (dev servers on 5173 / 5174 must be running).
 // Usage: node scripts/screenshots.mjs <out-dir> <plan.json>
 // plan.json: [{ "app": "miniapp" | "admin", "width": 320, "lang": "ru" | "uz", "path": "/catalog", "file": "320-ru-catalog.jpg",
-//              "url": "file:///…" (instead of app + path), "full": true, "wait": 1500, "scrollTo": ".css-selector", "scrollOffset": 300, "type": ["input.css", "text"] }]
+//              "url": "file:///…" (instead of app + path), "full": true, "wait": 1500, "scrollTo": ".css-selector", "scrollOffset": 300, "type": ["input.css", "text"],
+//              "mock": { "match": "/api/orders/<id>", "patch": { … } } }]
+// mock: for this shot only, the JSON answer of a request whose URL contains "match" gets the fields of "patch" on top
+//       (to show a state without changing the database, e.g. a paid order); the shot's file name should say so
 // scrollOffset: after scrollTo, scroll back up this many px (the fixed top bar would cover the element otherwise)
 // Uses headless Chrome over the DevTools protocol; nothing is installed. Signs in with the dev login (test users only).
 import { spawn } from 'node:child_process';
@@ -40,8 +43,10 @@ const ws = new WebSocket(await target());
 await new Promise((r) => ws.addEventListener('open', r, { once: true }));
 let seq = 0;
 const pending = new Map();
+let mock = null;
 ws.addEventListener('message', (e) => {
   const m = JSON.parse(e.data);
+  if (m.method === 'Fetch.requestPaused') void onPaused(m.params);
   if (m.id && pending.has(m.id)) {
     const { resolve, reject } = pending.get(m.id);
     pending.delete(m.id);
@@ -55,6 +60,19 @@ const send = (method, params = {}) =>
     ws.send(JSON.stringify({ id, method, params }));
   });
 const evaluate = async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })).result.value;
+
+async function onPaused(p) {
+  try {
+    if (mock && p.request.url.includes(mock.match) && p.responseStatusCode === 200) {
+      const { body, base64Encoded } = await send('Fetch.getResponseBody', { requestId: p.requestId });
+      const json = JSON.parse(base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body);
+      const out = Buffer.from(JSON.stringify({ ...json, ...mock.patch }), 'utf8').toString('base64');
+      await send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, responseHeaders: p.responseHeaders, body: out });
+      return;
+    }
+  } catch { /* fall through: let the real answer pass */ }
+  await send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => undefined);
+}
 
 await send('Page.enable');
 await send('Runtime.enable');
@@ -80,6 +98,9 @@ for (const shot of plan) {
   const app = shot.app ?? 'miniapp';
   await send('Emulation.setDeviceMetricsOverride', { width: shot.width, height: shot.height ?? 800, deviceScaleFactor: 2, mobile: shot.width < 768 });
   if (!signedIn[app]) await signIn(app);
+  mock = shot.mock ?? null;
+  if (mock) await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/*', requestStage: 'Response' }] });
+  else await send('Fetch.disable');
   await go(shot.url ?? BASE[app] + shot.path);
   if (shot.lang) await setLang(shot.lang);
   if (shot.click) { await evaluate(`(() => { const b=[...document.querySelectorAll('${shot.click[0]}')].find(x=>x.textContent.includes(${JSON.stringify(shot.click[1])})); b && b.click(); })()`); await sleep(1000); }

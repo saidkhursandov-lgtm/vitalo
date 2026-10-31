@@ -367,6 +367,20 @@ const ru = {
   'error.ORDER_CANCELLED': 'Заказ уже отменён',
   'error.ORDER_NOT_CANCELLABLE': 'Оплаченный заказ можно отменить только через поддержку',
   'error.TOO_MANY_ADDRESSES': 'Можно сохранить не больше 10 адресов',
+  // 3.2: notification centre, active-order plaque, intake memo
+  'nav.notifications': 'Уведомления',
+  'notifications.title': 'Уведомления',
+  'notifications.readAll': 'Прочитать все',
+  'notifications.empty': 'Здесь появятся статусы заказов, поступления товаров и акции',
+  'notifications.emptyTitle': 'Уведомлений пока нет',
+  'notifications.unread': 'Новое',
+  'activeOrder.label': 'Заказ №{n}',
+  'activeOrder.more': 'Подробнее',
+  'activeOrder.pay': 'Оплатить / Отправить чек',
+  'activeOrder.term': 'доставка {days}',
+  'activeOrder.others': '+{n}',
+  'intake.title': 'Как принимать',
+  'intake.askText': 'Здравствуйте! Вопрос по приёму заказа №{n}…',
 };
 
 export type MessageKey = keyof typeof ru;
@@ -732,6 +746,19 @@ const uz: Record<MessageKey, string> = {
   'error.ORDER_CANCELLED': 'Buyurtma allaqachon bekor qilingan',
   'error.ORDER_NOT_CANCELLABLE': 'To‘langan buyurtmani faqat qo‘llab-quvvatlash xizmati orqali bekor qilish mumkin',
   'error.TOO_MANY_ADDRESSES': '10 tadan ortiq manzil saqlab bo‘lmaydi',
+  'nav.notifications': 'Bildirishnomalar',
+  'notifications.title': 'Bildirishnomalar',
+  'notifications.readAll': 'Hammasini o‘qish',
+  'notifications.empty': 'Bu yerda buyurtma holatlari, mahsulot kelishi va aksiyalar paydo bo‘ladi',
+  'notifications.emptyTitle': 'Hozircha bildirishnomalar yo‘q',
+  'notifications.unread': 'Yangi',
+  'activeOrder.label': '№{n} buyurtma',
+  'activeOrder.more': 'Batafsil',
+  'activeOrder.pay': 'To‘lash / Chek yuborish',
+  'activeOrder.term': 'yetkazish {days}',
+  'activeOrder.others': '+{n}',
+  'intake.title': 'Qanday qabul qilish kerak',
+  'intake.askText': 'Assalomu alaykum! №{n} buyurtmani qabul qilish bo‘yicha savolim bor…',
 };
 
 export const dictionaries: Record<Lang, Record<MessageKey, string>> = { ru, uz };

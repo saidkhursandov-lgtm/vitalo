@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useI18n } from '../lib/i18n';
-import { useCartCount } from '../lib/queries';
+import { useCartCount, useUnreadCount } from '../lib/queries';
 import { telegram } from '../lib/telegram';
 import { FloatingCart } from './FloatingCart';
 import { BrandBlock, LangSwitch } from './HeaderParts';
-import { BackIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, SparkIcon, UserIcon } from './Icons';
+import { BackIcon, BellIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, SparkIcon, UserIcon } from './Icons';
 import { Logo } from './Logo';
 import { NetworkBanner } from './NetworkBanner';
 import { SheetsProvider, useSheets } from './Sheets';
@@ -87,6 +87,7 @@ export function Layout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const cartCount = useCartCount();
+  const unread = useUnreadCount().data?.unread ?? 0;
   const isTab = TABS.includes(pathname);
   const showNav = !NO_NAV.some((re) => re.test(pathname));
   const count = cartCount.data?.items_count ?? 0;
@@ -126,6 +127,11 @@ export function Layout() {
         </div>
         <div className="topbar-right">
           <LangSwitch />
+          {/* 3.2: the notification centre, next to the cart; the same orange counter with a navy number */}
+          <Link to="/notifications" className="icon-btn bell-btn" aria-label={unread ? `${t('nav.notifications')}: ${unread}` : t('nav.notifications')}>
+            <BellIcon />
+            {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
+          </Link>
           <Link to="/cart" className="icon-btn cart-btn" aria-label={t('nav.cart')}>
             <CartIcon />
             {count > 0 && <span className={`badge ${bump ? 'is-bump' : ''}`}>{count > 99 ? '99+' : count}</span>}

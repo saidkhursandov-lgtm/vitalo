@@ -12,6 +12,7 @@ import { useConfirm } from '../components/Confirm';
 import { SupportButton } from '../components/Support';
 import { PayBy } from '../components/PayBy';
 import { OrderItems, OrderTotals } from '../components/OrderItems';
+import { IntakeGuideBlock } from '../components/OrderNotices';
 import type { Order, OrderListItem } from '../lib/types';
 
 /** The same status twice in a row (e.g. "new" -> "awaiting_payment" shown as "Ожидает оплаты" twice) is shown once. */
@@ -117,6 +118,8 @@ export function OrderDetail() {
         <OrderItems items={o.items} />
         <OrderTotals goods={o.totals.total_uzs - o.totals.delivery_cost_uzs} delivery={o.totals.delivery_cost_uzs} total={o.totals.total_uzs} />
       </section>
+
+      {o.intake_guide && <IntakeGuideBlock guide={o.intake_guide} orderNumber={o.order_number} />}
 
       <section className="card">
         <h2>{t('orders.delivery')}</h2>

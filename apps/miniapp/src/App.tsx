@@ -17,6 +17,7 @@ import { Checkout } from './screens/Checkout';
 import { Favorites } from './screens/Favorites';
 import { Home } from './screens/Home';
 import { OrderDetail, Orders } from './screens/Orders';
+import { Notifications } from './screens/Notifications';
 import { Payment } from './screens/Payment';
 import { Product } from './screens/Product';
 import { Profile } from './screens/Profile';
@@ -93,6 +94,7 @@ function Shop() {
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/pay" element={<Payment />} />
+        <Route path="notifications" element={<Notifications />} />
         <Route path="profile" element={<Profile />} />
         <Route path="profile/addresses" element={<Addresses />} />
         <Route path="profile/addresses/:id" element={<AddressEdit />} />

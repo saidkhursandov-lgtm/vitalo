@@ -301,6 +301,49 @@ export interface Order {
   can_cancel: boolean;
   delivery_eta?: DeliveryEta | null;
   history: { from_status: string | null; to_status: OrderStatus; reason: string | null; created_at: string }[];
+  /** 3.2: «Как принимать ваш заказ» — after the payment (or the cash-on-delivery confirmation); null before or without memos */
+  intake_guide?: IntakeGuide | null;
+}
+
+export interface IntakeGuideLine {
+  product_id: string;
+  name: string;
+  text: string;
+}
+export interface IntakeGuide {
+  ru: IntakeGuideLine[];
+  uz: IntakeGuideLine[];
+  footer: Record<Lang, string>;
+}
+
+/** 3.2: one entry of the notification centre (title and line already in the requested language). */
+export interface CentreItem {
+  id: string;
+  category: 'order' | 'waitlist' | 'promo';
+  template: string;
+  title: string;
+  body: string;
+  path: string | null;
+  read: boolean;
+  created_at: string;
+}
+export interface CentreList {
+  unread: number;
+  items: CentreItem[];
+}
+
+/** 3.2: the plaque on the home screen. */
+export interface ActiveOrder {
+  order: {
+    id: string;
+    order_number: string;
+    status: OrderStatus;
+    payment_method: string | null;
+    payment_reported: boolean;
+    can_pay: boolean;
+    delivery_eta: DeliveryEta | null;
+  } | null;
+  more: number;
 }
 
 export interface OrderListItem {
