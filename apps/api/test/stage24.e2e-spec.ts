@@ -38,6 +38,11 @@ describe('Stage 2.4 (e2e)', () => {
       expect(texts.manifest.points[0].text.ru).toContain('усваиваются значительно хуже органических форм');
       expect(texts.manifest.points[0].text.uz).toContain('organik shakllarga qaraganda ancha yomon');
       expect(JSON.stringify(texts.manifest)).not.toMatch(/4–5%/);
+      // D-36: no Halal until certificates; capsule type as a fact
+      expect(JSON.stringify(texts.manifest)).not.toMatch(/halal|halol|халял/i);
+      expect(texts.manifest.points[0].text.uz).toContain('bisglitsinatlar');
+      expect(texts.manifest.points[2].text.uz).toContain('(oʻsimlik VEGE, mol yoki baliq jelatini)');
+      expect(texts.manifest.points[2].title).toEqual({ ru: 'Оригинальность, хранение и честная маркировка', uz: 'Originallik, saqlash va ochiq belgilash' });
     });
 
     it('admin edits every text and switches the block off; the manager may not', async () => {

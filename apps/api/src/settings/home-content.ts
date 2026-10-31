@@ -59,7 +59,10 @@ export interface Manifest {
   outro: LocalizedText;
 }
 
-/** Texts from docs/content/VITALO_content.xlsx, sheet «Манифест» (point 1 without the «4–5%» figure, owner's wording). */
+/**
+ * Texts from docs/content/VITALO_content.xlsx, sheet «Манифест» (point 1 without the «4–5%» figure, owner's wording).
+ * D-36: no «Halal» here — the capsule type is stated as a fact until Halal is confirmed by certificates.
+ */
 export const MANIFEST_DEFAULT: Manifest = {
   enabled: true,
   title: { ru: 'Как VITALO отбирает добавки', uz: 'VITALO qoʻshimchalarni qanday tanlaydi' },
@@ -73,7 +76,7 @@ export const MANIFEST_DEFAULT: Manifest = {
       title: { ru: 'Только биодоступные формы веществ', uz: 'Faqat yuqori oʻzlashtiriluvchan shakllar' },
       text: {
         ru: 'Мы не закупаем дешевые неорганические соли вроде оксида магния, которые усваиваются значительно хуже органических форм и вызывают дискомфорт в ЖКТ. В каталог попадают цитраты, хелаты, бисглицинаты и натуральные триглицериды.',
-        uz: 'Biz organik shakllarga qaraganda ancha yomon oʻzlashtiriladigan va oshqozonda noqulaylik tugʻdiradigan magniy oksidi kabi arzon noorganik tuzlarni xarid qilmaymiz. Katalogimizga faqat sitratlar, xelatlar va tabiiy triglitseridlar kiritiladi.',
+        uz: 'Biz organik shakllarga qaraganda ancha yomon oʻzlashtiriladigan va oshqozonda noqulaylik tugʻdiradigan magniy oksidi kabi arzon noorganik tuzlarni xarid qilmaymiz. Katalogimizga faqat sitratlar, xelatlar, bisglitsinatlar va tabiiy triglitseridlar kiritiladi.',
       },
     },
     {
@@ -84,10 +87,10 @@ export const MANIFEST_DEFAULT: Manifest = {
       },
     },
     {
-      title: { ru: 'Контроль оригинальности, хранения и Halal/VEGE', uz: 'Originallik, saqlash va Halal/VEGE nazorati' },
+      title: { ru: 'Оригинальность, хранение и честная маркировка', uz: 'Originallik, saqlash va ochiq belgilash' },
       text: {
         ru: 'Мы работаем только с проверенными поставками, соблюдаем температурный режим хранения на складе в Ташкенте и честно маркируем тип капсулы (растительная целлюлоза VEGE, говяжий или рыбий желатин).',
-        uz: 'Biz faqat sinalgan yetkazib beruvchilar bilan ishlaymiz, Toshkentdagi omborimizda harorat rejimiga amal qilamiz va kapsula qobigʻi turini (oʻsimlik VEGE yoki halol jelatin) ochiq koʻrsatamiz.',
+        uz: 'Biz faqat sinalgan yetkazib beruvchilar bilan ishlaymiz, Toshkentdagi omborimizda harorat rejimiga amal qilamiz va kapsula qobigʻi turini (oʻsimlik VEGE, mol yoki baliq jelatini) ochiq koʻrsatamiz.',
       },
     },
   ],
