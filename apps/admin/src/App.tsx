@@ -8,6 +8,7 @@ import { Analytics } from './pages/Analytics';
 import { Audit } from './pages/Audit';
 import { CustomerDetail, Customers } from './pages/Customers';
 import { Waitlist, WaitlistProductPage } from './pages/Waitlist';
+import { Promo } from './pages/Promo';
 import { Dashboard } from './pages/Dashboard';
 import { Finance } from './pages/Finance';
 import { Inventory } from './pages/Inventory';
@@ -54,6 +55,7 @@ export function App() {
         <Route path="customers" element={<Guard perm="customers.view"><Customers /></Guard>} />
         <Route path="customers/:id" element={<Guard perm="customers.view"><CustomerDetail /></Guard>} />
         <Route path="waitlist" element={<Guard perm="customers.view"><Waitlist /></Guard>} />
+        <Route path="promo" element={<Guard perm="promo.send"><Promo /></Guard>} />
         <Route path="waitlist/:productId" element={<Guard perm="customers.view"><WaitlistProductPage /></Guard>} />
         <Route path="analytics" element={<Guard perm="finance.manage"><Analytics /></Guard>} />
         <Route path="finance" element={<Guard perm="finance.manage"><Finance /></Guard>} />

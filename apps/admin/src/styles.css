@@ -379,3 +379,6 @@ textarea { resize: vertical; }
 .pick-list { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); max-height: 280px; overflow-y: auto; }
 .pick-list li + li { border-top: 1px solid var(--border); }
 .pick-list .btn { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; height: auto; min-height: 40px; }
+
+/* 3.2: wide tables scroll inside the card on narrow screens */
+.table-wrap { overflow-x: auto; }

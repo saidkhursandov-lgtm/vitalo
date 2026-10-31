@@ -39,6 +39,10 @@ const EXTRA_NAMES: Record<string, string> = {
   receipt_sent: 'Прислали чек в бот',
   receipt_confirmed: 'Оплата подтверждена по чеку',
   receipt_rejected: 'Чек отклонён',
+  notification_open: 'Открыли уведомление',
+  notification_read_all: 'Нажали «Прочитать все»',
+  active_order_click: 'Нажали плашку заказа на главной',
+  intake_guide_sent: 'Получили памятку приёма',
 };
 const SYSTEM_NAMES: Record<string, string> = { payme: 'Payme', click: 'Click', uzum: 'Uzum' };
 const PERIODS = [

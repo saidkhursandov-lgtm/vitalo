@@ -20,7 +20,7 @@ afterEach(cleanup);
 /** Same lists as apps/api/src/staff/permissions.ts permissionsOf(role). */
 const PERMS: Record<string, Permission[]> = {
   warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision'],
-  marketer: ['dashboard.view', 'products.view', 'yandex.price.view'],
+  marketer: ['dashboard.view', 'products.view', 'yandex.price.view', 'promo.send'],
   manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label', 'yandex.orders.view'],
 };
 
@@ -38,8 +38,9 @@ describe('menu by role', () => {
     for (const role of ['warehouse', 'marketer', 'manager']) expect(labels(role)).not.toContain('Бренды');
   });
 
-  it('marketer: dashboard and products only', () => {
-    expect(labels('marketer')).toEqual(['Дашборд', 'Товары']);
+  it('marketer: dashboard, products and «Акции» (3.2)', () => {
+    expect(labels('marketer')).toEqual(['Дашборд', 'Товары', 'Акции']);
+    for (const role of ['warehouse', 'manager']) expect(labels(role)).not.toContain('Акции');
   });
 
   it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {

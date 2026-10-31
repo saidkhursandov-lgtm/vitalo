@@ -2,7 +2,7 @@ import { OrderReceipts } from '../components/OrderReceipts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone } from '../lib/format';
@@ -42,6 +42,19 @@ export interface AdminOrder {
   finance?: { own_delivery_cost_uzs: number };
   /** Stage 2E: jars of unit-tracked lines (null when the order has none) */
   assembly: Assembly | null;
+  /** 3.2: what the customer was told (bot + Mini App centre) */
+  customer_notifications?: CustomerNotification[];
+}
+
+export interface CustomerNotification {
+  id: string;
+  template: string;
+  text: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+  read_at: string | null;
 }
 
 interface Region extends Named {
@@ -289,6 +302,8 @@ export function OrderDetail() {
         </section>
       </div>
 
+      {o.customer_notifications && <CustomerNotifications rows={o.customer_notifications} />}
+
       {modal === 'confirm' && <ConfirmPayment order={o} onDone={done} onClose={() => setModal(null)} />}
       {modal === 'cancel' && <CancelOrder order={o} onDone={done} onClose={() => setModal(null)} />}
       {modal === 'edit' && <EditOrder order={o} onDone={done} onClose={() => setModal(null)} />}
@@ -297,6 +312,56 @@ export function OrderDetail() {
 }
 
 type ModalProps = { order: AdminOrder; onDone: (o: AdminOrder) => void; onClose: () => void };
+
+const DELIVERY: Record<string, { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' }> = {
+  sent: { label: 'Доставлено в бот', tone: 'ok' },
+  queued: { label: 'В очереди', tone: 'warn' },
+  sending: { label: 'Отправляется', tone: 'warn' },
+  failed: { label: 'Не доставлено', tone: 'bad' },
+  skipped: { label: 'Не отправлялось', tone: 'neutral' },
+};
+
+/** 3.2: messages the customer got about this order — what, when, delivered to the bot or not, read in the Mini App. */
+function CustomerNotifications({ rows }: { rows: CustomerNotification[] }) {
+  return (
+    <section className="card">
+      <h2>Уведомления клиенту</h2>
+      {rows.length === 0 ? (
+        <p className="muted">Клиенту ещё ничего не отправлялось</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Что</th>
+                <th>Когда</th>
+                <th>Доставка</th>
+                <th>В Mini App</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((n) => {
+                const d = DELIVERY[n.status] ?? { label: n.status, tone: 'neutral' as const };
+                return (
+                  <tr key={n.id}>
+                    <td>{n.text}</td>
+                    <td className="small">{dateTime(n.created_at)}</td>
+                    <td>
+                      <Badge tone={d.tone}>{d.label}</Badge>
+                      {n.sent_at && <div className="muted small">{dateTime(n.sent_at)}</div>}
+                      {n.status !== 'sent' && n.error && <div className="muted small">{n.error}</div>}
+                    </td>
+                    <td className="small">{n.read_at ? `прочитано ${dateTime(n.read_at)}` : <span className="muted">не открыто</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function ConfirmPayment({ order, onDone, onClose }: ModalProps) {
   const [comment, setComment] = useState('');
