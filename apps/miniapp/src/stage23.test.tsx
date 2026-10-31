@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuickAdd } from './components/QuickAdd';
 import { ToastProvider } from './components/Toast';
 import { ProductTile } from './components/ui';
-import { compactForm, pricePerDay, tileMeta } from './lib/format';
+import { pricePerDay, tileLine } from './lib/format';
 import { I18nProvider } from './lib/i18n';
 import { resetQuickCart } from './lib/quick-cart';
 import type { Lang, ProductCard } from './lib/types';
@@ -85,15 +85,11 @@ describe('2.3 fixes: helpers', () => {
     expect(pricePerDay(76000, 60)).toBe(1260);
   });
 
-  it('the mini-card line: no brackets, «Витамин» → «Вит.», short days; a fallback with the days only', () => {
-    expect(compactForm('Цитрат магния + Витамин B6')).toBe('Цитрат магния + Вит. B6');
-    expect(compactForm('Холекальциферол (D3)')).toBe('Холекальциферол');
-    expect(compactForm('Magniy sitrat + Vitamin B6')).toBe('Magniy sitrat + Vit. B6');
-    expect(compactForm('Витаминный комплекс')).toBe('Витаминный комплекс');
-    const ru = tileMeta(PRODUCT, 'ru', (n) => `${n} дн.`, (n) => `На ${n} дней`);
-    expect(ru).toEqual({ full: 'Цитрат магния + Вит. B6 • 50 дн.', days: 'На 50 дней' });
-    expect(tileMeta({ ...PRODUCT, course_days: null }, 'ru', String, String)).toEqual({ full: 'Цитрат магния + Вит. B6', days: null });
-    expect(tileMeta({ substance_form_ru: null, course_days: null }, 'ru', String, String)).toBeNull();
+  it('2.4 patch: the mini-card line is days and price per day (rounded down to tens); none without days or under 7', () => {
+    expect(tileLine(98000, 30)).toEqual({ days: 30, perDay: 3260 });
+    expect(tileLine(125000, 45)).toEqual({ days: 45, perDay: 2770 });
+    expect(tileLine(98000, null)).toBeNull();
+    expect(tileLine(98000, 6)).toBeNull();
   });
 });
 

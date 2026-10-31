@@ -8,17 +8,16 @@ interface Manifest {
   enabled: boolean;
   title: Text;
   subtitle: Text;
-  intro: Text;
-  points: { title: Text; text: Text }[];
-  outro: Text;
+  lead: Text;
+  cards: { title: Text; bad: Text; good: Text }[];
 }
 
-function Pair({ label, value, onChange, rows }: { label: string; value: Text; onChange: (v: Text) => void; rows?: number }) {
+function Pair({ label, value, onChange, rows, optional }: { label: string; value: Text; onChange: (v: Text) => void; rows?: number; optional?: boolean }) {
   const input = (lang: 'ru' | 'uz') =>
     rows ? (
-      <textarea rows={rows} maxLength={1000} value={value[lang]} onChange={(e) => onChange({ ...value, [lang]: e.target.value })} required />
+      <textarea rows={rows} maxLength={300} value={value[lang]} onChange={(e) => onChange({ ...value, [lang]: e.target.value })} required={!optional} />
     ) : (
-      <input maxLength={200} value={value[lang]} onChange={(e) => onChange({ ...value, [lang]: e.target.value })} required />
+      <input maxLength={200} value={value[lang]} onChange={(e) => onChange({ ...value, [lang]: e.target.value })} required={!optional} />
     );
   return (
     <div className="form-grid">
@@ -28,7 +27,10 @@ function Pair({ label, value, onChange, rows }: { label: string; value: Text; on
   );
 }
 
-/** 2.4: «Как VITALO отбирает добавки» — the entry on Home (under «Популярное») and its sheet; every text RU/UZ. */
+/**
+ * 2.4: «Как VITALO отбирает добавки» — the entry on Home (under «Популярное») and its sheet; every text RU/UZ.
+ * 2.4 patch: one sentence above three cards «Не берём / Стандарт VITALO»; «Не берём» may stay empty.
+ */
 export function ManifestSettings() {
   const client = useQueryClient();
   const q = useQuery({ queryKey: ['settings', 'manifest'], queryFn: () => api<Manifest>('/staff/settings/manifest') });
@@ -59,8 +61,9 @@ export function ManifestSettings() {
     >
       <h2>Манифест «Как VITALO отбирает добавки»</h2>
       <p className="muted">
-        Строка на главной под «Популярным» открывает окно с текстом и кнопкой «Спросить специалиста». То же окно открывается
-        из центральной кнопки «Подбор».
+        Строка на главной под «Популярным» открывает окно: одна фраза и три карточки «Не берём» (красный крестик) и «Стандарт
+        VITALO» (зелёная галочка), внизу кнопка «Спросить специалиста». То же окно открывается из кнопки «AI-подбор». Без
+        процентов усвоения и без слова Halal (решение D-36).
       </p>
       <label className="check">
         <input type="checkbox" checked={f.enabled} onChange={(e) => set({ ...f, enabled: e.target.checked })} />
@@ -68,18 +71,18 @@ export function ManifestSettings() {
       </label>
       <Pair label="Заголовок" value={f.title} onChange={(title) => set({ ...f, title })} />
       <Pair label="Подзаголовок (одна строка на главной)" value={f.subtitle} onChange={(subtitle) => set({ ...f, subtitle })} />
-      <Pair label="Вступление" rows={4} value={f.intro} onChange={(intro) => set({ ...f, intro })} />
-      {f.points.map((p, i) => {
-        const put = (patch: Partial<typeof p>) => set({ ...f, points: f.points.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+      <Pair label="Фраза над карточками" rows={2} value={f.lead} onChange={(lead) => set({ ...f, lead })} />
+      {f.cards.map((c, i) => {
+        const put = (patch: Partial<typeof c>) => set({ ...f, cards: f.cards.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
         return (
           <div key={i} className="edit-entry">
-            <strong>Пункт {i + 1}</strong>
-            <Pair label="Заголовок" value={p.title} onChange={(title) => put({ title })} />
-            <Pair label="Текст" rows={4} value={p.text} onChange={(text) => put({ text })} />
+            <strong>Карточка {i + 1}</strong>
+            <Pair label="Заголовок" value={c.title} onChange={(title) => put({ title })} />
+            <Pair label="Не берём — можно оставить пустым" rows={2} optional value={c.bad} onChange={(bad) => put({ bad })} />
+            <Pair label="Стандарт VITALO" rows={3} value={c.good} onChange={(good) => put({ good })} />
           </div>
         );
       })}
-      <Pair label="Заключение" rows={3} value={f.outro} onChange={(outro) => set({ ...f, outro })} />
       <ErrorBox error={save.error} />
       {saved && <div className="alert alert-ok">Сохранено — покупатели увидят изменения при следующем открытии магазина</div>}
       <button className="btn" disabled={save.isPending}>

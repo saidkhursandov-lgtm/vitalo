@@ -144,6 +144,20 @@ export function useSubscribeWaitlist() {
   });
 }
 
+/** 2.4 patch: the bell is a switch — the server marks the row «отменена», the bell goes back to empty. */
+export function useUnsubscribeWaitlist() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<{ status: 'cancelled' | 'not_waiting' }>(`/waitlist/${id}`, { method: 'DELETE' }),
+    onSuccess: (_r, id) =>
+      client.setQueryData<Set<string>>(['waitlist', 'ids'], (prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      }),
+  });
+}
+
 export const useFavorites = () => useQuery({ queryKey: ['favorites', 'list'], queryFn: () => api<ProductListItem[]>('/favorites') });
 
 /** Optimistic heart toggle: the icon flips at once and rolls back if the request fails. */

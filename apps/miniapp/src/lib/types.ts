@@ -173,14 +173,14 @@ export interface DaysRange {
 }
 
 /** /catalog/texts: everything editable in the admin panel that the shop shows. */
-/** 2.4: «Как VITALO отбирает добавки». */
+/** 2.4: «Как VITALO отбирает добавки»; 2.4 patch: a lead sentence and 3 cards «Не берём / Стандарт VITALO». */
 export interface Manifest {
   enabled: boolean;
   title: LocalizedText;
   subtitle: LocalizedText;
-  intro: LocalizedText;
-  points: { title: LocalizedText; text: LocalizedText }[];
-  outro: LocalizedText;
+  lead: LocalizedText;
+  /** bad: «Не берём», empty = not shown; good: «Стандарт VITALO» */
+  cards: { title: LocalizedText; bad: LocalizedText; good: LocalizedText }[];
 }
 
 export interface ShopInfo {

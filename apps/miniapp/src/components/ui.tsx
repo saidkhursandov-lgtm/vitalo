@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
-import { discountPercent, money, nameOf, shortNameOf, tileMeta } from '../lib/format';
-import { errorText, pluralForm, shownStatus, statusKey, useI18n, type MessageKey } from '../lib/i18n';
+import { discountPercent, money, nameOf, shortNameOf, tileLine } from '../lib/format';
+import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, Region } from '../lib/types';
 import { Picture } from './Picture';
@@ -220,31 +220,26 @@ export function FavoriteButton({ productId, className = '' }: { productId: strin
 }
 
 /**
- * 2.3 fixes: «Цитрат магния + Вит. B6 • 50 дн.» on one line; when it does not fit — only «На 50 дней»
- * (without days — the form with «…»). The line is always there, empty or not, so all cards of a row are equal.
+ * 2.4 patch: «На 45 дн. · 2 770 сум/день» — the same in RU and UZ, no substance form (it is on the product page).
+ * No course days (or under 7): the line stays empty, so all cards of a row are equal. When the two parts do not fit
+ * one line on a narrow phone, the price per day moves to the second line (the line has room for two).
  */
 function TileMeta({ product }: { product: ProductListItem }) {
   const { t, lang } = useI18n();
-  const meta = tileMeta(product, lang, (n) => t('card.daysShort', { n }), (n) => t('card.days', { n, d: t(`card.day.${pluralForm(n)}` as MessageKey) }));
-  const box = useRef<HTMLDivElement>(null);
-  const probe = useRef<HTMLSpanElement>(null);
-  const [short, setShort] = useState(false);
-  useLayoutEffect(() => {
-    const el = box.current;
-    if (!el || !meta?.days) return;
-    const check = () => setShort(!!probe.current && el.clientWidth > 0 && probe.current.offsetWidth > el.clientWidth + 1);
-    check();
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check);
-    ro?.observe(el);
-    return () => ro?.disconnect();
-  }, [meta?.full, meta?.days]);
+  const line = tileLine(product.price_uzs, product.course_days);
   return (
-    <div className="tile-meta" ref={box}>
-      {meta ? (short && meta.days ? meta.days : meta.full) : ' '}
-      {meta?.days && (
-        <span className="tile-meta-probe" ref={probe} aria-hidden>
-          {meta.full}
-        </span>
+    <div className="tile-meta">
+      {line ? (
+        <>
+          {/* the dot stays with the days when the line wraps on a narrow card */}
+          <span>
+            {t('card.tileDays', { n: line.days })}
+            <span aria-hidden>{' ·'}</span>
+          </span>
+          <span>{t('card.tilePerDay', { price: money(line.perDay, lang) })}</span>
+        </>
+      ) : (
+        ' '
       )}
     </div>
   );

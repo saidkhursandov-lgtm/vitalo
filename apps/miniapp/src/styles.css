@@ -46,6 +46,7 @@
   --error-soft: #fdecea;
   --success: #1d7a45;
   --success-soft: #e7f4ec;
+  --reject: #b85a52;         /* 2.4 patch: muted red cross «Не берём» in the manifest (icon only, 4.4:1 on white) */
   --neutral-soft: #eef2f6;
   --verdict-bg: #f4f7fa;     /* 2.3: «Вердикт врача» (owner's colour), with a navy stripe on the left */
   --meta: #4a5a75;           /* 2.3: grey-blue «Цитрат + B6 • На 50 дней», 6.6:1 on white */
@@ -871,12 +872,13 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 .tile-name { height: 2.7em; min-height: 0; margin: 0 0 2px; }
 /* narrow phones: long words like «Мультивитамины» fit a line without breaking */
 @media (max-width: 360px) { .tile-body { padding: 10px 10px 10px; } .tile-name { font-size: 12.5px; } }
+/* 2.4 patch: «На 45 дн. · 2 770 сум/день»; on narrow cards the price per day wraps as a whole to the second line,
+   so the line always has room for two and every card of a row keeps the same height */
 .tile-meta {
-  position: relative; height: 1.3em; font-size: 12px; line-height: 1.3; color: var(--meta); margin-bottom: 6px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: flex; flex-wrap: wrap; column-gap: 0.3em; height: 2.6em; font-size: 12px; line-height: 1.3; color: var(--meta);
+  margin-bottom: 4px; overflow: hidden;
 }
-/* the full line, measured out of sight: if it is wider than the card, «На N дней» is shown instead */
-.tile-meta-probe { position: absolute; left: 0; top: 0; visibility: hidden; white-space: nowrap; pointer-events: none; }
+.tile-meta > span { white-space: nowrap; }
 .tile-foot { display: flex; flex-direction: column; margin-top: auto; }
 .tile-price { font-size: 15px; line-height: 22px; height: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .tile-action { display: flex; align-items: center; justify-content: flex-end; height: var(--tap); margin: 2px 0 -4px; }
@@ -1000,28 +1002,50 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 .sheet-actions-one .btn > span { white-space: normal; text-align: center; line-height: 1.3; overflow: visible; }
 .manifest-sheet .sheet-head, .ai-sheet .sheet-head { margin-bottom: -8px; }
 .manifest-title { margin: 0 0 10px; font-size: 20px; line-height: 1.25; color: var(--primary-text); }
-.manifest-intro { margin: 0 0 16px; font-size: 14.5px; line-height: 1.5; }
-.manifest-points { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-.manifest-points li { display: flex; align-items: flex-start; gap: 12px; }
-.manifest-points li > span:last-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 14px; line-height: 1.5; }
-.manifest-points strong { color: var(--primary-text); font-size: 15px; line-height: 1.3; }
+.manifest-lead { margin: 0 0 14px; font-size: 14.5px; line-height: 1.5; }
+.manifest-cards { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.manifest-card { padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.manifest-card-head { display: flex; align-items: center; gap: 10px; }
+.manifest-card-head strong { color: var(--primary-text); font-size: 15px; line-height: 1.3; }
 .manifest-num {
-  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%;
-  background: var(--primary); color: var(--on-primary); font-size: 15px; font-weight: 700;
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--primary); color: var(--on-primary); font-size: 14px; font-weight: 700;
 }
-.manifest-outro { margin: 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--primary-text); font-size: 14px; line-height: 1.45; font-weight: 500; }
+.manifest-line { margin: 0; display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.45; }
+.manifest-line svg { flex: none; margin-top: 1px; }
+.manifest-line.is-bad { color: var(--muted); }
+.manifest-line.is-bad svg { color: var(--reject); }
+.manifest-line.is-good svg { color: var(--success); }
 
-.ai-sheet-body { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 8px 20px; text-align: center; }
-.ai-sheet-body h2 { margin: 0; font-size: 18px; line-height: 1.35; color: var(--primary-text); }
-.ai-sheet-mark {
-  display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%;
-  background: var(--ai-gradient); color: var(--on-primary);
+.ai-sheet-body { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 4px 16px; text-align: center; }
+.ai-sheet-body h2 { margin: 0; font-size: 19px; line-height: 1.3; color: var(--primary-text); }
+.ai-badge {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 12px; border-radius: 999px;
+  background: var(--ai-gradient); color: var(--on-primary); font-size: 11px; line-height: 1.3; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
 }
+.ai-badge svg { flex: none; }
+.ai-text { margin: 0; font-size: 14px; line-height: 1.5; }
+.ai-chips { list-style: none; margin: 4px 0 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.ai-chip {
+  width: 100%; min-height: var(--tap); display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong); background: var(--neutral-soft); color: var(--muted); font: inherit; font-size: 14px; line-height: 1.35; text-align: left; cursor: default;
+}
+.ai-chip svg { flex: none; }
+.ai-chip-text { flex: 1; min-width: 0; }
+.ai-chip-soon { flex: none; padding: 2px 8px; border-radius: 999px; background: var(--surface); font-size: 12px; font-weight: 600; white-space: nowrap; }
+/* two class names so that every tap restarts the shake */
+.ai-chip.is-shake-a { animation: chip-shake-a 0.3s ease; }
+.ai-chip.is-shake-b { animation: chip-shake-b 0.3s ease; }
+@keyframes chip-shake-a { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+@keyframes chip-shake-b { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+@media (prefers-reduced-motion: reduce) { .ai-chip.is-shake-a, .ai-chip.is-shake-b { animation: none; } }
+button.toast-action { border: 0; background: none; font: inherit; font-weight: 700; cursor: pointer; }
 
 /* waiting list: a bell of the same size as [+] on a card, a wide button on the product page */
 .quick-bell .quick-round-dot { background: var(--surface); color: var(--primary-text); box-shadow: inset 0 0 0 1.5px var(--primary); }
 .quick-bell:active .quick-round-dot { background: var(--primary-soft); }
-.quick-bell.is-on .quick-round-dot { background: var(--primary-soft); box-shadow: none; }
+.quick-bell.is-on .quick-round-dot { background: var(--primary); color: var(--on-primary); box-shadow: none; }
+.quick-bell.is-on:active .quick-round-dot { background: var(--primary-press); }
 .waitlist-btn { gap: 8px; }
 .buy-panel-main .waitlist-btn { flex: 1 1 auto; }
 .waitlist-btn.is-on, .waitlist-btn.is-on:active { background: var(--primary-soft); color: var(--primary-text); border-color: var(--primary-soft); }

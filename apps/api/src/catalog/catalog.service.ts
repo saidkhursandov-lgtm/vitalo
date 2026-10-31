@@ -3,6 +3,7 @@ import { onlineModes } from '../payments/online/online-providers';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeliveryService } from '../delivery/delivery.service';
+import { manifestOrDefault } from '../settings/home-content';
 import { SettingsService, supportLink } from '../settings/settings.service';
 import { buildCategoryTrees, CategoryTrees, collectDescendantIds, pruneEmpty } from './category-tree';
 import { ListProductsQuery, ProductSort, SearchQuery } from './catalog.dto';
@@ -101,7 +102,7 @@ export class CatalogService {
       delivery_terms: await this.delivery.terms(),
       home_content: await this.settings.getOrDefault('home_content'),
       bonus_teaser: await this.settings.getOrDefault('bonus_teaser'),
-      manifest: await this.settings.getOrDefault('home_manifest'),
+      manifest: manifestOrDefault(await this.settings.get('home_manifest')),
       // Release 1: what checkout and the home page may show (the server re-checks everything on order creation)
       checkout: await this.checkoutForApp(),
     };

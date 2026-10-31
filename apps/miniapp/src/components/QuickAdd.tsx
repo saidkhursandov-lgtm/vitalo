@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react';
 import { errorText, useI18n } from '../lib/i18n';
 import { ApiError } from '../lib/api';
-import { useSubscribeWaitlist, useWaitlistIds } from '../lib/queries';
+import { useSubscribeWaitlist, useUnsubscribeWaitlist, useWaitlistIds } from '../lib/queries';
 import { useQuickCart, type QuickNotice } from '../lib/quick-cart';
 import { track } from '../lib/analytics';
 import { haptic, tapHaptic } from '../lib/telegram';
@@ -105,31 +105,44 @@ export function QuickAdd({ productId, inStock, variant = 'card' }: { productId: 
 }
 
 /**
- * 2.4: «Сообщить о поступлении» for a product that is out of stock. One tap subscribes (the server keeps one row per
- * customer and product); after that the button says «Вы в списке ожидания» and a tap only repeats it.
+ * 2.4: «Сообщить о поступлении» for a product that is out of stock. 2.4 patch: a switch — the first tap subscribes
+ * (toast with «Отменить»), a tap on the active bell or on «Отменить» switches it off (the row is marked, not deleted).
  */
 export function WaitlistButton({ productId, variant }: { productId: string; variant: 'card' | 'panel' }) {
   const { t, lang } = useI18n();
   const toast = useToast();
   const ids = useWaitlistIds();
   const subscribe = useSubscribeWaitlist();
+  const unsubscribe = useUnsubscribeWaitlist();
   const waiting = ids.data?.has(productId) ?? false;
+  const busy = subscribe.isPending || unsubscribe.isPending;
+  const fail = (err: unknown) => toast(errorText(lang, err instanceof ApiError ? err.code : undefined));
+  const turnOff = () =>
+    unsubscribe.mutate(productId, {
+      onSuccess: () => toast(t('waitlist.off')),
+      onError: fail,
+    });
   const onClick = (e: MouseEvent) => {
     stop(e);
-    if (waiting) return toast(t('waitlist.in'));
-    if (subscribe.isPending) return;
+    if (busy) return;
     tapHaptic();
+    if (waiting) return turnOff();
     subscribe.mutate(productId, {
       onSuccess: () => {
         haptic('success');
-        toast(t('waitlist.done'));
+        toast(
+          t('waitlist.done'),
+          <button type="button" className="toast-action" onClick={turnOff}>
+            {t('waitlist.undo')}
+          </button>,
+        );
       },
-      onError: (err) => toast(errorText(lang, err instanceof ApiError ? err.code : undefined)),
+      onError: fail,
     });
   };
   if (variant === 'card') {
     return (
-      <button type="button" className={`quick-round quick-bell ${waiting ? 'is-on' : ''}`} aria-label={t(waiting ? 'waitlist.in' : 'waitlist.notify')} aria-pressed={waiting} onClick={onClick}>
+      <button type="button" className={`quick-round quick-bell ${waiting ? 'is-on' : ''}`} aria-label={t(waiting ? 'waitlist.cancel' : 'waitlist.notify')} aria-pressed={waiting} onClick={onClick}>
         <span className="quick-round-dot">{waiting ? <BellCheckIcon width={20} height={20} /> : <BellIcon width={20} height={20} />}</span>
       </button>
     );
@@ -137,7 +150,7 @@ export function WaitlistButton({ productId, variant }: { productId: string; vari
   return (
     <button type="button" className={`btn btn-block waitlist-btn ${waiting ? 'is-on' : ''}`} aria-pressed={waiting} onClick={onClick}>
       {waiting ? <BellCheckIcon width={20} height={20} /> : <BellIcon width={20} height={20} />}
-      <span>{t(waiting ? 'waitlist.in' : 'waitlist.notify')}</span>
+      <span>{t(waiting ? 'waitlist.cancel' : 'waitlist.notify')}</span>
     </button>
   );
 }

@@ -3,7 +3,7 @@ import { track } from '../lib/analytics';
 import { useI18n } from '../lib/i18n';
 import { useShopTexts } from '../lib/queries';
 import type { LocalizedText } from '../lib/types';
-import { ChevronIcon, CloseIcon, ShieldIcon, SparkIcon, SupportIcon } from './Icons';
+import { AcceptIcon, ChevronIcon, CloseIcon, LockIcon, RejectIcon, ShieldIcon, SparkIcon, SupportIcon } from './Icons';
 import { useAskSpecialist } from './Support';
 
 type ManifestSource = 'home' | 'ai_sheet';
@@ -100,21 +100,30 @@ function ManifestSheet({ onClose }: { onClose: () => void }) {
     <SheetFrame label={tx(manifest.title)} onClose={onClose} className="manifest-sheet">
       <div className="sheet-body">
         <h2 className="manifest-title">{tx(manifest.title)}</h2>
-        <p className="manifest-intro">{tx(manifest.intro)}</p>
-        <ol className="manifest-points">
-          {manifest.points.map((p, i) => (
-            <li key={i}>
-              <span className="manifest-num" aria-hidden>
-                {i + 1}
-              </span>
-              <span>
-                <strong>{tx(p.title)}</strong>
-                <span>{tx(p.text)}</span>
-              </span>
+        <p className="manifest-lead">{tx(manifest.lead)}</p>
+        {/* 2.4 patch: scannable cards — «Не берём» (muted red cross, hidden when empty) and «Стандарт VITALO» (green tick) */}
+        <ol className="manifest-cards">
+          {manifest.cards.map((c, i) => (
+            <li key={i} className="manifest-card">
+              <div className="manifest-card-head">
+                <span className="manifest-num" aria-hidden>
+                  {i + 1}
+                </span>
+                <strong>{tx(c.title)}</strong>
+              </div>
+              {tx(c.bad).trim() && (
+                <p className="manifest-line is-bad">
+                  <RejectIcon width={18} height={18} />
+                  <span>{tx(c.bad)}</span>
+                </p>
+              )}
+              <p className="manifest-line is-good">
+                <AcceptIcon width={18} height={18} />
+                <span>{tx(c.good)}</span>
+              </p>
             </li>
           ))}
         </ol>
-        <p className="manifest-outro">{tx(manifest.outro)}</p>
       </div>
       <div className="sheet-actions sheet-actions-one">
         <AskButton />
@@ -123,17 +132,41 @@ function ManifestSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** «Подбор» until AI-подбор (release 5): what is coming and two ways to get help now. */
+const AI_CHIPS = ['ai.chipGoals', 'ai.chipCart', 'ai.chipQuick'] as const;
+
+/** A «Скоро» preview chip: does nothing, only shakes a little (not with reduced motion). */
+function SoonChip({ label }: { label: string }) {
+  const { t } = useI18n();
+  const [shake, setShake] = useState(0);
+  return (
+    <li>
+      <button type="button" className={`ai-chip ${shake % 2 ? 'is-shake-a' : shake ? 'is-shake-b' : ''}`} aria-disabled="true" onClick={() => setShake((n) => n + 1)}>
+        <LockIcon width={16} height={16} />
+        <span className="ai-chip-text">{label}</span>
+        <span className="ai-chip-soon">{t('ai.soon')}</span>
+      </button>
+    </li>
+  );
+}
+
+/** «AI-подбор» until release 5 (D-37): what is coming, three locked previews and two ways to get help now. */
 function AiSheet({ onClose, onManifest }: { onClose: () => void; onManifest: () => void }) {
   const { t, lang } = useI18n();
   const manifest = useShopTexts().data?.manifest;
   return (
     <SheetFrame label={t('nav.ai')} onClose={onClose} className="ai-sheet">
       <div className="sheet-body ai-sheet-body">
-        <span className="ai-sheet-mark" aria-hidden>
-          <SparkIcon width={28} height={28} />
+        <span className="ai-badge">
+          <SparkIcon width={14} height={14} />
+          {t('ai.badge')}
         </span>
         <h2>{t('ai.title')}</h2>
+        <p className="ai-text">{t('ai.text')}</p>
+        <ul className="ai-chips">
+          {AI_CHIPS.map((k) => (
+            <SoonChip key={k} label={t(k)} />
+          ))}
+        </ul>
       </div>
       <div className="sheet-actions sheet-actions-one">
         <AskButton />

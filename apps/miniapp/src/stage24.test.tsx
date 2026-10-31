@@ -21,10 +21,14 @@ vi.mock('./lib/telegram', async (orig) => {
 const MANIFEST: Manifest = {
   enabled: true,
   title: { ru: 'Как VITALO отбирает добавки', uz: 'VITALO qoʻshimchalarni qanday tanlaydi' },
-  subtitle: { ru: '3 правила врачебного отбора', uz: 'Shifokor tanlovining 3 qoidasi' },
-  intro: { ru: 'Вступление', uz: 'Kirish' },
-  points: [1, 2, 3].map((n) => ({ title: { ru: `Пункт ${n}`, uz: `Band ${n}` }, text: { ru: `Текст ${n}`, uz: `Matn ${n}` } })),
-  outro: { ru: 'Заключение', uz: 'Xulosa' },
+  subtitle: { ru: '3 критерия отбора', uz: '3 ta tanlov mezoni' },
+  lead: { ru: 'Вступление', uz: 'Kirish' },
+  cards: [1, 2, 3].map((n) => ({
+    title: { ru: `Карточка ${n}`, uz: `Karta ${n}` },
+    // the owner may leave «Не берём» empty: then the line is not shown
+    bad: n === 2 ? { ru: '', uz: '' } : { ru: `Не берём ${n}`, uz: `Olmaymiz ${n}` },
+    good: { ru: `Берём ${n}`, uz: `Olamiz ${n}` },
+  })),
 };
 
 const OUT: ProductListItem = {
@@ -35,6 +39,7 @@ const OUT: ProductListItem = {
 let manifest: Manifest;
 let waiting: string[];
 let puts: string[];
+let deletes: string[];
 let events: string[];
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -44,6 +49,7 @@ beforeEach(() => {
   manifest = MANIFEST;
   waiting = [];
   puts = [];
+  deletes = [];
   events = [];
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
@@ -58,6 +64,12 @@ beforeEach(() => {
       puts.push(id);
       waiting.push(id);
       return json({ status: 'subscribed' });
+    }
+    if (method === 'DELETE' && url.includes('/waitlist/')) {
+      const id = url.split('/waitlist/')[1];
+      deletes.push(id);
+      waiting = waiting.filter((x) => x !== id);
+      return json({ status: 'cancelled' });
     }
     if (url.endsWith('/cart/count')) return json({ items_count: 0, goods_total_uzs: 0 });
     if (url.includes('/catalog/texts')) return json({ support_url: 'https://t.me/VITALO_support', manifest });
@@ -92,34 +104,48 @@ function show(lang: Lang, ui: React.ReactNode) {
 }
 
 describe('2.4: waiting list «Сообщить о поступлении»', () => {
-  it('an out-of-stock card has an active bell instead of a grey [+]; one tap subscribes once', async () => {
+  it('the bell is a switch: a tap subscribes, a tap on the active bell switches it off', async () => {
     show('ru', <ProductTile product={OUT} />);
     const bell = await screen.findByRole('button', { name: 'Сообщить о поступлении' });
     expect(bell).toHaveProperty('disabled', false);
     fireEvent.click(bell);
-    expect(await screen.findByText('Сообщим, когда товар появится')).toBeTruthy();
-    const on = await screen.findByRole('button', { name: 'Вы в списке ожидания' });
+    expect(await screen.findByText('Сообщим в Telegram, когда появится')).toBeTruthy();
+    const on = await screen.findByRole('button', { name: 'Отменить уведомление' });
     expect(on.getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(on); // already waiting: no second request, only the reminder
-    expect(await screen.findByText('Вы в списке ожидания')).toBeTruthy();
+    fireEvent.click(on);
+    expect(await screen.findByText('Уведомление отключено')).toBeTruthy();
+    expect((await screen.findByRole('button', { name: 'Сообщить о поступлении' })).getAttribute('aria-pressed')).toBe('false');
     expect(puts).toEqual(['p2']);
+    expect(deletes).toEqual(['p2']);
   });
 
-  it('a customer already on the list sees «Kutish roʻyxatidasiz» in Uzbek right away', async () => {
+  it('«Отменить» in the toast switches the notification off', async () => {
+    show('ru', <ProductTile product={OUT} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Сообщить о поступлении' }));
+    const toast = await screen.findByRole('status');
+    fireEvent.click(await within(toast).findByRole('button', { name: 'Отменить' }));
+    expect(await screen.findByText('Уведомление отключено')).toBeTruthy();
+    expect(deletes).toEqual(['p2']);
+  });
+
+  it('a customer already on the list sees the active bell in Uzbek right away', async () => {
     waiting = ['p2'];
     show('uz', <ProductTile product={OUT} />);
-    expect(await screen.findByRole('button', { name: 'Siz kutish roʻyxatidasiz' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Bildirishnomani bekor qilish' })).toBeTruthy();
   });
 });
 
 describe('2.4: manifest «Как VITALO отбирает добавки»', () => {
-  it('the Home entry opens the sheet: intro, 3 numbered points, outro and «Спросить специалиста»', async () => {
+  it('the Home entry opens the sheet: the lead, 3 cards «Не берём / Стандарт VITALO» and «Спросить специалиста»', async () => {
     show('ru', <ManifestEntry />);
     fireEvent.click(await screen.findByRole('button', { name: /Как VITALO отбирает добавки/ }));
     const sheet = await screen.findByRole('dialog');
     expect(within(sheet).getByText('Вступление')).toBeTruthy();
     expect(within(sheet).getAllByRole('listitem')).toHaveLength(3);
-    expect(within(sheet).getByText('Заключение')).toBeTruthy();
+    expect(within(sheet).getByText('Не берём 1')).toBeTruthy();
+    expect(within(sheet).getByText('Берём 2')).toBeTruthy();
+    expect(sheet.querySelectorAll('.manifest-line.is-bad')).toHaveLength(2); // card 2 has an empty «Не берём»
+    expect(sheet.querySelectorAll('.manifest-line.is-good')).toHaveLength(3);
     expect(within(sheet).getByRole('button', { name: 'Спросить специалиста' })).toBeTruthy();
     await vi.waitFor(() => expect(events).toContain('manifest_open'));
   });
@@ -132,8 +158,8 @@ describe('2.4: manifest «Как VITALO отбирает добавки»', () =
   });
 });
 
-describe('2.4: «Подбор» in the bottom menu', () => {
-  it('5 items with the centre «Подбор»; it opens «Скоро…» with «Спросить специалиста» and the manifest', async () => {
+describe('2.4: «AI-подбор» in the bottom menu', () => {
+  it('5 items with the centre «AI-подбор»; it opens the preview with locked chips, «Спросить специалиста» and the manifest', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -149,10 +175,17 @@ describe('2.4: «Подбор» in the bottom menu', () => {
       </QueryClientProvider>,
     );
     const nav = await screen.findByRole('navigation');
-    expect(within(nav).getAllByText(/^(Главная|Каталог|Подбор|Избранное|Профиль)$/).map((x) => x.textContent)).toEqual(['Главная', 'Каталог', 'Подбор', 'Избранное', 'Профиль']);
-    fireEvent.click(within(nav).getByRole('button', { name: 'Подбор' }));
+    expect(within(nav).getAllByText(/^(Главная|Каталог|AI-подбор|Избранное|Профиль)$/).map((x) => x.textContent)).toEqual(['Главная', 'Каталог', 'AI-подбор', 'Избранное', 'Профиль']);
+    fireEvent.click(within(nav).getByRole('button', { name: 'AI-подбор' }));
     const sheet = await screen.findByRole('dialog');
-    expect(within(sheet).getByText('Скоро здесь будет умный подбор витаминов')).toBeTruthy();
+    expect(within(sheet).getByText('Персональный AI-подбор курса витаминов')).toBeTruthy();
+    expect(within(sheet).getByText('VITALO AI • по правилам отбора VITALO')).toBeTruthy();
+    const chips = within(sheet).getAllByRole('button', { name: /Скоро/ });
+    expect(chips).toHaveLength(3);
+    fireEvent.click(chips[0]); // does nothing: no navigation, no request, the sheet stays
+    expect(chips[0].getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('dialog')).toBe(sheet);
+    expect(sheet.textContent).not.toMatch(/врач|медицинск/i);
     expect(within(sheet).getByRole('button', { name: 'Спросить специалиста' })).toBeTruthy();
     await vi.waitFor(() => expect(events).toContain('ai_tab_click'));
     fireEvent.click(await within(sheet).findByRole('button', { name: 'Как VITALO отбирает добавки' }));

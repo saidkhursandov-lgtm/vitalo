@@ -22,6 +22,7 @@ import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, I
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { manifestOrDefault } from '../settings/home-content';
 import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService } from '../settings/settings.service';
 import { OnlinePaymentsService } from '../payments/online/online-payments.service';
 import { ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
@@ -214,19 +215,26 @@ export class HomeContentDto {
   @ApiProperty({ type: HomeStepsDto }) @IsObject() @ValidateNested() @Type(() => HomeStepsDto) steps!: HomeStepsDto;
 }
 
-/** 2.4: «Как VITALO отбирает добавки» (Настройки → Главная → Манифест): every text in RU and UZ, exactly 3 points. */
-export class ManifestPointDto {
+/** 2.4: «Как VITALO отбирает добавки» (Настройки → Главная → Манифест): every text in RU and UZ, exactly 3 cards. */
+/** RU/UZ text that may be left empty (the «Не берём» line of a manifest card is then not shown). */
+export class OptionalTextDto {
+  @ApiProperty() @Transform(trim) @IsString() @MaxLength(300) ru!: string;
+  @ApiProperty() @Transform(trim) @IsString() @MaxLength(300) uz!: string;
+}
+
+/** 2.4 patch: a card «Не берём / Стандарт VITALO». */
+export class ManifestCardDto {
   @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) title!: LocalizedTextDto;
-  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) text!: LocalizedTextDto;
+  @ApiProperty({ type: OptionalTextDto }) @IsObject() @ValidateNested() @Type(() => OptionalTextDto) bad!: OptionalTextDto;
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) good!: LocalizedTextDto;
 }
 
 export class ManifestDto {
   @ApiProperty() @IsBoolean() enabled!: boolean;
   @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) title!: LocalizedTextDto;
   @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) subtitle!: LocalizedTextDto;
-  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) intro!: LocalizedTextDto;
-  @ApiProperty({ type: [ManifestPointDto] }) @IsArray() @ArrayMinSize(3) @ArrayMaxSize(3) @ValidateNested({ each: true }) @Type(() => ManifestPointDto) points!: ManifestPointDto[];
-  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) outro!: LocalizedTextDto;
+  @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) lead!: LocalizedTextDto;
+  @ApiProperty({ type: [ManifestCardDto] }) @IsArray() @ArrayMinSize(3) @ArrayMaxSize(3) @ValidateNested({ each: true }) @Type(() => ManifestCardDto) cards!: ManifestCardDto[];
 }
 
 /** Profile card "VITALO Bonus — скоро" (B4). */
@@ -384,8 +392,8 @@ export class AdminSettingsService {
     return this.settings.getOrDefault('bonus_teaser');
   }
 
-  manifest() {
-    return this.settings.getOrDefault('home_manifest');
+  async manifest() {
+    return manifestOrDefault(await this.settings.get('home_manifest'));
   }
 
   async setManifest(staffId: string, dto: ManifestDto) {
@@ -394,9 +402,8 @@ export class AdminSettingsService {
       enabled: dto.enabled,
       title: lt(dto.title),
       subtitle: lt(dto.subtitle),
-      intro: lt(dto.intro),
-      points: dto.points.map((p) => ({ title: lt(p.title), text: lt(p.text) })),
-      outro: lt(dto.outro),
+      lead: lt(dto.lead),
+      cards: dto.cards.map((c) => ({ title: lt(c.title), bad: lt(c.bad), good: lt(c.good) })),
     };
     await this.saveSetting(staffId, SETTING_KEYS.manifest, value, 'settings.manifest_updated');
     return this.manifest();

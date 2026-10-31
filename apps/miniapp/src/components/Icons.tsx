@@ -33,6 +33,7 @@ import {
   CalendarClock,
   Clock,
   FileText,
+  Lock,
   Gift,
   Phone,
   ShieldCheck,
@@ -107,6 +108,10 @@ export const BellIcon = make(Bell);
 export const BellCheckIcon = make(BellCheck);
 /** 2.4: centre «Подбор» button */
 export const SparkIcon = make(Sparkle);
+/** 2.4 patch: manifest cards «Не берём» / «Стандарт VITALO»; «Скоро» chips of AI-подбор */
+export const RejectIcon = make(CircleX);
+export const AcceptIcon = make(CircleCheck);
+export const LockIcon = make(Lock);
 export const ShieldIcon = make(ShieldCheck);
 /** 2.3: «Стандарт VITALO» badges */
 export const BioIcon = make(Droplet);

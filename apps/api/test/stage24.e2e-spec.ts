@@ -31,35 +31,46 @@ describe('Stage 2.4 (e2e)', () => {
   });
 
   describe('manifest', () => {
-    it('the shop gets the texts from the content file until an admin saves new ones; point 1 has no «4–5%»', async () => {
+    it('the shop gets the owner cards «Не берём / Стандарт VITALO» until an admin saves new ones', async () => {
       const texts = (await http().get('/api/catalog/texts').expect(200)).body;
       expect(texts.manifest).toEqual(MANIFEST_DEFAULT);
-      expect(texts.manifest.points).toHaveLength(3);
-      expect(texts.manifest.points[0].text.ru).toContain('усваиваются значительно хуже органических форм');
-      expect(texts.manifest.points[0].text.uz).toContain('organik shakllarga qaraganda ancha yomon');
-      expect(JSON.stringify(texts.manifest)).not.toMatch(/4–5%/);
-      // D-36: no Halal until certificates; capsule type as a fact
-      expect(JSON.stringify(texts.manifest)).not.toMatch(/halal|halol|халял/i);
-      expect(texts.manifest.points[0].text.uz).toContain('bisglitsinatlar');
-      expect(texts.manifest.points[2].text.uz).toContain('(oʻsimlik VEGE, mol yoki baliq jelatini)');
-      expect(texts.manifest.points[2].title).toEqual({ ru: 'Оригинальность, хранение и честная маркировка', uz: 'Originallik, saqlash va ochiq belgilash' });
+      expect(texts.manifest.lead.ru).toBe('Мы отсеиваем пустышки и проверяем каждый состав по 3 критериям:');
+      expect(texts.manifest.cards.map((c: { title: { ru: string } }) => c.title.ru)).toEqual(['Усваиваемые формы', 'Дозировки и кофакторы', 'Оригинал и честная маркировка']);
+      expect(texts.manifest.cards[0].good.uz).toBe('Sitratlar, xelatlar, bisglitsinatlar, triglitseridlar');
+      // D-36: no Halal until certificates, no absorption figures
+      expect(JSON.stringify(texts.manifest)).not.toMatch(/halal|halol|халял|%/i);
+    });
+
+    it('a manifest saved before the patch (paragraphs, no cards) falls back to the default', async () => {
+      await prisma.settings.upsert({
+        where: { key: 'home_manifest' },
+        create: { key: 'home_manifest', value: { enabled: true, title: { ru: 'Старый', uz: 'Eski' }, intro: { ru: 'x', uz: 'x' }, points: [] } },
+        update: { value: { enabled: true, title: { ru: 'Старый', uz: 'Eski' }, intro: { ru: 'x', uz: 'x' }, points: [] } },
+      });
+      expect((await http().get('/api/catalog/texts').expect(200)).body.manifest).toEqual(MANIFEST_DEFAULT);
+      expect((await http().get('/api/staff/settings/manifest').set(bearer(admin)).expect(200)).body).toEqual(MANIFEST_DEFAULT);
+      await prisma.settings.deleteMany({ where: { key: 'home_manifest' } });
     });
 
     it('admin edits every text and switches the block off; the manager may not', async () => {
-      const body = { ...MANIFEST_DEFAULT, enabled: false, title: { ru: ' Как мы отбираем ', uz: 'Qanday tanlaymiz' } };
+      const cards = MANIFEST_DEFAULT.cards.map((c, i) => (i === 1 ? { ...c, bad: { ru: '', uz: '' } } : c));
+      const body = { ...MANIFEST_DEFAULT, enabled: false, title: { ru: ' Как мы отбираем ', uz: 'Qanday tanlaymiz' }, cards };
       await http().put('/api/staff/settings/manifest').set(bearer(manager)).send(body).expect(403);
       const saved = (await http().put('/api/staff/settings/manifest').set(bearer(admin)).send(body).expect(200)).body;
       expect(saved).toMatchObject({ enabled: false, title: { ru: 'Как мы отбираем', uz: 'Qanday tanlaymiz' } });
       const texts = (await http().get('/api/catalog/texts').expect(200)).body;
       expect(texts.manifest.enabled).toBe(false);
       expect(texts.manifest.title.ru).toBe('Как мы отбираем');
+      expect(texts.manifest.cards[1].bad).toEqual({ ru: '', uz: '' }); // an empty «Не берём» is allowed
     });
 
-    it('refuses empty texts and anything but exactly 3 points', async () => {
+    it('refuses an empty title, lead or «Стандарт VITALO» line and anything but exactly 3 cards', async () => {
       const put = (b: object) => http().put('/api/staff/settings/manifest').set(bearer(admin)).send(b);
-      await put({ ...MANIFEST_DEFAULT, intro: { ru: '', uz: 'x' } }).expect(400);
-      await put({ ...MANIFEST_DEFAULT, points: MANIFEST_DEFAULT.points.slice(0, 2) }).expect(400);
-      await put({ ...MANIFEST_DEFAULT, points: [...MANIFEST_DEFAULT.points, MANIFEST_DEFAULT.points[0]] }).expect(400);
+      const card = MANIFEST_DEFAULT.cards[0];
+      await put({ ...MANIFEST_DEFAULT, lead: { ru: '', uz: 'x' } }).expect(400);
+      await put({ ...MANIFEST_DEFAULT, cards: [{ ...card, good: { ru: '', uz: '' } }, card, card] }).expect(400);
+      await put({ ...MANIFEST_DEFAULT, cards: MANIFEST_DEFAULT.cards.slice(0, 2) }).expect(400);
+      await put({ ...MANIFEST_DEFAULT, cards: [...MANIFEST_DEFAULT.cards, card] }).expect(400);
     });
   });
 
@@ -135,6 +146,43 @@ describe('Stage 2.4 (e2e)', () => {
       await setStock(prisma, p.id, 1);
       await waitlist.notifyOnce();
       expect(await prisma.notifications.count({ where: { template: 'waitlist.back_in_stock', payload: { path: ['open_path'], equals: `/product/${p.id}` } } })).toBe(3);
+    });
+
+    it('the bell is a switch: «Отменить» marks the row (never deleted), no message for it; subscribing again reactivates', async () => {
+      const p = await createTestProduct(prisma, { price: 40_000, stock: 0, name: 'Омега отмена' });
+      const c1 = await loginCustomer(app, 770_000_021);
+      const c2 = await loginCustomer(app, 770_000_022);
+      await http().put(`/api/waitlist/${p.id}`).set(bearer(c1)).expect(200);
+      await http().put(`/api/waitlist/${p.id}`).set(bearer(c2)).expect(200);
+      const staffBefore = await prisma.notifications.count({ where: { template: 'staff.waitlist_new' } });
+
+      expect((await http().delete(`/api/waitlist/${p.id}`).set(bearer(c1)).expect(200)).body).toEqual({ status: 'cancelled' });
+      expect((await http().delete(`/api/waitlist/${p.id}`).set(bearer(c1)).expect(200)).body).toEqual({ status: 'not_waiting' });
+      expect((await http().get('/api/waitlist/ids').set(bearer(c1)).expect(200)).body).not.toContain(p.id);
+      const rows = await prisma.product_waitlist.findMany({ where: { product_id: p.id } });
+      expect(rows).toHaveLength(2);
+      expect(rows.filter((r) => r.cancelled_at)).toHaveLength(1);
+      const c1User = await prisma.users.findUniqueOrThrow({ where: { telegram_user_id: 770_000_021n } });
+      expect(await prisma.analytics_events.count({ where: { event: 'waitlist_unsubscribe', user_id: c1User.id } })).toBe(1);
+
+      // admin panel: only active ones are «waiting», the cancelled one apart
+      const list = (await http().get('/api/staff/waitlist').set(bearer(admin)).expect(200)).body;
+      expect(list.find((x: { product_id: string }) => x.product_id === p.id)).toMatchObject({ waiting: 1, notified: 0, cancelled: 1 });
+      const detail = (await http().get(`/api/staff/waitlist/${p.id}`).set(bearer(admin)).expect(200)).body;
+      expect(detail.customers.map((x: { cancelled_at: string | null }) => !!x.cancelled_at)).toEqual([false, true]);
+
+      // back in stock: only the active customer gets the message
+      await setStock(prisma, p.id, 2);
+      await app.get(WaitlistService).notifyOnce();
+      const msgs = await prisma.notifications.findMany({ where: { template: 'waitlist.back_in_stock', payload: { path: ['open_path'], equals: `/product/${p.id}` } } });
+      expect(msgs.map((m) => m.user_id)).toEqual([rows.find((r) => !r.cancelled_at)!.user_id]);
+
+      // sold out again: the cancelled customer subscribes again — the same row is active again, staff are not pinged twice
+      await setStock(prisma, p.id, 0);
+      await http().put(`/api/waitlist/${p.id}`).set(bearer(c1)).expect(200);
+      const again = await prisma.product_waitlist.findFirstOrThrow({ where: { product_id: p.id, user_id: c1User.id } });
+      expect(again).toMatchObject({ cancelled_at: null, notified_at: null });
+      expect(await prisma.notifications.count({ where: { template: 'staff.waitlist_new' } })).toBe(staffBefore);
     });
   });
 });
