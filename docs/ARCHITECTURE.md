@@ -43,7 +43,7 @@
 | Склад | `warehouses`, `inventory`, `inventory_batches`, `inventory_movements`, `physical_units` (банки), `physical_unit_events` | остаток на товар и склад; доступно = факт − резерв |
 | Закупки | `suppliers`, `purchases`, `purchase_lines`, `receiving_sessions`, `receiving_session_lines`, `purchase_events` | закупка → строки → приёмка → банки |
 | Корзина и заказы | `carts`, `cart_items`, `orders`, `order_items`, `order_item_units`, `order_status_history`, `order_edit_log`, `shipments`, `cancel_requests`, `returns` | заказ → позиции → банки; история статусов |
-| Оплата | `payment_methods` (`card_transfer`, `bank_transfer`, `cod`, …), `payments`, `payment_attempts`, `manual_payment_confirmations`, `payment_receipts` | платёж → заказ; ручное подтверждение менеджером; `payment_receipts` — чеки из бота (3.1, миграция `20261101100000`, только добавляющая; на `vitalo_test` есть, на сервере — нет) |
+| Оплата | `payment_methods` (`card_transfer`, `bank_transfer`, `cod`, …), `payments`, `payment_attempts`, `manual_payment_confirmations`, `payment_receipts` | платёж → заказ; ручное подтверждение менеджером; `payment_receipts` — чеки из бота (3.1, миграция `20261101100000`, только добавляющая; на `vitalo_test` и `vitalo_dev` есть (31.10), на сервере — нет) |
 | Доставка | `regions`, `cities`, `delivery_tariffs` | тариф по городу, порог бесплатной доставки |
 | Маркетплейсы | `marketplace_orders`, `marketplace_order_lines`, `marketplace_order_units`, `marketplace_external_orders`, `yandex_sync_runs`, `ozon_accounts` | заказ Яндекса → строки → банки |
 | Финансы | `expenses`, `expense_categories`, `tax_payments`, `payroll_*`, `finance_reminders`, `sales_daily` | — |
