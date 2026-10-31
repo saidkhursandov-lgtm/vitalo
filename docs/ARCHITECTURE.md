@@ -48,7 +48,7 @@
 | Маркетплейсы | `marketplace_orders`, `marketplace_order_lines`, `marketplace_order_units`, `marketplace_external_orders`, `yandex_sync_runs`, `ozon_accounts` | заказ Яндекса → строки → банки |
 | Финансы | `expenses`, `expense_categories`, `tax_payments`, `payroll_*`, `finance_reminders`, `sales_daily` | — |
 | Маркетинг и контент | `promotions`, `promo_codes`, `marketing_campaigns`, `content_blocks`, `home_banners`, `settings`, `analytics_events` | баннеры главной — `home_banners` (до 5, миграция `20261030100000`, применена на `vitalo_dev` и на сервере 29.10 23:45); настройки — пары ключ/значение в `settings`; манифест на главной — ключ `home_manifest` (2.4, без миграции; по умолчанию тексты из кода) |
-| Лист ожидания | `product_waitlist` | товар и покупатель (уникально); `notified_at` — когда бот написал «снова в наличии» (2.4, миграция `20261031100000`, только добавляющая; на сервере не применена) |
+| Лист ожидания | `product_waitlist` | товар и покупатель (уникально); `notified_at` — когда бот написал «снова в наличии» (2.4, миграция `20261031100000`, только добавляющая; на сервере не применена); `cancelled_at` — покупатель выключил колокольчик, запись не удаляется (патч 2.4, миграция `20261031200000`, только добавляющая; на сервере не применена) |
 | Сотрудники и аудит | `staff_users`, `staff_sessions`, `audit_logs`, `system_errors`, `legal_documents`, `legal_acceptances` | — |
 
 ## API (основное)
