@@ -1074,3 +1074,11 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .place-row svg { flex: none; color: var(--primary); }
 .place-group { padding: 14px 16px 6px; font-weight: 600; text-transform: none; }
 .place-empty { padding: 20px 16px; text-align: center; }
+
+/* ---------- 3.1: «Отправить скриншот чека в бот» ---------- */
+.receipt-card { display: flex; flex-direction: column; gap: 8px; }
+.receipt-card .hint { margin: 0; }
+.receipt-btn { gap: 8px; min-height: 48px; height: auto; padding-top: 10px; padding-bottom: 10px; }
+.receipt-btn > span { white-space: normal; text-align: center; line-height: 1.25; }
+.receipt-btn svg { flex: none; }
+.receipt-sent { margin: 0; font-weight: 600; color: var(--success); }

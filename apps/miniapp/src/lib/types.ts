@@ -340,6 +340,8 @@ export interface BankTransfer {
   pay_until: string | null;
   customer_reported_paid_at: string | null;
   delivery_eta?: DeliveryEta | null;
+  /** 3.1: link to the shop bot for this order's receipt (card transfer), and the last receipt sent */
+  receipt?: { bot_url: string | null; last: { status: 'pending' | 'confirmed' | 'rejected'; reject_reason: string | null; created_at: string } | null };
 }
 
 export interface CheckoutDefaults {

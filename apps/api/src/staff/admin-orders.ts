@@ -243,7 +243,11 @@ export class AdminOrdersService {
   async confirmPayment(staff: StaffContext, id: string, comment?: string) {
     let confirmedFor: string | null = null;
     const view = await this.inOrderTx(id, async (tx, order) => {
-      if ((await this.lifecycle.confirmBankTransfer(tx, order, staff.staff.id, comment)) === 'paid') confirmedFor = order.user_id;
+      if ((await this.lifecycle.confirmBankTransfer(tx, order, staff.staff.id, comment)) === 'paid') {
+        confirmedFor = order.user_id;
+        // 3.1: receipts sent to the bot are settled by the same confirmation, wherever it was pressed
+        await tx.payment_receipts.updateMany({ where: { order_id: id, status: 'pending' }, data: { status: 'confirmed', reviewed_by: staff.staff.id, reviewed_at: new Date() } });
+      }
     });
     if (confirmedFor) await this.analytics.track(confirmedFor, 'payment_confirmed', { order_id: id });
     return view;

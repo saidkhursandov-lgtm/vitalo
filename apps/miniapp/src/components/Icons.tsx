@@ -58,6 +58,7 @@ import {
   Trash2,
   Truck,
   Undo2,
+  ReceiptText,
   User,
   WifiOff,
   X,
@@ -98,6 +99,7 @@ export const InfoIcon = make(Info);
 export const SupportIcon = make(MessageCircle);
 export const GiftIcon = make(Gift);
 export const PhoneIcon = make(Phone);
+export const ReceiptIcon = make(ReceiptText);
 export const BadgeIcon = make(BadgeCheck);
 export const StarIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
   <Star strokeWidth={STROKE} aria-hidden fill={filled ? 'currentColor' : 'none'} {...p} />

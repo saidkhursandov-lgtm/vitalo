@@ -1,16 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CopyIcon } from '../components/Icons';
+import { CopyIcon, ReceiptIcon } from '../components/Icons';
 import { ErrorState, Loading, StickyAction } from '../components/ui';
 import { api, ApiError, isNetworkError } from '../lib/api';
 import { money } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
 import { useBankTransfer, useShopTexts } from '../lib/queries';
-import { copyText, daysText, paymentCheckWhen } from '../lib/shop';
+import { copyText, daysText, openSupport, paymentCheckWhen } from '../lib/shop';
 import { SupportButton } from '../components/Support';
 import { PayBy } from '../components/PayBy';
-import type { DeliveryEta } from '../lib/types';
+import type { BankTransfer, DeliveryEta, Lang } from '../lib/types';
 import { haptic } from '../lib/telegram';
 
 /** "8600123456789012" -> "8600 1234 5678 9012" */
@@ -41,11 +41,38 @@ function CopyRow({ label, value, copyValue = value }: { label: string; value: st
   );
 }
 
+/** Rejection reasons the bot offers are stored in Russian; the Uzbek customer sees them in Uzbek. */
+const REASON_UZ: Record<string, string> = {
+  'Сумма не совпадает': 'Summa mos kelmaydi',
+  'Чек не читается': 'Chek o‘qilmaydi',
+  'Платёж не поступил': 'To‘lov kelib tushmagan',
+};
+export const reasonText = (reason: string | null, lang: Lang) => (reason ? (lang === 'uz' && REASON_UZ[reason]) || reason : '—');
+
+/**
+ * 3.1: «Отправить скриншот чека в бот» — opens the shop bot with this order; the bot takes a photo or a PDF and sends
+ * it to the managers. Shown for a card transfer only, when the server knows the bot (it gives the link).
+ */
+function ReceiptButton({ receipt }: { receipt: BankTransfer['receipt'] }) {
+  const { t } = useI18n();
+  if (!receipt?.bot_url) return null;
+  return (
+    <section className="card receipt-card">
+      {receipt.last?.status === 'pending' && <p className="receipt-sent">{t('pay.receiptSent')}</p>}
+      <button type="button" className="btn btn-block receipt-btn" onClick={() => openSupport(receipt.bot_url)}>
+        <ReceiptIcon width={20} height={20} aria-hidden />
+        <span>{t('pay.receiptButton')}</span>
+      </button>
+      <p className="hint small">{t('pay.receiptHint')}</p>
+    </section>
+  );
+}
+
 /**
  * After "Я оплатил(а)": what happens next — payment check (with the daily hours from the settings),
  * picking, courier, delivery term — and the support / copy number / my orders buttons (A5).
  */
-function NextSteps({ orderNumber, eta }: { orderNumber: string; eta?: DeliveryEta | null }) {
+function NextSteps({ orderNumber, eta, receipt }: { orderNumber: string; eta?: DeliveryEta | null; receipt?: BankTransfer['receipt'] }) {
   const { t, lang } = useI18n();
   const shop = useShopTexts();
   const [copied, setCopied] = useState(false);
@@ -74,7 +101,8 @@ function NextSteps({ orderNumber, eta }: { orderNumber: string; eta?: DeliveryEt
           ))}
         </ol>
       </section>
-      <SupportButton className="btn btn-block" />
+      <ReceiptButton receipt={receipt} />
+      <SupportButton className={receipt?.bot_url ? 'btn btn-secondary btn-block' : 'btn btn-block'} />
       <button
         type="button"
         className="btn btn-secondary btn-block"
@@ -150,9 +178,14 @@ export function Payment() {
       ) : cancelled ? (
         <div className="notice notice-error">{t('pay.cancelled')}</div>
       ) : reported ? (
-        <NextSteps orderNumber={d.order_number} eta={d.delivery_eta} />
+        <NextSteps orderNumber={d.order_number} eta={d.delivery_eta} receipt={d.receipt} />
       ) : (
         <>
+          {d.receipt?.last?.status === 'rejected' && (
+            <div className="notice notice-error" role="alert">
+              {t('pay.receiptRejected', { reason: reasonText(d.receipt.last.reject_reason, lang) })}
+            </div>
+          )}
           <section className="card">
             {rows.map(([label, value, copy]) => (
               <CopyRow key={label} label={t(label)} value={value} copyValue={copy} />

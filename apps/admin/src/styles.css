@@ -367,3 +367,10 @@ textarea { resize: vertical; }
 .brand-thumb-empty { background: var(--neutral-soft); color: var(--primary); font-weight: 700; }
 .brand-logo-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
 .brand-logo-row .btn { margin-right: 8px; }
+
+/* ---------- 3.1: receipts the customer sent to the bot (order card) ---------- */
+.receipts { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.receipts li { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; padding-top: 12px; border-top: 1px solid var(--border); }
+.receipts li:first-child { padding-top: 0; border-top: 0; }
+.receipt-meta { display: flex; flex-direction: column; gap: 6px; min-width: 200px; flex: 1; }
+.receipt-img { display: block; max-width: 240px; max-height: 320px; border-radius: 8px; border: 1px solid var(--border); object-fit: contain; background: #fff; }

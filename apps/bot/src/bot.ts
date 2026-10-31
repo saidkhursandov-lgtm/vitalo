@@ -1,6 +1,7 @@
 import { Bot, Context, InlineKeyboard, Keyboard } from 'grammy';
 import type { UserFromGetMe } from 'grammy/types';
 import type { UserSummary, VitaloApi } from './api-client';
+import { installReceipts } from './receipts';
 import { bothLangs, langFromTelegram, money, t, type Lang, type TextKey } from './texts';
 
 /** Used when the API has no contact saved (the admin edits it in Настройки). */
@@ -19,6 +20,8 @@ export interface BotDeps {
   urls: { miniApp: () => string | null; admin: () => string | null };
   /** Pass in tests to skip the getMe call. */
   botInfo?: UserFromGetMe;
+  /** 3.1: downloads a file the customer sent (a receipt); tests pass a fake. */
+  download?: (fileId: string) => Promise<Uint8Array>;
 }
 
 /** Same names as the Mini App order screen and the notifications; "Я оплатил(а)" pressed -> checking. */
@@ -43,7 +46,7 @@ export function miniAppLink(base: string, path = '/', startParam?: string): stri
  * "Магазин" opens the Mini App through an inline web_app button: unlike reply-keyboard buttons it gives
  * the Mini App full, signed initData. The menu button (bottom-left) is set by the tunnel script.
  */
-export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
+export function createBot({ token, api, urls, botInfo, download }: BotDeps): Bot {
   const bot = new Bot(token, botInfo ? { botInfo } : undefined);
 
   /** Language: the one chosen in the shop, else Telegram's. */
@@ -77,6 +80,20 @@ export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
     return base ? new InlineKeyboard().webApp(t(lang, label), miniAppLink(base, path, startParam)) : null;
   };
 
+  // 3.1: receipts (photos, PDFs, the managers' buttons) go before the menu handlers
+  const receipts = installReceipts(bot, {
+    api,
+    lang: async (ctx) => (await context(ctx)).lang,
+    download:
+      download ??
+      (async (fileId) => {
+        const file = await bot.api.getFile(fileId);
+        const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`, { signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) throw new Error(`Telegram file download -> HTTP ${res.status}`);
+        return new Uint8Array(await res.arrayBuffer());
+      }),
+  });
+
   async function replyWithShop(ctx: Context, lang: Lang, text: string, label: TextKey = 'openShop', path = '/', startParam?: string) {
     const kb = shopButton(lang, label, path, startParam);
     if (kb) await ctx.reply(text, { reply_markup: kb });
@@ -85,7 +102,8 @@ export function createBot({ token, api, urls, botInfo }: BotDeps): Bot {
 
   bot.command('start', async (ctx) => {
     const { lang } = await context(ctx);
-    const payload = ctx.match.trim(); // /start <referral code>
+    const payload = ctx.match.trim(); // /start <referral code>, or rc_<order> from «Отправить скриншот чека в бот»
+    if (await receipts.start(ctx, payload)) return;
     const ref = REFERRAL_RE.test(payload) ? payload : undefined;
     await ctx.reply(t(lang, 'welcome', { name: ctx.from?.first_name ?? '' }), { reply_markup: menu(lang) });
     await replyWithShop(ctx, lang, t(lang, 'openShopHint'), 'openShop', '/', ref);

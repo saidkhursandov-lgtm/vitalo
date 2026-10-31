@@ -29,6 +29,18 @@ function setup(opts: { user?: Partial<UserSummary> | 'down'; staff?: StaffInfo; 
       contacts.push({ id, phone, contactUserId });
       return { saved: true };
     },
+    receiptStart: async () => {
+      throw new Error('not used here');
+    },
+    sendReceipt: async () => {
+      throw new Error('not used here');
+    },
+    confirmReceipt: async () => {
+      throw new Error('not used here');
+    },
+    rejectReceipt: async () => {
+      throw new Error('not used here');
+    },
   };
   const bot = createBot({
     token: '1:TEST',

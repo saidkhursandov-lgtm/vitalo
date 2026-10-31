@@ -173,9 +173,9 @@ export class ReceiptsService {
       await this.prisma.payment_receipts.updateMany({ where: { id: receiptId, status: 'pending' }, data: { status: 'confirmed', reviewed_by: staff.id, reviewed_at: new Date() } });
       return { result: 'already_paid' as const, order_number: receipt.order.order_number };
     }
+    // marks this order's pending receipts confirmed too (see AdminOrdersService.confirmPayment)
     await this.adminOrders.confirmPayment({ sessionId: 'telegram-bot', staff }, receipt.order_id, 'Оплата подтверждена по чеку в боте');
-    const marked = await this.prisma.payment_receipts.updateMany({ where: { id: receiptId, status: 'pending' }, data: { status: 'confirmed', reviewed_by: staff.id, reviewed_at: new Date() } });
-    if (marked.count) await this.analytics.track(receipt.user_id, 'receipt_confirmed', { order_id: receipt.order_id });
+    await this.analytics.track(receipt.user_id, 'receipt_confirmed', { order_id: receipt.order_id });
     return { result: 'confirmed' as const, order_number: receipt.order.order_number };
   }
 

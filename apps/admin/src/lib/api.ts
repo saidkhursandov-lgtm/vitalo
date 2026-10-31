@@ -62,6 +62,13 @@ export async function api<T>(
   return body as T;
 }
 
+/** 3.1: a private file (a payment receipt) as a Blob — it needs the staff token, so it cannot be a plain <img src>. */
+export async function apiBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${BASE}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, undefined, {});
+  return res.blob();
+}
+
 /** Idempotency-Key for one attempt (randomUUID needs https or localhost; the fallback is unique enough). */
 export const newKey = () => (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 

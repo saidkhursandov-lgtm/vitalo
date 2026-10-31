@@ -71,6 +71,7 @@ export const CONDITION: Record<string, string> = {
 /** Human names for audit actions; unknown actions are shown as is. */
 export const AUDIT_ACTION: Record<string, string> = {
   'order.label_printed': 'Напечатана наклейка заказа',
+  'order.receipt_rejected': 'Чек об оплате отклонён (в боте)',
   'order.waybill_changed': 'Изменён номер накладной службы доставки',
   'order.marked_test': 'Заказ помечен тестовым',
   'order.unmarked_test': 'Снята пометка «тест»',

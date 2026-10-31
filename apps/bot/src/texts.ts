@@ -50,6 +50,17 @@ const ru = {
   'role.manager': 'менеджер',
   'role.warehouse': 'склад',
   'role.marketer': 'маркетолог',
+  'receipt.ask': 'Пришлите сюда фото или PDF чека об оплате заказа №{number} на {sum}.',
+  'receipt.got': 'Чек по заказу №{number} получен. Проверим оплату в течение {hours} ч в рабочее время ({from}–{to}) и пришлём сообщение.',
+  'receipt.duplicate': 'Этот чек уже получен — проверяем.',
+  'receipt.noOrder': 'Не нашли заказ, который ждёт оплаты переводом на карту. Откройте заказ в магазине и нажмите «Отправить скриншот чека в бот».',
+  'receipt.paid': 'Этот заказ уже оплачен — чек не нужен.',
+  'receipt.cancelled': 'Этот заказ отменён. Если вы уже перевели деньги, напишите в поддержку.',
+  'receipt.expired': 'Время оплаты этого заказа вышло. Если вы уже перевели деньги, напишите в поддержку.',
+  'receipt.notCard': 'Для этого заказа чек не нужен: он оплачивается не переводом на карту.',
+  'receipt.badType': 'Пришлите фото или PDF-файл чека.',
+  'receipt.tooBig': 'Файл больше 10 МБ. Пришлите скриншот чека.',
+  'receipt.failed': 'Не удалось сохранить чек. Попробуйте ещё раз через минуту.',
 };
 
 export type TextKey = keyof typeof ru;
@@ -105,6 +116,17 @@ const uz: Record<TextKey, string> = {
   'role.manager': 'menejer',
   'role.warehouse': 'ombor',
   'role.marketer': 'marketolog',
+  'receipt.ask': '№{number} buyurtma uchun {sum} to‘lov chekining rasmini yoki PDF faylini shu yerga yuboring.',
+  'receipt.got': '№{number} buyurtma cheki qabul qilindi. To‘lovni ish vaqtida ({from}–{to}) {hours} soat ichida tekshiramiz va xabar yuboramiz.',
+  'receipt.duplicate': 'Bu chek allaqachon qabul qilingan — tekshirmoqdamiz.',
+  'receipt.noOrder': 'Karta orqali to‘lovni kutayotgan buyurtma topilmadi. Do‘konda buyurtmani ochib, «Chek skrinshotini botga yuborish» tugmasini bosing.',
+  'receipt.paid': 'Bu buyurtma allaqachon to‘langan — chek kerak emas.',
+  'receipt.cancelled': 'Bu buyurtma bekor qilingan. Agar pulni o‘tkazgan bo‘lsangiz, yordam xizmatiga yozing.',
+  'receipt.expired': 'Bu buyurtmani to‘lash vaqti tugadi. Agar pulni o‘tkazgan bo‘lsangiz, yordam xizmatiga yozing.',
+  'receipt.notCard': 'Bu buyurtma uchun chek kerak emas: u karta orqali to‘lanmaydi.',
+  'receipt.badType': 'Chek rasmini yoki PDF faylini yuboring.',
+  'receipt.tooBig': 'Fayl 10 MB dan katta. Chek skrinshotini yuboring.',
+  'receipt.failed': 'Chekni saqlab bo‘lmadi. Bir daqiqadan so‘ng qayta urinib ko‘ring.',
 };
 
 export const TEXTS: Record<Lang, Record<TextKey, string>> = { ru, uz };

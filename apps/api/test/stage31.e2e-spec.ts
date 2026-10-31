@@ -172,6 +172,14 @@ describe('Stage 3.1 receipts (e2e)', () => {
     expect(await prisma.orders.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: 'awaiting_payment', payment_status: 'payment_pending' });
   });
 
+  it('«Подтвердить оплату» in the admin panel settles the receipts sent to the bot', async () => {
+    const { telegram, order } = await cardOrder();
+    const { receipt_id } = (await send(telegram, order.id).expect(200)).body;
+    await http().post(`/api/staff/orders/${order.id}/confirm-payment`).set(bearer(manager)).send({}).expect(200);
+    expect((await prisma.payment_receipts.findUniqueOrThrow({ where: { id: receipt_id } })).status).toBe('confirmed');
+    expect((await confirm(ADMIN_TG, receipt_id).expect(200)).body).toMatchObject({ result: 'already_confirmed' });
+  });
+
   it('the admin panel lists the receipts and shows the file to employees only, never cached', async () => {
     const { telegram, token, order } = await cardOrder();
     const { receipt_id } = (await send(telegram, order.id).expect(200)).body;

@@ -1,3 +1,4 @@
+import { OrderReceipts } from '../components/OrderReceipts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -156,6 +157,7 @@ export function OrderDetail() {
           Клиент нажал «Я оплатил» {dateTime(o.payment.customer_reported_paid_at)}. Проверьте поступление на счёт и подтвердите оплату.
         </div>
       )}
+      <OrderReceipts orderId={o.id} />
 
       <div className="grid-2">
         <section className="card">
