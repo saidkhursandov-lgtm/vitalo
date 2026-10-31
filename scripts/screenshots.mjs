@@ -1,7 +1,7 @@
 // Screenshots of the local Mini App and admin panel (dev servers on 5173 / 5174 must be running).
 // Usage: node scripts/screenshots.mjs <out-dir> <plan.json>
 // plan.json: [{ "app": "miniapp" | "admin", "width": 320, "lang": "ru" | "uz", "path": "/catalog", "file": "320-ru-catalog.jpg",
-//              "full": true, "wait": 1500, "scrollTo": ".css-selector", "scrollOffset": 300 }]
+//              "url": "file:///…" (instead of app + path), "full": true, "wait": 1500, "scrollTo": ".css-selector", "scrollOffset": 300, "type": ["input.css", "text"] }]
 // scrollOffset: after scrollTo, scroll back up this many px (the fixed top bar would cover the element otherwise)
 // Uses headless Chrome over the DevTools protocol; nothing is installed. Signs in with the dev login (test users only).
 import { spawn } from 'node:child_process';
@@ -80,9 +80,11 @@ for (const shot of plan) {
   const app = shot.app ?? 'miniapp';
   await send('Emulation.setDeviceMetricsOverride', { width: shot.width, height: shot.height ?? 800, deviceScaleFactor: 2, mobile: shot.width < 768 });
   if (!signedIn[app]) await signIn(app);
-  await go(BASE[app] + shot.path);
+  await go(shot.url ?? BASE[app] + shot.path);
   if (shot.lang) await setLang(shot.lang);
   if (shot.click) { await evaluate(`(() => { const b=[...document.querySelectorAll('${shot.click[0]}')].find(x=>x.textContent.includes(${JSON.stringify(shot.click[1])})); b && b.click(); })()`); await sleep(1000); }
+  // type: fills a React input (native setter + input event), e.g. the search field of a sheet
+  if (shot.type) { await evaluate(`(() => { const el=document.querySelector(${JSON.stringify(shot.type[0])}); if(!el) return; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el, ${JSON.stringify(shot.type[1])}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`); await sleep(800); }
   if (shot.scrollTo) await evaluate(`document.querySelector(${JSON.stringify(shot.scrollTo)})?.scrollIntoView({block:'start'})`);
   if (shot.scrollOffset) await evaluate(`window.scrollBy(0, -${Number(shot.scrollOffset)})`);
   await sleep(shot.wait ?? 800);
