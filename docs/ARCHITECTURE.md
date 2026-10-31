@@ -57,7 +57,7 @@
 
 - Вход: `POST /auth/telegram`, `GET /auth/me`; сотрудники — `POST /staff/auth/telegram`.
 - Каталог: `/catalog/products`, `/catalog/products/:id`, `/catalog/search`, `/catalog/categories`, `/catalog/brands`, `/catalog/brands/showcase` (лента «Проверенные бренды», 2.2), `/catalog/brands/:slug` (страница бренда, 2.2).
-- Корзина и заказы: `/cart`, `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`.
+- Корзина и заказы: `/cart`, `/cart/upsell` (допродажа, 3.1), `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`. Настройка допродажи (админка): `GET/PUT /staff/settings/cart-upsell` (3.1).
 - Доставка: `/delivery/regions`, `/delivery/quote`.
 - Лист ожидания (2.4): покупатель — `GET /waitlist/ids`, `PUT /waitlist/:productId`; сотрудники — `/staff/waitlist`.
 - Админка: `/staff/...` (заказы, товары, склад, закупки, финансы, настройки, аналитика, сотрудники, аудит).
