@@ -14,6 +14,15 @@ interface TelegramWebApp {
   setBottomBarColor?(color: string): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
   HapticFeedback?: { notificationOccurred(type: 'error' | 'success' | 'warning'): void; impactOccurred?(style: 'light' | 'medium' | 'heavy'): void };
+  /** Bot API 8.0+: the location with Telegram's own permission dialog. */
+  LocationManager?: {
+    isInited: boolean;
+    isLocationAvailable: boolean;
+    isAccessRequested: boolean;
+    isAccessGranted: boolean;
+    init(cb?: () => void): void;
+    getLocation(cb: (data: { latitude: number; longitude: number } | null) => void): void;
+  };
 }
 
 declare global {
@@ -59,6 +68,48 @@ export function requestPhone(): Promise<string | null | undefined> {
 }
 
 export const canRequestPhone = () => !!telegram()?.requestContact && !!telegram()?.isVersionAtLeast('6.9');
+
+export type LocationResult = { status: 'ok'; lat: number; lon: number } | { status: 'denied' } | { status: 'unavailable' };
+
+const LOCATION_TIMEOUT_MS = 15_000;
+
+/**
+ * 3.6: «Моё местоположение» on the map. Inside Telegram (8.0+) — Telegram's LocationManager with its own permission
+ * dialog; elsewhere (and in older Telegram) — the browser. Never throws; a refusal is 'denied'.
+ */
+export function getLocation(): Promise<LocationResult> {
+  const lm = telegram()?.LocationManager;
+  if (lm && telegram()!.isVersionAtLeast('8.0')) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve({ status: 'unavailable' }), LOCATION_TIMEOUT_MS);
+      const done = (r: LocationResult) => {
+        clearTimeout(timer);
+        resolve(r);
+      };
+      const ask = () => {
+        if (!lm.isLocationAvailable) return done({ status: 'unavailable' });
+        if (lm.isAccessRequested && !lm.isAccessGranted) return done({ status: 'denied' });
+        lm.getLocation((data) =>
+          done(data ? { status: 'ok', lat: data.latitude, lon: data.longitude } : { status: lm.isAccessGranted ? 'unavailable' : 'denied' }),
+        );
+      };
+      if (lm.isInited) ask();
+      else lm.init(ask);
+    });
+  }
+  return browserLocation();
+}
+
+function browserLocation(): Promise<LocationResult> {
+  if (!('geolocation' in navigator)) return Promise.resolve({ status: 'unavailable' });
+  return new Promise((resolve) =>
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ status: 'ok', lat: p.coords.latitude, lon: p.coords.longitude }),
+      (e) => resolve({ status: e.code === e.PERMISSION_DENIED ? 'denied' : 'unavailable' }),
+      { enableHighAccuracy: true, timeout: LOCATION_TIMEOUT_MS, maximumAge: 60_000 },
+    ),
+  );
+}
 
 /** A light tap (quick add, quantity change). */
 export function tapHaptic() {

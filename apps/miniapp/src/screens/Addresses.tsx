@@ -2,9 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PinIcon } from '../components/Icons';
 import { Empty, EmptyState, ErrorState, Loading } from '../components/ui';
-import { RegionCitySelect } from '../components/PlacePicker';
+import { AddressFields, type AddressValue } from '../components/AddressFields';
 import { ApiError } from '../lib/api';
 import { nameOf } from '../lib/format';
+import { composeAddress } from '../lib/address';
 import { errorText, useI18n } from '../lib/i18n';
 import { useAddressActions, useAddresses, useRegions } from '../lib/queries';
 import { useConfirm } from '../components/Confirm';
@@ -34,7 +35,7 @@ export function Addresses() {
             <p>
               {nameOf(a.region, lang)}, {nameOf(a.city, lang)}
               <br />
-              {a.address_text}
+              {composeAddress(a.address_text, a, lang)}
             </p>
             <div className="row-actions">
               {!a.is_primary && (
@@ -73,7 +74,7 @@ export function AddressEdit() {
   const { create, update } = useAddressActions();
   const current = isNew ? undefined : addresses.data?.find((a) => a.id === id);
 
-  const [draft, setDraft] = useState<{ label: string; region_id: string; city_id: string; address_text: string; is_primary: boolean } | null>(null);
+  const [draft, setDraft] = useState<(AddressValue & { label: string; is_primary: boolean }) | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (regions.isPending || addresses.isPending) return <div className="page"><Loading /></div>;
@@ -85,6 +86,8 @@ export function AddressEdit() {
     region_id: current?.region.id ?? '',
     city_id: current?.city.id ?? '',
     address_text: current?.address_text ?? '',
+    details: { apartment: current?.apartment ?? '', entrance: current?.entrance ?? '', floor: current?.floor ?? '', landmark: current?.landmark ?? '' },
+    point: current?.latitude != null && current.longitude != null ? { lat: current.latitude, lon: current.longitude } : null,
     is_primary: false,
   };
   const valid = form.region_id && form.city_id && form.address_text.trim();
@@ -94,7 +97,16 @@ export function AddressEdit() {
     e.preventDefault();
     if (!valid) return;
     setError(null);
-    const body = { label: form.label.trim() || undefined, region_id: form.region_id, city_id: form.city_id, address_text: form.address_text.trim() };
+    const body = {
+      label: form.label.trim() || undefined,
+      region_id: form.region_id,
+      city_id: form.city_id,
+      address_text: form.address_text.trim(),
+      // 3.6: the map point (null clears an old one) and the parts typed by hand ('' clears)
+      latitude: form.point?.lat ?? null,
+      longitude: form.point?.lon ?? null,
+      ...form.details,
+    };
     try {
       if (isNew) await create.mutateAsync({ ...body, is_primary: form.is_primary || undefined });
       else await update.mutateAsync({ id: id!, ...body });
@@ -112,11 +124,7 @@ export function AddressEdit() {
           <span>{t('addresses.label')}</span>
           <input maxLength={50} value={form.label} onChange={(e) => setDraft({ ...form, label: e.target.value })} />
         </label>
-        <RegionCitySelect regions={regions.data} regionId={form.region_id} cityId={form.city_id} onChange={(v) => setDraft({ ...form, ...v })} />
-        <label className="field">
-          <span>{t('checkout.addressText')}</span>
-          <input value={form.address_text} onChange={(e) => setDraft({ ...form, address_text: e.target.value })} />
-        </label>
+        <AddressFields regions={regions.data} value={form} place="profile" onChange={(v) => setDraft({ ...form, ...v })} />
         {isNew && (addresses.data?.length ?? 0) > 0 && (
           <label className="check-row">
             <input type="checkbox" checked={form.is_primary} onChange={(e) => setDraft({ ...form, is_primary: e.target.checked })} />

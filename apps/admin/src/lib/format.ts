@@ -18,6 +18,11 @@ export function dateTime(iso: string | null | undefined): string {
   }).format(new Date(iso));
 }
 
+/** 3.6: «Открыть в Яндекс Картах» — a pin at the point the customer chose (same link as in the bot message). */
+export function yandexMapsLink(lat: number, lon: number): string {
+  return `https://yandex.uz/maps/?pt=${lon.toFixed(6)},${lat.toFixed(6)}&z=17&l=map`;
+}
+
 export function prettyPhone(phone: string): string {
   const m = phone.match(/^\+998(\d{2})(\d{3})(\d{2})(\d{2})$/);
   return m ? `+998 ${m[1]} ${m[2]} ${m[3]} ${m[4]}` : phone;
@@ -127,6 +132,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'settings.card_transfer_updated': 'Изменены данные карты',
   'settings.checkout_options_updated': 'Изменены настройки оплаты (при получении, Payme / Click / Uzum, бесплатная доставка)',
   'settings.texts_updated': 'Изменены тексты магазина',
+  'settings.maps_updated': 'Включена или выключена карта (Яндекс) в Mini App',
   'settings.contacts_updated': 'Изменены контакты и часы',
   'settings.label_size_updated': 'Изменён размер этикетки',
   'settings.home_updated': 'Изменена главная страница',

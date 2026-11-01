@@ -398,6 +398,11 @@ model addresses {
   address_text String
   latitude     Decimal?  @db.Decimal(9, 6)
   longitude    Decimal?  @db.Decimal(9, 6)
+  /// 3.6: typed by the customer next to the street from the map (the order gets them inside address_text)
+  apartment    String?
+  entrance     String?
+  floor        String?
+  landmark     String?
   is_primary   Boolean   @default(false)
   created_at   DateTime  @default(now())
   updated_at   DateTime  @updatedAt

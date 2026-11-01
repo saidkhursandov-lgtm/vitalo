@@ -2,13 +2,14 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ErrorState, Loading, StickyAction } from '../components/ui';
-import { RegionCitySelect } from '../components/PlacePicker';
+import { AddressFields } from '../components/AddressFields';
+import { composeAddress, EMPTY_DETAILS, type AddressDetails } from '../lib/address';
 import { api, ApiError, isNetworkError } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { money, normalizePhone, prettyPhone } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { createIdempotencyKeys } from '../lib/idempotency';
-import { useAddressActions, useAddresses, useCartPromo, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
+import { useAddressActions, useAddresses, useCartMapPick, useCartPromo, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
 import { PromoBox, type PromoApplyResult } from '../components/Promo';
 import { canRequestPhone, haptic, requestPhone } from '../lib/telegram';
 import { track } from '../lib/analytics';
@@ -34,6 +35,9 @@ interface Form {
   region_id: string;
   city_id: string;
   address_text: string;
+  /** 3.6: apartment / entrance / floor / landmark and the point on the map of a new address */
+  details: AddressDetails;
+  point: { lat: number; lon: number } | null;
   comment: string;
   saveAddress: boolean;
 }
@@ -55,6 +59,7 @@ export function Checkout() {
   const defaults = useCheckoutDefaults();
   const shop = useShopTexts();
   const [deliveryCity, setDeliveryCity] = useDeliveryCity();
+  const [cartPick] = useCartMapPick();
   const { create: saveAddress } = useAddressActions();
   const keys = useRef(createIdempotencyKeys()).current;
   useEffect(() => track('checkout_start', { source: params.get('buy') ? 'buy_now' : 'cart' }), [params]);
@@ -84,18 +89,22 @@ export function Checkout() {
     const savedInCity = inCity.find((a) => a.is_primary) ?? inCity[0];
     const region_id = deliveryCity?.region_id ?? d?.region_id ?? '';
     const city_id = deliveryCity?.city_id ?? d?.city_id ?? '';
+    // 3.6: a point chosen on the map in the cart, in this district: a new address with that street and point
+    const pick = cartPick && cartPick.city_id === city_id ? cartPick : null;
     setForm({
       name: d?.recipient_name ?? [user.first_name, user.last_name].filter(Boolean).join(' '),
       phone: d?.recipient_phone ? prettyPhone(d.recipient_phone) : user.phone ? prettyPhone(user.phone) : '',
-      addressId: savedInCity ? savedInCity.id : 'new',
+      addressId: savedInCity && !pick ? savedInCity.id : 'new',
       region_id,
       city_id,
       // the last order's street only when it was in this same district
-      address_text: d?.address_text && d.city_id === city_id ? d.address_text : '',
+      address_text: pick ? pick.street_line : d?.address_text && d.city_id === city_id ? d.address_text : '',
+      details: EMPTY_DETAILS,
+      point: pick ? { lat: pick.lat, lon: pick.lon } : null,
       comment: '',
       saveAddress: true,
     });
-  }, [form, addresses.data, defaults.isPending, defaults.data, deliveryCity, user]);
+  }, [form, addresses.data, defaults.isPending, defaults.data, deliveryCity, user, cartPick]);
 
   const saved = addresses.data?.find((a) => a.id === form?.addressId);
   const city: CityRef | null = saved
@@ -199,7 +208,11 @@ export function Checkout() {
       recipient_name: form.name.trim(),
       recipient_phone: normalizePhone(form.phone)!,
       ...city,
-      address_text: saved ? saved.address_text : form.address_text.trim(),
+      // 3.6: street + apartment / entrance / floor / landmark in one line; the map point when there is one
+      address_text: saved ? composeAddress(saved.address_text, saved, lang) : composeAddress(form.address_text, form.details, lang),
+      ...(saved
+        ? saved.latitude != null && saved.longitude != null && { latitude: saved.latitude, longitude: saved.longitude }
+        : form.point && { latitude: form.point.lat, longitude: form.point.lon }),
       customer_comment: form.comment.trim() || undefined,
       payment_method: method,
       // 3.3: exactly the code of the shown total ('' = none)
@@ -210,7 +223,8 @@ export function Checkout() {
       const order = await placeOrder.mutateAsync({ body, key: keys.keyFor(body) });
       haptic('success');
       if (form.addressId === 'new' && form.saveAddress) {
-        saveAddress.mutate({ ...city, address_text: body.address_text }); // best effort, never blocks the order
+        // best effort, never blocks the order
+        saveAddress.mutate({ ...city, address_text: form.address_text.trim(), latitude: form.point?.lat, longitude: form.point?.lon, ...form.details });
       }
       void client.invalidateQueries({ queryKey: ['cart'] });
       void client.invalidateQueries({ queryKey: ['orders'] });
@@ -276,7 +290,7 @@ export function Checkout() {
                 />
                 <span>
                   {a.label && <strong>{a.label}: </strong>}
-                  {a.address_text}
+                  {composeAddress(a.address_text, a, lang)}
                   <span className="hint small"> · {lang === 'uz' && a.city.name_uz ? a.city.name_uz : a.city.name_ru}</span>
                 </span>
               </label>
@@ -293,18 +307,18 @@ export function Checkout() {
         )}
         {form.addressId === 'new' && (
           <>
-            <RegionCitySelect regions={regions.data} regionId={form.region_id} cityId={form.city_id} onChange={(v) => {
+            <AddressFields
+              regions={regions.data}
+              value={form}
+              place="checkout"
+              errors={errors}
+              onChange={(v, why) => {
                 setForm({ ...form, ...v });
-                setErrors({ ...errors, city_id: undefined });
-                if (v.city_id) setDeliveryCity(v);
+                setErrors({ ...errors, ...(why !== 'text' && { city_id: undefined }), ...(v.address_text.trim() && { address_text: undefined }) });
+                // a new district (by hand or from the map) recalculates delivery, terms and «оплата при получении»
+                if (v.city_id && v.city_id !== form.city_id) setDeliveryCity({ region_id: v.region_id, city_id: v.city_id });
               }}
             />
-            {errors.city_id && <small className="error-text">{errors.city_id}</small>}
-            <label className="field">
-              <span>{t('checkout.addressText')}</span>
-              <input autoComplete="street-address" value={form.address_text} onChange={(e) => set('address_text', e.target.value)} aria-invalid={!!errors.address_text} />
-              {errors.address_text && <small className="error-text">{errors.address_text}</small>}
-            </label>
             <label className="check-row">
               <input type="checkbox" checked={form.saveAddress} onChange={(e) => set('saveAddress', e.target.checked)} />
               {t('checkout.saveAddress')}

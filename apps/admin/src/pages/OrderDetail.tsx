@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
-import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone } from '../lib/format';
+import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone, yandexMapsLink } from '../lib/format';
 import { CheckIcon, ForwardIcon } from '../components/Icons';
 import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly';
 import { OrderFinance, TestBadge } from '../components/OrderFinance';
@@ -25,7 +25,7 @@ export interface AdminOrder {
   reserved_until: string | null;
   paid_at: string | null;
   recipient: { name: string; phone: string };
-  delivery: { region: Named; city: Named; address_text: string; cost_uzs: number; method: string };
+  delivery: { region: Named; city: Named; address_text: string; latitude: number | null; longitude: number | null; cost_uzs: number; method: string };
   customer_comment: string | null;
   items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
   totals: { goods_total_uzs: number; discount_total_uzs: number; delivery_cost_uzs: number; total_uzs: number };
@@ -235,6 +235,17 @@ export function OrderDetail() {
               <br />
               {o.delivery.address_text}
             </dd>
+            {/* 3.6: the point the customer chose on the map; orders without it — nothing */}
+            {o.delivery.latitude != null && o.delivery.longitude != null && (
+              <>
+                <dt>Точка на карте</dt>
+                <dd>
+                  <a href={yandexMapsLink(o.delivery.latitude, o.delivery.longitude)} target="_blank" rel="noopener noreferrer">
+                    Открыть в Яндекс Картах
+                  </a>
+                </dd>
+              </>
+            )}
             {o.customer_comment && (
               <>
                 <dt>Комментарий</dt>

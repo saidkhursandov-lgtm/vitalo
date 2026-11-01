@@ -6,6 +6,7 @@ import { tashkentDateTime } from '../common/tashkent';
 import { SETTING_DEFAULTS, SETTING_KEYS, supportLink } from '../settings/settings.service';
 import { productTitle } from '../waitlist/waitlist';
 import { promoOf } from '../orders/order-view';
+import { yandexMapsLink } from '../maps/maps-match';
 
 /** 3.2: «Как принимать ваш заказ» lines — one per product with a memo in the language (Russian as a fallback), no repeats. */
 export function intakeGuideItems(
@@ -191,6 +192,10 @@ export class NotificationsService {
           promo: promoOf(order),
           // 3.5: «Комментарий к заказу» from the checkout — only in the new-order message
           ...(template === 'staff.new_order' && order.customer_comment ? { comment: order.customer_comment } : {}),
+          // 3.6: the point chosen on the map — the button «Открыть в Яндекс Картах»
+          ...(template === 'staff.new_order' && order.latitude != null && order.longitude != null
+            ? { map_url: yandexMapsLink(Number(order.latitude), Number(order.longitude)) }
+            : {}),
           lang: 'ru',
         },
       })),

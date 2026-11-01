@@ -26,6 +26,7 @@ import { manifestOrDefault } from '../settings/home-content';
 import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService } from '../settings/settings.service';
 import { OnlinePaymentsService } from '../payments/online/online-payments.service';
 import { ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
+import { MapsService } from '../maps/maps.service';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
 
@@ -244,6 +245,11 @@ export class CartUpsellDto {
   @ApiProperty({ type: [String] }) @IsArray() @ArrayMaxSize(12) @IsUUID('all', { each: true }) product_ids!: string[];
 }
 
+/** 3.6: «Настройки → Доставка → Карта»: show «Выбрать на карте» in the Mini App. */
+export class MapsSettingsDto {
+  @ApiProperty() @IsBoolean() enabled!: boolean;
+}
+
 export class BonusTeaserDto {
   @ApiProperty() @IsBoolean() enabled!: boolean;
   @ApiProperty({ type: LocalizedTextDto }) @IsObject() @ValidateNested() @Type(() => LocalizedTextDto) text!: LocalizedTextDto;
@@ -287,6 +293,7 @@ export class AdminSettingsService {
     private readonly staffAuth: StaffAuthService,
     private readonly settings: SettingsService,
     private readonly online: OnlinePaymentsService,
+    private readonly maps: MapsService,
   ) {}
 
   /** Saves one settings row and writes before/after to the audit log. */
@@ -443,6 +450,15 @@ export class AdminSettingsService {
     if (known !== ids.length) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT', message: 'Some products do not exist' });
     await this.saveSetting(staffId, SETTING_KEYS.cartUpsell, { enabled: dto.enabled, product_ids: ids }, 'settings.cart_upsell_updated');
     return this.cartUpsell();
+  }
+
+  async setMaps(staffId: string, dto: MapsSettingsDto) {
+    await this.saveSetting(staffId, SETTING_KEYS.maps, { enabled: dto.enabled }, 'settings.maps_updated');
+    return this.maps.status();
+  }
+
+  mapsStatus() {
+    return this.maps.status();
   }
 
   async setBonusTeaser(staffId: string, dto: BonusTeaserDto) {
@@ -796,6 +812,16 @@ export class AdminSettingsController {
   @Put('cart-upsell')
   setCartUpsell(@CurrentStaff() me: StaffContext, @Body() dto: CartUpsellDto) {
     return this.settings.setCartUpsell(me.staff.id, dto);
+  }
+
+  @Get('maps')
+  maps() {
+    return this.settings.mapsStatus();
+  }
+
+  @Put('maps')
+  setMaps(@CurrentStaff() me: StaffContext, @Body() dto: MapsSettingsDto) {
+    return this.settings.setMaps(me.staff.id, dto);
   }
 
   @Get('label-size')

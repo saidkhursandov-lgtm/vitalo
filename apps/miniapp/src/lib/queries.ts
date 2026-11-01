@@ -230,7 +230,40 @@ export const useAddresses = () => useQuery({ queryKey: ['addresses'], queryFn: (
 export interface AddressInput extends CityRef {
   label?: string;
   address_text: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  apartment?: string;
+  entrance?: string;
+  floor?: string;
+  landmark?: string;
   is_primary?: boolean;
+}
+
+// ---------- 3.6: map ----------
+
+export interface MapConfig {
+  available: boolean;
+  reason: 'off' | 'no_key' | 'limit' | null;
+  js_api_key: string | null;
+}
+
+/** Show «Выбрать на карте»? Asked again after 5 minutes (the daily limit may have been reached meanwhile). */
+export const useMapConfig = () => useQuery({ queryKey: ['map-config'], queryFn: () => api<MapConfig>('/maps/config'), staleTime: 5 * 60_000, retry: false });
+
+/** What the customer confirmed on the map. region_id / city_id: our district when the geocoder matched it. */
+export interface MapPick {
+  lat: number;
+  lon: number;
+  street_line: string;
+  region_id: string | null;
+  city_id: string | null;
+}
+
+/** 3.6: a point chosen on the map in the cart waits here for the checkout (new address in the same district). */
+export function useCartMapPick(): [MapPick | null, (p: MapPick | null) => void] {
+  const client = useQueryClient();
+  const pick = useQuery({ queryKey: ['map-pick'], queryFn: () => null as MapPick | null, enabled: false, initialData: null as MapPick | null, staleTime: Infinity, gcTime: Infinity }).data;
+  return [pick, (p) => client.setQueryData(['map-pick'], p)];
 }
 
 export function useAddressActions() {

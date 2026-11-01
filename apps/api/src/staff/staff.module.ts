@@ -1,3 +1,4 @@
+import { MapsModule } from '../maps/maps.module';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { DeliveryModule } from '../delivery/delivery.module';
@@ -45,7 +46,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
  * YandexWebhookController (/api/yandex/notifications/<secret>): off by default, secret path + Yandex networks only.
  */
 @Module({
-  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule, OnlinePaymentsModule, PromoModule],
+  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule, OnlinePaymentsModule, PromoModule, MapsModule],
   controllers: [
     StaffAuthController,
     AdminBannersController,

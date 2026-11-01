@@ -44,6 +44,8 @@ import {
   Info,
   LayoutGrid,
   MapPin,
+  LocateFixed,
+  Map as MapLucide,
   MessageCircle,
   Minus,
   Package,
@@ -93,6 +95,8 @@ export const MinusIcon = make(Minus);
 export const PlusIcon = make(Plus);
 export const OrdersIcon = make(ClipboardList);
 export const PinIcon = make(MapPin);
+export const LocateIcon = make(LocateFixed);
+export const MapIcon = make(MapLucide);
 export const OfflineIcon = make(WifiOff);
 export const AlertIcon = make(CircleAlert);
 export const InfoIcon = make(Info);

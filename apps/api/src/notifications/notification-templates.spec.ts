@@ -29,6 +29,14 @@ describe('notification texts', () => {
     expect(renderNotification('staff.customer_paid', { order_number: 'VTL-7', total_uzs: 5000, lang: 'ru' })).toContain('на 5 000 сум');
   });
 
+  it('3.6: the new-order message says there is a point on the map (the link is the button); none without a point', () => {
+    const p = { order_number: 'VTL-7', total_uzs: 310000, customer: 'Тест', phone: '+998901234567', lang: 'ru' as const };
+    expect(renderNotification('staff.new_order', { ...p, map_url: 'https://yandex.uz/maps/?pt=69.2856,41.3401&z=17&l=map' })).toBe(
+      '🆕 Новый заказ VTL-7 на 310 000 сум\nКлиент: Тест, +998901234567\n📍 Точка на карте: кнопка «Открыть в Яндекс Картах» ниже',
+    );
+    expect(renderNotification('staff.new_order', p)).not.toContain('📍');
+  });
+
   it('3.5: the new-order message carries the customer comment with its line breaks (RU / UZ)', () => {
     const comment = 'Позвоните за час.\nДомофон 25, 3 этаж';
     expect(renderNotification('staff.new_order', { order_number: 'VTL-7', total_uzs: 310000, customer: 'Тест', phone: '+998901234567', comment, lang: 'ru' })).toBe(

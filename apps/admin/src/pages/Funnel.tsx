@@ -50,12 +50,21 @@ const EXTRA_NAMES: Record<string, string> = {
   compat_instant_answer: 'Получили сохранённый ответ о совместимости',
   compat_answered: 'Получили ответ специалиста о совместимости',
   compat_view: 'Увидели ответ о совместимости в корзине',
+  map_open: 'Открыли карту (выбор адреса)',
+  map_locate_me: 'Нажали «Моё местоположение» на карте',
+  map_confirm: 'Подтвердили адрес на карте',
+  map_district_auto: 'Район после карты (определился сам / нет)',
 };
 /** Sub-rows: payment systems of «Скоро» and (3.3) reasons a promo code did not fit. */
 const SYSTEM_NAMES: Record<string, string> = {
   payme: 'Payme',
   click: 'Click',
   uzum: 'Uzum',
+  district_auto: 'район определился сам',
+  district_manual: 'район выбрали вручную',
+  locate_ok: 'местоположение найдено',
+  locate_denied: 'нет разрешения',
+  locate_unavailable: 'не удалось определить',
   not_found: 'нет такого кода',
   disabled: 'код выключен',
   not_started: 'ещё не начался',

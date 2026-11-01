@@ -291,6 +291,13 @@ export interface Address {
   region: Named & { id: string };
   city: Named & { id: string };
   address_text: string;
+  /** 3.6: the point chosen on the map (null: typed by hand) */
+  latitude: number | null;
+  longitude: number | null;
+  apartment: string | null;
+  entrance: string | null;
+  floor: string | null;
+  landmark: string | null;
   is_primary: boolean;
 }
 

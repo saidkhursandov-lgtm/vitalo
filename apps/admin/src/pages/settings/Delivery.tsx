@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Badge, ErrorBox, Field, Loading, Modal, toInt } from '../../components/ui';
 import { api } from '../../lib/api';
 import { money } from '../../lib/format';
+import { MapsSettings } from './Maps';
 
 interface Tariff {
   id: string;
@@ -39,6 +40,7 @@ export function DeliverySettings() {
   return (
     <>
       <Tariffs />
+      <MapsSettings />
       <h2 className="section-title">Города и районы</h2>
       <Cities />
     </>

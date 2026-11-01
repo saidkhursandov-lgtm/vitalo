@@ -1259,3 +1259,44 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
   background: var(--success-soft); color: var(--success);
 }
 .centre-icon-compat { color: var(--primary-text); }
+
+/* 3.6: «Адрес на Яндекс Карте» — full screen over everything, the pin stays in the centre, the panel under the map. */
+.map-btn { margin-top: 4px; }
+.map-off { margin: 4px 0 8px; }
+.map-note { margin: 6px 0 2px; }
+.map-note.is-ok { color: var(--success); }
+.addr-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.addr-details .field input { min-width: 0; }
+.map-screen {
+  position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh; background: var(--surface);
+}
+.map-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) 8px 6px 16px; border-bottom: 1px solid var(--border);
+}
+.map-top h2 { margin: 0; font-size: 18px; min-width: 0; }
+.map-canvas { position: relative; flex: 1; min-height: 0; background: var(--neutral-soft); }
+.map-box { position: absolute; inset: 0; }
+.map-pin {
+  position: absolute; left: 50%; top: 50%; z-index: 2; pointer-events: none; color: var(--primary);
+  transform: translate(-50%, -100%); transition: transform 0.15s; filter: drop-shadow(0 2px 2px rgb(30 41 59 / 0.35));
+}
+.map-pin svg { fill: var(--surface); }
+.map-pin.is-moving { transform: translate(-50%, calc(-100% - 8px)); }
+.map-loading { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; color: var(--muted); }
+.map-locate {
+  position: absolute; right: 12px; bottom: 12px; z-index: 2; display: inline-flex; align-items: center; gap: 6px;
+  min-height: var(--tap); max-width: calc(100% - 24px); padding: 0 14px; border: 1px solid var(--border-strong); border-radius: 22px;
+  background: var(--surface); color: var(--primary-text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 2px 6px rgb(30 41 59 / 0.15);
+}
+.map-locate:disabled { color: var(--muted); }
+.map-panel {
+  flex: none; display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 16px calc(12px + var(--safe-b)); border-top: 1px solid var(--border); background: var(--surface);
+}
+.map-address { margin: 0; min-height: 2.6em; font-weight: 600; overflow-wrap: anywhere; }
+.map-address.is-muted { color: var(--muted); font-weight: 500; }
+.map-notice { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--warning-soft); color: var(--warning); font-size: 14px; }
+.map-panel .btn { white-space: normal; }

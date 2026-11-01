@@ -9,10 +9,11 @@ import { tapHaptic } from '../lib/telegram';
 import { track } from '../lib/analytics';
 import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui';
 import { RegionCitySelect } from '../components/PlacePicker';
+import { MapPickerButton } from '../components/MapPicker';
 import { OrderTotals } from '../components/OrderItems';
 import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import { useCart, useCartActions, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
+import { useCart, useCartActions, useCartMapPick, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
 import { PromoBox } from '../components/Promo';
 import { CompatBlock } from '../components/Compat';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
@@ -155,6 +156,8 @@ export function Cart() {
       setDraftRegion('');
     } else setDraftRegion(v.region_id);
   };
+  // 3.6: «Выбрать на карте» here sets the district; the point and the street wait for the checkout
+  const [mapPick, setMapPick] = useCartMapPick();
   const cart = useCart(selected);
   const { setQty, remove } = useCartActions();
   const promo = useCartPromo(selected, lang);
@@ -227,6 +230,16 @@ export function Cart() {
       <section className="card">
         <h2>{t('cart.deliveryTo')}</h2>
         {regions.data && <RegionCitySelect regions={regions.data} regionId={city.region_id} cityId={city.city_id} onChange={setCity} />}
+        <MapPickerButton
+          place="cart"
+          start={mapPick}
+          chosen={!!mapPick}
+          onPick={(p) => {
+            setMapPick(p);
+            if (p.region_id) setCity({ region_id: p.region_id, city_id: p.city_id ?? '' });
+          }}
+        />
+        {mapPick && <p className={`hint small map-note ${mapPick.city_id ? 'is-ok' : ''}`}>{mapPick.city_id ? t('map.districtAuto') : t('map.districtManual')}</p>}
         {delivery ? (
           <>
             <QuoteTerm min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />

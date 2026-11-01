@@ -22,6 +22,9 @@ export const SETTING_KEYS = {
   manifest: 'home_manifest',
   cartUpsell: 'cart_upsell',
   promoGuard: 'promo_guard',
+  /** 3.6: «Настройки → Доставка» — the map switch; the daily counter of Yandex geocoder requests (not edited by hand) */
+  maps: 'maps',
+  mapsUsage: 'maps_usage',
 } as const;
 
 /**

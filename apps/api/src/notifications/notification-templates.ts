@@ -97,7 +97,12 @@ export interface TemplatePayload {
   answer_uz?: string;
   /** 3.4: Telegram's id of the sent staff message — its buttons are removed once somebody answers */
   tg_message_id?: number;
+  /** 3.6: staff.new_order — «Открыть в Яндекс Картах» at the point the customer chose (orders without a point: none) */
+  map_url?: string;
 }
+
+/** 3.6: the button under staff.new_order when the customer chose a point on the map. */
+export const MAP_BUTTON: Record<Lang, string> = { ru: 'Открыть в Яндекс Картах', uz: 'Yandex Xaritada ochish' };
 
 /** Text of the button under a message that has open_path. */
 export const OPEN_BUTTON: Record<Lang, string> = { ru: 'Открыть заказ', uz: 'Buyurtmani ochish' };
@@ -159,6 +164,11 @@ const sum = (n: number | undefined, lang: Lang) => `${formatUzs(n ?? 0)} ${lang 
 
 /** 3.3: a new line «Промокод VITALO10: −20 000 сум» / «…: доставка бесплатно»; empty without a code. */
 /** 3.5: the customer's comment from the checkout, line breaks kept (plain-text message, up to 500 characters). */
+/** 3.6: one line about the map point; the link itself is the button under the message. */
+export function mapLine(p: TemplatePayload, lang: Lang): string {
+  return p.map_url ? `\n📍 ${lang === 'uz' ? 'Xaritadagi nuqta: pastdagi tugma' : 'Точка на карте: кнопка «Открыть в Яндекс Картах» ниже'}` : '';
+}
+
 export function commentLine(p: TemplatePayload, lang: Lang): string {
   const text = p.comment?.trim();
   return text ? `
@@ -261,9 +271,9 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   // Staff messages: the admin panel is Russian-only, so are these.
   'staff.new_order': {
     ru: (p) =>
-      `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}${promoLine(p, 'ru')}${commentLine(p, 'ru')}` +
+      `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}${promoLine(p, 'ru')}${commentLine(p, 'ru')}${mapLine(p, 'ru')}` +
       (p.payment === 'cod' ? '\n💵 Оплата при получении (Ташкент). Ожидает подтверждения менеджером: позвоните клиенту и подтвердите заказ в админке.' : ''),
-    uz: (p) => `🆕 Yangi buyurtma ${p.order_number}: ${sum(p.total_uzs, 'uz')}\nMijoz: ${p.customer ?? '—'}, ${p.phone ?? '—'}${commentLine(p, 'uz')}`,
+    uz: (p) => `🆕 Yangi buyurtma ${p.order_number}: ${sum(p.total_uzs, 'uz')}\nMijoz: ${p.customer ?? '—'}, ${p.phone ?? '—'}${commentLine(p, 'uz')}${mapLine(p, 'uz')}`,
   },
   'staff.customer_paid': {
     ru: (p) => `💳 Клиент сообщил об оплате заказа ${p.order_number} на ${sum(p.total_uzs, 'ru')}.\nПроверьте поступление и подтвердите оплату в админке.`,

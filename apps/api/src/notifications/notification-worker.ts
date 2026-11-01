@@ -3,7 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import { Prisma, notifications } from '@prisma/client';
 import { VERDICT_CODES, VERDICT_LABELS, VERDICTS } from '../compat/compat';
 import { PrismaService } from '../prisma/prisma.service';
-import { ADMIN_BUTTON, SUPPORT_BUTTON, openButtonText, renderNotification, type TemplatePayload } from './notification-templates';
+import { ADMIN_BUTTON, MAP_BUTTON, SUPPORT_BUTTON, openButtonText, renderNotification, type TemplatePayload } from './notification-templates';
 import { TELEGRAM_SENDER, TelegramSendError, type TelegramSender } from './telegram-sender';
 import { ConfigService } from '@nestjs/config';
 import { adminUrl, miniAppUrl } from './mini-app-url';
@@ -121,7 +121,11 @@ export class NotificationWorker {
             : payload.admin_path && admin
               ? { text: ADMIN_BUTTON, url: `${admin}${payload.admin_path}` }
               : undefined;
-        const link = payload.support_url ? { text: SUPPORT_BUTTON[lang], url: payload.support_url } : undefined;
+        const link = payload.support_url
+          ? { text: SUPPORT_BUTTON[lang], url: payload.support_url }
+          : payload.map_url
+            ? { text: MAP_BUTTON[lang], url: payload.map_url }
+            : undefined;
         // 3.4: the specialist answers with buttons of the bot; at night the message comes without a sound
         const compat = n.template === 'staff.compat_request' && payload.compat_id ? { buttons: compatButtons(payload.compat_id), silent: !!quietUntil(now) } : {};
         const messageId = await this.sender.sendMessage(n.chat_id, text, { ...(button && { webApp: button }), ...(link && { link }), ...compat });

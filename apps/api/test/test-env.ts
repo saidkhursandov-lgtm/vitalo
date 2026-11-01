@@ -21,6 +21,10 @@ export const TEST_ENV = {
   YANDEX_SYNC_DRY_RUN: 'true',
   YANDEX_WEBHOOK_ENABLED: 'false',
   YANDEX_WEBHOOK_SECRET: '',
+  // 3.6: Yandex Maps — never the real keys from apps/api/.env (the free geocoder has 1000 requests a day); the maps
+  // suite sets fake keys itself and replaces fetch.
+  YANDEX_MAPS_JS_API_KEY: '',
+  YANDEX_GEOCODER_API_KEY: '',
   UPLOAD_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
   RECEIPTS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-receipts'),
 };

@@ -19,6 +19,12 @@ export class AddressDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(-90) @Max(90) latitude?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(-180) @Max(180) longitude?: number;
 
+  // 3.6: typed by hand next to the street from the map; an empty string clears the field
+  @ApiPropertyOptional({ example: '5' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(20) apartment?: string;
+  @ApiPropertyOptional({ example: '2' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(20) entrance?: string;
+  @ApiPropertyOptional({ example: '3' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(20) floor?: string;
+  @ApiPropertyOptional({ example: 'напротив школы' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(200) landmark?: string;
+
   @ApiPropertyOptional({ description: 'Сделать основным (первый адрес всегда основной)' })
   @IsOptional()
   @IsBoolean()

@@ -24,8 +24,10 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
  * 3.4: compat_view (props.verdict, props.source, props.changed) — the answer card seen in the cart, from the app;
  * compat_request (props.products, props.has_comment, props.lang), compat_instant_answer (props.verdict), compat_answered
  * (props.verdict, props.via = bot | admin, props.minutes) — server only. The comment itself never goes to analytics (D-40).
+ * 3.6: map_open (props.place = checkout | profile | cart), map_locate_me (props.result = ok | denied | unavailable),
+ * map_confirm (props.place), map_district_auto (props.matched = true | false) — from the app. No coordinates in analytics.
  */
-export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove', 'compat_view'] as const;
+export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove', 'compat_view', 'map_open', 'map_locate_me', 'map_confirm', 'map_district_auto'] as const;
 export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent', 'compat_request', 'compat_instant_answer', 'compat_answered'] as const;
 export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;
@@ -97,6 +99,14 @@ export class AnalyticsService {
       SELECT props->>'reason' AS system, COUNT(DISTINCT user_id) AS users, COUNT(*) AS events FROM analytics_events
       WHERE created_at >= ${from} AND event = 'promo_apply_fail' AND props->>'reason' IS NOT NULL
       GROUP BY 1 ORDER BY 3 DESC`;
+    // 3.6: the map — was the district found by itself; what «Моё местоположение» gave
+    const byMap = await this.prisma.$queryRaw<{ event: string; system: string; users: bigint; events: bigint }[]>`
+      SELECT event,
+        CASE WHEN event = 'map_district_auto' THEN (CASE WHEN props->>'matched' = 'true' THEN 'district_auto' ELSE 'district_manual' END)
+             ELSE 'locate_' || COALESCE(props->>'result', 'unknown') END AS system,
+        COUNT(DISTINCT user_id) AS users, COUNT(*) AS events FROM analytics_events
+      WHERE created_at >= ${from} AND event IN ('map_district_auto', 'map_locate_me')
+      GROUP BY 1, 2 ORDER BY 4 DESC`;
     const sub = (b: { system: string; users: bigint; events: bigint }) => ({ system: b.system, users: Number(b.users), events: Number(b.events) });
     return EXTRA_EVENTS.map((event) => {
       const r = rows.find((x) => x.event === event);
@@ -106,6 +116,7 @@ export class AnalyticsService {
         events: Number(r?.events ?? 0),
         ...(event === 'payment_soon_click' && { by_system: bySystem.map(sub) }),
         ...(event === 'promo_apply_fail' && { by_system: byReason.map(sub) }),
+        ...((event === 'map_district_auto' || event === 'map_locate_me') && { by_system: byMap.filter((b) => b.event === event).map(sub) }),
       };
     });
   }
