@@ -12,6 +12,7 @@ import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useCartActions, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
 import { PromoBox } from '../components/Promo';
+import { CompatBlock } from '../components/Compat';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
 
 /** Human text for a cart warning (price changed / qty reduced / out of stock). */
@@ -177,6 +178,8 @@ export function Cart() {
           </li>
         ))}
       </ul>
+
+      <CompatBlock productIds={data.items.map((l) => l.product_id)} />
 
       <section className="card">
         <h2>{t('cart.deliveryTo')}</h2>

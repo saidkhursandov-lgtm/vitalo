@@ -3,7 +3,7 @@ import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CartUpsell, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
+import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -98,6 +98,10 @@ export function useCart(city?: CityRef | null) {
  * 3.1: 2–3 products under «Добавьте ещё X сум — доставка бесплатна». Asked again when the cart total or the district
  * changes; an empty list = no strip (block off, threshold reached, free first order, not enough products).
  */
+/** 3.4: the compatibility block of the cart; refetched when the set of products or the language changes. */
+export const useCompat = (setKey: string, lang: Lang) =>
+  useQuery({ queryKey: ['compat', setKey, lang], queryFn: () => api<CompatState>('/compat'), placeholderData: (prev) => prev });
+
 export const useUpsell = (city: CityRef | null, goodsTotal: number) =>
   useQuery({
     queryKey: ['upsell', city, goodsTotal],

@@ -355,7 +355,7 @@ export type CentreCounts = { unread: number; tabs: Record<CentreTab, number> };
 export interface CentreItem {
   id: string;
   tab: CentreTab;
-  category: 'order' | 'waitlist' | 'promo';
+  category: 'order' | 'waitlist' | 'promo' | 'compat';
   template: string;
   title: string;
   body: string;
@@ -457,6 +457,28 @@ export interface CartCount {
 }
 
 /** 3.1: GET /cart/upsell — products close to the amount missing for free delivery. */
+/** 3.4: «Проверить совместимость у специалиста» in the cart (GET /api/compat). */
+export type CompatVerdict = 'compatible' | 'spread' | 'consult';
+export interface CompatRequest {
+  id: string;
+  status: 'pending' | 'answered';
+  source: 'specialist' | 'instant';
+  verdict: CompatVerdict | null;
+  text: string | null;
+  created_at: string;
+  answered_at: string | null;
+  /** the cart is not the one the answer was about any more */
+  changed: boolean;
+  products: string[];
+}
+export interface CompatState {
+  eligible: boolean;
+  products: string[];
+  left_today: number;
+  request: CompatRequest | null;
+  result?: 'sent' | 'instant';
+}
+
 export interface CartUpsell {
   items: ProductListItem[];
   source: 'auto' | 'manual' | null;

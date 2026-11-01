@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellIcon, GiftIcon, InfoIcon, OrdersIcon, type Icon } from '../components/Icons';
+import { BellIcon, GiftIcon, InfoIcon, OrdersIcon, SupportIcon, type Icon } from '../components/Icons';
 import { EmptyState, ErrorState, Loading } from '../components/ui';
 import { track } from '../lib/analytics';
 import { dateTime } from '../lib/format';
@@ -9,7 +9,7 @@ import { useNotificationActions, useNotifications } from '../lib/queries';
 import type { CentreItem, CentreTab } from '../lib/types';
 
 const TABS: CentreTab[] = ['orders', 'promo', 'service'];
-const CATEGORY_ICONS: Record<CentreItem['category'], Icon> = { order: OrdersIcon, waitlist: BellIcon, promo: GiftIcon };
+const CATEGORY_ICONS: Record<CentreItem['category'], Icon> = { order: OrdersIcon, waitlist: BellIcon, promo: GiftIcon, compat: SupportIcon };
 const TAB_ICONS: Record<CentreTab, Icon> = { orders: OrdersIcon, promo: GiftIcon, service: InfoIcon };
 
 /**

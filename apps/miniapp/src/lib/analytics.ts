@@ -1,7 +1,7 @@
 import { api } from './api';
 
 /** Funnel steps the app reports (B3); orders and payments are recorded by the server itself. */
-export type AppEvent = 'app_open' | 'product_view' | 'add_to_cart' | 'checkout_start' | 'language_change' | 'cod_selected' | 'payment_soon_click' | 'manifest_open' | 'ai_tab_click' | 'upsell_shown' | 'upsell_add' | 'notification_open' | 'notification_read_all' | 'active_order_click' | 'promo_apply_success' | 'promo_apply_fail' | 'promo_remove';
+export type AppEvent = 'app_open' | 'product_view' | 'add_to_cart' | 'checkout_start' | 'language_change' | 'cod_selected' | 'payment_soon_click' | 'manifest_open' | 'ai_tab_click' | 'upsell_shown' | 'upsell_add' | 'notification_open' | 'notification_read_all' | 'active_order_click' | 'promo_apply_success' | 'promo_apply_fail' | 'promo_remove' | 'compat_view';
 
 /** Fire and forget: analytics never blocks or breaks the shop (errors, limits and slow network are ignored). */
 export function track(event: AppEvent, props?: Record<string, string | number | boolean>) {
