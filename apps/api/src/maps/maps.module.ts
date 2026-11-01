@@ -1,4 +1,4 @@
-import { Controller, Get, Module, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, Module, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsNumber, IsOptional, Max, Min } from 'class-validator';
@@ -25,6 +25,13 @@ export class MapsController {
   @Get('config')
   config() {
     return this.maps.clientConfig();
+  }
+
+  /** The customer opens the map: one JavaScript API load is counted (free limit 100 a day), the script key comes back. */
+  @Post('open')
+  @HttpCode(200)
+  open(@CurrentAuth() auth: AuthContext) {
+    return this.maps.open(auth.user.id);
   }
 
   /** The address under the map pin (the customer stopped moving the map). */

@@ -65,7 +65,8 @@ beforeEach(() => {
   loc.result = { status: 'denied' };
   calls = [];
   routes = {
-    '/maps/config': () => ({ available: true, reason: null, js_api_key: 'js-key' }),
+    '/maps/config': () => ({ available: true, reason: null }),
+    '/maps/open': () => ({ js_api_key: 'js-key' }),
     '/maps/geocode': () => ({ found: true, outside: false, street_line: 'улица Амира Темура, 107', full_text: 'Ташкент, Юнусабадский район, улица Амира Темура, 107', region_id: 'tash', city_id: 'yunus' }),
   };
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
@@ -116,7 +117,7 @@ describe('3.6 address on the Yandex map', () => {
   });
 
   it('no key / switched off / limit: no button, a clear text instead; manual fields still work (RU / UZ)', async () => {
-    routes['/maps/config'] = () => ({ available: false, reason: 'no_key', js_api_key: null });
+    routes['/maps/config'] = () => ({ available: false, reason: 'no_key' });
     show('ru');
     expect(await screen.findByText('Карта временно недоступна, введите адрес вручную')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Выбрать на карте/ })).toBeNull();
@@ -126,6 +127,20 @@ describe('3.6 address on the Yandex map', () => {
     show('uz');
     expect(await screen.findByText('Xarita vaqtincha ishlamayapti, manzilni qo‘lda kiriting')).toBeTruthy();
     expect(ymaps.load).not.toHaveBeenCalled();
+  });
+
+  it('the 100 free map loads a day: the key comes only with a counted opening; at the limit the map is not loaded at all', async () => {
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body as string) : null });
+      if (url.includes('/maps/open')) return new Response(JSON.stringify({ code: 'MAP_UNAVAILABLE', reason: 'limit' }), { status: 503 });
+      return new Response(JSON.stringify(url.includes('/maps/config') ? { available: true, reason: null } : {}));
+    });
+    show('uz');
+    fireEvent.click(await screen.findByRole('button', { name: 'Xaritadan tanlash' }));
+    expect(await screen.findByText('Xarita vaqtincha ishlamayapti, manzilni qo‘lda kiriting')).toBeTruthy();
+    expect(ymaps.load).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(events().map((e) => e.event)).not.toContain('map_open');
   });
 
   it('the map script is loaded only when the map is opened; the start is the centre of Tashkent', async () => {
@@ -223,7 +238,7 @@ describe('3.6 address on the Yandex map', () => {
     vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
       calls.push({ url, body: init.body ? JSON.parse(init.body as string) : null });
       if (url.includes('/maps/geocode')) return new Response(JSON.stringify({ code: 'MAP_UNAVAILABLE', reason: 'limit' }), { status: 503 });
-      return new Response(JSON.stringify(url.includes('/maps/config') ? { available: true, reason: null, js_api_key: 'js-key' } : {}));
+      return new Response(JSON.stringify(url.includes('/maps/config') ? { available: true, reason: null } : url.includes('/maps/open') ? { js_api_key: 'js-key' } : {}));
     });
     show('ru');
     fireEvent.click(await screen.findByRole('button', { name: 'Выбрать на карте' }));

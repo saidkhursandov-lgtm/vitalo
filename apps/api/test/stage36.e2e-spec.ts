@@ -25,6 +25,20 @@ const YUNUSABAD = yandexAnswer([
   ['street', 'улица Амира Темура'],
   ['house', '107'],
 ]);
+/** A point on a street, not on a house: Yandex names the street but not the district. */
+const STREET_ONLY = yandexAnswer([
+  ['country', 'Узбекистан'],
+  ['province', 'Ташкент'],
+  ['locality', 'Ташкент'],
+  ['street', 'улица Ахмада Дониша'],
+]);
+const DISTRICT_ONLY = yandexAnswer([
+  ['country', 'Узбекистан'],
+  ['province', 'Ташкент'],
+  ['locality', 'Ташкент'],
+  ['district', 'Юнусабадский район'],
+  ['district', 'махалля Биллур'],
+]);
 const PASTDARGOM = yandexAnswer([
   ['country', 'Узбекистан'],
   ['province', 'Самаркандская область'],
@@ -44,18 +58,20 @@ describe('Stage 3.6 map (e2e)', () => {
   const realFetch = global.fetch;
   let geocoderCalls: string[] = [];
   let nextAnswer: { status: number; body: unknown } = { status: 200, body: YUNUSABAD };
+  let districtAnswer: unknown = null;
 
   const setKeys = (js: string, geo: string) => {
     process.env.YANDEX_MAPS_JS_API_KEY = js;
     process.env.YANDEX_GEOCODER_API_KEY = geo;
   };
-  const setUsage = (n: number) =>
+  const setUsage = (n: number, js = 0) =>
     prisma.settings.upsert({
       where: { key: 'maps_usage' },
-      create: { key: 'maps_usage', value: { date: tashkentDateString(new Date()), geocoder: n } },
-      update: { value: { date: tashkentDateString(new Date()), geocoder: n } },
+      create: { key: 'maps_usage', value: { date: tashkentDateString(new Date()), geocoder: n, js } },
+      update: { value: { date: tashkentDateString(new Date()), geocoder: n, js } },
     });
-  const usage = async () => ((await prisma.settings.findUnique({ where: { key: 'maps_usage' } }))?.value as { geocoder: number } | undefined)?.geocoder ?? 0;
+  const usage = async (kind: 'geocoder' | 'js' = 'geocoder') =>
+    ((await prisma.settings.findUnique({ where: { key: 'maps_usage' } }))?.value as Record<string, number> | undefined)?.[kind] ?? 0;
   // a new point every time: the answers are cached for an hour per point
   let step = 0;
   const point = () => ({ lat: (41.33 + ++step * 0.001).toFixed(4), lon: '69.28' });
@@ -65,6 +81,7 @@ describe('Stage 3.6 map (e2e)', () => {
       const url = String(input instanceof Request ? input.url : input);
       if (!url.startsWith('https://geocode-maps.yandex.ru/')) return realFetch(input, init);
       geocoderCalls.push(url);
+      if (url.includes('&kind=district') && districtAnswer) return new Response(JSON.stringify(districtAnswer), { status: 200 });
       return new Response(JSON.stringify(nextAnswer.body), { status: nextAnswer.status, headers: { 'content-type': 'application/json' } });
     });
     app = await createTestApp();
@@ -78,6 +95,7 @@ describe('Stage 3.6 map (e2e)', () => {
   beforeEach(() => {
     geocoderCalls = [];
     nextAnswer = { status: 200, body: YUNUSABAD };
+    districtAnswer = null;
     setKeys('js-test-key', 'geo-test-key');
   });
   afterAll(async () => {
@@ -90,7 +108,8 @@ describe('Stage 3.6 map (e2e)', () => {
 
   it('without the keys the map is not offered and the geocoder is not asked', async () => {
     setKeys('', '');
-    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: false, reason: 'no_key', js_api_key: null });
+    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: false, reason: 'no_key' });
+    expect((await http().post('/api/maps/open').set(bearer(customer)).expect(503)).body).toMatchObject({ code: 'MAP_UNAVAILABLE', reason: 'no_key' });
     const res = await http().get('/api/maps/geocode').query(point()).set(bearer(customer)).expect(503);
     expect(res.body.code).toBe('MAP_UNAVAILABLE');
     expect(geocoderCalls).toHaveLength(0);
@@ -98,11 +117,15 @@ describe('Stage 3.6 map (e2e)', () => {
 
   it('only for a signed-in customer', async () => {
     await http().get('/api/maps/config').expect(401);
+    await http().post('/api/maps/open').expect(401);
     await http().get('/api/maps/geocode').query(point()).expect(401);
   });
 
-  it('with the keys: the map key for the script; the address with our region and district; each request is counted', async () => {
-    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: true, reason: null, js_api_key: 'js-test-key' });
+  it('with the keys: the map key comes only with a counted opening; the address with our region and district; each request is counted', async () => {
+    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: true, reason: null });
+    const loads = await usage('js');
+    expect((await http().post('/api/maps/open').set(bearer(customer)).expect(200)).body).toEqual({ js_api_key: 'js-test-key' });
+    expect(await usage('js')).toBe(loads + 1);
     const before = await usage();
     const p = point();
     const res = (await http().get('/api/maps/geocode').query({ ...p, lang: 'ru' }).set(bearer(customer)).expect(200)).body;
@@ -121,6 +144,22 @@ describe('Stage 3.6 map (e2e)', () => {
     await http().get('/api/maps/geocode').query({ ...p, lang: 'ru' }).set(bearer(customer)).expect(200);
     expect(geocoderCalls).toHaveLength(1);
     expect(await usage()).toBe(before + 1);
+  });
+
+  it('a point on a street without the district: one more (counted) question to Yandex — only the district', async () => {
+    nextAnswer = { status: 200, body: STREET_ONLY };
+    districtAnswer = DISTRICT_ONLY;
+    const before = await usage();
+    const res = (await http().get('/api/maps/geocode').query({ ...point(), lang: 'ru' }).set(bearer(customer)).expect(200)).body;
+    expect(res).toMatchObject({ found: true, street_line: 'улица Ахмада Дониша', ...addr.tashkent });
+    expect(geocoderCalls).toHaveLength(2);
+    expect(geocoderCalls[0]).not.toContain('kind=');
+    expect(geocoderCalls[1]).toContain('&kind=district');
+    expect(await usage()).toBe(before + 2);
+    // Yandex cannot tell the district either: the region stays, the customer picks the district
+    districtAnswer = { response: { GeoObjectCollection: { featureMember: [] } } };
+    const res2 = (await http().get('/api/maps/geocode').query({ ...point(), lang: 'ru' }).set(bearer(customer)).expect(200)).body;
+    expect(res2).toMatchObject({ found: true, region_id: addr.tashkent.region_id, city_id: null });
   });
 
   it('a district we do not have: only the region (the customer picks the district); Uzbek asks uz_UZ', async () => {
@@ -147,7 +186,8 @@ describe('Stage 3.6 map (e2e)', () => {
     await setUsage(899);
     expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body.available).toBe(true);
     await setUsage(900);
-    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: false, reason: 'limit', js_api_key: null });
+    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: false, reason: 'limit' });
+    await http().post('/api/maps/open').set(bearer(customer)).expect(503);
     // a map already open finishes its lookups
     await http().get('/api/maps/geocode').query(point()).set(bearer(customer)).expect(200);
     await setUsage(950);
@@ -155,6 +195,28 @@ describe('Stage 3.6 map (e2e)', () => {
     expect(geocoderCalls).toHaveLength(1);
     await prisma.settings.update({ where: { key: 'maps_usage' }, data: { value: { date: '2020-01-01', geocoder: 999 } } });
     expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body.available).toBe(true);
+  });
+
+  it('the map itself (JavaScript API, 100 free loads a day): the button hides at 90 openings, no key is given after that', async () => {
+    await setUsage(0, 89);
+    const who = await loginCustomer(app, ++tg);
+    await http().post('/api/maps/open').set(bearer(who)).expect(200);
+    expect(await usage('js')).toBe(90);
+    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: false, reason: 'limit' });
+    expect((await http().post('/api/maps/open').set(bearer(who)).expect(503)).body).toMatchObject({ code: 'MAP_UNAVAILABLE', reason: 'limit' });
+    expect(await usage('js')).toBe(90);
+    // a geocoder request keeps the map counter as it is
+    await setUsage(5, 40);
+    await http().get('/api/maps/geocode').query(point()).set(bearer(who)).expect(200);
+    expect([await usage('geocoder'), await usage('js')]).toEqual([6, 40]);
+    await setUsage(0);
+  });
+
+  it('one customer cannot open the map again and again: 6 openings an hour, then 429', async () => {
+    const greedy = await loginCustomer(app, ++tg);
+    for (let i = 0; i < 6; i++) await http().post('/api/maps/open').set(bearer(greedy)).expect(200);
+    expect((await http().post('/api/maps/open').set(bearer(greedy)).expect(429)).body.code).toBe('MAP_TOO_MANY');
+    await setUsage(0);
   });
 
   it('one customer cannot spend the whole limit: 40 lookups in 10 minutes, then 429', async () => {
@@ -167,13 +229,20 @@ describe('Stage 3.6 map (e2e)', () => {
   it('Настройки → Доставка: the switch (admin, audited) and today’s counters; the manager cannot change it', async () => {
     await setUsage(812);
     const s = (await http().get('/api/staff/settings/maps').set(bearer(admin)).expect(200)).body;
-    expect(s).toMatchObject({ enabled: true, has_js_key: true, has_geocoder_key: true, available: true, limit: 1000, warn_at: 800, hide_at: 900 });
-    expect(s.today.geocoder_requests).toBe(812);
+    expect(s).toMatchObject({
+      enabled: true,
+      has_js_key: true,
+      has_geocoder_key: true,
+      available: true,
+      geocoder: { limit: 1000, warn_at: 800, hide_at: 900 },
+      js: { limit: 100, warn_at: 70, hide_at: 90 },
+    });
+    expect(s.today).toMatchObject({ geocoder_requests: 812, map_loads: 0 });
     expect(JSON.stringify(s)).not.toContain('test-key'); // keys themselves never leave the server here
     await http().put('/api/staff/settings/maps').set(bearer(manager)).send({ enabled: false }).expect(403);
     const off = (await http().put('/api/staff/settings/maps').set(bearer(admin)).send({ enabled: false }).expect(200)).body;
     expect(off).toMatchObject({ enabled: false, available: false, reason: 'off' });
-    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: false, reason: 'off', js_api_key: null });
+    expect((await http().get('/api/maps/config').set(bearer(customer)).expect(200)).body).toEqual({ available: false, reason: 'off' });
     expect(await prisma.audit_logs.count({ where: { action: 'settings.maps_updated' } })).toBeGreaterThan(0);
     await http().put('/api/staff/settings/maps').set(bearer(admin)).send({ enabled: true }).expect(200);
     await setUsage(0);
@@ -189,7 +258,7 @@ describe('Stage 3.6 map (e2e)', () => {
     ] as const)
       await http().post('/api/analytics/events').set(bearer(customer)).send({ event, props }).expect(202);
     const status = (await http().get('/api/staff/settings/maps').set(bearer(admin)).expect(200)).body;
-    expect(status.today.map_opens).toBeGreaterThan(0);
+    expect(status.today.map_confirms).toBeGreaterThan(0);
   });
 
   it('a saved address keeps the point, apartment, entrance, floor and landmark; empty clears them', async () => {

@@ -244,7 +244,6 @@ export interface AddressInput extends CityRef {
 export interface MapConfig {
   available: boolean;
   reason: 'off' | 'no_key' | 'limit' | null;
-  js_api_key: string | null;
 }
 
 /** Show «Выбрать на карте»? Asked again after 5 minutes (the daily limit may have been reached meanwhile). */

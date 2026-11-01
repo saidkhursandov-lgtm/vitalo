@@ -8,6 +8,7 @@
 // mock.exact: the URL must end with "match" (not only contain it)
 // mock.patch may be an array: the whole answer is replaced (lists such as /api/staff/promo-codes)
 // js: a script run after click/type (e.g. open a block and press a button); "file" may be omitted for a setup step
+// geo: { "lat": 41.36, "lon": 69.28 } — «Моё местоположение» answers with this point (permission granted for the shot)
 // scrollOffset: after scrollTo, scroll back up this many px (the fixed top bar would cover the element otherwise)
 // Uses headless Chrome over the DevTools protocol; nothing is installed. Signs in with the dev login (test users only).
 import { spawn } from 'node:child_process';
@@ -102,6 +103,10 @@ for (const shot of plan) {
   await send('Emulation.setDeviceMetricsOverride', { width: shot.width, height: shot.height ?? 800, deviceScaleFactor: 2, mobile: shot.width < 768 });
   if (!signedIn[app]) await signIn(app);
   mock = shot.mock ?? null;
+  if (shot.geo) {
+    await send('Browser.grantPermissions', { permissions: ['geolocation'], origin: BASE[app] });
+    await send('Emulation.setGeolocationOverride', { latitude: shot.geo.lat, longitude: shot.geo.lon, accuracy: 20 });
+  }
   if (mock) await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/*', requestStage: 'Response' }] });
   else await send('Fetch.disable');
   await go(shot.url ?? BASE[app] + shot.path);

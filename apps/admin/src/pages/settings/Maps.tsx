@@ -2,21 +2,28 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge, ErrorBox, Loading } from '../../components/ui';
 import { api } from '../../lib/api';
 
+interface Limit {
+  limit: number;
+  warn_at: number;
+  hide_at: number;
+}
 interface MapsStatus {
   enabled: boolean;
   has_js_key: boolean;
   has_geocoder_key: boolean;
   available: boolean;
   reason: 'off' | 'no_key' | 'limit' | null;
-  today: { date: string; geocoder_requests: number; map_opens: number };
-  limit: number;
-  warn_at: number;
-  hide_at: number;
+  today: { date: string; geocoder_requests: number; map_loads: number; map_confirms: number };
+  geocoder: Limit;
+  js: Limit;
 }
 
+const tone = (used: number, l: Limit) => (used >= l.hide_at ? 'bad' : used >= l.warn_at ? 'warn' : 'ok');
+
 /**
- * 3.6: «Настройки → Доставка → Карта». The switch of «Выбрать на карте» in the Mini App and today's requests to Yandex:
- * the free plan allows 1000 geocoder requests a day, the shop hides the button itself at 900 (until midnight, Tashkent).
+ * 3.6: «Настройки → Доставка → Карта». The switch of «Выбрать на карте» in the Mini App and today's requests to Yandex.
+ * The free plan allows 100 map loads (JavaScript API) and 1000 geocoder requests a day; the shop hides the button itself
+ * at 90 / 900 (until midnight, Tashkent).
  */
 export function MapsSettings() {
   const client = useQueryClient();
@@ -28,8 +35,10 @@ export function MapsSettings() {
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const s = q.data;
-  const used = s.today.geocoder_requests;
-  const tone = used >= s.hide_at ? 'bad' : used >= s.warn_at ? 'warn' : 'ok';
+  const loads = s.today.map_loads;
+  const geo = s.today.geocoder_requests;
+  const hidden = loads >= s.js.hide_at || geo >= s.geocoder.hide_at;
+  const near = loads >= s.js.warn_at || geo >= s.geocoder.warn_at;
 
   return (
     <section className="card narrow">
@@ -64,17 +73,20 @@ export function MapsSettings() {
 
       <h3 style={{ marginTop: 16 }}>Запросы к Яндексу сегодня ({s.today.date.split('-').reverse().join('.')})</h3>
       <p>
-        Поиск адреса по точке: <Badge tone={tone}>{used} из {s.limit}</Badge>
+        Открытий карты: <Badge tone={tone(loads, s.js)}>{loads} из {s.js.limit}</Badge>
       </p>
-      <p className="muted small">Открытий карты: {s.today.map_opens}. Счётчик обнуляется в полночь по Ташкенту.</p>
-      {used >= s.hide_at ? (
+      <p>
+        Поиск адреса по точке: <Badge tone={tone(geo, s.geocoder)}>{geo} из {s.geocoder.limit}</Badge>
+      </p>
+      <p className="muted small">Адресов подтверждено на карте: {s.today.map_confirms}. Счётчики обнуляются в полночь по Ташкенту.</p>
+      {hidden ? (
         <div className="alert alert-error" style={{ display: 'block' }}>
-          Лимит почти исчерпан: кнопка карты скрыта до полуночи, клиенты вводят адрес вручную. При регулярном превышении 1000 запросов Яндекс
+          Лимит почти исчерпан: кнопка карты скрыта до полуночи, клиенты вводят адрес вручную. При регулярном превышении бесплатного лимита Яндекс
           блокирует ключ навсегда — если так бывает часто, нужна платная лицензия.
         </div>
-      ) : used >= s.warn_at ? (
+      ) : near ? (
         <div className="alert alert-warn" style={{ display: 'block' }}>
-          Близко к лимиту: на {s.hide_at} запросах карта сама скроется до полуночи.
+          Близко к лимиту: на {s.js.hide_at} открытиях карты или {s.geocoder.hide_at} поисках адреса кнопка сама скроется до полуночи.
         </div>
       ) : null}
     </section>

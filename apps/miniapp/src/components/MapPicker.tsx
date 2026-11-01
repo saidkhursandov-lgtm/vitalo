@@ -36,33 +36,47 @@ export function MapPickerButton({ place, start, chosen, onPick }: { place: MapPl
   const { t } = useI18n();
   const config = useMapConfig();
   const client = useQueryClient();
-  const [open, setOpen] = useState(false);
+  // the key of the map script comes with each opening: the server counts it against the 100 free loads a day
+  const [key, setKey] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const off = () => client.setQueryData<MapConfig>(['map-config'], { available: false, reason: null });
   if (config.isPending) return null;
-  if (!config.data?.available || !config.data.js_api_key) return <p className="hint small map-off">{t('map.unavailable')}</p>;
+  if (!config.data?.available) return <p className="hint small map-off">{t('map.unavailable')}</p>;
+
+  async function openMap() {
+    setNotice(null);
+    setOpening(true);
+    try {
+      const r = await api<{ js_api_key: string }>('/maps/open', { method: 'POST' });
+      track('map_open', { place });
+      setKey(r.js_api_key);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'MAP_TOO_MANY') setNotice(t('map.tooManyOpens'));
+      else off(); // limit, switched off, no key or no network: manual entry
+    } finally {
+      setOpening(false);
+    }
+  }
+
   return (
     <>
-      <button
-        type="button"
-        className="btn btn-secondary btn-block map-btn"
-        onClick={() => {
-          setOpen(true);
-          track('map_open', { place });
-        }}
-      >
+      <button type="button" className="btn btn-secondary btn-block map-btn" disabled={opening} onClick={() => void openMap()}>
         <MapIcon width={18} height={18} aria-hidden /> {chosen ? t('map.change') : t('map.choose')}
       </button>
-      {open && (
+      {notice && <p className="hint small map-off">{notice}</p>}
+      {key && (
         <MapScreen
-          apiKey={config.data.js_api_key}
+          apiKey={key}
           start={start ?? null}
-          onClose={() => setOpen(false)}
+          onClose={() => setKey(null)}
           onFail={() => {
-            setOpen(false);
+            setKey(null);
             // the script did not load (network, key): no button until the config is asked again
-            client.setQueryData<MapConfig>(['map-config'], { available: false, reason: null, js_api_key: null });
+            off();
           }}
           onConfirm={(p) => {
-            setOpen(false);
+            setKey(null);
             track('map_confirm', { place });
             track('map_district_auto', { matched: !!p.city_id });
             onPick(p);
@@ -216,7 +230,7 @@ export function MapScreen({
           <PinIcon width={40} height={40} />
         </div>
         {!ready && <div className="map-loading">{t('common.loading')}</div>}
-        {/* on the map, above the panel: the Yandex logo and copyrights stay visible in the left corner */}
+        {/* on the map, top right: the Yandex logo and copyrights at the bottom stay visible */}
         <button type="button" className="map-locate" disabled={!ready || locating} onClick={() => void locate()}>
           <LocateIcon width={18} height={18} aria-hidden /> {locating ? t('map.locating') : t('map.locate')}
         </button>
