@@ -1,4 +1,4 @@
-import { DEFAULT_TEMPLATES, mergeTemplates, setKeyOf, tashkentDayStart } from './compat';
+import { DEFAULT_TEMPLATES, answerIn, mergeTemplates, setKeyOf, tashkentDayStart } from './compat';
 import { compatButtons } from '../notifications/notification-worker';
 
 describe('3.4 compatibility rules', () => {
@@ -21,6 +21,15 @@ describe('3.4 compatibility rules', () => {
     expect(t.compatible.uz).toBe(DEFAULT_TEMPLATES.compatible.uz);
     expect(t.consult).toEqual(DEFAULT_TEMPLATES.consult);
     expect(mergeTemplates(null)).toEqual(DEFAULT_TEMPLATES);
+  });
+
+  it('a template answer follows the customer language; an own text stays', () => {
+    const t = mergeTemplates({ spread: { ru: 'Новый RU', uz: 'Yangi UZ' } });
+    expect(answerIn(DEFAULT_TEMPLATES.compatible.ru, 'compatible', 'ru', 'uz', t)).toBe(DEFAULT_TEMPLATES.compatible.uz);
+    expect(answerIn('Новый RU', 'spread', 'ru', 'uz', t)).toBe('Yangi UZ');
+    expect(answerIn(DEFAULT_TEMPLATES.spread.ru, 'spread', 'ru', 'uz', t)).toBe(DEFAULT_TEMPLATES.spread.uz);
+    expect(answerIn('Магний вечером', 'consult', 'ru', 'uz', t)).toBe('Магний вечером');
+    expect(answerIn('Любой', 'consult', 'uz', 'uz', t)).toBe('Любой');
   });
 
   it('bot buttons fit Telegram callback data (64 bytes)', () => {

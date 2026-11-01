@@ -91,6 +91,9 @@ export interface TemplatePayload {
   comment?: string | null;
   verdict?: Verdict;
   answer?: string;
+  /** 3.4: a template answer in both languages — the centre shows the one the customer reads now */
+  answer_ru?: string;
+  answer_uz?: string;
   /** 3.4: Telegram's id of the sent staff message — its buttons are removed once somebody answers */
   tg_message_id?: number;
 }
@@ -371,7 +374,7 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
   if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
   if (template === 'compat.answered') {
     const label = payload.verdict ? VERDICT_LABELS[payload.verdict][lang] : '';
-    return { title: lang === 'uz' ? 'Moslikni tekshirish' : 'Проверка совместимости', body: [label, payload.answer].filter(Boolean).join('. ') };
+    return { title: lang === 'uz' ? 'Moslikni tekshirish' : 'Проверка совместимости', body: [label, (lang === 'uz' ? payload.answer_uz : payload.answer_ru) || payload.answer].filter(Boolean).join('. ') };
   }
   return { title: lang === 'uz' ? `№${payload.order_number} buyurtma` : `Заказ №${payload.order_number}`, body: line ?? renderNotification(template, { ...payload, lang }) };
 }

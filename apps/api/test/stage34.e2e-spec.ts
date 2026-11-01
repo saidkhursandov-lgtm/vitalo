@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { DEFAULT_TEMPLATES } from '../src/compat/compat';
 import request from 'supertest';
 import { CompatService } from '../src/compat/compat.service';
 import { NotificationWorker } from '../src/notifications/notification-worker';
@@ -179,6 +180,36 @@ describe('Stage 3.4 compatibility check (e2e)', () => {
     const id = (await ask(c.token).expect(200)).body.request.id;
     await botAnswer(ADMIN_TG, id, 'k', 'Магний лучше вечером, а железо утром.').expect(200);
     expect((await state(c.token)).request).toMatchObject({ verdict: 'consult', text: 'Магний лучше вечером, а железо утром.' });
+  });
+
+  it('the customer switched RU → UZ after asking: a template answer comes in UZ; switching back shows RU; own text stays', async () => {
+    const c = await customer('ru');
+    const [a, b] = [await createTestProduct(prisma, { price: 50_000, stock: 10 }), await createTestProduct(prisma, { price: 60_000, stock: 10 })];
+    await add(c.token, a.id);
+    await add(c.token, b.id);
+    const id = (await ask(c.token).expect(200)).body.request.id;
+    await prisma.users.update({ where: { id: c.user.id }, data: { language: 'uz' } });
+    await botAnswer(SPECIALIST_TG, id, 'c').expect(200);
+    expect((await state(c.token)).request.text).toBe(DEFAULT_TEMPLATES.compatible.uz);
+    expect((await prisma.compat_requests.findUniqueOrThrow({ where: { id } })).lang).toBe('uz');
+
+    await drain();
+    const toCustomer = fake.sent.filter((m) => m.chatId === BigInt(c.telegram)).pop()!;
+    expect(toCustomer.text).toContain(DEFAULT_TEMPLATES.compatible.uz);
+
+    await prisma.users.update({ where: { id: c.user.id }, data: { language: 'ru' } });
+    expect((await state(c.token)).request.text).toBe(DEFAULT_TEMPLATES.compatible.ru);
+    const centre = (await http().get('/api/notifications?lang=ru').set(bearer(c.token)).expect(200)).body;
+    expect(centre.items.find((i: { template: string }) => i.template === 'compat.answered').body).toContain(DEFAULT_TEMPLATES.compatible.ru);
+
+    // own text: written for the language of the request, never swapped
+    const d = await customer('ru');
+    await add(d.token, a.id);
+    await add(d.token, b.id);
+    const id2 = (await ask(d.token).expect(200)).body.request.id;
+    await prisma.users.update({ where: { id: d.user.id }, data: { language: 'uz' } });
+    await botAnswer(ADMIN_TG, id2, 'k', 'Магний вечером.').expect(200);
+    expect((await state(d.token)).request.text).toBe('Магний вечером.');
   });
 
   it('a reusable answer is given at once for the same set in any order and quantity, same language, without a comment', async () => {

@@ -61,6 +61,17 @@ export function mergeTemplates(saved: unknown): CompatTemplates {
   return out;
 }
 
+/**
+ * A template answer in another language: the customer switched RU/UZ after the answer. Only a text equal to a template
+ * (current or default) is swapped; a specialist's own text stays as written.
+ */
+export function answerIn(text: string | null, verdict: Verdict | null, from: Lang, to: Lang, templates: CompatTemplates): string | null {
+  if (!text || !verdict || from === to) return text;
+  if (text === templates[verdict][from]) return templates[verdict][to];
+  if (text === DEFAULT_TEMPLATES[verdict][from]) return DEFAULT_TEMPLATES[verdict][to];
+  return text;
+}
+
 const TASHKENT_OFFSET_MS = 5 * 3600_000;
 /** 00:00 Tashkent time of the day `at` falls on (UTC+5, no daylight saving). */
 export function tashkentDayStart(at: Date): Date {

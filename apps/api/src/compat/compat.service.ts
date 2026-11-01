@@ -39,6 +39,7 @@ import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '
 import { productTitle } from '../waitlist/waitlist';
 import {
   ANSWER_MAX,
+  answerIn,
   COMMENT_DAYS,
   COMMENT_MAX,
   DAILY_LIMIT,
@@ -111,13 +112,13 @@ export class CompatService {
     return this.prisma.compat_requests.count({ where: { user_id: userId, source: 'specialist', created_at: { gte: tashkentDayStart(now) } } });
   }
 
-  private requestView(r: compat_requests, setKey: string, lang: Lang) {
+  private requestView(r: compat_requests, setKey: string, lang: Lang, templates: CompatTemplates) {
     return {
       id: r.id,
       status: r.status as 'pending' | 'answered',
       source: r.source as 'specialist' | 'instant',
       verdict: (r.verdict as Verdict | null) ?? null,
-      text: r.answer_text,
+      text: answerIn(r.answer_text, r.verdict as Verdict | null, langOf(r.lang), lang, templates),
       created_at: r.created_at,
       answered_at: r.answered_at,
       /** the cart is not the one the answer was about any more — «Состав корзины изменился — проверьте снова» */
@@ -137,7 +138,7 @@ export class CompatService {
       eligible: items.length >= 2,
       products: items.map((i) => nameIn(i, lang)),
       left_today: Math.max(0, DAILY_LIMIT - (await this.sentToday(userId, now))),
-      request: latest ? this.requestView(latest, setKey, lang) : null,
+      request: latest ? this.requestView(latest, setKey, lang, await this.templates()) : null,
     };
   }
 
@@ -217,13 +218,19 @@ export class CompatService {
     if (req.status === 'closed') return { result: 'closed' };
     if (req.status === 'answered') return { result: 'already', verdict: req.verdict as Verdict, by: req.answerer?.name ?? null };
 
-    const lang = langOf(req.lang);
-    const text = (input.text?.trim() || (await this.templates())[input.verdict][lang]).slice(0, ANSWER_MAX);
+    // the customer may have switched RU/UZ since the request: a template answer goes in the language they use now;
+    // an own text stays in the language it was written for (the request's)
+    const lang = langOf(req.user.language);
+    const own = input.text?.trim();
+    const templates = await this.templates();
+    const text = (own || templates[input.verdict][lang]).slice(0, ANSWER_MAX);
+    const textLang = own ? langOf(req.lang) : lang;
+    const both = own ? {} : { answer_ru: templates[input.verdict].ru, answer_uz: templates[input.verdict].uz };
     const done = await this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.compat_requests.updateMany({ where: { id, status: 'pending' }, data: { status: 'answered', verdict: input.verdict, answer_text: text, answered_by: staff.id, answered_at: now } });
+      const claimed = await tx.compat_requests.updateMany({ where: { id, status: 'pending' }, data: { status: 'answered', lang: textLang, verdict: input.verdict, answer_text: text, answered_by: staff.id, answered_at: now } });
       if (!claimed.count) return false;
       if (input.reuse) {
-        const saved = await this.saveAnswer(tx, staff.id, { ...req, verdict: input.verdict, answer_text: text });
+        const saved = await this.saveAnswer(tx, staff.id, { ...req, lang: textLang, verdict: input.verdict, answer_text: text });
         await tx.compat_requests.update({ where: { id }, data: { saved_answer_id: saved.id } });
       }
       await this.notifications.toCustomer(tx, {
@@ -231,7 +238,7 @@ export class CompatService {
         chatId: req.user.telegram_user_id,
         category: 'compat',
         template: 'compat.answered',
-        payload: { order_number: '', lang, compat_id: id, verdict: input.verdict, answer: text, open_path: '/cart', open_button: 'cart' },
+        payload: { order_number: '', lang, compat_id: id, verdict: input.verdict, answer: text, ...both, open_path: '/cart', open_button: 'cart' },
         dedupKey: `compat:${id}:answered`,
       });
       // the customer's comment is never copied into the audit log (D-40)
