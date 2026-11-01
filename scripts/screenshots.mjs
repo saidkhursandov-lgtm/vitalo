@@ -5,6 +5,9 @@
 //              "mock": { "match": "/api/orders/<id>", "patch": { … } } }]
 // mock: for this shot only, the JSON answer of a request whose URL contains "match" gets the fields of "patch" on top
 //       (to show a state without changing the database, e.g. a paid order); the shot's file name should say so
+// mock.exact: the URL must end with "match" (not only contain it)
+// mock.patch may be an array: the whole answer is replaced (lists such as /api/staff/promo-codes)
+// js: a script run after click/type (e.g. open a block and press a button); "file" may be omitted for a setup step
 // scrollOffset: after scrollTo, scroll back up this many px (the fixed top bar would cover the element otherwise)
 // Uses headless Chrome over the DevTools protocol; nothing is installed. Signs in with the dev login (test users only).
 import { spawn } from 'node:child_process';
@@ -63,10 +66,10 @@ const evaluate = async (expression) => (await send('Runtime.evaluate', { express
 
 async function onPaused(p) {
   try {
-    if (mock && p.request.url.includes(mock.match) && p.responseStatusCode === 200) {
+    if (mock && (mock.exact ? p.request.url.endsWith(mock.match) : p.request.url.includes(mock.match)) && p.responseStatusCode === 200) {
       const { body, base64Encoded } = await send('Fetch.getResponseBody', { requestId: p.requestId });
       const json = JSON.parse(base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body);
-      const out = Buffer.from(JSON.stringify({ ...json, ...mock.patch }), 'utf8').toString('base64');
+      const out = Buffer.from(JSON.stringify(Array.isArray(mock.patch) ? mock.patch : { ...json, ...mock.patch }), 'utf8').toString('base64');
       await send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 200, responseHeaders: p.responseHeaders, body: out });
       return;
     }
@@ -106,6 +109,8 @@ for (const shot of plan) {
   if (shot.click) { await evaluate(`(() => { const b=[...document.querySelectorAll('${shot.click[0]}')].find(x=>x.textContent.includes(${JSON.stringify(shot.click[1])})); b && b.click(); })()`); await sleep(1000); }
   // type: fills a React input (native setter + input event), e.g. the search field of a sheet
   if (shot.type) { await evaluate(`(() => { const el=document.querySelector(${JSON.stringify(shot.type[0])}); if(!el) return; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el, ${JSON.stringify(shot.type[1])}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`); await sleep(800); }
+  if (shot.js) { await evaluate(shot.js); await sleep(shot.jsWait ?? 1500); }
+  if (!shot.file) continue;
   if (shot.scrollTo) await evaluate(`document.querySelector(${JSON.stringify(shot.scrollTo)})?.scrollIntoView({block:'start'})`);
   if (shot.scrollOffset) await evaluate(`window.scrollBy(0, -${Number(shot.scrollOffset)})`);
   await sleep(shot.wait ?? 800);

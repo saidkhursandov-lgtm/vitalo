@@ -393,3 +393,8 @@ textarea { resize: vertical; }
 .picker-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .picker-chips .id-chip { border: 0; cursor: pointer; font-size: 13px; }
 .picker input[type='search'] { width: 100%; margin-bottom: 4px; }
+.alert.promo-margin { display: block; }
+.promo-margin ul { margin: 6px 0 0; padding-left: 20px; }
+.promo-cond { min-width: 160px; }
+.promo-code-btn { border: 1px solid var(--border-strong); cursor: pointer; color: var(--primary); min-height: 32px; }
+.nowrap { white-space: nowrap; }

@@ -54,3 +54,11 @@ describe('3.3 Промокоды', () => {
     expect(Object.values(STATE).map((s) => s[0])).toEqual(['Действует', 'Запланирован', 'Закончился', 'Лимит исчерпан', 'Выключен']);
   });
 });
+
+describe('3.3 dates in the table', () => {
+  it('the year once when both days are in one year', async () => {
+    const { datesLabel } = await import('./pages/PromoCodes');
+    expect(datesLabel(base)).toBe('01.11 — 30.11.2026');
+    expect(datesLabel({ start_at: '2026-12-20T00:00:00+05:00', end_at: '2027-01-10T23:59:59+05:00' })).toBe('20.12.2026 — 10.01.2027');
+  });
+});

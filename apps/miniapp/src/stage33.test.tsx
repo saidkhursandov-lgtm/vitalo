@@ -22,6 +22,9 @@ const applied: PromoView = {
   message_uz: 'VITALO10 promokodi qo‘llandi (−20 000 so‘m)',
 };
 
+/** The applied line keeps sums on one line with non-breaking spaces. */
+const plainStatus = () => screen.getByRole('status').textContent?.replace(/ /g, ' ');
+
 let events: { event: string; props?: Record<string, unknown> }[];
 beforeEach(() => {
   events = [];
@@ -81,8 +84,9 @@ describe('3.3 «У меня есть промокод»', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(screen.getByRole('status').textContent).toContain('Промокод VITALO10 применён (−20 000 сум)');
-    expect(screen.getByRole('status').textContent).toContain('Скидка 10% на первый заказ');
+    expect(screen.getByRole('status').textContent).toContain('Промокод VITALO10 применён (−20 000 сум)'); // never breaks inside the sum
+    expect(plainStatus()).toContain('Промокод VITALO10 применён (−20 000 сум)');
+    expect(plainStatus()).toContain('Скидка 10% на первый заказ');
     fireEvent.click(screen.getByRole('button', { name: 'Убрать промокод' }));
     await waitFor(() => expect(onRemove).toHaveBeenCalled());
     await waitFor(() => expect(events).toContainEqual({ event: 'promo_remove', props: { code: 'VITALO10', place: 'checkout' } }));
@@ -93,8 +97,8 @@ describe('3.3 «У меня есть промокод»', () => {
     expect(screen.getByRole('button', { name: /Promokodim bor/ })).toBeTruthy();
     cleanup();
     show('uz', <PromoBox applied={{ ...applied, capped: true }} place="cart" onApply={vi.fn()} onRemove={vi.fn()} />);
-    expect(screen.getByRole('status').textContent).toContain('VITALO10 promokodi qo‘llandi (−20 000 so‘m)');
-    expect(screen.getByRole('status').textContent).toContain(translate('uz', 'promo.capped'));
+    expect(plainStatus()).toContain('VITALO10 promokodi qo‘llandi (−20 000 so‘m)');
+    expect(plainStatus()).toContain(translate('uz', 'promo.capped'));
   });
 });
 

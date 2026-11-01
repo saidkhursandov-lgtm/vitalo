@@ -11,6 +11,9 @@ export type PromoApplyResult = { ok: true; promo: PromoView } | { ok: false; rea
  * «Промокод VITALO10 применён (−20 000 сум)» with [✕]. The server checks the code and computes the discount; this block
  * only shows the answer. Events: promo_apply_success, promo_apply_fail (with the reason), promo_remove.
  */
+/** «−36 900 сум» never breaks across lines: non-breaking spaces inside the sum and before the currency. */
+export const keepSums = (text: string) => text.replace(/(\d) (?=\d{3}\b)/g, '$1 ').replace(/ (сум|so‘m)/g, ' $1');
+
 export function PromoBox({ applied, place, onApply, onRemove }: {
   applied: PromoView | null | undefined;
   place: 'cart' | 'checkout';
@@ -61,7 +64,7 @@ export function PromoBox({ applied, place, onApply, onRemove }: {
     return (
       <div className="promo-applied" role="status">
         <div className="promo-applied-text">
-          <strong>{lang === 'uz' ? applied.message_uz : applied.message_ru}</strong>
+          <strong>{keepSums(lang === 'uz' ? applied.message_uz : applied.message_ru)}</strong>
           {description && <span className="small block">{description}</span>}
           {applied.capped && <span className="small block">{t('promo.capped')}</span>}
         </div>

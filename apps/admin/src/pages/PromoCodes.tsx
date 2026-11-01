@@ -73,6 +73,12 @@ export function conditionsLabel(p: PromoCode): string {
   return parts.join(' · ');
 }
 
+/** «01.11 — 30.11.2026»; the year twice only when it differs. */
+export function datesLabel(p: Pick<PromoCode, 'start_at' | 'end_at'>): string {
+  const [a, b] = [ruDate(toDay(p.start_at)), ruDate(toDay(p.end_at))];
+  return a.slice(6) === b.slice(6) ? `${a.slice(0, 5)} — ${b}` : `${a} — ${b}`;
+}
+
 const REASON: Record<MarginItem['reason'], string> = {
   margin: 'скидку урежет защита маржи',
   no_cost: 'нет закупочной цены — скидка не больше лимита',
@@ -129,23 +135,26 @@ export function PromoCodes() {
                 <th>Даты</th>
                 <th>Статус</th>
                 <th className="num">Использован</th>
-                <th className="num">Сумма скидок</th>
-                <th className="num">Выручка</th>
-                <th />
+                <th className="num">Скидки / выручка</th>
               </tr>
             </thead>
             <tbody>
               {q.data.map((p) => (
                 <tr key={p.id} className={p.state === 'disabled' ? 'muted' : ''}>
                   <td>
-                    <span className="id-chip">{p.code}</span>
+                    {/* the code itself opens editing (keeps the table narrow enough for 1280 px) */}
+                    {manage ? (
+                      <button type="button" className="id-chip promo-code-btn" title="Изменить" onClick={() => setEditing(p)}>
+                        {p.code}
+                      </button>
+                    ) : (
+                      <span className="id-chip">{p.code}</span>
+                    )}
                     {p.description_ru && <div className="muted small">{p.description_ru}</div>}
                   </td>
                   <td>{typeLabel(p)}</td>
-                  <td className="small">{conditionsLabel(p)}</td>
-                  <td className="small">
-                    {ruDate(toDay(p.start_at))} — {ruDate(toDay(p.end_at))}
-                  </td>
+                  <td className="small promo-cond">{conditionsLabel(p)}</td>
+                  <td className="small nowrap">{datesLabel(p)}</td>
                   <td>
                     <Badge tone={STATE[p.state][1]}>{STATE[p.state][0]}</Badge>
                   </td>
@@ -153,14 +162,9 @@ export function PromoCodes() {
                     {p.used} / {p.global_limit ?? '∞'}
                     <div className="muted small">оплачено {p.used_paid}</div>
                   </td>
-                  <td className="num">{money(p.discount_total_uzs)}</td>
-                  <td className="num">{money(p.revenue_uzs)}</td>
-                  <td>
-                    {manage && (
-                      <button className="btn btn-ghost btn-sm" onClick={() => setEditing(p)}>
-                        Изменить
-                      </button>
-                    )}
+                  <td className="num nowrap">
+                    {p.discount_total_uzs ? `−${money(p.discount_total_uzs)}` : '—'}
+                    <div className="muted small">{money(p.revenue_uzs)}</div>
                   </td>
                 </tr>
               ))}
@@ -170,7 +174,7 @@ export function PromoCodes() {
       )}
       <p className="muted small">
         «Использован» — заказы, которые держат код (ещё не оплачены или оплачены); отменённый заказ возвращает активацию.
-        «Выручка» — сумма оплаченных заказов с кодом. Тестовые заказы не считаются.
+        «Скидки / выручка»: сумма скидок и, ниже, сумма оплаченных заказов с кодом. Тестовые заказы не считаются.
       </p>
       {editing && <PromoEditor key={editing === 'new' ? 'new' : editing.id} promo={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
       {guardOpen && guard.data && <GuardEditor guard={guard.data} onClose={() => setGuardOpen(false)} />}
@@ -323,7 +327,7 @@ function PromoEditor({ promo, onClose }: { promo: PromoCode | null; onClose: () 
       </div>
 
       {checked && (
-        <div className="alert alert-warn">
+        <div className="alert alert-warn promo-margin">
           <strong>Защита маржи: скидка будет меньше на {checked.items.length} из {checked.products_checked} товаров</strong>
           <ul className="small">
             {checked.items.slice(0, 15).map((i) => (
