@@ -7,8 +7,10 @@ import { SheetsProvider } from './components/Sheets';
 import { ToastProvider } from './components/Toast';
 import { I18nProvider } from './lib/i18n';
 import { resetQuickCart } from './lib/quick-cart';
-import type { Lang, ProductListItem } from './lib/types';
+import type { BankTransfer, Lang, ProductListItem } from './lib/types';
 import { UpsellStrip } from './screens/Cart';
+import { Payment } from './screens/Payment';
+import { OnlineSoon } from './components/OrderItems';
 
 // Telegram is reached only through the adapter
 const tg = vi.hoisted(() => ({ opened: [] as string[] }));
@@ -84,5 +86,59 @@ describe('3.5 upsell: an added card leaves the strip, the next product takes its
     expect(await screen.findByText('Товар a')).toBeTruthy();
     expect(screen.queryByText('Товар b')).toBeNull();
     expect(screen.getByText('Товар d')).toBeTruthy();
+  });
+});
+
+describe('3.5 card transfer on one screen', () => {
+  const base: BankTransfer = {
+    method: 'card_transfer', order_number: 'V-1001', status: 'awaiting_payment', payment_status: 'payment_pending', amount_uzs: 120_000, purpose: '',
+    requisites: null, card: { card_number: '8600000000000000' }, hint: { ru: 'Переведите', uz: 'O‘tkazing' }, pay_until: null,
+    customer_reported_paid_at: null, receipt: { bot_url: 'https://t.me/vitalo_store_bot?start=rc_1', last: null },
+  } as BankTransfer;
+
+  it('shows the three steps at once; one tap marks «оплатил(а)» and opens the bot (UZ)', async () => {
+    routes['/payment/bank-transfer/paid'] = () => ({ ok: true });
+    routes['/payment/bank-transfer'] = () => base;
+    show('uz', <Payment />, '/orders/o1/pay');
+    expect(await screen.findByText('Karta raqamidan nusxa oling')).toBeTruthy();
+    expect(screen.getByText(/o‘tkazing$/)).toBeTruthy();
+    expect(screen.getByText('Chek skrinshotini yuboring')).toBeTruthy();
+    expect(screen.getByText('8600 0000 0000 0000')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'To‘ladim — chekni yuborish' }));
+    expect(tg.opened).toEqual(['https://t.me/vitalo_store_bot?start=rc_1']);
+    await waitFor(() => expect(posted.some((p) => p.url.includes('/bank-transfer/paid'))).toBe(true));
+    // the same screen: no «Что дальше» page, the receipt can be sent again
+    expect(await screen.findByRole('button', { name: 'Chekni qayta yuborish' })).toBeTruthy();
+    expect(screen.getByText('Karta raqamidan nusxa oling')).toBeTruthy();
+  });
+
+  it('after «оплатил(а)» the button only reopens the bot, «оплатил» is not sent twice (RU)', async () => {
+    routes['/payment/bank-transfer'] = () => ({ ...base, customer_reported_paid_at: '2026-11-01T10:00:00Z' });
+    show('ru', <Payment />, '/orders/o1/pay');
+    expect(await screen.findByText('Спасибо! Ожидаем подтверждения оплаты менеджером')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Отправить чек ещё раз' }));
+    expect(tg.opened).toEqual(['https://t.me/vitalo_store_bot?start=rc_1']);
+    expect(posted).toEqual([]);
+  });
+
+  it('without the bot link the button is the plain «Я оплатил(а)»', async () => {
+    routes['/payment/bank-transfer/paid'] = () => ({ ok: true });
+    routes['/payment/bank-transfer'] = () => ({ ...base, receipt: { bot_url: null, last: null } });
+    show('ru', <Payment />, '/orders/o1/pay');
+    fireEvent.click(await screen.findByRole('button', { name: 'Я оплатил(а)' }));
+    await waitFor(() => expect(posted.some((p) => p.url.includes('/bank-transfer/paid'))).toBe(true));
+    expect(tg.opened).toEqual([]);
+  });
+});
+
+describe('3.5 Payme / Click / Uzum «Скоро подключим»', () => {
+  it('the label comes before the logos (RU / UZ)', () => {
+    const { container } = show('uz', <OnlineSoon systems={['payme', 'click', 'uzum']} />);
+    const block = container.querySelector('.online-soon')!;
+    expect(block.firstElementChild!.textContent).toBe('Tez orada ulanadi');
+    cleanup();
+    show('ru', <OnlineSoon systems={['payme']} />);
+    expect(screen.getByText('Скоро подключим')).toBeTruthy();
   });
 });

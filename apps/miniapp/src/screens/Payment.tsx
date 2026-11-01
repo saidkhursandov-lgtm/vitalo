@@ -7,10 +7,10 @@ import { api, ApiError, isNetworkError } from '../lib/api';
 import { money, orderNo } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
 import { useBankTransfer, useShopTexts } from '../lib/queries';
-import { copyText, daysText, openSupport, paymentCheckWhen } from '../lib/shop';
+import { copyText, openSupport, paymentCheckWhen } from '../lib/shop';
 import { SupportButton } from '../components/Support';
 import { PayBy } from '../components/PayBy';
-import type { BankTransfer, DeliveryEta, Lang } from '../lib/types';
+import type { Lang } from '../lib/types';
 import { haptic } from '../lib/telegram';
 
 /** "8600123456789012" -> "8600 1234 5678 9012" */
@@ -49,81 +49,26 @@ const REASON_UZ: Record<string, string> = {
 };
 export const reasonText = (reason: string | null, lang: Lang) => (reason ? (lang === 'uz' && REASON_UZ[reason]) || reason : '—');
 
-/**
- * 3.1: «Отправить скриншот чека в бот» — opens the shop bot with this order; the bot takes a photo or a PDF and sends
- * it to the managers. Shown for a card transfer only, when the server knows the bot (it gives the link).
- */
-function ReceiptButton({ receipt }: { receipt: BankTransfer['receipt'] }) {
+/** When the managers check the transfer (daily hours from the settings), said after «Я оплатил(а)». */
+function CheckWhen() {
   const { t } = useI18n();
-  if (!receipt?.bot_url) return null;
-  return (
-    <section className="card receipt-card">
-      {receipt.last?.status === 'pending' && <p className="receipt-sent">{t('pay.receiptSent')}</p>}
-      <button type="button" className="btn btn-block receipt-btn" onClick={() => openSupport(receipt.bot_url)}>
-        <ReceiptIcon width={20} height={20} aria-hidden />
-        <span>{t('pay.receiptButton')}</span>
-      </button>
-      <p className="hint small">{t('pay.receiptHint')}</p>
-    </section>
-  );
-}
-
-/**
- * After "Я оплатил(а)": what happens next — payment check (with the daily hours from the settings),
- * picking, courier, delivery term — and the support / copy number / my orders buttons (A5).
- */
-function NextSteps({ orderNumber, eta, receipt }: { orderNumber: string; eta?: DeliveryEta | null; receipt?: BankTransfer['receipt'] }) {
-  const { t, lang } = useI18n();
   const shop = useShopTexts();
-  const [copied, setCopied] = useState(false);
   const hours = shop.data?.payment_check_hours ?? { from: '08:00', to: '22:00' };
   const when = paymentCheckWhen(hours);
-  const term = daysText(eta?.min_days, eta?.max_days, shop.data?.delivery_days_label, lang);
-  const steps = [
-    when === 'now' ? t('pay.next.check', hours) : t(when === 'today' ? 'pay.next.checkToday' : 'pay.next.checkTomorrow', hours),
-    t('pay.next.pick'),
-    t('pay.next.courier'),
-    term ? t('pay.next.delivery', { days: term }) : t('pay.next.deliveryNoTerm'),
-  ];
   return (
-    <>
-      <div className="notice notice-ok">{t('pay.waiting')}</div>
-      <section className="card">
-        <h2>{t('pay.next.title')}</h2>
-        <ol className="steps">
-          {steps.map((s, i) => (
-            <li key={i} className={i === 0 ? 'is-current' : ''}>
-              <span className="step-num" aria-hidden>
-                {i + 1}
-              </span>
-              <span>{s}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
-      <ReceiptButton receipt={receipt} />
-      <SupportButton className={receipt?.bot_url ? 'btn btn-secondary btn-block' : 'btn btn-block'} />
-      <button
-        type="button"
-        className="btn btn-secondary btn-block"
-        onClick={() =>
-          void copyText(orderNumber).then((ok) => {
-            if (!ok) return;
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          })
-        }
-      >
-        <CopyIcon width={18} height={18} /> {copied ? t('pay.copied') : t('pay.copyNumber')}
-      </button>
-      <Link to="/orders" className="btn btn-secondary btn-block">
-        {t('pay.toOrders')}
-      </Link>
-    </>
+    <div className="notice notice-ok">
+      <p>{t('pay.waiting')}</p>
+      <p className="small">{when === 'now' ? t('pay.next.check', hours) : t(when === 'today' ? 'pay.next.checkToday' : 'pay.next.checkTomorrow', hours)}</p>
+    </div>
   );
 }
 
-/** Manual transfer instruction (card or bank requisites, from admin settings) + "Я оплатил(а)". */
+/**
+ * Manual transfer on one screen (3.5): the three steps — copy the card number, transfer the sum, send the receipt — and
+ * one main button «Я оплатил(а) — отправить чек» that marks the order as paid and opens the shop bot with this order for
+ * the receipt (3.1). After that the screen stays the same: «Проверяем оплату», the receipt state and «Отправить чек ещё
+ * раз»; there is no second screen any more. Bank requisites (an old order) keep the plain rows and «Я оплатил(а)».
+ */
 export function Payment() {
   const { id = '' } = useParams();
   const { t, lang } = useI18n();
@@ -146,19 +91,24 @@ export function Payment() {
   const paid = d.payment_status === 'payment_success';
   const cancelled = d.status === 'cancelled';
   const reported = !!d.customer_reported_paid_at || reportPaid.isSuccess;
-  const rows: [MessageKey, string, string?][] =
-    d.method === 'card_transfer' && d.card
-      ? [['pay.cardNumber', prettyCard(d.card.card_number), d.card.card_number]] // D-04: never the card holder's name
-      : d.requisites
-        ? [
-            ['pay.recipient', d.requisites.recipient],
-            ['pay.bank', d.requisites.bank_name],
-            ['pay.account', d.requisites.account],
-            ['pay.mfo', d.requisites.mfo],
-            ['pay.inn', d.requisites.inn],
-            ['pay.purpose', d.purpose],
-          ]
-        : [];
+  const card = d.method === 'card_transfer' && d.card ? d.card : null;
+  const botUrl = card ? d.receipt?.bot_url : null;
+  const lastReceipt = d.receipt?.last;
+  const rows: [MessageKey, string][] = d.requisites
+    ? [
+        ['pay.recipient', d.requisites.recipient],
+        ['pay.bank', d.requisites.bank_name],
+        ['pay.account', d.requisites.account],
+        ['pay.mfo', d.requisites.mfo],
+        ['pay.inn', d.requisites.inn],
+        ['pay.purpose', d.purpose],
+      ]
+    : [];
+  // The tap opens the bot right away (Telegram allows it only inside the tap), then the server notes «оплатил(а)»
+  const payAndSend = () => {
+    if (botUrl) openSupport(botUrl);
+    if (!reported) reportPaid.mutate();
+  };
 
   return (
     <div className="page">
@@ -168,7 +118,6 @@ export function Payment() {
       <section className="card amount-card">
         <div className="hint small">{t('pay.amount')}</div>
         <div className="amount">{money(d.amount_uzs, lang)}</div>
-        
       </section>
 
       {!paid && !cancelled && !reported && d.pay_until && <PayBy until={d.pay_until} />}
@@ -177,24 +126,48 @@ export function Payment() {
         <div className="notice notice-ok">{t('pay.paid')}</div>
       ) : cancelled ? (
         <div className="notice notice-error">{t('pay.cancelled')}</div>
-      ) : reported ? (
-        <NextSteps orderNumber={d.order_number} eta={d.delivery_eta} receipt={d.receipt} />
       ) : (
         <>
-          {d.receipt?.last?.status === 'rejected' && (
+          {reported && <CheckWhen />}
+          {lastReceipt?.status === 'rejected' && (
             <div className="notice notice-error" role="alert">
-              {t('pay.receiptRejected', { reason: reasonText(d.receipt.last.reject_reason, lang) })}
+              {t('pay.receiptRejected', { reason: reasonText(lastReceipt.reject_reason, lang) })}
             </div>
           )}
-          <section className="card">
-            {rows.map(([label, value, copy]) => (
-              <CopyRow key={label} label={t(label)} value={value} copyValue={copy} />
-            ))}
-          </section>
-          {d.method === 'card_transfer' && <p className="hint small">{t('pay.tapToCopy')}</p>}
-          <p className="notice notice-info">{lang === 'uz' ? d.hint.uz : d.hint.ru}</p>
+          {reported && lastReceipt?.status === 'pending' && <p className="receipt-sent">{t('pay.receiptSent')}</p>}
 
-          {(
+          {card ? (
+            <section className="card pay-steps">
+              <h2>{t('pay.steps.title')}</h2>
+              <ol className="steps">
+                <li className={reported ? '' : 'is-current'}>
+                  <span className="step-num" aria-hidden>1</span>
+                  <div className="pay-step-body">
+                    <span>{t('pay.step.copy')}</span>
+                    <CopyRow label={t('pay.cardNumber')} value={prettyCard(card.card_number)} copyValue={card.card_number} />
+                  </div>
+                </li>
+                <li>
+                  <span className="step-num" aria-hidden>2</span>
+                  <span>{t('pay.step.transfer', { sum: money(d.amount_uzs, lang) })}</span>
+                </li>
+                <li className={reported ? 'is-current' : ''}>
+                  <span className="step-num" aria-hidden>3</span>
+                  <span>{t('pay.step.receipt')}</span>
+                </li>
+              </ol>
+              {botUrl && <p className="hint small">{t('pay.receiptHint')}</p>}
+            </section>
+          ) : (
+            <section className="card">
+              {rows.map(([label, value]) => (
+                <CopyRow key={label} label={t(label)} value={value} />
+              ))}
+            </section>
+          )}
+          {!reported && <p className="notice notice-info">{lang === 'uz' ? d.hint.uz : d.hint.ru}</p>}
+
+          {(!reported || botUrl) && (
             <StickyAction>
               {reportPaid.isError && (
                 <p className="error-text" role="alert">
@@ -202,19 +175,19 @@ export function Payment() {
                   {isNetworkError(reportPaid.error) && ` ${t('pay.retrySafe')}`}
                 </p>
               )}
-              <button className="btn btn-block" disabled={reportPaid.isPending} onClick={() => reportPaid.mutate()}>
-                {t('pay.iPaid')}
+              <button className={`btn btn-block ${reported ? 'btn-secondary' : ''}`} disabled={reportPaid.isPending} onClick={payAndSend}>
+                {botUrl && <ReceiptIcon width={20} height={20} aria-hidden />}
+                <span>{t(reported ? 'pay.resendReceipt' : botUrl ? 'pay.paidAndSend' : 'pay.iPaid')}</span>
               </button>
             </StickyAction>
           )}
+          {reported && <SupportButton className="btn btn-secondary btn-block" />}
         </>
       )}
 
-      {!(reported && !paid && !cancelled) && (
-        <Link to={`/orders/${id}`} className="btn btn-secondary btn-block">
-          {t('pay.toOrder')}
-        </Link>
-      )}
+      <Link to={reported && !paid && !cancelled ? '/orders' : `/orders/${id}`} className="btn btn-secondary btn-block">
+        {t(reported && !paid && !cancelled ? 'pay.toOrders' : 'pay.toOrder')}
+      </Link>
     </div>
   );
 }

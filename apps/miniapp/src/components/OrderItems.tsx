@@ -103,6 +103,7 @@ export function OnlineSoon({ systems }: { systems: OnlineProvider[] }) {
   if (!systems.length) return null;
   return (
     <div className="online-soon">
+      <p className="online-soon-label">{t('pay.soonNote')}</p>
       <div className="online-soon-row">
         {systems.map((s) => (
           <button
@@ -119,7 +120,6 @@ export function OnlineSoon({ systems }: { systems: OnlineProvider[] }) {
           </button>
         ))}
       </div>
-      <p className="hint small">{t('pay.soonNote')}</p>
       {open && (
         <div className="sheet-backdrop" onClick={() => setOpen(null)}>
           <div className="sheet confirm-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>

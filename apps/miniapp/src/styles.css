@@ -483,10 +483,11 @@ details.card[open] summary { margin-bottom: 4px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* Payme / Click / Uzum «Скоро» (D-20) */
 .pay-hint { margin: 10px 0 0; }
-.online-soon { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.online-soon .hint { margin: 8px 0 0; }
+/* 3.5: a compact row ABOVE the working methods, with the label «Скоро подключим» (D-41: acquiring comes last) */
+.online-soon { margin: 0 0 12px; padding: 0 0 12px; border-bottom: 1px solid var(--border); }
+.online-soon-label { margin: 0 0 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .online-soon-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.online-soon-btn { display: flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.online-soon-btn { display: flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 4px 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; }
 .online-soon-btn:active { background: var(--surface-2); }
 .online-soon-btn img { max-width: 100%; height: 24px; object-fit: contain; filter: grayscale(0.15); }
 .online-soon-logo { display: block; height: 32px; margin: 8px auto 0; }
@@ -619,6 +620,11 @@ details.card[open] summary { margin-bottom: 4px; }
 }
 .steps li.is-current .step-num { background: var(--primary-soft); color: var(--primary-text); box-shadow: inset 0 0 0 1.5px var(--primary); }
 .steps li > span:last-child { padding-top: 3px; }
+/* 3.5: «Перевод на карту» on one screen — step 1 holds the card number with «Копировать» */
+.pay-steps h2 { margin-bottom: 4px; }
+.pay-step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 3px; }
+.pay-step-body .copy-row { padding: 0; border: 0; flex-wrap: wrap; justify-content: flex-start; gap: 8px 12px; }
+.pay-step-body .copy-value { white-space: nowrap; }
 .term { margin: 4px 0 8px; font-weight: 600; }
 
 button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border); font: inherit; color: inherit; text-align: left; cursor: pointer; }

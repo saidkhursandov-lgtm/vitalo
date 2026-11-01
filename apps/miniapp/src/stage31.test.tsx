@@ -131,7 +131,7 @@ describe('3.1 receipt in the bot from the payment screen', () => {
   it('after «Я оплатил(а)» the button opens the bot with this order (UZ text in one piece)', async () => {
     transfer = base;
     show('uz', <Payment />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Chek skrinshotini botga yuborish' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Chekni qayta yuborish' }));
     expect(tg.opened).toEqual(['https://t.me/vitalo_store_bot?start=rc_1']);
   });
 

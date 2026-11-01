@@ -319,6 +319,8 @@ export function Checkout() {
 
       <section className="card">
         <h2>{t('checkout.payment')}</h2>
+        {/* 3.5: Payme / Click / Uzum «Скоро подключим» above the working methods; the card transfer stays chosen */}
+        <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon')} />
         <label className={`pay-option ${method === 'card_transfer' ? 'is-on' : ''}`}>
           <input type="radio" name="payment" checked={method === 'card_transfer'} onChange={() => setMethod('card_transfer')} />
           <span>
@@ -350,7 +352,6 @@ export function Checkout() {
           </label>
         )}
         <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : 'checkout.bankTransferHint')}</p>
-        <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon')} />
       </section>
 
       <section className="card summary">

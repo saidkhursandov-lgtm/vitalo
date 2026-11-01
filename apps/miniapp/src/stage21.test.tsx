@@ -79,7 +79,7 @@ describe('Payme / Click / Uzum «Скоро» (D-20)', () => {
 
   it('logo buttons + disclaimer; a tap opens the sheet and counts payment_soon_click with the system', () => {
     wrap('ru', <OnlineSoon systems={['payme', 'click', 'uzum']} />);
-    expect(screen.getByText('Онлайн-оплата скоро заработает')).toBeTruthy();
+    expect(screen.getByText('Скоро подключим')).toBeTruthy();
     expect(screen.getAllByRole('button')).toHaveLength(3);
     fireEvent.click(screen.getByLabelText('Uzum · Скоро'));
     expect(analytics.track).toHaveBeenCalledWith('payment_soon_click', { system: 'uzum' });
@@ -90,7 +90,7 @@ describe('Payme / Click / Uzum «Скоро» (D-20)', () => {
 
   it('Uzbek texts; hidden systems are not shown at all', () => {
     wrap('uz', <OnlineSoon systems={['click']} />);
-    expect(screen.getByText('Onlayn to‘lov tez orada ishga tushadi')).toBeTruthy();
+    expect(screen.getByText('Tez orada ulanadi')).toBeTruthy();
     expect(screen.getAllByRole('button')).toHaveLength(1);
     fireEvent.click(screen.getByLabelText('Click · Tez orada'));
     expect(screen.getByRole('dialog').textContent).toContain('Click orqali to‘lov tez orada ishga tushadi');
