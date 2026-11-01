@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { money } from '../lib/format';
 import { useI18n } from '../lib/i18n';
@@ -32,6 +32,9 @@ const BUILT_IN_BANNERS: ShopBanner[] = [
   { id: 'delivery', kind: 'delivery', image_url: null, image_jpeg_url: null, link: null },
 ];
 
+/** 3.5: the home banner moves to the next slide every 3.5 s until the customer touches it. */
+export const HERO_AUTOPLAY_MS = 3500;
+
 /** Where a tap on the banner leads (null — nowhere). */
 export function bannerHref(link: ShopBanner['link']): string | null {
   if (!link) return null;
@@ -58,6 +61,7 @@ export function HomeCarousel({
   const { t, lang } = useI18n();
   const track = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
+  const [touched, setTouched] = useState(false);
   const slides = banners.flatMap((b) => {
     const href = bannerHref(b.link);
     if (b.kind === 'image') {
@@ -97,9 +101,28 @@ export function HomeCarousel({
     );
     return [{ key: b.id, className: 'hero-slide', href, body }];
   });
+  // 3.5: autoplay — stops for good once the banner is touched (finger, mouse, wheel), never with «reduce motion» in the
+  // system, waits while the app is in the background; after the last slide comes the first one again
+  const count = slides.length;
+  useEffect(() => {
+    if (touched || count < 2) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = setInterval(() => {
+      const el = track.current;
+      if (!el || document.hidden) return;
+      const width = Math.max(1, el.clientWidth);
+      const next = (Math.round(el.scrollLeft / width) + 1) % count;
+      if (el.scrollTo) el.scrollTo({ left: next * width, behavior: 'smooth' });
+      else el.scrollLeft = next * width;
+      setIndex(next);
+    }, HERO_AUTOPLAY_MS);
+    return () => clearInterval(timer);
+  }, [touched, count]);
+  const stop = () => setTouched(true);
+
   if (slides.length === 0) return null;
   return (
-    <section className="hero" aria-roledescription="carousel">
+    <section className="hero" aria-roledescription="carousel" onPointerDown={stop} onTouchStart={stop} onWheel={stop}>
       <div
         className="hero-track"
         ref={track}

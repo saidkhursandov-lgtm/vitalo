@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,8 @@ import type { BankTransfer, Lang, ProductListItem } from './lib/types';
 import { UpsellStrip } from './screens/Cart';
 import { Payment } from './screens/Payment';
 import { OnlineSoon } from './components/OrderItems';
+import { HERO_AUTOPLAY_MS, HomeCarousel } from './components/HomeBlocks';
+
 
 // Telegram is reached only through the adapter
 const tg = vi.hoisted(() => ({ opened: [] as string[] }));
@@ -140,5 +142,35 @@ describe('3.5 Payme / Click / Uzum «Скоро подключим»', () => {
     cleanup();
     show('ru', <OnlineSoon systems={['payme']} />);
     expect(screen.getByText('Скоро подключим')).toBeTruthy();
+  });
+});
+
+describe('3.5 home banner autoplay', () => {
+  const dot = (c: HTMLElement) => [...c.querySelectorAll('.hero-dots span')].findIndex((s) => s.classList.contains('is-on'));
+
+  it('moves to the next slide every 3.5 s; the dots follow', () => {
+    vi.useFakeTimers();
+    const { container } = show('ru', <HomeCarousel firstOrderFree freeFromUzs={null} />);
+    expect(dot(container)).toBe(0);
+    act(() => void vi.advanceTimersByTime(HERO_AUTOPLAY_MS - 100));
+    expect(dot(container)).toBe(0);
+    act(() => void vi.advanceTimersByTime(200));
+    expect(dot(container)).toBe(1);
+  });
+
+  it('stops for good once the customer touches the banner', () => {
+    vi.useFakeTimers();
+    const { container } = show('uz', <HomeCarousel firstOrderFree freeFromUzs={null} />);
+    fireEvent.pointerDown(container.querySelector('.hero')!);
+    act(() => void vi.advanceTimersByTime(HERO_AUTOPLAY_MS * 3));
+    expect(dot(container)).toBe(0);
+  });
+
+  it('no autoplay with «reduce motion» in the system', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduce'), addEventListener: () => undefined, removeEventListener: () => undefined }));
+    const { container } = show('ru', <HomeCarousel firstOrderFree freeFromUzs={null} />);
+    act(() => void vi.advanceTimersByTime(HERO_AUTOPLAY_MS * 2));
+    expect(dot(container)).toBe(0);
   });
 });
