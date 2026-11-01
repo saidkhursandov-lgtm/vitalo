@@ -3,6 +3,7 @@ import { track } from '../lib/analytics';
 import { shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useActiveOrder, useShopTexts } from '../lib/queries';
 import { daysText } from '../lib/shop';
+import { orderNo } from '../lib/format';
 import type { IntakeGuide } from '../lib/types';
 import { ChevronIcon, DoctorIcon, STATUS_ICONS } from './Icons';
 import { useAskSpecialist } from './Support';
@@ -32,7 +33,7 @@ export function ActiveOrderBar() {
         </span>
         <span className="active-order-text">
           <span className="active-order-title">
-            <strong>{t('activeOrder.label', { n: o.order_number })}</strong>
+            <strong>{t('activeOrder.label', { n: orderNo(o.order_number) })}</strong>
             {more > 0 && <span className="active-order-others">{t('activeOrder.others', { n: more })}</span>}
           </span>
           <span className="active-order-row">

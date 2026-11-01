@@ -239,6 +239,8 @@ p { margin: 0 0 8px; }
   padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border);
 }
 .sticky-action .btn-block { margin: 0; }
+/* 3.5: «Rasmiylashtirishga o‘tish · 1 299 000 so‘m» on 320 px: less side padding, and a second line instead of text cut at the edges */
+.sticky-action .btn { padding-left: 12px; padding-right: 12px; white-space: normal; }
 .app:not(.with-nav) .sticky-action { bottom: 0; padding-bottom: calc(12px + var(--safe-b)); }
 /* room for the fixed bar: its measured height (+ safe-area when there is no bottom menu under it) */
 html.has-action .content { padding-bottom: calc(var(--action-h, 72px) + 8px); }
@@ -860,7 +862,7 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 
 /* 2.2: three-layer catalog and the brand showcase */
 .catalog-root > .list-row { margin-bottom: 4px; }
-/* narrow phones: the icon goes above the name, so «Минералы» or «Kreatin va aminokislotalar» never break inside a word */
+/* narrow phones: the icon goes above the name, so «Минералы» or «Kreatin va aminolar» never break inside a word */
 @media (max-width: 374px) {
   .type-grid .type-card { flex-direction: column; align-items: flex-start; gap: 8px; }
   .type-grid .cat-name { overflow-wrap: normal; hyphens: auto; }
@@ -1164,6 +1166,14 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .centre-dot { flex: none; width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; background: var(--accent); }
 /* tabs: a scrolling strip so «Aksiya va bonuslar» stays on one line at 320 px; the count is an orange pill with a navy digit */
 .centre-tabs .chip { gap: 6px; }
+/* 3.5: all three tabs fit a 320 px screen in RU and UZ: they share the width, a long name («Aksiya va bonuslar») takes
+   two lines inside its tab instead of running off the screen */
+.centre-tabs { gap: 6px; }
+.centre-tabs::after { display: none; }
+.centre-tabs .chip {
+  flex: 1 1 auto; min-width: min-content; justify-content: center; padding: 4px 8px; font-size: 13px; line-height: 1.15;
+  white-space: normal; text-align: center; overflow-wrap: normal;
+}
 .centre-tab-count {
   display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
   border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700;

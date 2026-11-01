@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { CopyIcon, ReceiptIcon } from '../components/Icons';
 import { ErrorState, Loading, StickyAction } from '../components/ui';
 import { api, ApiError, isNetworkError } from '../lib/api';
-import { money } from '../lib/format';
+import { money, orderNo } from '../lib/format';
 import { errorText, useI18n, type MessageKey } from '../lib/i18n';
 import { useBankTransfer, useShopTexts } from '../lib/queries';
 import { copyText, daysText, openSupport, paymentCheckWhen } from '../lib/shop';
@@ -163,7 +163,7 @@ export function Payment() {
   return (
     <div className="page">
       <h1>{t(d.method === 'card_transfer' ? 'pay.card' : 'pay.bank')}</h1>
-      <p className="hint">{t('orders.number', { n: d.order_number })}</p>
+      <p className="hint">{t('orders.number', { n: orderNo(d.order_number) })}</p>
 
       <section className="card amount-card">
         <div className="hint small">{t('pay.amount')}</div>

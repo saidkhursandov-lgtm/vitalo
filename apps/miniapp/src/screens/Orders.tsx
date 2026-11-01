@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ChevronIcon, OrdersIcon, STATUS_ICONS } from '../components/Icons';
 import { EmptyState, ErrorState, Loading, StatusPill } from '../components/ui';
 import { api, ApiError } from '../lib/api';
-import { dateTime, money, nameOf, prettyPhone } from '../lib/format';
+import { dateTime, money, nameOf, orderNo, prettyPhone } from '../lib/format';
 import { errorText, statusKey, useI18n } from '../lib/i18n';
 import { useOrder, useOrders, useShopTexts } from '../lib/queries';
 import { daysText } from '../lib/shop';
@@ -25,7 +25,7 @@ export function OrderRow({ order }: { order: OrderListItem }) {
   return (
     <Link to={`/orders/${order.id}`} className="order-row">
       <div>
-        <strong>{t('orders.number', { n: order.order_number })}</strong>
+        <strong>{t('orders.number', { n: orderNo(order.order_number) })}</strong>
         <div className="hint small">
           {dateTime(order.created_at, lang)} · {t('orders.items', { n: order.items_count })}
         </div>
@@ -104,7 +104,7 @@ export function OrderDetail() {
 
   return (
     <div className="page">
-      <h1>{t('orders.number', { n: o.order_number })}</h1>
+      <h1>{t('orders.number', { n: orderNo(o.order_number) })}</h1>
       <div className="order-status-hero">
         <StatusPill status={o.status} reported={reported} large cod={cod} />
         <span className="hint small">{dateTime(o.created_at, lang)}</span>

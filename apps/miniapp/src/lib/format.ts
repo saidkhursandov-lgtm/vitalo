@@ -116,3 +116,6 @@ export function prettyPhone(phone: string): string {
   const m = phone.match(/^\+998(\d{2})(\d{3})(\d{2})(\d{2})$/);
   return m ? `+998 ${m[1]} ${m[2]} ${m[3]} ${m[4]}` : phone;
 }
+
+/** 3.5: an order number never breaks at its hyphens (VTL-20261101-0001): non-breaking hyphens, for display only. */
+export const orderNo = (n: string) => n.replace(/-/g, '\u2011');

@@ -24,7 +24,7 @@ beforeEach(() => {
     if (url.includes('/catalog/categories')) {
       return json({
         need: [cat('sleep', 'Сон и стресс', 'Uyqu va stress', 5), cat('energy', 'Энергия и мозг', 'Energiya va miya', 9)],
-        product_type: [cat('vitamins', 'Витамины', 'Vitaminlar', 17), cat('creatine-amino', 'Креатин и аминокислоты', 'Kreatin va aminokislotalar', 3)],
+        product_type: [cat('vitamins', 'Витамины', 'Vitaminlar', 17), cat('creatine-amino', 'Креатин и аминокислоты', 'Kreatin va aminolar', 3)],
       });
     }
     if (url.includes('/catalog/brands/showcase')) return json(BRANDS);
@@ -72,7 +72,7 @@ describe('catalog in three layers (2.2)', () => {
     show('uz', <Catalog />);
     expect(await screen.findByText('Ehtiyoj bo‘yicha')).toBeTruthy();
     expect(screen.getByText('Turi bo‘yicha')).toBeTruthy();
-    expect(screen.getByText('Kreatin va aminokislotalar')).toBeTruthy();
+    expect(screen.getByText('Kreatin va aminolar')).toBeTruthy();
     expect(await screen.findByText('Ishonchli brendlar')).toBeTruthy();
   });
 });

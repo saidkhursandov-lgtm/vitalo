@@ -83,7 +83,7 @@ describe('3.2 active order plaque', () => {
   it('number · status · term, «Подробнее», «+N» and «Оплатить / Отправить чек»; taps are reported', async () => {
     active = { order: order(), more: 2 };
     show('ru', <ActiveOrderBar />);
-    expect(await screen.findByText('Заказ №VTL-20261101-0001')).toBeTruthy();
+    expect(await screen.findByText('Заказ №VTL\u201120261101\u20110001')).toBeTruthy();
     expect(screen.getByText('+2')).toBeTruthy();
     await waitFor(() => expect(screen.getByText(/Ожидает оплаты · доставка 1–3 рабочих дней/)).toBeTruthy());
     fireEvent.click(screen.getByText('Оплатить / Отправить чек'));
@@ -94,7 +94,7 @@ describe('3.2 active order plaque', () => {
   it('cash on delivery: «Ожидает подтверждения», no pay button; Uzbek', async () => {
     active = { order: order({ status: 'new', payment_method: 'cod', can_pay: false }), more: 0 };
     show('uz', <ActiveOrderBar />);
-    expect(await screen.findByText('№VTL-20261101-0001 buyurtma')).toBeTruthy();
+    expect(await screen.findByText('№VTL\u201120261101\u20110001 buyurtma')).toBeTruthy();
     expect(screen.getByText(/Tasdiqlash kutilmoqda/)).toBeTruthy();
     expect(screen.queryByText('To‘lash / Chek yuborish')).toBeNull();
     expect(screen.queryByText(/^\+/)).toBeNull();

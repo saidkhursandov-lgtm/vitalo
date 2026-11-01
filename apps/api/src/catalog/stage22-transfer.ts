@@ -34,7 +34,7 @@ export const TYPE_TARGETS: TargetCategory[] = [
   { slug: 'minerals', ru: 'Минералы', uz: 'Minerallar' },
   { slug: 'omega', ru: 'Омега-3', uz: 'Omega-3' },
   { slug: 'collagen', ru: 'Коллаген', uz: 'Kollagen' },
-  { slug: 'creatine-amino', ru: 'Креатин и аминокислоты', uz: 'Kreatin va aminokislotalar' },
+  { slug: 'creatine-amino', ru: 'Креатин и аминокислоты', uz: 'Kreatin va aminolar' },
   { slug: 'protein', ru: 'Протеин и гейнеры', uz: 'Protein va geynerlar' },
   { slug: 'other', ru: 'Другие добавки', uz: 'Boshqa qo‘shimchalar' },
 ];
