@@ -32,6 +32,7 @@
 - Уведомления пишутся в таблицу `notifications` в той же транзакции, что и изменение заказа, и отправляются ботом
   каждые 3 секунды с повторами.
 - Уведомления и центр (3.2, миграция `20261102100000`, только добавляющая: 5 колонок в `notifications`, уникальный `dedup_key`): одно сообщение на каждый статус заказа, центр `/api/notifications` (вкладки «Заказы / Акции и бонусы / Сервисные»; одна карточка на заказ), `/api/orders/active` для плашки на главной. На сервере с 01.11.2026 (`fe09b28`).
+- Скидки и промокоды (3.3), модуль `apps/api/src/promo`: `pricing.ts` — чистые функции расчёта скидки и бесплатной доставки (без базы); `promo.service.ts` — `PromoCodesService` (проверка кода, резерв при заказе, возврат при отмене, общий лимит через блокировку строки акции). Итог считает сервер; в заказе хранится снимок расчёта `orders.pricing_json`, он не пересчитывается. Админка — `apps/api/src/staff/admin-promo-codes.ts`. Защита маржи — настройка `promo_guard` (таблица `settings`; по умолчанию минимальная наценка 10% и скидка до 20% без закупочной цены, D-39; меняет только админ). Миграция `20261103100000` (только добавляющая); на сервере — с выкладки 3.3 (пока нет).
 - Лист ожидания (2.4): задача раз в минуту проверяет товары с ожидающими покупателями; при появлении остатка бот пишет каждому один раз «снова в наличии» (запись помечается `notified_at`).
 - Фото товаров: на ноутбуке `apps/api/uploads/products/<id>/…`, на сервере `/var/lib/vitalo`; адрес `/uploads/...`.
 
@@ -43,12 +44,13 @@
 | Каталог | `products`, `brands`, `manufacturers`, `countries`, `forms`, `categories`, `product_categories`, `product_media`, `product_relations`, `product_sku_aliases` | товар → бренд, форма; короткие названия `short_name_ru/uz` (с 2.1, миграция `20261029200000`); поля карточки товара (2.3, миграция `20261030400000`, только добавляющая, на сервере с 31.10): форма вещества, число капсул/дней, Halal/VEGE, «Стандарт», доля выгоды над Маркетом, вердикт и памятка; товар ↔ категории; бренд — адрес (`slug`), логотип, страна, «Почему в VITALO» (2.2); скрытая категория → замена (`categories.merged_into_id`, 2.2) |
 | Склад | `warehouses`, `inventory`, `inventory_batches`, `inventory_movements`, `physical_units` (банки), `physical_unit_events` | остаток на товар и склад; доступно = факт − резерв |
 | Закупки | `suppliers`, `purchases`, `purchase_lines`, `receiving_sessions`, `receiving_session_lines`, `purchase_events` | закупка → строки → приёмка → банки |
-| Корзина и заказы | `carts`, `cart_items`, `orders`, `order_items`, `order_item_units`, `order_status_history`, `order_edit_log`, `shipments`, `cancel_requests`, `returns` | заказ → позиции → банки; история статусов |
+| Корзина и заказы | `carts`, `cart_items`, `orders`, `order_items`, `order_item_units`, `order_status_history`, `order_edit_log`, `shipments`, `cancel_requests`, `returns` | заказ → позиции → банки; история статусов; 3.3: `carts.promo_code`, `orders.promo_code`, `orders.pricing_json` (снимок расчёта скидки, миграция `20261103100000`) |
 | Оплата | `payment_methods` (`card_transfer`, `bank_transfer`, `cod`, …), `payments`, `payment_attempts`, `manual_payment_confirmations`, `payment_receipts` | платёж → заказ; ручное подтверждение менеджером; `payment_receipts` — чеки из бота (3.1, миграция `20261101100000`, только добавляющая; на `vitalo_test`, `vitalo_dev` и на сервере — с 31.10) |
 | Доставка | `regions`, `cities`, `delivery_tariffs` | тариф по городу, порог бесплатной доставки |
 | Маркетплейсы | `marketplace_orders`, `marketplace_order_lines`, `marketplace_order_units`, `marketplace_external_orders`, `yandex_sync_runs`, `ozon_accounts` | заказ Яндекса → строки → банки |
 | Финансы | `expenses`, `expense_categories`, `tax_payments`, `payroll_*`, `finance_reminders`, `sales_daily` | — |
 | Маркетинг и контент | `promotions`, `promo_codes`, `marketing_campaigns`, `content_blocks`, `home_banners`, `settings`, `analytics_events` | баннеры главной — `home_banners` (до 5, миграция `20261030100000`, применена на `vitalo_dev` и на сервере 29.10 23:45); настройки — пары ключ/значение в `settings`; манифест на главной — ключ `home_manifest` (2.4, без миграции; по умолчанию тексты из кода) |
+| Скидки и промокоды (3.3) | `promotions`, `promotion_targets`, `promotion_usages` | акция → цели (товар, категория, бренд: `promotion_targets.brand_id`); у `promotions` новые поля `description_ru/uz`, `first_order_only`, `created_at`, `updated_at`; тип `PromoType` получил значение `free_delivery`; `promotion_usages.order_id` уникален — одна активация на заказ; миграция `20261103100000` (только добавляющая) |
 | Лист ожидания | `product_waitlist` | товар и покупатель (уникально); `notified_at` — когда бот написал «снова в наличии» (2.4, миграция `20261031100000`, только добавляющая; на сервере с 31.10); `cancelled_at` — покупатель выключил колокольчик, запись не удаляется (патч 2.4, миграция `20261031200000`, только добавляющая; на сервере с 31.10) |
 | Сотрудники и аудит | `staff_users`, `staff_sessions`, `audit_logs`, `system_errors`, `legal_documents`, `legal_acceptances` | — |
 
@@ -58,7 +60,8 @@
 
 - Вход: `POST /auth/telegram`, `GET /auth/me`; сотрудники — `POST /staff/auth/telegram`.
 - Каталог: `/catalog/products`, `/catalog/products/:id`, `/catalog/search`, `/catalog/categories`, `/catalog/brands`, `/catalog/brands/showcase` (лента «Проверенные бренды», 2.2), `/catalog/brands/:slug` (страница бренда, 2.2).
-- Корзина и заказы: `/cart`, `/cart/upsell` (допродажа, 3.1), `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`. Настройка допродажи (админка): `GET/PUT /staff/settings/cart-upsell` (3.1).
+- Корзина и заказы: `/cart`, `/cart/upsell` (допродажа, 3.1), `POST /cart/promo` и `DELETE /cart/promo` (промокод: «Применить» и [✕], 3.3), `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`. Настройка допродажи (админка): `GET/PUT /staff/settings/cart-upsell` (3.1).
+- Промокоды (админка, 3.3): `/staff/promo-codes` — список, генерация кода, создание, `PUT /:id`, смена статуса, `POST margin-check` (проверка защиты маржи); настройка `promo_guard`: `GET/PUT /staff/promo-codes/settings`. Права: смотрит менеджер, меняют админ и маркетолог, защиту маржи — только админ.
 - Доставка: `/delivery/regions`, `/delivery/quote`.
 - Лист ожидания (2.4): покупатель — `GET /waitlist/ids`, `PUT /waitlist/:productId`; сотрудники — `/staff/waitlist`.
 - Админка: `/staff/...` (заказы, товары, склад, закупки, финансы, настройки, аналитика, сотрудники, аудит).
