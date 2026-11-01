@@ -38,7 +38,7 @@ describe('Telegram notifications (e2e)', () => {
   const http = () => request(app.getHttpServer());
 
   /** Logs a customer in with the given Telegram language and places a buy-now order. */
-  async function order(lang: 'ru' | 'uz' = 'ru') {
+  async function order(lang: 'ru' | 'uz' = 'ru', extra: object = {}) {
     const id = ++tg;
     const login = await http().post('/api/auth/telegram').send({ initData: makeInitData({ id, first_name: 'Notify', language_code: lang }) }).expect(200);
     const p = await createTestProduct(prisma, { price: 10_000, stock: 10 });
@@ -54,6 +54,7 @@ describe('Telegram notifications (e2e)', () => {
         ...addr.tashkent,
         address_text: 'ул. 1',
         payment_method: 'bank_transfer',
+        ...extra,
       })
       .expect(201);
     return { order: res.body, token: login.body.token as string, chatId: BigInt(id) };
@@ -97,6 +98,37 @@ describe('Telegram notifications (e2e)', () => {
       expect(chats).not.toContain(222_222_224n); // marketer
       expect(chats).not.toContain(970_999_001n); // blocked
       expect(rows.every((r) => r.kind === 'service' && r.staff_user_id)).toBe(true);
+    });
+
+    it('3.5: «Комментарий к заказу» reaches the admin order card and the staff message, line breaks and full length kept', async () => {
+      const comment = `Позвоните за час до доставки.
+Домофон 25, 3 этаж.
+Qo‘ng‘iroq qiling. ${'Длинный текст '.repeat(30)}`.slice(0, 500).trim();
+      const { order: o } = await order('uz', { customer_comment: `  ${comment}  ` });
+      const admin = await loginStaff(app, Number(ADMIN_TG));
+      const card = (await http().get(`/api/staff/orders/${o.id}`).set(bearer(admin)).expect(200)).body;
+      expect(card.customer_comment).toBe(comment);
+
+      await drain();
+      const toManager = fake.sent.find((m) => m.chatId === MANAGER_TG && m.text.includes(o.order_number))!;
+      expect(toManager.text).toContain(`
+💬 Комментарий клиента:
+${comment}`);
+      // the queued new-order rows (one per employee) keep the same text
+      const rows = await queued({ template: 'staff.new_order', payload: { path: ['order_number'], equals: o.order_number } });
+      expect(rows.every((r) => (r.payload as { comment?: string }).comment === comment)).toBe(true);
+    });
+
+    it('3.5: a comment longer than 500 characters is refused, no order is created', async () => {
+      const id = ++tg;
+      const login = await http().post('/api/auth/telegram').send({ initData: makeInitData({ id, first_name: 'Notify', language_code: 'ru' }) }).expect(200);
+      const p = await createTestProduct(prisma, { price: 10_000, stock: 10 });
+      await http()
+        .post('/api/orders')
+        .set(bearer(login.body.token))
+        .set('Idempotency-Key', randomUUID())
+        .send({ source: 'buy_now', buy_now: { product_id: p.id, qty: 1 }, recipient_name: 'Т', recipient_phone: '+998901112233', ...addr.tashkent, address_text: 'ул. 1', payment_method: 'bank_transfer', customer_comment: 'я'.repeat(501) })
+        .expect(400);
     });
 
     it('"Я оплатил" notifies admins and managers', async () => {

@@ -238,7 +238,7 @@ export function OrderDetail() {
             {o.customer_comment && (
               <>
                 <dt>Комментарий</dt>
-                <dd>{o.customer_comment}</dd>
+                <dd className="pre-line">{o.customer_comment}</dd>
               </>
             )}
             <dt>Клиент</dt>
@@ -502,7 +502,7 @@ function EditOrder({ order, onDone, onClose }: ModalProps) {
           <input value={f.address_text} onChange={(e) => setF({ ...f, address_text: e.target.value })} />
         </Field>
         <Field label="Комментарий клиента">
-          <input value={f.customer_comment} onChange={(e) => setF({ ...f, customer_comment: e.target.value })} />
+          <textarea rows={3} maxLength={500} value={f.customer_comment} onChange={(e) => setF({ ...f, customer_comment: e.target.value })} />
         </Field>
         <Field label="Причина изменения (обязательно, попадёт в журнал)">
           <input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />

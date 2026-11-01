@@ -189,6 +189,8 @@ export class NotificationsService {
           phone: order.recipient_phone,
           payment: order.payments[0]?.method.code,
           promo: promoOf(order),
+          // 3.5: «Комментарий к заказу» from the checkout — only in the new-order message
+          ...(template === 'staff.new_order' && order.customer_comment ? { comment: order.customer_comment } : {}),
           lang: 'ru',
         },
       })),

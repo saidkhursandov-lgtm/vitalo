@@ -87,7 +87,8 @@ export interface TemplatePayload {
   compat_id?: string;
   /** 3.4: the customer's language, shown to the specialist */
   client_lang?: Lang;
-  /** 3.4: the customer's comment (may hold health data — removed from the row after 90 days, D-40) */
+  /** 3.4: the customer's comment (may hold health data — removed from the row after 90 days, D-40);
+   *  3.5: in staff.new_order — «Комментарий к заказу» from the checkout */
   comment?: string | null;
   verdict?: Verdict;
   answer?: string;
@@ -157,6 +158,14 @@ function reasonLine(p: TemplatePayload, lang: Lang): string {
 const sum = (n: number | undefined, lang: Lang) => `${formatUzs(n ?? 0)} ${lang === 'uz' ? 'so‘m' : 'сум'}`;
 
 /** 3.3: a new line «Промокод VITALO10: −20 000 сум» / «…: доставка бесплатно»; empty without a code. */
+/** 3.5: the customer's comment from the checkout, line breaks kept (plain-text message, up to 500 characters). */
+export function commentLine(p: TemplatePayload, lang: Lang): string {
+  const text = p.comment?.trim();
+  return text ? `
+💬 ${lang === 'uz' ? 'Mijoz izohi' : 'Комментарий клиента'}:
+${text}` : '';
+}
+
 export function promoLine(p: TemplatePayload, lang: Lang): string {
   if (!p.promo) return '';
   const what = p.promo.free_delivery ? (lang === 'uz' ? 'yetkazib berish bepul' : 'доставка бесплатно') : `−${sum(p.promo.discount_uzs, lang)}`;
@@ -252,9 +261,9 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   // Staff messages: the admin panel is Russian-only, so are these.
   'staff.new_order': {
     ru: (p) =>
-      `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}${promoLine(p, 'ru')}` +
+      `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}${promoLine(p, 'ru')}${commentLine(p, 'ru')}` +
       (p.payment === 'cod' ? '\n💵 Оплата при получении (Ташкент). Ожидает подтверждения менеджером: позвоните клиенту и подтвердите заказ в админке.' : ''),
-    uz: (p) => `🆕 Yangi buyurtma ${p.order_number}: ${sum(p.total_uzs, 'uz')}\nMijoz: ${p.customer ?? '—'}, ${p.phone ?? '—'}`,
+    uz: (p) => `🆕 Yangi buyurtma ${p.order_number}: ${sum(p.total_uzs, 'uz')}\nMijoz: ${p.customer ?? '—'}, ${p.phone ?? '—'}${commentLine(p, 'uz')}`,
   },
   'staff.customer_paid': {
     ru: (p) => `💳 Клиент сообщил об оплате заказа ${p.order_number} на ${sum(p.total_uzs, 'ru')}.\nПроверьте поступление и подтвердите оплату в админке.`,

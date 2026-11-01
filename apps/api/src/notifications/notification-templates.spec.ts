@@ -29,6 +29,16 @@ describe('notification texts', () => {
     expect(renderNotification('staff.customer_paid', { order_number: 'VTL-7', total_uzs: 5000, lang: 'ru' })).toContain('на 5 000 сум');
   });
 
+  it('3.5: the new-order message carries the customer comment with its line breaks (RU / UZ)', () => {
+    const comment = 'Позвоните за час.\nДомофон 25, 3 этаж';
+    expect(renderNotification('staff.new_order', { order_number: 'VTL-7', total_uzs: 310000, customer: 'Тест', phone: '+998901234567', comment, lang: 'ru' })).toBe(
+      '🆕 Новый заказ VTL-7 на 310 000 сум\nКлиент: Тест, +998901234567\n💬 Комментарий клиента:\nПозвоните за час.\nДомофон 25, 3 этаж',
+    );
+    expect(renderNotification('staff.new_order', { order_number: 'VTL-7', total_uzs: 310000, comment: 'Qo‘ng‘iroq qiling', lang: 'uz' })).toContain('\n💬 Mijoz izohi:\nQo‘ng‘iroq qiling');
+    // no comment, or only spaces — no line at all
+    expect(renderNotification('staff.new_order', { order_number: 'VTL-7', total_uzs: 1, comment: '  ', lang: 'ru' })).not.toContain('Комментарий');
+  });
+
   it('every template has RU and UZ', () => {
     for (const t of ['order.paid', 'order.handed_to_delivery', 'order.in_transit', 'order.delivered', 'order.cancelled', 'staff.new_order', 'staff.customer_paid']) {
       expect(renderNotification(t, { order_number: 'X', lang: 'ru' })).toContain('X');
