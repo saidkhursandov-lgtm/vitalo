@@ -390,7 +390,9 @@ export function Checkout() {
               {promoNotice && <div className="notice notice-warn" role="alert">{promoNotice}</div>}
               <PromoBox applied={p.promo} place="checkout" onApply={applyPromo} onRemove={removePromo} />
               <OrderTotals
-                goods={p.totals.goods_total_uzs}
+                goods={p.totals.goods_list_total_uzs ?? p.totals.goods_total_uzs}
+                campaigns={p.campaigns}
+                saleHint={!!p.promo && p.items.some((i) => (i.campaign?.discount_pct ?? 0) > 15)}
                 discount={p.totals.discount_total_uzs}
                 promo={p.promo}
                 delivery={p.totals.delivery_cost_uzs}

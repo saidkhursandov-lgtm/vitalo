@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { money } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { openSupport } from '../lib/shop';
+import { track as trackEvent } from '../lib/analytics';
+import { CampaignSlideBody } from './Campaign';
 import type { HomeContent, Lang, LocalizedText, ShopBanner, ShopInfo } from '../lib/types';
 import { generalTerms } from './Delivery';
 import { BadgeIcon, DoctorIcon, ShieldIcon, StarIcon, SupportIcon, TRUST_ICONS } from './Icons';
@@ -40,6 +42,8 @@ export function bannerHref(link: ShopBanner['link']): string | null {
   if (!link) return null;
   if (link.type === 'product') return `/product/${link.value}`;
   if (link.type === 'category') return `/catalog/products?category=${encodeURIComponent(link.value)}`;
+  // 3.7: a sale slide opens all products of the sale
+  if (link.type === 'campaign') return `/campaign/${encodeURIComponent(link.value)}`;
   // 2.2: a brand banner opens the brand page (the server finds the brand by its name too)
   return `/brand/${encodeURIComponent(link.value)}`;
 }
@@ -64,6 +68,11 @@ export function HomeCarousel({
   const [touched, setTouched] = useState(false);
   const slides = banners.flatMap((b) => {
     const href = bannerHref(b.link);
+    if (b.kind === 'campaign') {
+      if (!b.campaign) return [];
+      const c = b.campaign;
+      return [{ key: b.id, className: `hero-slide sale-slide sale-slide-${c.skin}`, href: href ?? `/campaign/${c.slug}`, body: <CampaignSlideBody campaign={c} />, campaignId: c.id }];
+    }
     if (b.kind === 'image') {
       if (!b.image_url) return [];
       const picture = (
@@ -72,7 +81,7 @@ export function HomeCarousel({
           <img src={b.image_jpeg_url ?? b.image_url} alt="" width={1200} height={400} decoding="async" />
         </picture>
       );
-      return [{ key: b.id, className: 'hero-slide hero-image', href, body: picture }];
+      return [{ key: b.id, className: 'hero-slide hero-image', href, body: picture, campaignId: undefined as string | undefined }];
     }
     const text =
       b.kind === 'doctor'
@@ -99,7 +108,7 @@ export function HomeCarousel({
         <p>{text.sub}</p>
       </>
     );
-    return [{ key: b.id, className: 'hero-slide', href, body }];
+    return [{ key: b.id, className: 'hero-slide', href, body, campaignId: undefined as string | undefined }];
   });
   // 3.5: autoplay — stops for good once the banner is touched (finger, mouse, wheel), never with «reduce motion» in the
   // system, waits while the app is in the background; after the last slide comes the first one again
@@ -130,7 +139,7 @@ export function HomeCarousel({
       >
         {slides.map((s) =>
           s.href ? (
-            <Link key={s.key} to={s.href} className={s.className}>
+            <Link key={s.key} to={s.href} className={s.className} onClick={s.campaignId ? () => trackEvent('campaign_banner_click', { campaign_id: s.campaignId! }) : undefined}>
               {s.body}
             </Link>
           ) : (

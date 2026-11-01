@@ -66,6 +66,49 @@ export interface ProductListItem extends Named {
   /** Thumbnail with JPEG fallback and size (null for products without photos). */
   image?: { webp: string; jpeg: string | null; width: number | null; height: number | null } | null;
   in_stock: boolean;
+  /** 3.7: the product is in a running sale — price_uzs is the sale price, campaign.list_price_uzs the regular one */
+  campaign?: ShopCampaign | null;
+}
+
+/** 3.7: «Акции»: the skin draws the badge and the price colour; «none» — only the two prices. */
+export type CampaignSkin = 'none' | 'black_friday' | 'eleven_eleven' | 'sale';
+
+export interface ShopCampaign {
+  id: string;
+  slug: string;
+  skin: CampaignSkin;
+  title_ru: string;
+  title_uz: string | null;
+  discount_pct: number;
+  list_price_uzs: number;
+  /** null — a sale without an end date (no countdown) */
+  ends_at: string | null;
+}
+
+/** 3.7: a running sale for the home slide and the sale page. */
+export interface CampaignSummary {
+  id: string;
+  slug: string;
+  skin: CampaignSkin;
+  title_ru: string;
+  title_uz: string | null;
+  ends_at: string | null;
+  max_discount_pct: number;
+  products_count: number;
+}
+
+export interface CampaignPage {
+  campaign: CampaignSummary;
+  items: ProductListItem[];
+}
+
+/** 3.7: «Акция 11.11: −X сум» in the cart, checkout and order. */
+export interface CampaignLine {
+  promotion_id: string;
+  title_ru: string;
+  title_uz: string | null;
+  skin: CampaignSkin;
+  amount_uzs: number;
 }
 
 /** 2.2: a card in «Проверенные бренды». `name` is the brand as written on the products. */
@@ -249,6 +292,7 @@ export interface LegalStatus {
 
 export type CartWarning =
   | { code: 'price_changed'; product_id: string; old_price_uzs: number; new_price_uzs: number }
+  | { code: 'campaign_ended'; product_id: string; old_price_uzs: number; new_price_uzs: number; campaign_title_ru?: string | null; campaign_title_uz?: string | null }
   | { code: 'qty_reduced'; product_id: string; requested_qty: number; available_qty: number }
   | { code: 'out_of_stock'; product_id: string }
   | { code: 'promo_removed'; product_id?: undefined; promo_code: string; reason: string; message_ru: string; message_uz: string };
@@ -266,6 +310,9 @@ export interface CartLine extends Named {
   available_qty: number;
   unit_price_uzs: number;
   line_total_uzs: number;
+  /** 3.7: the regular price (equals unit_price_uzs outside a sale) */
+  list_price_uzs?: number;
+  campaign?: ShopCampaign | null;
 }
 
 export interface Cart {
@@ -278,6 +325,10 @@ export interface Cart {
   delivery: DeliveryQuote | null;
   /** 3.3 */
   promo?: PromoView | null;
+  /** 3.7: goods at regular prices and one line per sale */
+  goods_list_total_uzs?: number;
+  campaign_discount_uzs?: number;
+  campaigns?: CampaignLine[];
 }
 
 export interface Region extends Named {
@@ -319,6 +370,9 @@ export interface Totals {
   goods_paid_uzs: number;
   delivery_cost_uzs: number;
   total_uzs: number;
+  /** 3.7: goods at regular prices (goods_total_uzs is at sale prices) and the sale discount */
+  goods_list_total_uzs?: number;
+  campaign_discount_uzs?: number;
 }
 
 export interface Order {
@@ -331,8 +385,10 @@ export interface Order {
   recipient: { name: string; phone: string };
   delivery: { region: Named; city: Named; address_text: string; cost_uzs: number };
   customer_comment: string | null;
-  items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null })[];
+  items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; list_price_uzs?: number; form?: string | null; image_url?: string | null })[];
   totals: Totals;
+  /** 3.7: «Акция 11.11: −X сум», frozen at creation */
+  campaigns?: CampaignLine[];
   /** 3.3: the order's promo code (frozen at creation) */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null } | null;
@@ -402,13 +458,15 @@ export interface OrderListItem {
 }
 
 export interface OrderPreview {
-  items: (ShortNamed & { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null })[];
+  items: (ShortNamed & { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null; campaign?: { discount_pct: number } | null })[];
   skipped_unavailable: string[];
   totals: Totals;
   delivery: DeliveryQuote;
   /** 3.3: the applied code / why the requested code does not fit */
   promo?: PromoView | null;
   promo_rejection?: PromoRejection | null;
+  /** 3.7 */
+  campaigns?: CampaignLine[];
   problems: { code: string; product_id: string; requested: number; available: number }[];
   can_place: boolean;
   /** «Оплата при получении» is offered only for the city of Tashkent and up to the limit. */
@@ -445,10 +503,12 @@ export interface CheckoutDefaults {
 /** Home banner (Настройки → Главная → Баннеры): doctor / delivery are drawn by the Mini App, image is a picture from the admin panel. */
 export interface ShopBanner {
   id: string;
-  kind: 'doctor' | 'delivery' | 'image';
+  kind: 'doctor' | 'delivery' | 'image' | 'campaign';
   image_url: string | null;
   image_jpeg_url: string | null;
-  link: { type: 'product' | 'category' | 'brand'; value: string } | null;
+  link: { type: 'product' | 'category' | 'brand' | 'campaign'; value: string } | null;
+  /** 3.7: a running sale — the slide is drawn by the Mini App with a countdown, first in the carousel */
+  campaign?: CampaignSummary;
 }
 
 /** Home page: from which goods total delivery is free, and whether this customer's first order is delivered free. */

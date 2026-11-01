@@ -54,6 +54,14 @@
   --ask-border: #fed7aa;
   --accent-text: #c2410c;    /* dark orange for small text: 4.9:1 on --ask-bg (#ff6600 would be only 2.8:1) */
   --ai-gradient: linear-gradient(135deg, #002d62 0%, #002d62 35%, #ff6600 100%); /* 2.4: centre «Подбор» (add-on 3.1, module 1) */
+  /* 3.7: sale skins. Black Friday: white / gold on #111827 (17:1 / 10:1); 11.11: #111827 on orange (6.3:1), its price
+     dark orange on white (5.2:1); «Акция»: white on teal and teal on white (5.5:1) */
+  --skin-dark: #111827;
+  --skin-gold: #f5b700;
+  --skin-orange: #ff6600;
+  --skin-orange-text: #c2410c;
+  --skin-teal: #0f766e;
+  --on-skin: #ffffff;
 
   --font: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   --radius: 14px;
@@ -897,6 +905,43 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 .brand-why h2 { margin: 0 0 6px; }
 .brand-why p { margin: 0; white-space: pre-line; line-height: 1.5; }
 .brand-products-title { margin: 0 0 10px; }
+
+/* ---------- 3.7: sales — badge on the photo, two prices, frame of a Black Friday card, home slide, sale page ---------- */
+.sale-badge {
+  display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 7px; border-radius: 6px;
+  font-size: 11px; line-height: 1.25; font-weight: 700; white-space: nowrap;
+}
+.tile-sale { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 56px); overflow: hidden; }
+.sale-black_friday { background: var(--skin-dark); color: var(--on-skin); }
+.sale-black_friday .sale-badge-pct { color: var(--skin-gold); }
+.sale-eleven_eleven { background: var(--skin-orange); color: var(--skin-dark); }
+.sale-sale { background: var(--skin-teal); color: var(--on-skin); }
+.sale-card-black_friday { border-color: var(--skin-dark); box-shadow: 0 0 0 1px var(--skin-dark); }
+.sale-text-black_friday { color: var(--skin-dark); }
+.sale-text-eleven_eleven { color: var(--skin-orange-text); }
+.sale-text-sale { color: var(--skin-teal); }
+.tile-price-old { font-size: 12px; line-height: 16px; height: 16px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tile .tile-price.sale-text-black_friday, .tile .tile-price.sale-text-eleven_eleven, .tile .tile-price.sale-text-sale { font-size: 16px; }
+.sale-price { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+.sale-price-old { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.sale-price-now { font-weight: 700; white-space: nowrap; }
+.sale-price-md .sale-price-now { font-size: 16px; }
+.sale-price-lg .sale-price-now { font-size: 26px; line-height: 1.2; }
+.sale-price-md .sale-price-old { font-size: 12px; }
+.buy-panel-top .sale-price { flex-direction: row; align-items: baseline; gap: 8px; }
+.sale-row .sale-amount { color: var(--text); font-weight: 600; }
+.sale-hint { margin: 2px 0 4px; }
+/* home slide and the sale page head: navy by default (orange is never a big fill, D-19) */
+.hero-slide.sale-slide { background: var(--primary); }
+.hero-slide.sale-slide-black_friday, .sale-head.sale-slide-black_friday { background: var(--skin-dark); }
+.hero-slide.sale-slide-sale, .sale-head.sale-slide-sale { background: var(--skin-teal); }
+.sale-slide-tag { position: relative; align-self: flex-start; margin-bottom: 6px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.sale-slide-black_friday .sale-slide-tag { background: var(--skin-gold); color: var(--skin-dark); }
+.sale-slide-sale .sale-slide-tag { background: var(--on-skin); color: var(--skin-teal); }
+.sale-slide-time { display: inline-block; padding: 2px 8px; border-radius: 6px; background: rgb(255 255 255 / 0.16); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sale-head { margin: 0 0 16px; padding: 16px 18px; border-radius: var(--radius-lg); background: var(--primary); color: var(--on-skin); }
+.sale-head h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.2; }
+.sale-head p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; }
 .brand-link { display: inline-flex; align-items: center; min-height: var(--tap); margin: -12px 0; font-weight: 600; color: var(--primary-text); text-decoration: none; }
 
 /* ---------- 2.3: mini-card (short name, meta line, round [+] opposite the price) ---------- */

@@ -5,10 +5,15 @@ import { AuthContext } from '../auth/auth.types';
 import { CurrentAuth, SessionGuard } from '../auth/session.guard';
 import { listInclude, ProductListItem, toProductListItem } from '../catalog/product.mapper';
 import { PrismaService } from '../prisma/prisma.service';
+import { CampaignsService } from '../promo/campaigns.service';
+import { PromoModule } from '../promo/promo.module';
 
 @Injectable()
 export class FavoritesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly campaigns: CampaignsService,
+  ) {}
 
   /** Newest first. Products that stopped being sold (archived/hidden) are not shown. */
   async list(userId: string): Promise<ProductListItem[]> {
@@ -17,7 +22,7 @@ export class FavoritesService {
       orderBy: { created_at: 'desc' },
       include: { product: { include: listInclude } },
     });
-    return rows.map((r) => toProductListItem(r.product));
+    return this.campaigns.decorate(rows.map((r) => toProductListItem(r.product)));
   }
 
   async ids(userId: string): Promise<string[]> {
@@ -76,5 +81,5 @@ export class FavoritesController {
   }
 }
 
-@Module({ imports: [AuthModule], controllers: [FavoritesController], providers: [FavoritesService] })
+@Module({ imports: [AuthModule, PromoModule], controllers: [FavoritesController], providers: [FavoritesService] })
 export class FavoritesModule {}

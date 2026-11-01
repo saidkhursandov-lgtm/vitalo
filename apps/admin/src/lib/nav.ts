@@ -18,8 +18,10 @@ export const NAV: NavItem[] = [
   { to: '/purchases', label: 'Закупки', permission: 'purchases.view' },
   { to: '/customers', label: 'Клиенты', permission: 'customers.view' },
   { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
-  // 3.2: promos to customers with «Получать акции и новости» — admin and marketer
-  { to: '/promo', label: 'Акции', permission: 'promo.send' },
+  // 3.7: sales with their own prices and skins — admin, marketer (change), manager (view only)
+  { to: '/campaigns', label: 'Акции', permission: 'promo.view' },
+  // 3.2: promo messages to customers with «Получать акции и новости» — admin and marketer (3.7: renamed from «Акции»)
+  { to: '/promo', label: 'Рассылки', permission: 'promo.send' },
   // 3.3: promo codes — admin, marketer (change), manager (view only)
   { to: '/promo-codes', label: 'Промокоды', permission: 'promo.view' },
   // 3.4: compatibility requests — admin and «специалист» answer, manager only looks (without the comment)

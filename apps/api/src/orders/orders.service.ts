@@ -16,7 +16,7 @@ import { StockLine, StockService } from '../inventory/stock.service';
 import { intakeGuideItems, NotificationsService } from '../notifications/notifications.service';
 import { INTAKE_FOOTER } from '../notifications/notification-templates';
 import { PrismaService } from '../prisma/prisma.service';
-import { listImage, listInclude } from '../catalog/product.mapper';
+import { listImage, listInclude, ShopCampaign } from '../catalog/product.mapper';
 import { BankTransferDetails, COD_METHOD, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
 import { formatOrderNumber } from './order-number';
 import { CUSTOMER_CANCELLABLE } from './order-state';
@@ -25,6 +25,7 @@ import { orderViewInclude, OrderView, toOrderView } from './order-view';
 import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
 import { AnalyticsService } from '../analytics/analytics.module';
 import { BotInfoService } from './receipts';
+import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
 import { PromoCodesService } from '../promo/promo.service';
 
 type Tx = Prisma.TransactionClient;
@@ -54,6 +55,9 @@ interface PricedLine {
   qty: number;
   unit_price_uzs: number;
   line_total_uzs: number;
+  /** 3.7: the regular price and the running sale (unit_price_uzs is then the sale price) */
+  list_price_uzs: number;
+  campaign: ShopCampaign | null;
 }
 
 interface Totals {
@@ -83,6 +87,7 @@ export class OrdersService {
     private readonly analytics: AnalyticsService,
     private readonly botInfo: BotInfoService,
     private readonly promo: PromoCodesService,
+    private readonly campaigns: CampaignsService,
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
@@ -111,6 +116,8 @@ export class OrdersService {
       delivery: calc.delivery,
       promo: calc.promo,
       promo_rejection: calc.promo_rejection,
+      // 3.7: «Акция 11.11: −X сум», the same lines the order will freeze
+      campaigns: calc.snapshot.campaigns ?? [],
       problems,
       payment_options,
       can_place: problems.length === 0 && !codBlocked,
@@ -501,13 +508,16 @@ export class OrdersService {
     };
   }
 
+  /** 3.7: a product in a running sale is charged its sale price; the price is frozen into the order at this moment. */
   private async priceLines(db: Tx | PrismaService, lines: StockLine[]): Promise<PricedLine[]> {
     const products = await db.products.findMany({ where: { id: { in: lines.map((l) => l.product_id) }, status: 'active' }, include: { media: listInclude.media } });
     const byId = new Map(products.map((p) => [p.id, p]));
+    const sale = await this.campaigns.running(db, lines.map((l) => l.product_id));
     return lines.map((l) => {
       const p = byId.get(l.product_id);
       if (!p) throw new ConflictException({ code: 'PRODUCT_UNAVAILABLE', message: 'Product is no longer sold', product_id: l.product_id });
-      const price = Number(p.price_uzs);
+      const c = sale.get(p.id);
+      const price = c ? c.price_uzs : Number(p.price_uzs);
       return {
         product_id: p.id,
         sku: p.sku,
@@ -520,6 +530,8 @@ export class OrdersService {
         qty: l.qty,
         unit_price_uzs: price,
         line_total_uzs: price * l.qty,
+        list_price_uzs: c ? c.list_price_uzs : price,
+        campaign: c ? toShopCampaign(c) : null,
       };
     });
   }

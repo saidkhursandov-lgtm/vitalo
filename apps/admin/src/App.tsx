@@ -10,6 +10,7 @@ import { CustomerDetail, Customers } from './pages/Customers';
 import { Waitlist, WaitlistProductPage } from './pages/Waitlist';
 import { Promo } from './pages/Promo';
 import { PromoCodes } from './pages/PromoCodes';
+import { Campaigns } from './pages/Campaigns';
 import { Compat } from './pages/Compat';
 import { Dashboard } from './pages/Dashboard';
 import { Finance } from './pages/Finance';
@@ -59,6 +60,7 @@ export function App() {
         <Route path="waitlist" element={<Guard perm="customers.view"><Waitlist /></Guard>} />
         <Route path="promo" element={<Guard perm="promo.send"><Promo /></Guard>} />
         <Route path="promo-codes" element={<Guard perm="promo.view"><PromoCodes /></Guard>} />
+        <Route path="campaigns" element={<Guard perm="promo.view"><Campaigns /></Guard>} />
         <Route path="compat" element={<Guard perm="compat.view"><Compat /></Guard>} />
         <Route path="waitlist/:productId" element={<Guard perm="customers.view"><WaitlistProductPage /></Guard>} />
         <Route path="analytics" element={<Guard perm="finance.manage"><Analytics /></Guard>} />

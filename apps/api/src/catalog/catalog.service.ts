@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { onlineModes } from '../payments/online/online-providers';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CampaignsService } from '../promo/campaigns.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { manifestOrDefault } from '../settings/home-content';
 import { SettingsService, supportLink } from '../settings/settings.service';
@@ -59,6 +60,7 @@ export class CatalogService {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly delivery: DeliveryService,
+    private readonly campaigns: CampaignsService,
   ) {}
 
   /** Both trees; every node carries product_count = products available to customers in it or below it. */
@@ -218,13 +220,14 @@ export class CatalogService {
         })),
       );
     }
-    return toPage(rows.map(toProductListItem), totalIn + totalOut, q.page);
+    // 3.7: a product in a running sale is shown at its sale price (the sort stays by the regular price)
+    return toPage(await this.campaigns.decorate(rows.map(toProductListItem)), totalIn + totalOut, q.page);
   }
 
   async getProduct(id: string) {
     const product = await this.prisma.products.findFirst({ where: { id, status: 'active' }, include: cardInclude });
     if (!product) throw new NotFoundException('Product not found');
-    return toProductCard(product);
+    return this.campaigns.decorateCard(toProductCard(product));
   }
 
   /**
@@ -260,6 +263,6 @@ export class CatalogService {
       const p = byId.get(id);
       return p ? [toProductListItem(p)] : [];
     });
-    return toPage(items, total, q.page);
+    return toPage(await this.campaigns.decorate(items), total, q.page);
   }
 }

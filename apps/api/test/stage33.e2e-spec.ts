@@ -145,7 +145,7 @@ describe('Stage 3.3 promo codes (e2e)', () => {
       const token = await customer();
       const r = (await preview(token, checkout(p.id, 2, { promo_code: ` ${c.code.toLowerCase()} ` })).expect(200)).body;
       // 10% of 246 912 = 24 691.2 → 24 600 (down to 100 sum)
-      expect(r.totals).toEqual({ goods_total_uzs: 246_912, discount_total_uzs: 24_600, bonus_used_uzs: 0, goods_paid_uzs: 222_312, delivery_cost_uzs: 35_000, total_uzs: 257_312 });
+      expect(r.totals).toEqual({ goods_list_total_uzs: 246_912, campaign_discount_uzs: 0, goods_total_uzs: 246_912, discount_total_uzs: 24_600, bonus_used_uzs: 0, goods_paid_uzs: 222_312, delivery_cost_uzs: 35_000, total_uzs: 257_312 });
       expect(r.promo).toMatchObject({ code: c.code, discount_uzs: 24_600, free_delivery: false, capped: false, message_ru: `Промокод ${c.code} применён (−24 600 сум)` });
       expect(r.items[0].discount_uzs).toBe(24_600);
     });

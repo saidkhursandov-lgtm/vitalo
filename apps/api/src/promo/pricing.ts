@@ -27,6 +27,9 @@ export interface PricingLine {
   old_price_uzs: number | null;
   /** The purchase cost of one jar (the larger of the product cost and the dearest jar on stock), null = unknown. */
   cost_uzs: number | null;
+  /** 3.7: in a running sale — the regular price (unit_price_uzs is then the sale price) and the sale's percent. */
+  list_price_uzs?: number;
+  campaign_pct?: number | null;
 }
 
 export type PromoKind = 'percent' | 'fixed' | 'free_delivery';
@@ -44,20 +47,29 @@ export function visibleDiscountPct(price: number, oldPrice: number | null): numb
   return pct > MAX_SHOWN_DISCOUNT_PCT ? null : pct;
 }
 
-/** The lines a promo code may touch: its targets, and never a product with a visible discount above 15%. */
+/** The discount the customer sees on the line: the sale's percent (3.7), otherwise the crossed-out «old price». */
+export function shownDiscountPct(l: Pick<PricingLine, 'unit_price_uzs' | 'old_price_uzs' | 'campaign_pct'>): number {
+  return l.campaign_pct ?? visibleDiscountPct(l.unit_price_uzs, l.old_price_uzs) ?? 0;
+}
+
+/** The lines a promo code may touch: its targets, and never a product with a visible discount (or a sale) above 15%. */
 export function eligibleLines(lines: PricingLine[], t: PromoTargets): PricingLine[] {
   return lines.filter((l) => {
-    if ((visibleDiscountPct(l.unit_price_uzs, l.old_price_uzs) ?? 0) > PROMO_MAX_PRODUCT_DISCOUNT_PCT) return false;
+    if (shownDiscountPct(l) > PROMO_MAX_PRODUCT_DISCOUNT_PCT) return false;
     if (t.scope === 'product') return t.product_ids.includes(l.product_id);
     if (t.scope === 'brand') return !!l.brand_id && t.brand_ids.includes(l.brand_id);
     return true;
   });
 }
 
-/** The lowest price of one jar a promo may bring it to (whole sum, rounded up so the margin is never cut). */
-export function minUnitPrice(line: Pick<PricingLine, 'unit_price_uzs' | 'cost_uzs'>, guard: PromoGuard): number {
+/**
+ * The lowest price of one jar any discount may bring it to (whole sum, rounded up so the margin is never cut).
+ * Without a cost the max discount counts from the REGULAR price, so a sale and a promo code together stay inside it.
+ */
+export function minUnitPrice(line: Pick<PricingLine, 'unit_price_uzs' | 'cost_uzs' | 'list_price_uzs'>, guard: PromoGuard): number {
   if (line.cost_uzs != null) return Math.ceil((line.cost_uzs * (100 + guard.min_markup_pct)) / 100);
-  return line.unit_price_uzs - Math.floor((line.unit_price_uzs * guard.max_discount_pct) / 100);
+  const list = line.list_price_uzs ?? line.unit_price_uzs;
+  return list - Math.floor((list * guard.max_discount_pct) / 100);
 }
 
 /** How much a promo may take off a whole line (never negative). */
@@ -156,7 +168,7 @@ export function marginWarnings(
   return products.flatMap((p): MarginWarning[] => {
     const one = { ...p, qty: 1 };
     const wanted = kind === 'percent' ? Math.floor((p.unit_price_uzs * Math.min(value, 100)) / 100) : Math.min(value, p.unit_price_uzs);
-    if ((visibleDiscountPct(p.unit_price_uzs, p.old_price_uzs) ?? 0) > PROMO_MAX_PRODUCT_DISCOUNT_PCT) {
+    if (shownDiscountPct(p) > PROMO_MAX_PRODUCT_DISCOUNT_PCT) {
       return [{ product_id: p.product_id, sku: p.sku, name: p.name, wanted_uzs: wanted, allowed_uzs: 0, reason: 'product_discount' }];
     }
     const allowed = lineHeadroom(one, guard);

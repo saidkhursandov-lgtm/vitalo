@@ -54,6 +54,10 @@ const EXTRA_NAMES: Record<string, string> = {
   map_locate_me: 'Нажали «Моё местоположение» на карте',
   map_confirm: 'Подтвердили адрес на карте',
   map_district_auto: 'Район после карты (определился сам / нет)',
+  // 3.7: sales
+  campaign_view: 'Открыли страницу акции',
+  campaign_banner_click: 'Нажали на слайд акции',
+  campaign_add_to_cart: 'Добавили в корзину товар акции',
 };
 /** Sub-rows: payment systems of «Скоро» and (3.3) reasons a promo code did not fit. */
 const SYSTEM_NAMES: Record<string, string> = {

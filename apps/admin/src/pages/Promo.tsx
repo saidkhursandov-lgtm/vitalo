@@ -49,7 +49,7 @@ export function Promo() {
 
   return (
     <>
-      <PageHead title="Акции" />
+      <PageHead title="Рассылки" />
       <section className="card">
         <p className="muted">
           Сообщение придёт в бот и в «Уведомления» Mini App только клиентам, у которых включено «Получать акции и новости»

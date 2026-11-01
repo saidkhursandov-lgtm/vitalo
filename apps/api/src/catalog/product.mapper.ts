@@ -53,6 +53,21 @@ export interface ProductListItem {
   image_url: string | null;
   image: ListImage | null;
   in_stock: boolean;
+  /** 3.7: a running sale — price_uzs is then the sale price and old_price_uzs the regular one (CampaignsService.decorate) */
+  campaign: ShopCampaign | null;
+}
+
+/** 3.7: what the shop shows about a product's sale: the badge (skin, title, %) and the countdown. */
+export interface ShopCampaign {
+  id: string;
+  slug: string;
+  skin: 'none' | 'black_friday' | 'eleven_eleven' | 'sale';
+  title_ru: string;
+  title_uz: string | null;
+  discount_pct: number;
+  list_price_uzs: number;
+  /** null = «без даты окончания» (no countdown) */
+  ends_at: Date | null;
 }
 
 /** WebP + JPEG fallback and the size, so the page does not jump while the picture loads. */
@@ -98,6 +113,7 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     image_url: listImage(p.media.find((m) => m.media_type === 'image'))?.webp ?? null,
     image: listImage(p.media.find((m) => m.media_type === 'image')),
     in_stock: availableQty(p.inventory) > 0,
+    campaign: null,
   };
 }
 

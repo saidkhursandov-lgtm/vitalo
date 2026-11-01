@@ -38,6 +38,12 @@
   --warn-soft: #fdf2e0;
   --bad: #c0362c;
   --bad-soft: #fdecea;
+  /* 3.7: sale skins (same values as the Mini App); text on each passes WCAG AA */
+  --skin-dark: #111827;      /* Black Friday badge and frame; white text 17:1, gold 9.6:1 */
+  --skin-gold: #f5b700;
+  --skin-orange: #ff6600;    /* 11.11 badge: dark text on it (6.0:1) */
+  --skin-orange-text: #c2410c; /* 11.11 price on white (5.2:1): plain orange is too light for text */
+  --skin-teal: #0f766e;      /* «Акция» badge, white text 5.5:1 (#0D9488 is only 3.7:1) */
   /* old names kept for existing screens */
   --accent: var(--primary);
   --accent-text: #ffffff;
@@ -410,3 +416,31 @@ textarea { resize: vertical; }
 .compat-template { margin-bottom: 8px; }
 .compat-template h3 { margin: 8px 0; }
 .compat-table .pre, .compat-template .pre { white-space: pre-line; overflow-wrap: anywhere; }
+
+/* ───────────── 3.7: «Акции» ───────────── */
+.link-btn { background: none; border: 0; padding: 0; color: var(--primary-text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.link-btn:hover { text-decoration: underline; }
+.input-xs { width: 64px; }
+.input-sm { width: 120px; }
+.strike { text-decoration: line-through; }
+.skin-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.skin-badge b { font-weight: 800; }
+.skin-black_friday { background: var(--skin-dark); color: #ffffff; }
+.skin-black_friday b { color: var(--skin-gold); }
+.skin-eleven_eleven { background: var(--skin-orange); color: var(--skin-dark); }
+.skin-sale { background: var(--skin-teal); color: #ffffff; }
+.camp-form { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 20px; align-items: start; margin-bottom: 16px; }
+@media (max-width: 900px) { .camp-form { grid-template-columns: 1fr; } }
+.camp-quick { flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+.camp-preview { width: 180px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 6px; }
+.camp-preview.skin-card-black_friday { border: 2px solid var(--skin-dark); }
+.camp-preview-photo { position: relative; height: 140px; background: var(--neutral-soft); }
+.camp-preview-photo .skin-badge { position: absolute; top: 8px; left: 8px; }
+.camp-preview-body { padding: 8px 10px 12px; }
+.camp-preview-name { font-size: 13px; font-weight: 600; margin: 2px 0 6px; }
+.camp-preview-old { font-size: 12px; color: var(--muted); text-decoration: line-through; }
+.camp-preview-price { font-size: 18px; font-weight: 800; color: var(--primary-text); }
+.skin-price-black_friday { color: var(--skin-dark); }
+.skin-price-eleven_eleven { color: var(--skin-orange-text); }
+.skin-price-sale { color: var(--skin-teal); }
+.camp-items td { vertical-align: top; }

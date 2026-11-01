@@ -4,7 +4,8 @@ import { ApiError, isNetworkError } from '../lib/api';
 import { discountPercent, money, shortNameOf, tileLine } from '../lib/format';
 import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
-import type { OrderStatus, ProductListItem } from '../lib/types';
+import type { OrderStatus, ProductListItem, ShopCampaign } from '../lib/types';
+import { SaleBadge, SalePrice } from './Campaign';
 import { Picture } from './Picture';
 import { QuickAdd } from './QuickAdd';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
@@ -178,8 +179,10 @@ export function StatusPill({ status, reported = false, large = false, cod = fals
   );
 }
 
-export function Price({ price, old, size = 'md' }: { price: number; old?: number | null; size?: 'md' | 'lg' }) {
+export function Price({ price, old, size = 'md', campaign }: { price: number; old?: number | null; size?: 'md' | 'lg'; campaign?: ShopCampaign | null }) {
   const { lang } = useI18n();
+  // 3.7: a sale shows its own two prices (up to 35%, not capped at 25% like a Market old price)
+  if (campaign) return <SalePrice price={price} campaign={campaign} size={size} />;
   const pct = discountPercent(price, old ?? null);
   return (
     <div className={`price price-${size}`}>
@@ -247,14 +250,16 @@ function TileMeta({ product }: { product: ProductListItem }) {
 
 export function ProductTile({ product }: { product: ProductListItem }) {
   const { t, lang } = useI18n();
-  const pct = discountPercent(product.price_uzs, product.old_price_uzs ?? null);
+  const sale = product.campaign ?? null;
+  const pct = sale ? null : discountPercent(product.price_uzs, product.old_price_uzs ?? null);
   return (
-    <Link to={`/product/${product.id}`} className={`tile ${product.in_stock ? '' : 'is-out'}`}>
+    <Link to={`/product/${product.id}`} className={`tile ${product.in_stock ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
       <div className="tile-img">
         {product.image ? <Picture src={product.image} /> : product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" />}
         <FavoriteButton productId={product.id} className="tile-fav" />
         {/* the discount lives on the photo, so the price is always one line; the old price is on the product page */}
         {pct && product.in_stock && <span className="tile-discount">−{pct}%</span>}
+        {sale && <SaleBadge campaign={sale} className="tile-sale" />}
         {!product.in_stock && <span className="tile-out">{t('product.outOfStock')}</span>}
       </div>
       <div className="tile-body">
@@ -264,9 +269,11 @@ export function ProductTile({ product }: { product: ProductListItem }) {
         <TileMeta product={product} />
         {/* price on its own line, the button row under it: the same in every card, so prices and [+] line up */}
         <div className="tile-foot">
-          <div className="tile-price">{money(product.price_uzs, lang)}</div>
+          {/* 3.7: the regular price crossed out over the sale price; the row of cards keeps its prices on one level */}
+          {sale && <s className="tile-price-old">{money(sale.list_price_uzs, lang)}</s>}
+          <div className={`tile-price${sale ? ` sale-text-${sale.skin}` : ''}`}>{money(product.price_uzs, lang)}</div>
           <div className="tile-action">
-            <QuickAdd productId={product.id} inStock={product.in_stock} />
+            <QuickAdd productId={product.id} inStock={product.in_stock} campaignId={sale?.id} />
           </div>
         </div>
       </div>

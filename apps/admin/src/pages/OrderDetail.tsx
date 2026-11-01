@@ -27,8 +27,11 @@ export interface AdminOrder {
   recipient: { name: string; phone: string };
   delivery: { region: Named; city: Named; address_text: string; latitude: number | null; longitude: number | null; cost_uzs: number; method: string };
   customer_comment: string | null;
-  items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
-  totals: { goods_total_uzs: number; discount_total_uzs: number; delivery_cost_uzs: number; total_uzs: number };
+  /** 3.7: list_price_uzs — the regular price when the line was bought in a sale (unit_price_uzs is the sale price) */
+  items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; line_total_uzs: number }[];
+  totals: { goods_list_total_uzs?: number; goods_total_uzs: number; discount_total_uzs: number; delivery_cost_uzs: number; total_uzs: number };
+  /** 3.7: «Акция 11.11: −X сум» lines (frozen at checkout) */
+  campaigns?: { promotion_id: string; title_ru: string; amount_uzs: number }[];
   /** 3.3: the promo code of the order (frozen at checkout) */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null; verified_at: string | null } | null;
@@ -193,7 +196,10 @@ export function OrderDetail() {
                     <Link to={`/products/${i.product_id}`}>{i.name_ru}</Link>
                     <div className="muted small">{i.sku}</div>
                   </td>
-                  <td className="num">{money(i.unit_price_uzs)}</td>
+                  <td className="num">
+                    {money(i.unit_price_uzs)}
+                    {i.list_price_uzs != null && i.list_price_uzs > i.unit_price_uzs && <div className="muted small strike">{money(i.list_price_uzs)}</div>}
+                  </td>
                   <td className="num">{i.qty}</td>
                   <td className="num">{money(i.line_total_uzs)}</td>
                 </tr>
@@ -202,8 +208,14 @@ export function OrderDetail() {
             <tfoot>
               <tr>
                 <td colSpan={3}>Товары</td>
-                <td className="num">{money(o.totals.goods_total_uzs)}</td>
+                <td className="num">{money(o.totals.goods_list_total_uzs ?? o.totals.goods_total_uzs)}</td>
               </tr>
+              {(o.campaigns ?? []).map((c) => (
+                <tr key={c.promotion_id}>
+                  <td colSpan={3}>Акция «{c.title_ru}»</td>
+                  <td className="num">−{money(c.amount_uzs)}</td>
+                </tr>
+              ))}
               {o.totals.discount_total_uzs > 0 && (
                 <tr>
                   <td colSpan={3}>{o.promo ? `Промокод ${o.promo.code}` : 'Скидка'}</td>

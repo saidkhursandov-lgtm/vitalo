@@ -33,7 +33,7 @@ const base: PromoCode = {
 
 describe('3.3 Промокоды', () => {
   it('«Промокоды» for admin, marketer and manager (view), not for warehouse', () => {
-    expect(navFor(['promo.view']).map((n) => n.label)).toEqual(['Промокоды']);
+    expect(navFor(['promo.view']).map((n) => n.label)).toEqual(['Акции', 'Промокоды']); // 3.7: «Акции» share the permission
     expect(navFor(['orders.view', 'inventory.view']).map((n) => n.label)).not.toContain('Промокоды');
   });
 

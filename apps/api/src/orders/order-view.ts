@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { listImage, listInclude } from '../catalog/product.mapper';
-import type { PricingSnapshot } from '../promo/promo.service';
+import type { CampaignLine, PricingSnapshot } from '../promo/promo.service';
 import { CUSTOMER_CANCELLABLE } from './order-state';
 
 export const orderViewInclude = {
@@ -22,6 +22,7 @@ export function toOrderView(o: OrderForView) {
   const payment = o.payments[0];
   const reported = payment?.manual.find((m) => m.customer_confirmed_at);
   const verified = payment?.manual.find((m) => m.verified_at);
+  const snapLines = (o.pricing_json as unknown as PricingSnapshot | null)?.lines ?? [];
 
   return {
     id: o.id,
@@ -54,11 +55,15 @@ export function toOrderView(o: OrderForView) {
       image_url: listImage(i.product.media[0])?.webp ?? null,
       qty: i.qty,
       unit_price_uzs: num(i.unit_price_uzs),
+      // 3.7: the regular price when the line was bought in a sale (from the frozen calculation)
+      list_price_uzs: snapLines.find((s) => s.product_id === i.product_id)?.list_price_uzs ?? num(i.unit_price_uzs),
       line_total_uzs: num(i.line_total_uzs),
       discount_uzs: num(i.discount_uzs),
       paid_line_total_uzs: num(i.paid_line_total_uzs),
     })),
     totals: {
+      goods_list_total_uzs: num(o.goods_total_uzs) + campaignsOf(o).reduce((s, c) => s + c.amount_uzs, 0),
+      campaign_discount_uzs: campaignsOf(o).reduce((s, c) => s + c.amount_uzs, 0),
       goods_total_uzs: num(o.goods_total_uzs),
       discount_total_uzs: num(o.discount_total_uzs),
       bonus_used_uzs: num(o.bonus_used_uzs),
@@ -67,6 +72,7 @@ export function toOrderView(o: OrderForView) {
       total_uzs: num(o.total_uzs),
     },
     promo: promoOf(o),
+    campaigns: campaignsOf(o),
     payment: payment
       ? {
           method: payment.method.code,
@@ -89,6 +95,11 @@ export function toOrderView(o: OrderForView) {
 }
 
 export type OrderView = ReturnType<typeof toOrderView>;
+
+/** 3.7: «Акция 11.11: −X сум» lines of the order, from its frozen calculation (older orders: none). */
+export function campaignsOf(o: { pricing_json: Prisma.JsonValue | null }): CampaignLine[] {
+  return (o.pricing_json as unknown as PricingSnapshot | null)?.campaigns ?? [];
+}
 
 /** 3.3: the order's promo code from its frozen calculation: «Промокод VITALO10: −20 000 сум» / free delivery. */
 export function promoOf(o: { promo_code: string | null; pricing_json: Prisma.JsonValue | null }): { code: string; discount_uzs: number; free_delivery: boolean } | null {

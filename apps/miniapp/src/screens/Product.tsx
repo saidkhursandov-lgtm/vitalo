@@ -86,7 +86,7 @@ export function Product() {
       <h1 className="product-title">{short}</h1>
       {substance && <p className="product-sub">{substance}</p>}
       <div className="price-line">
-        <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" />
+        <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" campaign={p.campaign} />
         <div className={`stock ${p.in_stock ? 'is-in' : 'is-out'}`}>{p.in_stock ? t('product.inStock') : t('product.outOfStock')}</div>
       </div>
       {p.course_days ? (
@@ -200,7 +200,7 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
   return (
     <div className="buy-panel" role="region" aria-label={t('product.addToCart')}>
       <div className="buy-panel-top">
-        <Price price={p.price_uzs} old={p.old_price_uzs} />
+        <Price price={p.price_uzs} old={p.old_price_uzs} campaign={p.campaign} />
       </div>
       <div className="buy-panel-main">
         {soldOut ? (
@@ -214,6 +214,7 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
                 tapHaptic();
                 set(1);
                 track('add_to_cart', { product_id: p.id, source: 'product' });
+                if (p.campaign) track('campaign_add_to_cart', { campaign_id: p.campaign.id, product_id: p.id });
               }}
             >
               <CartIcon width={20} height={20} />
@@ -225,7 +226,7 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
           </>
         ) : (
           <>
-            <QuickAdd productId={p.id} inStock={p.in_stock} variant="panel" />
+            <QuickAdd productId={p.id} inStock={p.in_stock} variant="panel" campaignId={p.campaign?.id} />
             <Link to="/cart" className="btn to-cart">
               <span>{t('panel.toCart')}</span>
               {total !== null && <small>{money(total, lang)}</small>}

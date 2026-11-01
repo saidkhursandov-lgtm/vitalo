@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 import type { home_banners } from '@prisma/client';
+import type { ShopCampaignSummary } from '../promo/campaigns.service';
 import type { FileStorage } from '../storage/file-storage';
 
 /**
@@ -24,10 +25,12 @@ const JPEG_QUALITY = 82;
 
 export interface ShopBanner {
   id: string;
-  kind: BannerKind;
+  /** 3.7: 'campaign' — a running sale, drawn by the Mini App in the sale's skin with a countdown (not a home_banners row) */
+  kind: BannerKind | 'campaign';
   image_url: string | null;
   image_jpeg_url: string | null;
-  link: { type: BannerLinkType; value: string } | null;
+  link: { type: BannerLinkType | 'campaign'; value: string } | null;
+  campaign?: ShopCampaignSummary;
 }
 
 /** The picture for the language: its own, otherwise the other one (if only one was uploaded it is shown in both). */

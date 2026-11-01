@@ -15,6 +15,7 @@ import { AdminProductsController, AdminProductsService } from './admin-products'
 import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
 import { AdminWaitlistController, AdminWaitlistService } from './admin-waitlist';
 import { AdminPromoCodesController, AdminPromoCodesService } from './admin-promo-codes';
+import { AdminCampaignsController, AdminCampaignsService } from './admin-campaigns';
 import { PromoModule } from '../promo/promo.module';
 import { PromoController, PromoService } from '../notifications/notification-centre';
 import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from './admin-receipts';
@@ -75,6 +76,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminLegalController,
     AdminWaitlistController,
     AdminPromoCodesController,
+    AdminCampaignsController,
     PromoController,
     AdminReceiptsController,
     BotReceiptsController,
@@ -86,6 +88,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminBannersService,
     AdminBrandsService,
     AdminPromoCodesService,
+    AdminCampaignsService,
     StaffAuthService,
     StaffGuard,
     AuditService,

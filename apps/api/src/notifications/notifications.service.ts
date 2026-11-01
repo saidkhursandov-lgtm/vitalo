@@ -5,7 +5,7 @@ import { CUSTOMER_STATUS_TEMPLATES, type CentreCategory, type Lang, type Templat
 import { tashkentDateTime } from '../common/tashkent';
 import { SETTING_DEFAULTS, SETTING_KEYS, supportLink } from '../settings/settings.service';
 import { productTitle } from '../waitlist/waitlist';
-import { promoOf } from '../orders/order-view';
+import { campaignsOf, promoOf } from '../orders/order-view';
 import { yandexMapsLink } from '../maps/maps-match';
 
 /** 3.2: «Как принимать ваш заказ» lines — one per product with a memo in the language (Russian as a fallback), no repeats. */
@@ -52,7 +52,7 @@ export class NotificationsService {
     // Release 1: cash on delivery is not «Оплачен» when the manager confirms it — the customer pays the courier.
     if (status === 'paid' && cod) template = 'order.cod_confirmed';
     const lang = order.user.language;
-    const payload: TemplatePayload = { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang, open_path: `/orders/${order.id}`, promo: promoOf(order) };
+    const payload: TemplatePayload = { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang, open_path: `/orders/${order.id}`, promo: promoOf(order), campaigns: campaignsOf(order) };
     if (status === 'awaiting_payment') {
       payload.open_path = `/orders/${order.id}/pay`;
       payload.open_button = 'pay';
@@ -190,6 +190,7 @@ export class NotificationsService {
           phone: order.recipient_phone,
           payment: order.payments[0]?.method.code,
           promo: promoOf(order),
+          campaigns: campaignsOf(order),
           // 3.5: «Комментарий к заказу» from the checkout — only in the new-order message
           ...(template === 'staff.new_order' && order.customer_comment ? { comment: order.customer_comment } : {}),
           // 3.6: the point chosen on the map — the button «Открыть в Яндекс Картах»

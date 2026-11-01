@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { track } from '../lib/analytics';
-import type { OnlineProvider, ShortNamed } from '../lib/types';
+import type { CampaignLine, OnlineProvider, ShortNamed } from '../lib/types';
+import { CampaignRows } from './Campaign';
 
 export interface OrderItemLine extends ShortNamed {
   product_id: string;
@@ -47,7 +48,8 @@ export function OrderItems({ items, note }: { items: OrderItemLine[]; note?: (it
  * Goods, the promo discount as its own line (3.3), delivery («Бесплатно» as an accent, the first-order or promo badge)
  * and a big «Итого». delivery null = city not chosen. `goods` is before the discount.
  */
-export function OrderTotals({ goods, goodsCount, discount = 0, promo, delivery, firstOrder = false, total }: {
+export function OrderTotals({ goods, goodsCount, discount = 0, promo, delivery, firstOrder = false, total, campaigns, saleHint = false }: {
+  /** 3.7: at regular prices when there are sale lines (they follow it) */
   goods: number;
   goodsCount?: number;
   discount?: number;
@@ -55,6 +57,10 @@ export function OrderTotals({ goods, goodsCount, discount = 0, promo, delivery, 
   delivery: number | null;
   firstOrder?: boolean;
   total: number;
+  /** 3.7: «Акция «11.11»: −X сум» */
+  campaigns?: CampaignLine[];
+  /** 3.7: a promo code is on, but some products are in a sale above 15% — it does not apply to them */
+  saleHint?: boolean;
 }) {
   const { t, lang } = useI18n();
   return (
@@ -63,12 +69,14 @@ export function OrderTotals({ goods, goodsCount, discount = 0, promo, delivery, 
         <span>{goodsCount != null ? t('cart.goods', { n: goodsCount }) : t('order.goods')}</span>
         <span>{money(goods, lang)}</span>
       </div>
+      <CampaignRows campaigns={campaigns} />
       {discount > 0 && (
         <div className="sum-row promo-row">
           <span>{promo ? t('promo.line', { code: promo.code }) : t('promo.label')}</span>
           <span className="promo-amount">−{money(discount, lang)}</span>
         </div>
       )}
+      {saleHint && <p className="hint small sale-hint">{t('promo.saleHint')}</p>}
       {delivery != null && (
         <div className="sum-row">
           <span>

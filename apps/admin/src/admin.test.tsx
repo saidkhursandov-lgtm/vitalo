@@ -38,13 +38,14 @@ describe('menu by role', () => {
     for (const role of ['warehouse', 'marketer', 'manager']) expect(labels(role)).not.toContain('Бренды');
   });
 
-  it('marketer: dashboard, products, «Акции» (3.2) and «Промокоды» (3.3)', () => {
-    expect(labels('marketer')).toEqual(['Дашборд', 'Товары', 'Акции', 'Промокоды']);
-    for (const role of ['warehouse', 'manager']) expect(labels(role)).not.toContain('Акции');
+  it('marketer: dashboard, products, «Акции» (3.7), «Рассылки» (3.2) and «Промокоды» (3.3)', () => {
+    expect(labels('marketer')).toEqual(['Дашборд', 'Товары', 'Акции', 'Рассылки', 'Промокоды']);
+    for (const role of ['warehouse', 'manager']) expect(labels(role)).not.toContain('Рассылки');
+    expect(labels('warehouse')).not.toContain('Акции');
   });
 
   it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {
-    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты', 'Лист ожидания', 'Промокоды', 'Совместимость']);
+    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты', 'Лист ожидания', 'Акции', 'Промокоды', 'Совместимость']);
   });
 });
 

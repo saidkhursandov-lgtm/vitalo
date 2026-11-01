@@ -5,6 +5,7 @@ import { DeliveryQuote } from '../delivery/delivery-quote';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { purchaseCosts } from './purchase-costs';
 import { eligibleLines, goodsDiscount, GoodsDiscount, normalizePromoCode, PricingLine, PROMO_CODE_RE, PromoGuard, PromoKind, PromoTargets } from './pricing';
 
 type Db = Prisma.TransactionClient | PrismaService;
@@ -43,9 +44,6 @@ export interface PromoApplied {
 }
 
 export type PromoResult = PromoApplied | PromoRejection;
-
-/** Units still in the shop: their real cost is the purchase cost of what we sell now. */
-const ON_HAND = ['RECEIVED', 'IN_STOCK', 'ASSIGNED'] as const;
 
 /** Statuses that hold an activation: reserved (order created) and consumed (paid). Rolled back = free again. */
 const HOLDING = ['reserved', 'consumed'] as const;
@@ -89,24 +87,26 @@ export class PromoCodesService {
     return this.settings.getOrDefault('promo_guard');
   }
 
-  /** Pricing lines with brand, «old price» and purchase cost (the larger of the product cost and the dearest jar on hand). */
-  async pricingLines(db: Db, lines: { product_id: string; qty: number; unit_price_uzs: number }[]): Promise<PricingLine[]> {
+  /**
+   * Pricing lines with brand, «old price» and purchase cost (purchaseCosts). 3.7: a line in a running sale carries its
+   * regular price and the sale's percent (the promo code then looks at them).
+   */
+  async pricingLines(db: Db, lines: { product_id: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; campaign?: LineCampaign | null }[]): Promise<PricingLine[]> {
     const ids = lines.map((l) => l.product_id);
-    const [products, units] = await Promise.all([
-      db.products.findMany({ where: { id: { in: ids } }, select: { id: true, brand_id: true, old_price_uzs: true, cost_uzs: true } }),
-      db.physical_units.groupBy({ by: ['product_id'], where: { product_id: { in: ids }, status: { in: [...ON_HAND] } }, _max: { actual_cost_uzs: true } }),
+    const [products, costs] = await Promise.all([
+      db.products.findMany({ where: { id: { in: ids } }, select: { id: true, brand_id: true, old_price_uzs: true } }),
+      purchaseCosts(db, ids),
     ]);
     return lines.map((l) => {
       const p = products.find((x) => x.id === l.product_id);
-      const unitMax = units.find((u) => u.product_id === l.product_id)?._max.actual_cost_uzs;
-      const costs = [p?.cost_uzs, unitMax].filter((c): c is bigint => c != null).map(Number);
       return {
         product_id: l.product_id,
         brand_id: p?.brand_id ?? null,
         qty: l.qty,
         unit_price_uzs: l.unit_price_uzs,
         old_price_uzs: p?.old_price_uzs == null ? null : Number(p.old_price_uzs),
-        cost_uzs: costs.length ? Math.max(...costs) : null,
+        cost_uzs: costs.get(l.product_id) ?? null,
+        ...(l.campaign && { list_price_uzs: l.list_price_uzs ?? l.unit_price_uzs, campaign_pct: l.campaign.discount_pct }),
       };
     });
   }
@@ -155,12 +155,15 @@ export class PromoCodesService {
   }
 
   /**
-   * THE order calculation (cart, checkout preview, order creation): goods at their prices → promo code → (bonuses,
+   * THE order calculation (cart, checkout preview, order creation): goods at their prices (3.7: a line in a running sale
+   * already at its sale price — the difference to the regular price is the «Акция …» line) → promo code → (bonuses,
    * release 4) → delivery → total. The free-delivery threshold uses goods AFTER the promo (Master TZ §9). A code that
    * does not fit comes back as `promo_rejection` and the totals are computed without it.
    */
   async calculate(db: Db, userId: string, priced: PricedInput[], opts: { address?: { region_id: string; city_id: string } | null; code?: string | null; lock?: boolean }): Promise<Calculation> {
     const goods = priced.reduce((s, l) => s + l.unit_price_uzs * l.qty, 0);
+    const campaigns = campaignLines(priced);
+    const campaignDiscount = campaigns.reduce((s, c) => s + c.amount_uzs, 0);
     let applied: PromoApplied | null = null;
     let rejection: PromoRejection | null = null;
     if (opts.code) {
@@ -199,13 +202,16 @@ export class PromoCodesService {
     };
 
     const snapshot: PricingSnapshot = {
-      version: 1,
+      version: 2,
       lines: priced.map((l) => {
         const d = byLine.get(l.product_id);
         return {
           product_id: l.product_id,
           qty: l.qty,
           unit_price_uzs: l.unit_price_uzs,
+          list_price_uzs: l.campaign ? (l.list_price_uzs ?? l.unit_price_uzs) : l.unit_price_uzs,
+          campaign_id: l.campaign?.id ?? null,
+          campaign_discount_uzs: l.campaign ? ((l.list_price_uzs ?? l.unit_price_uzs) - l.unit_price_uzs) * l.qty : 0,
           line_total_uzs: l.unit_price_uzs * l.qty,
           promo_discount_uzs: d?.discount_uzs ?? 0,
           promo_capped: d?.capped ?? false,
@@ -213,6 +219,8 @@ export class PromoCodesService {
         };
       }),
       goods_total_uzs: goods,
+      goods_list_total_uzs: goods + campaignDiscount,
+      campaigns,
       discounts: applied
         ? [{ kind: 'promo', promotion_id: applied.promotion_id, code: applied.code, type: applied.kind, value: applied.value, target: applied.kind === 'free_delivery' ? 'delivery' : 'goods', amount_uzs: promo!.discount_uzs, capped: applied.goods.capped }]
         : [],
@@ -227,7 +235,7 @@ export class PromoCodesService {
     };
 
     return {
-      totals: { goods_total_uzs: goods, discount_total_uzs: discount, bonus_used_uzs: bonus, goods_paid_uzs: goodsPaid, delivery_cost_uzs: deliveryCost, total_uzs: goodsPaid + deliveryCost },
+      totals: { goods_list_total_uzs: goods + campaignDiscount, campaign_discount_uzs: campaignDiscount, goods_total_uzs: goods, discount_total_uzs: discount, bonus_used_uzs: bonus, goods_paid_uzs: goodsPaid, delivery_cost_uzs: deliveryCost, total_uzs: goodsPaid + deliveryCost },
       delivery,
       promo,
       promo_rejection: rejection,
@@ -241,6 +249,40 @@ export interface PricedInput {
   product_id: string;
   qty: number;
   unit_price_uzs: number;
+  /** 3.7: the line is in a running sale: unit_price_uzs is its sale price, this is the regular one */
+  list_price_uzs?: number;
+  campaign?: LineCampaign | null;
+}
+
+/** 3.7: the sale of a line (CampaignsService.running). */
+export interface LineCampaign {
+  id: string;
+  title_ru: string;
+  title_uz: string | null;
+  skin: string;
+  discount_pct: number;
+}
+
+/** 3.7: «Акция 11.11: −X сум» — one line per sale in the order, in the order of the lines. */
+export type CampaignLine = {
+  promotion_id: string;
+  title_ru: string;
+  title_uz: string | null;
+  skin: string;
+  amount_uzs: number;
+};
+
+export function campaignLines(priced: PricedInput[]): CampaignLine[] {
+  const out: CampaignLine[] = [];
+  for (const l of priced) {
+    if (!l.campaign) continue;
+    const amount = ((l.list_price_uzs ?? l.unit_price_uzs) - l.unit_price_uzs) * l.qty;
+    if (amount <= 0) continue;
+    const row = out.find((c) => c.promotion_id === l.campaign!.id);
+    if (row) row.amount_uzs += amount;
+    else out.push({ promotion_id: l.campaign.id, title_ru: l.campaign.title_ru, title_uz: l.campaign.title_uz, skin: l.campaign.skin, amount_uzs: amount });
+  }
+  return out;
 }
 
 /** What the customer sees about the applied code. */
@@ -259,11 +301,18 @@ export interface PromoView {
   message_uz: string;
 }
 
-/** The frozen calculation kept in orders.pricing_json (never recalculated after the order is created). */
+/**
+ * The frozen calculation kept in orders.pricing_json (never recalculated after the order is created).
+ * Version 2 (3.7): the regular price of each line, its sale and the «Акция …» lines; goods_total_uzs stays the goods at
+ * the prices paid before the promo code (sale prices), so older readers keep working.
+ */
 export interface PricingSnapshot {
-  version: 1;
-  lines: { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; promo_discount_uzs: number; promo_capped: boolean; paid_line_total_uzs: number }[];
+  version: 1 | 2;
+  lines: { product_id: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; campaign_id?: string | null; campaign_discount_uzs?: number; line_total_uzs: number; promo_discount_uzs: number; promo_capped: boolean; paid_line_total_uzs: number }[];
   goods_total_uzs: number;
+  /** 3.7: goods at regular prices (goods_total_uzs + the sales) */
+  goods_list_total_uzs?: number;
+  campaigns?: CampaignLine[];
   discounts: { kind: 'promo'; promotion_id: string; code: string; type: PromoKind; value: number; target: 'goods' | 'delivery'; amount_uzs: number; capped: boolean }[];
   bonus_used_uzs: number;
   delivery: { tariff_uzs: number; cost_uzs: number; free_reason: 'threshold' | 'first_order' | 'promo' | null };
@@ -272,7 +321,7 @@ export interface PricingSnapshot {
 }
 
 export interface Calculation {
-  totals: { goods_total_uzs: number; discount_total_uzs: number; bonus_used_uzs: number; goods_paid_uzs: number; delivery_cost_uzs: number; total_uzs: number };
+  totals: { goods_list_total_uzs: number; campaign_discount_uzs: number; goods_total_uzs: number; discount_total_uzs: number; bonus_used_uzs: number; goods_paid_uzs: number; delivery_cost_uzs: number; total_uzs: number };
   delivery: DeliveryQuote | null;
   promo: PromoView | null;
   promo_rejection: PromoRejection | null;

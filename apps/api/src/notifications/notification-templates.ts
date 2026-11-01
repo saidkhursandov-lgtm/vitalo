@@ -74,6 +74,8 @@ export interface TemplatePayload {
   open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart';
   /** 3.3: the order's promo code — one more line under the total */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
+  /** 3.7: «Акция 11.11: −X сум» lines of the order */
+  campaigns?: { title_ru: string; title_uz: string | null; amount_uzs: number }[];
   /** 3.2: «Как принимать ваш заказ» — short product name and its intake memo, in the customer's language */
   guide?: { name: string; text: string }[];
   /** 3.2: second button «Спросить специалиста» (support chat) */
@@ -176,10 +178,12 @@ export function commentLine(p: TemplatePayload, lang: Lang): string {
 ${text}` : '';
 }
 
+/** The order's discounts: 3.7 «Акция 11.11: −X сум» lines, then 3.3 «Промокод VITALO10: −Y сум». */
 export function promoLine(p: TemplatePayload, lang: Lang): string {
-  if (!p.promo) return '';
+  const sales = (p.campaigns ?? []).map((c) => `\n${lang === 'uz' ? `«${c.title_uz || c.title_ru}» aksiyasi` : `Акция «${c.title_ru}»`}: −${sum(c.amount_uzs, lang)}`).join('');
+  if (!p.promo) return sales;
   const what = p.promo.free_delivery ? (lang === 'uz' ? 'yetkazib berish bepul' : 'доставка бесплатно') : `−${sum(p.promo.discount_uzs, lang)}`;
-  return `\n${lang === 'uz' ? 'Promokod' : 'Промокод'} ${p.promo.code}: ${what}`;
+  return `${sales}\n${lang === 'uz' ? 'Promokod' : 'Промокод'} ${p.promo.code}: ${what}`;
 }
 
 /** Status names shared with the Mini App order screen and the bot ("Мои заказы"). */

@@ -148,6 +148,20 @@ enum PromoUsageStatus {
   rolled_back
 }
 
+/// 3.7: a promotions row is a promo code (codes) or a sale with its own prices (campaign)
+enum PromotionKind {
+  code
+  campaign
+}
+
+/// 3.7: how a sale looks in the shop (badge, price colour)
+enum CampaignSkin {
+  none
+  black_friday
+  eleven_eleven
+  sale
+}
+
 enum PromoCodeStatus {
   active
   disabled
@@ -1258,6 +1272,8 @@ model cart_items {
   product_id              String   @db.Uuid
   qty                     Int
   unit_price_snapshot_uzs BigInt
+  /// 3.7: the sale the snapshot price came from: «Акция завершилась» when it is over
+  campaign_id             String?  @db.Uuid
   created_at              DateTime @default(now())
   updated_at              DateTime @updatedAt
   cart                    carts    @relation(fields: [cart_id], references: [id])
@@ -1496,28 +1512,43 @@ model promotions {
   description_ru     String?
   description_uz     String?
   first_order_only   Boolean             @default(false)
+  // 3.7: sales («Акции»): titles, look, address, «без даты окончания» (end_at is then far away), «Сообщить о старте»
+  kind               PromotionKind       @default(code)
+  title_ru           String?
+  title_uz           String?
+  slug               String?             @unique
+  skin               CampaignSkin?
+  open_ended         Boolean             @default(false)
+  notify_start       Boolean             @default(false)
+  start_notified_at  DateTime?
   created_at         DateTime            @default(now())
   updated_at         DateTime            @default(now()) @updatedAt
   targets            promotion_targets[]
   usages             promotion_usages[]
   codes              promo_codes[]
   orders             orders[]
+
+  @@index([kind, status, start_at])
 }
 
 model promotion_targets {
-  id           String      @id @default(uuid()) @db.Uuid
-  promotion_id String      @db.Uuid
-  product_id   String?     @db.Uuid
-  category_id  String?     @db.Uuid
-  brand        String?
+  id                 String      @id @default(uuid()) @db.Uuid
+  promotion_id       String      @db.Uuid
+  product_id         String?     @db.Uuid
+  category_id        String?     @db.Uuid
+  brand              String?
   /// 3.3: a brand from the brands dictionary (the text column `brand` is not used)
-  brand_id     String?     @db.Uuid
-  promotion    promotions  @relation(fields: [promotion_id], references: [id])
-  product      products?   @relation(fields: [product_id], references: [id])
-  category     categories? @relation(fields: [category_id], references: [id])
-  brand_ref    brands?     @relation(fields: [brand_id], references: [id])
+  brand_id           String?     @db.Uuid
+  /// 3.7: a sale: the product's discount in % or its sale price (one of the two)
+  discount_pct       Int?
+  campaign_price_uzs BigInt?
+  promotion          promotions  @relation(fields: [promotion_id], references: [id])
+  product            products?   @relation(fields: [product_id], references: [id])
+  category           categories? @relation(fields: [category_id], references: [id])
+  brand_ref          brands?     @relation(fields: [brand_id], references: [id])
 
   @@index([promotion_id])
+  @@index([product_id])
 }
 
 model promotion_usages {

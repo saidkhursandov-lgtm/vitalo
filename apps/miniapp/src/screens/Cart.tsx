@@ -25,6 +25,8 @@ export function warningText(w: CartWarning, cart: CartData, lang: Lang, t: (k: M
   switch (w.code) {
     case 'price_changed':
       return t('cart.warn.price_changed', { name, old: money(w.old_price_uzs, lang), new: money(w.new_price_uzs, lang) });
+    case 'campaign_ended':
+      return t('cart.warn.campaign_ended', { name, old: money(w.old_price_uzs, lang), new: money(w.new_price_uzs, lang) });
     case 'qty_reduced':
       return t('cart.warn.qty_reduced', { name, n: w.available_qty });
     case 'out_of_stock':
@@ -254,8 +256,10 @@ export function Cart() {
       <section className="card summary">
         <PromoBox applied={data.promo} place="cart" onApply={promo.apply} onRemove={promo.remove} />
         <OrderTotals
-          goods={data.goods_total_uzs}
+          goods={data.goods_list_total_uzs ?? data.goods_total_uzs}
           goodsCount={data.items_count}
+          campaigns={data.campaigns}
+          saleHint={!!data.promo && data.items.some((i) => (i.campaign?.discount_pct ?? 0) > 15)}
           discount={data.discount_total_uzs}
           promo={data.promo}
           delivery={delivery ? (delivery.is_free ? 0 : delivery.cost_uzs) : null}

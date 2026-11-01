@@ -40,6 +40,13 @@ describe('reconcileCartLine', () => {
     expect(reconcileCartLine({ ...base, sellable: false }).status).toBe('unavailable');
   });
 
+  it('3.7: a sale price whose sale is over → «Акция завершилась», the regular price is taken', () => {
+    const r = reconcileCartLine({ ...base, snapshot_price_uzs: 40_000, current_price_uzs: 50_000, snapshot_campaign_id: 'c1', current_campaign_id: null });
+    expect(r).toMatchObject({ unit_price_uzs: 50_000, warnings: [{ code: 'campaign_ended', old_price_uzs: 40_000, new_price_uzs: 50_000 }] });
+    // a sale that started while the line waited is just a new (lower) price
+    expect(reconcileCartLine({ ...base, current_price_uzs: 40_000, current_campaign_id: 'c1' }).warnings).toEqual([{ code: 'price_changed', product_id: 'p1', old_price_uzs: 50_000, new_price_uzs: 40_000 }]);
+  });
+
   it('caps a line at 99 units', () => {
     expect(reconcileCartLine({ ...base, qty: 150, available_qty: 500 }).qty).toBe(99);
   });

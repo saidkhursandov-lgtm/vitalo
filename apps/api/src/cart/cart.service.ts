@@ -1,11 +1,12 @@
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { listInclude, toProductListItem } from '../catalog/product.mapper';
+import { listInclude, ShopCampaign, toProductListItem } from '../catalog/product.mapper';
 import { DeliveryService } from '../delivery/delivery.service';
 import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockService } from '../inventory/stock.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { PromoCodesService, PromoView } from '../promo/promo.service';
+import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
+import { CampaignLine, PromoCodesService, PromoView } from '../promo/promo.service';
 import { SettingsService } from '../settings/settings.service';
 import { CartWarning, MAX_LINE_QTY, reconcileCartLine } from './cart-reconcile';
 import { rankUpsell, UPSELL_COUNT, UPSELL_MIN_COUNT, UPSELL_SPARE } from './upsell';
@@ -25,12 +26,19 @@ export interface CartLineView {
   available_qty: number;
   unit_price_uzs: number;
   line_total_uzs: number;
+  /** 3.7: the regular price (= unit_price_uzs when the product is not in a running sale) and the sale */
+  list_price_uzs: number;
+  campaign: ShopCampaign | null;
 }
 
 export interface CartView {
   items: CartLineView[];
   warnings: CartWarning[];
-  goods_total_uzs: number; // available lines only
+  goods_total_uzs: number; // available lines only, at the prices charged (sale prices included)
+  /** 3.7: goods at regular prices and «Акция 11.11: −X сум» lines */
+  goods_list_total_uzs: number;
+  campaign_discount_uzs: number;
+  campaigns: CampaignLine[];
   discount_total_uzs: number; // 3.3: the promo code's goods discount
   items_count: number;
   can_checkout: boolean;
@@ -47,6 +55,7 @@ export class CartService {
     private readonly delivery: DeliveryService,
     private readonly settings: SettingsService,
     private readonly promo: PromoCodesService,
+    private readonly campaigns: CampaignsService,
   ) {}
 
   /**
@@ -74,7 +83,7 @@ export class CartService {
       where: { status: 'active', id: source === 'manual' ? { in: manual } : { notIn: inCart }, price_uzs: { gt: 0 } },
       include: listInclude,
     });
-    const ranked = rankUpsell(products.map(toProductListItem).filter((p) => p.in_stock), quote.remaining_for_free_uzs, UPSELL_COUNT + UPSELL_SPARE);
+    const ranked = rankUpsell((await this.campaigns.decorate(products.map(toProductListItem))).filter((p) => p.in_stock), quote.remaining_for_free_uzs, UPSELL_COUNT + UPSELL_SPARE);
     const items = ranked.slice(0, UPSELL_COUNT);
     return items.length >= UPSELL_MIN_COUNT ? { items, spare: ranked.slice(UPSELL_COUNT), source, remaining_uzs: quote.remaining_for_free_uzs } : none;
   }
@@ -87,25 +96,37 @@ export class CartService {
     });
     const items = cart?.items ?? [];
     const available = await this.stock.availability(items.map((i) => i.product_id));
+    // 3.7: the sale prices of now; the sales the snapshots came from (for «Акция завершилась»)
+    const products = await this.campaigns.decorate(items.map((i) => toProductListItem(i.product)));
+    const endedIds = [...new Set(items.map((i) => i.campaign_id).filter((id): id is string => !!id && !products.some((p) => p.campaign?.id === id)))];
+    const ended = endedIds.length ? await this.prisma.promotions.findMany({ where: { id: { in: endedIds } }, select: { id: true, name: true, title_ru: true, title_uz: true } }) : [];
 
     const lines: CartLineView[] = [];
     const warnings: CartWarning[] = [...extraWarnings];
-    for (const item of items) {
-      const product = toProductListItem(item.product);
+    for (const [idx, item] of items.entries()) {
+      const product = products[idx];
+      const campaignId = product.campaign?.id ?? null;
       const r = reconcileCartLine({
         product_id: item.product_id,
         qty: item.qty,
         snapshot_price_uzs: Number(item.unit_price_snapshot_uzs),
         current_price_uzs: product.price_uzs,
+        snapshot_campaign_id: item.campaign_id,
+        current_campaign_id: campaignId,
         sellable: item.product.status === 'active',
         available_qty: available.get(item.product_id) ?? 0,
       });
       // Persist corrections so each warning is shown once and the cart stays consistent between sessions.
-      if (r.status === 'available' && (r.qty !== item.qty || r.unit_price_uzs !== Number(item.unit_price_snapshot_uzs))) {
+      if (r.status === 'available' && (r.qty !== item.qty || r.unit_price_uzs !== Number(item.unit_price_snapshot_uzs) || campaignId !== item.campaign_id)) {
         await this.prisma.cart_items.update({
           where: { id: item.id },
-          data: { qty: r.qty, unit_price_snapshot_uzs: BigInt(r.unit_price_uzs) },
+          data: { qty: r.qty, unit_price_snapshot_uzs: BigInt(r.unit_price_uzs), campaign_id: campaignId },
         });
+      }
+      for (const w of r.warnings) {
+        if (w.code !== 'campaign_ended') continue;
+        const c = ended.find((e) => e.id === item.campaign_id);
+        Object.assign(w, { campaign_title_ru: c?.title_ru ?? c?.name, campaign_title_uz: c?.title_uz ?? null });
       }
       warnings.push(...r.warnings.filter((w) => !extraWarnings.some((e) => e.code === w.code && e.product_id === w.product_id)));
       lines.push({
@@ -123,6 +144,8 @@ export class CartService {
         available_qty: Math.min(available.get(item.product_id) ?? 0, MAX_LINE_QTY),
         unit_price_uzs: r.unit_price_uzs,
         line_total_uzs: r.unit_price_uzs * r.qty,
+        list_price_uzs: product.campaign?.list_price_uzs ?? r.unit_price_uzs,
+        campaign: product.campaign,
       });
     }
 
@@ -138,6 +161,9 @@ export class CartService {
       items: lines,
       warnings,
       goods_total_uzs: calc.totals.goods_total_uzs,
+      goods_list_total_uzs: calc.totals.goods_list_total_uzs,
+      campaign_discount_uzs: calc.totals.campaign_discount_uzs,
+      campaigns: calc.snapshot.campaigns ?? [],
       discount_total_uzs: calc.totals.discount_total_uzs,
       items_count: sellable.reduce((s, l) => s + l.qty, 0),
       can_checkout: sellable.length > 0,
@@ -180,15 +206,20 @@ export class CartService {
     };
   }
 
-  /** Orderable lines at current prices, read-only (see count()). */
-  private async countLines(userId: string): Promise<{ product_id: string; qty: number; unit_price_uzs: number }[]> {
+  /** Orderable lines at current prices (3.7: sale prices included), read-only (see count()). */
+  private async countLines(userId: string): Promise<{ product_id: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; campaign?: ShopCampaign | null }[]> {
     const items = await this.prisma.cart_items.findMany({
       where: { cart: { user_id: userId, status: 'active' }, product: { status: 'active' } },
       select: { product_id: true, qty: true, product: { select: { price_uzs: true } } },
     });
     const available = await this.stock.availability(items.map((i) => i.product_id));
+    const sale = await this.campaigns.running(this.prisma, items.map((i) => i.product_id));
     return items
-      .map((i) => ({ product_id: i.product_id, qty: Math.min(i.qty, available.get(i.product_id) ?? 0, MAX_LINE_QTY), unit_price_uzs: Number(i.product.price_uzs) }))
+      .map((i) => {
+        const c = sale.get(i.product_id);
+        const qty = Math.min(i.qty, available.get(i.product_id) ?? 0, MAX_LINE_QTY);
+        return c ? { product_id: i.product_id, qty, unit_price_uzs: c.price_uzs, list_price_uzs: c.list_price_uzs, campaign: toShopCampaign(c) } : { product_id: i.product_id, qty, unit_price_uzs: Number(i.product.price_uzs) };
+      })
       .filter((l) => l.qty > 0);
   }
 
@@ -221,15 +252,19 @@ export class CartService {
     return this.getCart(userId);
   }
 
-  private async writeLine(userId: string, cartId: string, productId: string, price: bigint, wanted: number, available: number) {
+  /** 3.7: the snapshot keeps the price charged now (a sale price too) and the sale it came from. */
+  private async writeLine(userId: string, cartId: string, productId: string, regular: bigint, wanted: number, available: number) {
+    const sale = (await this.campaigns.running(this.prisma, [productId])).get(productId);
+    const price = sale ? BigInt(sale.price_uzs) : regular;
+    const campaign_id = sale?.campaign.id ?? null;
     const limit = Math.min(available, MAX_LINE_QTY);
     const qty = Math.min(wanted, limit);
     const warnings: CartWarning[] =
       wanted > limit ? [{ code: 'qty_reduced', product_id: productId, requested_qty: wanted, available_qty: limit }] : [];
     await this.prisma.cart_items.upsert({
       where: { cart_id_product_id: { cart_id: cartId, product_id: productId } },
-      create: { cart_id: cartId, product_id: productId, qty, unit_price_snapshot_uzs: price },
-      update: { qty, unit_price_snapshot_uzs: price },
+      create: { cart_id: cartId, product_id: productId, qty, unit_price_snapshot_uzs: price, campaign_id },
+      update: { qty, unit_price_snapshot_uzs: price, campaign_id },
     });
     return this.getCart(userId, undefined, warnings);
   }

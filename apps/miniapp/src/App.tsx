@@ -13,6 +13,7 @@ import { useI18n } from './lib/i18n';
 import { AddressEdit, Addresses } from './screens/Addresses';
 import { Cart } from './screens/Cart';
 import { BrandScreen, Catalog, ProductList } from './screens/Catalog';
+import { CampaignScreen } from './screens/Campaign';
 import { Checkout } from './screens/Checkout';
 import { Favorites } from './screens/Favorites';
 import { Home } from './screens/Home';
@@ -87,6 +88,7 @@ function Shop() {
         <Route path="catalog" element={<Catalog />} />
         <Route path="catalog/products" element={<ProductList />} />
         <Route path="brand/:slug" element={<BrandScreen />} />
+        <Route path="campaign/:slug" element={<CampaignScreen />} />
         <Route path="product/:id" element={<Product />} />
         <Route path="favorites" element={<Favorites />} />
         <Route path="cart" element={<Cart />} />

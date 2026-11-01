@@ -86,6 +86,9 @@ describe('Orders (e2e)', () => {
     it('fixes server-side prices and totals (delivery 20 000 below the 300 000 threshold)', () => {
       expect(order.items).toEqual([expect.objectContaining({ product_id: p.id, qty: 2, unit_price_uzs: 100_000, line_total_uzs: 200_000 })]);
       expect(order.totals).toEqual({
+        // 3.7: goods at regular prices and the sale discount (no sale here)
+        goods_list_total_uzs: 200_000,
+        campaign_discount_uzs: 0,
         goods_total_uzs: 200_000,
         discount_total_uzs: 0,
         bonus_used_uzs: 0,

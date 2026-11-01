@@ -3,7 +3,7 @@ import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
+import type { Address, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -32,6 +32,9 @@ export const useBrands = () => useQuery({ queryKey: ['brands'], queryFn: () => a
 export const useBrandShowcase = () => useQuery({ queryKey: ['brands', 'showcase'], queryFn: () => api<BrandCard[]>('/catalog/brands/showcase'), staleTime: 300_000 });
 export const useBrandPage = (slug: string) =>
   useQuery({ queryKey: ['brands', 'page', slug], queryFn: () => api<BrandPage>(`/catalog/brands/${encodeURIComponent(slug)}`), staleTime: 300_000 });
+/** 3.7: «Все товары акции»; 404 — the sale ended or has not started. */
+export const useCampaignPage = (slug: string) =>
+  useQuery({ queryKey: ['campaigns', 'page', slug], queryFn: () => api<CampaignPage>(`/catalog/campaigns/${encodeURIComponent(slug)}`), staleTime: 60_000, retry: false });
 export const useForms = () => useQuery({ queryKey: ['forms'], queryFn: () => api<{ form: string }[]>('/catalog/forms'), staleTime: 300_000 });
 export const useRegions = () => useQuery({ queryKey: ['regions'], queryFn: () => api<Region[]>('/delivery/regions'), staleTime: 300_000 });
 
