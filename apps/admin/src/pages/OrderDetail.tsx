@@ -29,6 +29,8 @@ export interface AdminOrder {
   customer_comment: string | null;
   items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; line_total_uzs: number }[];
   totals: { goods_total_uzs: number; discount_total_uzs: number; delivery_cost_uzs: number; total_uzs: number };
+  /** 3.3: the promo code of the order (frozen at checkout) */
+  promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null; verified_at: string | null } | null;
   history: { from_status: string | null; to_status: string; reason: string | null; changed_by_type: string; created_at: string }[];
   customer: { id: string; name: string; username: string | null; telegram_user_id: number; status: string };
@@ -202,9 +204,15 @@ export function OrderDetail() {
                 <td colSpan={3}>Товары</td>
                 <td className="num">{money(o.totals.goods_total_uzs)}</td>
               </tr>
+              {o.totals.discount_total_uzs > 0 && (
+                <tr>
+                  <td colSpan={3}>{o.promo ? `Промокод ${o.promo.code}` : 'Скидка'}</td>
+                  <td className="num">−{money(o.totals.discount_total_uzs)}</td>
+                </tr>
+              )}
               <tr>
                 <td colSpan={3}>Доставка</td>
-                <td className="num">{o.totals.delivery_cost_uzs ? money(o.totals.delivery_cost_uzs) : 'бесплатно'}</td>
+                <td className="num">{o.totals.delivery_cost_uzs ? money(o.totals.delivery_cost_uzs) : o.promo?.free_delivery ? `бесплатно (промокод ${o.promo.code})` : 'бесплатно'}</td>
               </tr>
               <tr className="strong">
                 <td colSpan={3}>Итого к оплате</td>

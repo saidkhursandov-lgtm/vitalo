@@ -43,8 +43,26 @@ const EXTRA_NAMES: Record<string, string> = {
   notification_read_all: 'Нажали «Прочитать все»',
   active_order_click: 'Нажали плашку заказа на главной',
   intake_guide_sent: 'Получили памятку приёма',
+  promo_apply_success: 'Применили промокод',
+  promo_apply_fail: 'Промокод не подошёл',
+  promo_remove: 'Убрали промокод',
 };
-const SYSTEM_NAMES: Record<string, string> = { payme: 'Payme', click: 'Click', uzum: 'Uzum' };
+/** Sub-rows: payment systems of «Скоро» and (3.3) reasons a promo code did not fit. */
+const SYSTEM_NAMES: Record<string, string> = {
+  payme: 'Payme',
+  click: 'Click',
+  uzum: 'Uzum',
+  not_found: 'нет такого кода',
+  disabled: 'код выключен',
+  not_started: 'ещё не начался',
+  expired: 'срок закончился',
+  first_order: 'только на первый заказ',
+  already_used: 'клиент уже использовал',
+  limit_reached: 'лимит исчерпан',
+  min_order: 'мала сумма заказа',
+  not_applicable: 'не подходит к товарам',
+  delivery_free: 'доставка уже бесплатная',
+};
 const PERIODS = [
   ['today', 'Сегодня'],
   ['7', '7 дней'],

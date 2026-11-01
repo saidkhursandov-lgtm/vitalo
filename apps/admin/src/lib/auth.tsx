@@ -46,7 +46,9 @@ export type Permission =
   | 'yandex.sync'
   | 'finance.manage'
   | 'products.aliases'
-  | 'promo.send';
+  | 'promo.send'
+  | 'promo.view'
+  | 'promo.manage';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };

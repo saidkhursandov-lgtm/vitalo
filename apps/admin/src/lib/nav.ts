@@ -20,6 +20,8 @@ export const NAV: NavItem[] = [
   { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
   // 3.2: promos to customers with «Получать акции и новости» — admin and marketer
   { to: '/promo', label: 'Акции', permission: 'promo.send' },
+  // 3.3: promo codes — admin, marketer (change), manager (view only)
+  { to: '/promo-codes', label: 'Промокоды', permission: 'promo.view' },
   // Stage 3: money — admin only
   { to: '/analytics', label: 'Аналитика', permission: 'finance.manage' },
   { to: '/finance', label: 'Финансы', permission: 'finance.manage' },

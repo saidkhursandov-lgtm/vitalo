@@ -382,3 +382,14 @@ textarea { resize: vertical; }
 
 /* 3.2: wide tables scroll inside the card on narrow screens */
 .table-wrap { overflow-x: auto; }
+
+/* 3.3 Промокоды: code + «Сгенерировать», brand / product pickers, a wide table that scrolls on small screens */
+.row-gap { display: flex; gap: 8px; align-items: center; }
+.row-gap input { flex: 1; min-width: 0; }
+.table-scroll { overflow-x: auto; }
+.picker { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 0 0 16px; }
+.picker legend { padding: 0 4px; font-weight: 600; }
+.picker-list { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; }
+.picker-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.picker-chips .id-chip { border: 0; cursor: pointer; font-size: 13px; }
+.picker input[type='search'] { width: 100%; margin-bottom: 4px; }
