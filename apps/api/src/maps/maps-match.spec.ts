@@ -63,6 +63,38 @@ describe('3.6 maps: region and district from the geocoder', () => {
     expect(matchPlace([c('province', 'Ташкентская область'), c('area', 'Кибрайский район'), c('locality', 'махаллинский сход граждан Маърифат')], REGIONS)).toEqual({ region_id: 'tash-obl', city_id: null });
   });
 
+  it('full SOATO list: a city and a district of one name are not confused; Tashkent and Kibray districts', () => {
+    const regions: PlaceRegion[] = [
+      {
+        id: 'andijan',
+        name_ru: 'Андижанская область',
+        name_uz: 'Andijon viloyati',
+        cities: [
+          { id: 'andijan-district', name_ru: 'Андижанский район', name_uz: 'Andijon tumani' },
+          { id: 'andijan-city', name_ru: 'Андижан', name_uz: 'Andijon' },
+          { id: 'asaka-district', name_ru: 'Асакинский район', name_uz: 'Asaka tumani' },
+        ],
+      },
+      {
+        id: 'tash-obl',
+        name_ru: 'Ташкентская область',
+        name_uz: 'Toshkent viloyati',
+        cities: [
+          { id: 'tashkent-district', name_ru: 'Ташкентский район', name_uz: 'Toshkent tumani' },
+          { id: 'qibray', name_ru: 'Кибрайский район', name_uz: 'Qibray tumani' },
+        ],
+      },
+    ];
+    expect(matchPlace([c('province', 'Андижанская область'), c('locality', 'Андижан'), c('street', 'улица Навои')], regions).city_id).toBe('andijan-city');
+    expect(matchPlace([c('province', 'Andijon viloyati'), c('locality', 'Andijon')], regions).city_id).toBe('andijan-city');
+    // as Yandex really answers for a street in the city: the city is also an «area»
+    expect(matchPlace([c('province', 'Andijon viloyati'), c('area', 'Andijon'), c('locality', 'Andijon'), c('street', 'Chashma koʻchasi')], regions).city_id).toBe('andijan-city');
+    expect(matchPlace([c('province', 'Андижанская область'), c('area', 'Андижанский район'), c('locality', 'кишлак Куйганъяр')], regions).city_id).toBe('andijan-district');
+    expect(matchPlace([c('province', 'Andijon viloyati'), c('area', 'Asaka tumani'), c('locality', 'Asaka')], regions).city_id).toBe('asaka-district');
+    expect(matchPlace([c('province', 'Ташкентская область'), c('area', 'Ташкентский район'), c('locality', 'Келес')], regions).city_id).toBe('tashkent-district');
+    expect(matchPlace([c('province', 'Ташкентская область'), c('area', 'Кибрайский район'), c('district', 'махаллинский сход граждан Янгихаёт')], regions).city_id).toBe('qibray');
+  });
+
   it('nothing known: neither region nor district', () => {
     expect(matchPlace([c('country', 'Казахстан'), c('province', 'Туркестанская область')], REGIONS)).toEqual({ region_id: null, city_id: null });
     expect(matchPlace([], REGIONS)).toEqual({ region_id: null, city_id: null });

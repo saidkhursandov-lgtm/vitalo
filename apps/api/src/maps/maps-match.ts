@@ -104,6 +104,11 @@ function regionMatches(component: string, region: PlaceRegion): boolean {
   });
 }
 
+/** «Андижанский район» / «Andijon tumani» — a district; «Андижан» — a city. */
+function isDistrictName(name: string): boolean {
+  return /(^|\s)(район|tumani|tuman)(\s|$)/i.test(name);
+}
+
 /** Most precise first: «Чиланзарский район» before the city «Ташкент». */
 const DISTRICT_KINDS = ['district', 'area', 'locality'];
 
@@ -117,11 +122,19 @@ export function matchPlace(components: GeoComponent[], regions: PlaceRegion[]): 
   // Yandex may give two provinces («Ташкентская область» and the district's own one); the most precise is the last
   const region = [...provinces].reverse().map((p) => regions.find((r) => regionMatches(p, r))).find(Boolean);
   if (!region) return { region_id: null, city_id: null };
-  for (const kind of DISTRICT_KINDS) {
-    for (const c of components.filter((x) => x.kind === kind)) {
-      const base = districtBase(c.name);
-      const city = region.cities.find((city) => [city.name_ru, city.name_uz].some((n) => n && sameStem(districtBase(n), base)));
-      if (city) return { region_id: region.id, city_id: city.id };
+  // the full SOATO list has a city and a district of one name («Андижан» and «Андижанский район»): the exact name wins
+  // over a similar one, in all components, before any similar name is tried
+  for (const same of [(a: string, b: string) => a === b, sameStem]) {
+    for (const kind of DISTRICT_KINDS) {
+      for (const c of components.filter((x) => x.kind === kind)) {
+        const base = districtBase(c.name);
+        const found = region.cities.filter((city) => [city.name_ru, city.name_uz].some((n) => n && same(districtBase(n), base)));
+        // «Andijon» and «Andijon tumani» are equal without the word «tumani»: the component's own word decides (Yandex
+        // gives a city as «area: Andijon» and a district as «area: Andijon tumani»)
+        const wantDistrict = isDistrictName(c.name);
+        const city = found.find((x) => isDistrictName(x.name_ru) === wantDistrict) ?? found[0];
+        if (city) return { region_id: region.id, city_id: city.id };
+      }
     }
   }
   return { region_id: region.id, city_id: null };

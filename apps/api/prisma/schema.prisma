@@ -365,26 +365,30 @@ model user_sessions {
 }
 
 model regions {
-  id        String             @id @default(uuid()) @db.Uuid
-  name_ru   String
-  name_uz   String
-  status    EntityStatus       @default(active)
-  cities    cities[]
-  addresses addresses[]
-  orders    orders[]
-  tariffs   delivery_tariffs[]
+  id         String             @id @default(uuid()) @db.Uuid
+  name_ru    String
+  name_uz    String
+  status     EntityStatus       @default(active)
+  /// Classifier SOATO (Agency of statistics), e.g. 1727 — Tashkent region
+  soato_code String?            @unique
+  cities     cities[]
+  addresses  addresses[]
+  orders     orders[]
+  tariffs    delivery_tariffs[]
 }
 
 model cities {
-  id        String             @id @default(uuid()) @db.Uuid
-  region_id String             @db.Uuid
-  name_ru   String
-  name_uz   String
-  status    EntityStatus       @default(active)
-  region    regions            @relation(fields: [region_id], references: [id])
-  addresses addresses[]
-  orders    orders[]
-  tariffs   delivery_tariffs[]
+  id         String             @id @default(uuid()) @db.Uuid
+  region_id  String             @db.Uuid
+  name_ru    String
+  name_uz    String
+  status     EntityStatus       @default(active)
+  /// Classifier SOATO, e.g. 1727265 — Tashkent district; null for towns added by hand
+  soato_code String?            @unique
+  region     regions            @relation(fields: [region_id], references: [id])
+  addresses  addresses[]
+  orders     orders[]
+  tariffs    delivery_tariffs[]
 
   @@index([region_id])
 }
@@ -594,21 +598,21 @@ model products {
 /// Stage 1 dictionaries: unique name_ru ignoring case and extra spaces (expression index in the migration).
 /// Never deleted (trigger), only archived; an archived value is not offered for new choices.
 model brands {
-  id               String       @id @default(uuid()) @db.Uuid
+  id               String              @id @default(uuid()) @db.Uuid
   name_ru          String
   name_uz          String?
-  status           EntityStatus @default(active)
+  status           EntityStatus        @default(active)
   // 2.2: brand showcase and the brand page
-  slug             String?      @unique
+  slug             String?             @unique
   logo_url         String?
   country_ru       String?
   country_uz       String?
   why_vitalo_ru    String?
   why_vitalo_uz    String?
-  show_in_showcase Boolean      @default(true)
-  sort_order       Int          @default(0)
-  created_at       DateTime     @default(now())
-  updated_at       DateTime     @updatedAt
+  show_in_showcase Boolean             @default(true)
+  sort_order       Int                 @default(0)
+  created_at       DateTime            @default(now())
+  updated_at       DateTime            @updatedAt
   products         products[]
   promo_targets    promotion_targets[]
 }
@@ -1317,7 +1321,7 @@ model orders {
   promo_code                     String?
   pricing_json                   Json?
 
-  user            users                 @relation(fields: [user_id], references: [id])
+  user            users                  @relation(fields: [user_id], references: [id])
   region          regions                @relation(fields: [region_id], references: [id])
   city            cities                 @relation(fields: [city_id], references: [id])
   promo           promotions?            @relation(fields: [promo_id], references: [id])
