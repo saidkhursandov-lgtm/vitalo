@@ -82,10 +82,19 @@ export class CheckoutDto {
   @ApiProperty({ enum: PAYMENT_METHOD_CODES, example: 'bank_transfer' })
   @IsIn(PAYMENT_METHOD_CODES)
   payment_method!: PaymentMethodCode;
+
+  @ApiPropertyOptional({
+    description: '3.3: промокод. Не передан — для корзины берётся сохранённый в корзине; пустая строка — без промокода',
+    example: 'VITALO10',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  promo_code?: string;
 }
 
 /** The confirmation screen recalculates as soon as the city is chosen, before name/phone are typed. */
-export class OrderPreviewDto extends PickType(CheckoutDto, ['source', 'buy_now', 'region_id', 'city_id', 'payment_method'] as const) {}
+export class OrderPreviewDto extends PickType(CheckoutDto, ['source', 'buy_now', 'region_id', 'city_id', 'payment_method', 'promo_code'] as const) {}
 
 export class CreateOrderDto extends CheckoutDto {
   @ApiPropertyOptional({

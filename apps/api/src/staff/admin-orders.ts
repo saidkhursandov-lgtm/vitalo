@@ -31,6 +31,7 @@ import { renderCentre, type TemplatePayload } from '../notifications/notificatio
 import { can, type Permission } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 import { AnalyticsService } from '../analytics/analytics.module';
+import { PricingSnapshot, promoFreeDelivery } from '../promo/promo.service';
 
 const PAGE_SIZE = 50;
 const TX = { maxWait: 10_000, timeout: 20_000 };
@@ -391,7 +392,10 @@ export class AdminOrdersService {
           throw new ConflictException({ code: 'COD_REGION', message: 'Оплата при получении — только для г. Ташкент: отмените заказ или оставьте город' });
         }
         const goods = Number(order.goods_total_uzs - order.discount_total_uzs);
-        const quote = await this.delivery.quote(regionId, cityId, goods, tx, { userId: order.user_id, exceptOrderId: id });
+        let quote = await this.delivery.quote(regionId, cityId, goods, tx, { userId: order.user_id, exceptOrderId: id });
+        // 3.3: a free-delivery promo code of the order keeps the delivery free in any city
+        const snap = order.pricing_json as unknown as PricingSnapshot | null;
+        if (snap?.discounts?.some((d) => d.type === 'free_delivery')) quote = promoFreeDelivery(quote);
         const total = Number(order.goods_paid_uzs) + quote.cost_uzs;
         if (cod) {
           const max = (await this.settings.getOrDefault('checkout_options')).cod_max_total_uzs;

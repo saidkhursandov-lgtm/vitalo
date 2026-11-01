@@ -69,6 +69,8 @@ export interface TemplatePayload {
   product?: string;
   /** 2.4: which page the button opens (text of the button); default: the order. 3.2: 'pay', 'link' */
   open_button?: 'order' | 'product' | 'pay' | 'link';
+  /** 3.3: the order's promo code — one more line under the total */
+  promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   /** 3.2: «Как принимать ваш заказ» — short product name and its intake memo, in the customer's language */
   guide?: { name: string; text: string }[];
   /** 3.2: second button «Спросить специалиста» (support chat) */
@@ -135,6 +137,13 @@ function reasonLine(p: TemplatePayload, lang: Lang): string {
 
 const sum = (n: number | undefined, lang: Lang) => `${formatUzs(n ?? 0)} ${lang === 'uz' ? 'so‘m' : 'сум'}`;
 
+/** 3.3: a new line «Промокод VITALO10: −20 000 сум» / «…: доставка бесплатно»; empty without a code. */
+export function promoLine(p: TemplatePayload, lang: Lang): string {
+  if (!p.promo) return '';
+  const what = p.promo.free_delivery ? (lang === 'uz' ? 'yetkazib berish bepul' : 'доставка бесплатно') : `−${sum(p.promo.discount_uzs, lang)}`;
+  return `\n${lang === 'uz' ? 'Promokod' : 'Промокод'} ${p.promo.code}: ${what}`;
+}
+
 /** Status names shared with the Mini App order screen and the bot ("Мои заказы"). */
 export const STATUS_LABELS: Record<Lang, Record<string, string>> = {
   ru: {
@@ -178,20 +187,20 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   },
   // 3.2: the order was just placed
   'order.accepted_pay': {
-    ru: (p) => `Заказ №${p.order_number} принят. Ожидает оплаты: ${sum(p.total_uzs, 'ru')}${p.until ? ` до ${p.until}` : ''}. После перевода отправьте чек.`,
-    uz: (p) => `№${p.order_number} buyurtma qabul qilindi. To‘lov kutilmoqda: ${sum(p.total_uzs, 'uz')}${p.until ? `, ${p.until} gacha` : ''}. O‘tkazmadan so‘ng chekni yuboring.`,
+    ru: (p) => `Заказ №${p.order_number} принят. Ожидает оплаты: ${sum(p.total_uzs, 'ru')}${p.until ? ` до ${p.until}` : ''}. После перевода отправьте чек.${promoLine(p, 'ru')}`,
+    uz: (p) => `№${p.order_number} buyurtma qabul qilindi. To‘lov kutilmoqda: ${sum(p.total_uzs, 'uz')}${p.until ? `, ${p.until} gacha` : ''}. O‘tkazmadan so‘ng chekni yuboring.${promoLine(p, 'uz')}`,
   },
   'order.accepted_cod': {
-    ru: (p) => `Заказ №${p.order_number} принят. Ожидает подтверждения: менеджер позвонит вам в рабочее время (08:00–22:00).`,
-    uz: (p) => `№${p.order_number} buyurtma qabul qilindi. Tasdiqlash kutilmoqda: menejer ish vaqtida (08:00–22:00) qo‘ng‘iroq qiladi.`,
+    ru: (p) => `Заказ №${p.order_number} принят. Ожидает подтверждения: менеджер позвонит вам в рабочее время (08:00–22:00).${promoLine(p, 'ru')}`,
+    uz: (p) => `№${p.order_number} buyurtma qabul qilindi. Tasdiqlash kutilmoqda: menejer ish vaqtida (08:00–22:00) qo‘ng‘iroq qiladi.${promoLine(p, 'uz')}`,
   },
   'order.paid': {
     ru: (p) => `Заказ №${p.order_number}: оплата подтверждена. Скоро начнём сборку.`,
     uz: (p) => `№${p.order_number} buyurtma: to‘lov tasdiqlandi. Tez orada yig‘ishni boshlaymiz.`,
   },
   'order.cod_confirmed': {
-    ru: (p) => `Заказ №${p.order_number} подтверждён. Оплата при получении: ${sum(p.total_uzs, 'ru')} наличными или переводом курьеру.`,
-    uz: (p) => `№${p.order_number} buyurtma tasdiqlandi. Qabul qilganda to‘lash: ${sum(p.total_uzs, 'uz')} naqd yoki kuryerga o‘tkazma.`,
+    ru: (p) => `Заказ №${p.order_number} подтверждён. Оплата при получении: ${sum(p.total_uzs, 'ru')} наличными или переводом курьеру.${promoLine(p, 'ru')}`,
+    uz: (p) => `№${p.order_number} buyurtma tasdiqlandi. Qabul qilganda to‘lash: ${sum(p.total_uzs, 'uz')} naqd yoki kuryerga o‘tkazma.${promoLine(p, 'uz')}`,
   },
   'order.picking': {
     ru: (p) => `Заказ №${p.order_number} собирается. Сообщим, когда передадим в доставку.`,
@@ -224,7 +233,7 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   // Staff messages: the admin panel is Russian-only, so are these.
   'staff.new_order': {
     ru: (p) =>
-      `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}` +
+      `🆕 Новый заказ ${p.order_number} на ${sum(p.total_uzs, 'ru')}\nКлиент: ${p.customer ?? '—'}, ${p.phone ?? '—'}${promoLine(p, 'ru')}` +
       (p.payment === 'cod' ? '\n💵 Оплата при получении (Ташкент). Ожидает подтверждения менеджером: позвоните клиенту и подтвердите заказ в админке.' : ''),
     uz: (p) => `🆕 Yangi buyurtma ${p.order_number}: ${sum(p.total_uzs, 'uz')}\nMijoz: ${p.customer ?? '—'}, ${p.phone ?? '—'}`,
   },

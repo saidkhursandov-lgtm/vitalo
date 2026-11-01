@@ -120,6 +120,7 @@ enum PaymentMethodStatus {
 enum PromoType {
   percent
   fixed
+  free_delivery // 3.3
 }
 
 enum StackingMode {
@@ -599,6 +600,7 @@ model brands {
   created_at       DateTime     @default(now())
   updated_at       DateTime     @updatedAt
   products         products[]
+  promo_targets    promotion_targets[]
 }
 
 model manufacturers {
@@ -1225,6 +1227,8 @@ model carts {
   id         String       @id @default(uuid()) @db.Uuid
   user_id    String       @db.Uuid
   status     CartStatus   @default(active)
+  /// 3.3: the promo code typed in the cart (checked again on every cart read; removed when it stops fitting)
+  promo_code String?
   created_at DateTime     @default(now())
   updated_at DateTime     @updatedAt
   user       users        @relation(fields: [user_id], references: [id])
@@ -1299,8 +1303,11 @@ model orders {
   is_test                        Boolean       @default(false)
   /// Stage 3: what the delivery really cost US (free delivery for the customer), admin only
   own_delivery_cost_uzs          BigInt        @default(0)
+  /// 3.3: the promo code (normalized) and the frozen price calculation; never recalculated after creation
+  promo_code                     String?
+  pricing_json                   Json?
 
-  user            users                  @relation(fields: [user_id], references: [id])
+  user            users                 @relation(fields: [user_id], references: [id])
   region          regions                @relation(fields: [region_id], references: [id])
   city            cities                 @relation(fields: [city_id], references: [id])
   promo           promotions?            @relation(fields: [promo_id], references: [id])
@@ -1471,6 +1478,12 @@ model promotions {
   stacking_mode      StackingMode        @default(exclusive)
   status             PromoStatus         @default(draft)
   scope_type         PromoScope          @default(order)
+  // 3.3: promo codes — the customer's text, «только первый заказ», when it was made
+  description_ru     String?
+  description_uz     String?
+  first_order_only   Boolean             @default(false)
+  created_at         DateTime            @default(now())
+  updated_at         DateTime            @default(now()) @updatedAt
   targets            promotion_targets[]
   usages             promotion_usages[]
   codes              promo_codes[]
@@ -1483,9 +1496,14 @@ model promotion_targets {
   product_id   String?     @db.Uuid
   category_id  String?     @db.Uuid
   brand        String?
+  /// 3.3: a brand from the brands dictionary (the text column `brand` is not used)
+  brand_id     String?     @db.Uuid
   promotion    promotions  @relation(fields: [promotion_id], references: [id])
   product      products?   @relation(fields: [product_id], references: [id])
   category     categories? @relation(fields: [category_id], references: [id])
+  brand_ref    brands?     @relation(fields: [brand_id], references: [id])
+
+  @@index([promotion_id])
 }
 
 model promotion_usages {
@@ -1500,6 +1518,7 @@ model promotion_usages {
   user         users            @relation(fields: [user_id], references: [id])
   order        orders           @relation(fields: [order_id], references: [id])
 
+  @@unique([order_id]) // 3.3: one promo code per order
   @@index([promotion_id, user_id])
 }
 

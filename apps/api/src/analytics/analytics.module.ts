@@ -19,8 +19,10 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
  * receipt_sent, receipt_confirmed, receipt_rejected (props.order_id, props.reason) — written by the server only.
  * 3.2: notification_open (props.category, props.template), notification_read_all (props.count), active_order_click
  * (props.order_id, props.action = open | pay) — from the app; intake_guide_sent (props.order_id, props.products) — server only.
+ * 3.3: promo_apply_success (props.code, props.discount_uzs, props.place = cart | checkout), promo_apply_fail (props.code,
+ * props.reason), promo_remove (props.code, props.place) — from the app.
  */
-export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click'] as const;
+export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove'] as const;
 export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent'] as const;
 export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;
@@ -87,13 +89,20 @@ export class AnalyticsService {
       SELECT props->>'system' AS system, COUNT(DISTINCT user_id) AS users, COUNT(*) AS events FROM analytics_events
       WHERE created_at >= ${from} AND event = 'payment_soon_click' AND props->>'system' IS NOT NULL
       GROUP BY 1 ORDER BY 3 DESC`;
+    // 3.3: why promo codes did not fit (min_order, expired, …), shown as sub-rows like the payment systems
+    const byReason = await this.prisma.$queryRaw<{ system: string; users: bigint; events: bigint }[]>`
+      SELECT props->>'reason' AS system, COUNT(DISTINCT user_id) AS users, COUNT(*) AS events FROM analytics_events
+      WHERE created_at >= ${from} AND event = 'promo_apply_fail' AND props->>'reason' IS NOT NULL
+      GROUP BY 1 ORDER BY 3 DESC`;
+    const sub = (b: { system: string; users: bigint; events: bigint }) => ({ system: b.system, users: Number(b.users), events: Number(b.events) });
     return EXTRA_EVENTS.map((event) => {
       const r = rows.find((x) => x.event === event);
       return {
         event,
         users: Number(r?.users ?? 0),
         events: Number(r?.events ?? 0),
-        ...(event === 'payment_soon_click' && { by_system: bySystem.map((b) => ({ system: b.system, users: Number(b.users), events: Number(b.events) })) }),
+        ...(event === 'payment_soon_click' && { by_system: bySystem.map(sub) }),
+        ...(event === 'promo_apply_fail' && { by_system: byReason.map(sub) }),
       };
     });
   }

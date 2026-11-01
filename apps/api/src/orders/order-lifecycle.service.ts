@@ -160,6 +160,7 @@ export class OrderLifecycleService {
     await tx.order_status_history.create({
       data: { order_id: order.id, from_status: order.status, to_status: 'paid', reason: 'Online payment confirmed by the payment system', changed_by_type: 'system', changed_by_id: null, created_at: now },
     });
+    await this.settlePromo(tx, order.id, 'paid');
     await this.notifications.orderStatusChanged(tx, order.id, 'paid', null);
     await this.units.reserveOnPayment(tx, { id: order.id, order_number: order.order_number, status: 'paid' }, null);
     return 'paid';
@@ -213,7 +214,21 @@ export class OrderLifecycleService {
         created_at: at,
       },
     });
+    await this.settlePromo(tx, orderId, to);
     const shownReason = actor.type === 'staff' ? reason : actor.type === 'system' ? EXPIRED_REASON_CODE : null;
     await this.notifications.orderStatusChanged(tx, orderId, to, shownReason);
+  }
+
+  /**
+   * 3.3: the promo activation of an order. Any cancellation (customer, expiry, staff — unpaid or paid, or after the
+   * handover) gives it back: the customer may use the code again and the «всего» limit is free again. Payment
+   * (or the cash-on-delivery confirmation) makes it consumed. A return after delivery keeps it: the order happened.
+   */
+  private async settlePromo(tx: Tx, orderId: string, to: OrderStatus) {
+    if (to === 'cancelled') {
+      await tx.promotion_usages.updateMany({ where: { order_id: orderId, status: { in: ['reserved', 'consumed'] } }, data: { status: 'rolled_back' } });
+    } else if (to === 'paid') {
+      await tx.promotion_usages.updateMany({ where: { order_id: orderId, status: 'reserved' }, data: { status: 'consumed' } });
+    }
   }
 }

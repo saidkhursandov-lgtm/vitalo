@@ -2,6 +2,7 @@ import { Global, Injectable, Module } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BONUS_TEASER_DEFAULT, HOME_CONTENT_DEFAULT, MANIFEST_DEFAULT } from './home-content';
 import { CART_UPSELL_DEFAULT } from '../cart/upsell';
+import { PROMO_GUARD_DEFAULT } from '../promo/pricing';
 
 /** Business settings editable by admins (table `settings`, JSON values). */
 export const SETTING_KEYS = {
@@ -20,6 +21,7 @@ export const SETTING_KEYS = {
   checkoutOptions: 'checkout_options',
   manifest: 'home_manifest',
   cartUpsell: 'cart_upsell',
+  promoGuard: 'promo_guard',
 } as const;
 
 /**
@@ -91,6 +93,8 @@ export const SETTING_DEFAULTS = {
   home_manifest: MANIFEST_DEFAULT,
   /** 3.1: «Настройки → Корзина» — products under the free-delivery bar. Not inserted by a migration: on by default. */
   cart_upsell: CART_UPSELL_DEFAULT,
+  /** 3.3: «Настройки → Промокоды» — margin protection (min markup over the purchase cost, max discount without a cost). Not inserted by a migration. */
+  promo_guard: PROMO_GUARD_DEFAULT,
 };
 
 /** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */

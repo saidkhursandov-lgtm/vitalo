@@ -10,9 +10,10 @@ import { OrdersService } from './orders.service';
 import { ReservationExpiryService } from './reservation-expiry.service';
 import { BotInfoService } from './receipts';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { PromoModule } from '../promo/promo.module';
 
 @Module({
-  imports: [AuthModule, InventoryModule, DeliveryModule, LegalModule, AnalyticsModule],
+  imports: [AuthModule, InventoryModule, DeliveryModule, LegalModule, AnalyticsModule, PromoModule],
   controllers: [OrdersController],
   providers: [OrdersService, OrderLifecycleService, OrderUnitsService, ReservationExpiryService, BotInfoService],
   exports: [OrdersService, OrderLifecycleService, OrderUnitsService, ReservationExpiryService, BotInfoService],

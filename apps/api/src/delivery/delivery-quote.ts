@@ -18,6 +18,8 @@ export interface DeliveryQuote extends Tariff {
   message_uz: string;
   /** Release 1: free because it is the customer's first order (setting «Бесплатная доставка первого заказа»). */
   first_order?: boolean;
+  /** 3.3: free because of a free-delivery promo code. */
+  promo?: boolean;
 }
 
 /** The same tariff, delivered free as the customer's first order. */

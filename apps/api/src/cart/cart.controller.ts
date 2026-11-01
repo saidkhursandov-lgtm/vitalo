@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsUUID, Max, Min, ValidateIf } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { AuthContext } from '../auth/auth.types';
 import { CurrentAuth, SessionGuard } from '../auth/session.guard';
 import { MAX_LINE_QTY } from './cart-reconcile';
@@ -25,6 +25,13 @@ export class CartQuery {
   @ValidateIf((q: CartQuery) => q.city_id !== undefined || q.region_id !== undefined)
   @IsUUID()
   city_id?: string;
+}
+
+export class ApplyPromoDto extends CartQuery {
+  @ApiProperty({ example: 'VITALO10', description: 'Регистр и пробелы по краям не важны' })
+  @IsString()
+  @MaxLength(64)
+  code!: string;
 }
 
 @ApiTags('cart')
@@ -61,6 +68,20 @@ export class CartController {
   @Patch('items/:productId')
   setQty(@CurrentAuth() auth: AuthContext, @Param('productId', new ParseUUIDPipe()) productId: string, @Body() dto: SetQtyDto) {
     return this.cart.setQty(auth.user.id, productId, dto.qty);
+  }
+
+  /** 3.3: «Применить» — 422 PROMO_REJECTED with the reason and RU/UZ text when the code does not fit. */
+  @Post('promo')
+  applyPromo(@CurrentAuth() auth: AuthContext, @Body() dto: ApplyPromoDto) {
+    const address = dto.region_id && dto.city_id ? { region_id: dto.region_id, city_id: dto.city_id } : undefined;
+    return this.cart.applyPromo(auth.user.id, dto.code, address);
+  }
+
+  /** 3.3: [✕] on the applied code. */
+  @Delete('promo')
+  removePromo(@CurrentAuth() auth: AuthContext, @Query() q: CartQuery) {
+    const address = q.region_id && q.city_id ? { region_id: q.region_id, city_id: q.city_id } : undefined;
+    return this.cart.removePromo(auth.user.id, address);
   }
 
   @Delete('items/:productId')

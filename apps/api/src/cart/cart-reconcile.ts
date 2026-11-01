@@ -3,7 +3,9 @@ export const MAX_LINE_QTY = 99;
 export type CartWarning =
   | { code: 'price_changed'; product_id: string; old_price_uzs: number; new_price_uzs: number }
   | { code: 'qty_reduced'; product_id: string; requested_qty: number; available_qty: number }
-  | { code: 'out_of_stock'; product_id: string };
+  | { code: 'out_of_stock'; product_id: string }
+  // 3.3: the saved promo code stopped fitting the cart and was removed
+  | { code: 'promo_removed'; product_id?: undefined; promo_code: string; reason: string; message_ru: string; message_uz: string };
 
 export interface ReconcileInput {
   product_id: string;

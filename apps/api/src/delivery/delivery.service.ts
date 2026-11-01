@@ -33,12 +33,18 @@ export class DeliveryService {
     return !!region && isTashkentRegionName(region.name_ru);
   }
 
-  /** Release 1: «Бесплатная доставка первого заказа» is on and the customer has no other orders except cancelled ones. */
+  /** Release 1: «Бесплатная доставка первого заказа» is on and this is the customer's first order (hasNoOrders). */
   async isFirstOrder(customer: QuoteCustomer, db: Db = this.prisma): Promise<boolean> {
     if (!(await this.settings.getOrDefault('checkout_options')).first_order_free_delivery) return false;
-    const others = await db.orders.count({
-      where: { user_id: customer.userId, status: { not: 'cancelled' }, ...(customer.exceptOrderId && { id: { not: customer.exceptOrderId } }) },
-    });
+    return this.hasNoOrders(customer.userId, db, customer.exceptOrderId);
+  }
+
+  /**
+   * D-39 (В): THE «first order» rule, for free delivery and for «только первый заказ» promo codes — the customer has
+   * no order except cancelled ones (unpaid, paid, in delivery and delivered ones all count).
+   */
+  async hasNoOrders(userId: string, db: Db = this.prisma, exceptOrderId?: string): Promise<boolean> {
+    const others = await db.orders.count({ where: { user_id: userId, status: { not: 'cancelled' }, ...(exceptOrderId && { id: { not: exceptOrderId } }) } });
     return others === 0;
   }
 

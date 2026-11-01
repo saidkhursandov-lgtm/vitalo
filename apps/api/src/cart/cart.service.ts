@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { listInclude, toProductListItem } from '../catalog/product.mapper';
 import { DeliveryService } from '../delivery/delivery.service';
 import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockService } from '../inventory/stock.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PromoCodesService, PromoView } from '../promo/promo.service';
 import { SettingsService } from '../settings/settings.service';
 import { CartWarning, MAX_LINE_QTY, reconcileCartLine } from './cart-reconcile';
 import { rankUpsell, UPSELL_MIN_COUNT } from './upsell';
@@ -29,11 +30,13 @@ export interface CartLineView {
 export interface CartView {
   items: CartLineView[];
   warnings: CartWarning[];
-  goods_total_uzs: number; // available lines only; no promo discounts yet
-  discount_total_uzs: number;
+  goods_total_uzs: number; // available lines only
+  discount_total_uzs: number; // 3.3: the promo code's goods discount
   items_count: number;
   can_checkout: boolean;
   delivery: DeliveryQuote | null;
+  /** 3.3: the applied promo code (null — none or it stopped fitting, see warnings `promo_removed`). */
+  promo: PromoView | null;
 }
 
 @Injectable()
@@ -43,6 +46,7 @@ export class CartService {
     private readonly stock: StockService,
     private readonly delivery: DeliveryService,
     private readonly settings: SettingsService,
+    private readonly promo: PromoCodesService,
   ) {}
 
   /**
@@ -54,9 +58,11 @@ export class CartService {
     const none = { items: [] as ReturnType<typeof toProductListItem>[], source: null as 'auto' | 'manual' | null, remaining_uzs: 0 };
     const cfg = await this.settings.getOrDefault('cart_upsell');
     if (!cfg.enabled || !address) return none;
-    const { goods_total_uzs } = await this.count(userId);
-    if (!goods_total_uzs) return none;
-    const quote = await this.delivery.quote(address.region_id, address.city_id, goods_total_uzs, undefined, { userId });
+    const lines = await this.countLines(userId);
+    if (!lines.length) return none;
+    // 3.3: the threshold counts goods after the promo code, exactly as in the cart
+    const cart = await this.prisma.carts.findFirst({ where: { user_id: userId, status: 'active' }, select: { promo_code: true } });
+    const quote = (await this.promo.calculate(this.prisma, userId, lines, { address, code: cart?.promo_code })).delivery!;
     if (quote.is_free || quote.first_order || quote.remaining_for_free_uzs <= 0) return none;
 
     const inCart = (await this.prisma.cart_items.findMany({ where: { cart: { user_id: userId, status: 'active' } }, select: { product_id: true } })).map((i) => i.product_id);
@@ -119,16 +125,44 @@ export class CartService {
     }
 
     const sellable = lines.filter((l) => l.status === 'available');
-    const goodsTotal = sellable.reduce((s, l) => s + l.line_total_uzs, 0);
+    // 3.3: the same calculation as the checkout; a saved code that stopped fitting is removed with a hint
+    const calc = await this.promo.calculate(this.prisma, userId, sellable, { address: sellable.length ? address : null, code: cart?.promo_code });
+    if (cart?.promo_code && calc.promo_rejection) {
+      await this.prisma.carts.update({ where: { id: cart.id }, data: { promo_code: null } });
+      const r = calc.promo_rejection;
+      warnings.push({ code: 'promo_removed', promo_code: r.code, reason: r.reason, message_ru: r.message_ru, message_uz: r.message_uz });
+    }
     return {
       items: lines,
       warnings,
-      goods_total_uzs: goodsTotal,
-      discount_total_uzs: 0,
+      goods_total_uzs: calc.totals.goods_total_uzs,
+      discount_total_uzs: calc.totals.discount_total_uzs,
       items_count: sellable.reduce((s, l) => s + l.qty, 0),
       can_checkout: sellable.length > 0,
-      delivery: address && sellable.length ? await this.delivery.quote(address.region_id, address.city_id, goodsTotal, undefined, { userId }) : null,
+      delivery: calc.delivery,
+      promo: calc.promo,
     };
+  }
+
+  /**
+   * 3.3: «У меня есть промокод» — checks the code against the cart (and the district, when given) and keeps it on the
+   * cart; a code that does not fit is not kept and comes back as 422 with the reason and the customer text.
+   */
+  async applyPromo(userId: string, input: string, address?: { region_id: string; city_id: string }): Promise<CartView> {
+    const cart = await this.getOrCreateActiveCart(userId);
+    const view = await this.getCart(userId, address);
+    const calc = await this.promo.calculate(this.prisma, userId, view.items.filter((l) => l.status === 'available'), { address, code: input });
+    if (!calc.promo) {
+      const r = calc.promo_rejection!;
+      throw new UnprocessableEntityException({ code: 'PROMO_REJECTED', promo_code: r.code, reason: r.reason, message_ru: r.message_ru, message_uz: r.message_uz });
+    }
+    await this.prisma.carts.update({ where: { id: cart.id }, data: { promo_code: calc.promo.code } });
+    return this.getCart(userId, address);
+  }
+
+  async removePromo(userId: string, address?: { region_id: string; city_id: string }): Promise<CartView> {
+    await this.prisma.carts.updateMany({ where: { user_id: userId, status: 'active' }, data: { promo_code: null } });
+    return this.getCart(userId, address);
   }
 
   /**
@@ -137,16 +171,23 @@ export class CartService {
    * shown when the customer opens the cart.
    */
   async count(userId: string): Promise<{ items_count: number; goods_total_uzs: number }> {
+    const lines = await this.countLines(userId);
+    return {
+      items_count: lines.reduce((s, l) => s + l.qty, 0),
+      goods_total_uzs: lines.reduce((s, l) => s + l.qty * l.unit_price_uzs, 0),
+    };
+  }
+
+  /** Orderable lines at current prices, read-only (see count()). */
+  private async countLines(userId: string): Promise<{ product_id: string; qty: number; unit_price_uzs: number }[]> {
     const items = await this.prisma.cart_items.findMany({
       where: { cart: { user_id: userId, status: 'active' }, product: { status: 'active' } },
       select: { product_id: true, qty: true, product: { select: { price_uzs: true } } },
     });
     const available = await this.stock.availability(items.map((i) => i.product_id));
-    const qty = (i: (typeof items)[number]) => Math.min(i.qty, available.get(i.product_id) ?? 0, MAX_LINE_QTY);
-    return {
-      items_count: items.reduce((s, i) => s + qty(i), 0),
-      goods_total_uzs: items.reduce((s, i) => s + qty(i) * Number(i.product.price_uzs), 0),
-    };
+    return items
+      .map((i) => ({ product_id: i.product_id, qty: Math.min(i.qty, available.get(i.product_id) ?? 0, MAX_LINE_QTY), unit_price_uzs: Number(i.product.price_uzs) }))
+      .filter((l) => l.qty > 0);
   }
 
   async addItem(userId: string, productId: string, qty: number): Promise<CartView> {

@@ -55,6 +55,8 @@ export const PERMISSIONS = {
   'products.aliases': [], // add / remove alternative SKUs of a product (old codes for the Yandex sync)
   'finance.manage': [], // Stage 3: expenses, tax, payroll, analytics, test flag and own delivery cost of an order — admin only
   'yandex.sync': [],
+  'promo.view': ['manager', 'marketer'], // 3.3: «Промокоды» — the table and stats (D-39 Б: the manager only looks)
+  'promo.manage': ['marketer'], // 3.3: create / change / switch off promo codes
   'promo.send': ['marketer'], // 3.2: «Акции» — a promo to customers with «Получать акции и новости» (bot + Mini App centre) // Stage 2D: «Синхронизация Яндекса», «Проверить сейчас», «Требует внимания», «Закрыть как неактуальный»
 } as const satisfies Record<string, readonly StaffRole[]>;
 

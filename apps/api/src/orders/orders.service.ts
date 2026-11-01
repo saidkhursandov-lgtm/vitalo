@@ -25,6 +25,7 @@ import { orderViewInclude, OrderView, toOrderView } from './order-view';
 import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
 import { AnalyticsService } from '../analytics/analytics.module';
 import { BotInfoService } from './receipts';
+import { PromoCodesService } from '../promo/promo.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -81,24 +82,45 @@ export class OrdersService {
     private readonly legal: LegalService,
     private readonly analytics: AnalyticsService,
     private readonly botInfo: BotInfoService,
+    private readonly promo: PromoCodesService,
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
   async preview(userId: string, dto: OrderPreviewDto) {
-    const { lines, skipped } = await this.resolveLines(this.prisma, userId, dto);
+    const { lines, skipped, cartId, cartPromo } = await this.resolveLines(this.prisma, userId, dto);
     const priced = await this.priceLines(this.prisma, lines);
     const available = await this.stock.availability(lines.map((l) => l.product_id));
     const problems = lines
       .filter((l) => (available.get(l.product_id) ?? 0) < l.qty)
       .map((l) => ({ code: 'INSUFFICIENT_STOCK', product_id: l.product_id, requested: l.qty, available: available.get(l.product_id) ?? 0 }));
     await this.resolvePaymentMethod(this.prisma, dto.payment_method);
-    const { totals, delivery } = await this.computeTotals(this.prisma, priced, dto, userId);
+    const code = this.promoCodeOf(dto, cartPromo);
+    const calc = await this.promo.calculate(this.prisma, userId, priced, { address: dto, code });
+    // the code saved in the cart stopped fitting: it is removed there too (the customer sees the hint)
+    if (calc.promo_rejection && cartId && dto.promo_code === undefined) await this.prisma.carts.update({ where: { id: cartId }, data: { promo_code: null } });
+    const totals = calc.totals;
     const cod = await this.codAvailable(this.prisma, dto.region_id, totals.total_uzs);
     // «Оплата при получении» is offered only when it is possible for this address and total (Tashkent, the limit).
     const payment_options = { cod: cod === 'ok', cod_unavailable: cod === 'ok' ? null : cod };
     const codBlocked = dto.payment_method === COD_METHOD && cod !== 'ok';
 
-    return { items: priced, skipped_unavailable: skipped, totals, delivery, problems, payment_options, can_place: problems.length === 0 && !codBlocked };
+    return {
+      items: priced.map((l) => ({ ...l, discount_uzs: calc.snapshot.lines.find((s) => s.product_id === l.product_id)?.promo_discount_uzs ?? 0 })),
+      skipped_unavailable: skipped,
+      totals,
+      delivery: calc.delivery,
+      promo: calc.promo,
+      promo_rejection: calc.promo_rejection,
+      problems,
+      payment_options,
+      can_place: problems.length === 0 && !codBlocked,
+    };
+  }
+
+  /** 3.3: the code of this checkout — sent by the app, else (cart checkout) the one saved in the cart; '' = none. */
+  private promoCodeOf(dto: OrderPreviewDto, cartPromo: string | null): string | null {
+    if (dto.promo_code !== undefined) return dto.promo_code.trim() || null;
+    return dto.source === 'cart' ? cartPromo : null;
   }
 
   /**
@@ -340,7 +362,7 @@ export class OrdersService {
   }
 
   private async createInTx(tx: Tx, userId: string, dto: CreateOrderDto): Promise<OrderView> {
-    const { lines, cartId } = await this.resolveLines(tx, userId, dto);
+    const { lines, cartId, cartPromo } = await this.resolveLines(tx, userId, dto);
     const method = await this.resolvePaymentMethod(tx, dto.payment_method);
     const orderId = randomUUID();
 
@@ -348,8 +370,15 @@ export class OrdersService {
     await this.stock.reserve(tx, orderId, lines);
 
     // 2. Prices are read on the server, inside the transaction, and frozen into the order.
+    //    3.3: the promo row is locked here, so parallel orders never exceed its limits.
     const priced = await this.priceLines(tx, lines);
-    const { totals } = await this.computeTotals(tx, priced, dto, userId);
+    const code = this.promoCodeOf(dto, cartPromo);
+    const calc = await this.promo.calculate(tx, userId, priced, { address: dto, code, lock: true });
+    const totals = calc.totals;
+    if (calc.promo_rejection) {
+      const r = calc.promo_rejection;
+      throw new ConflictException({ code: 'PROMO_REJECTED', promo_code: r.code, reason: r.reason, message_ru: r.message_ru, message_uz: r.message_uz, message: 'The promo code does not fit this order' });
+    }
     if (dto.expected_total_uzs != null && dto.expected_total_uzs !== totals.total_uzs) {
       throw new ConflictException({
         code: 'PRICE_CHANGED',
@@ -393,19 +422,26 @@ export class OrdersService {
         bonus_used_uzs: BigInt(totals.bonus_used_uzs),
         goods_paid_uzs: BigInt(totals.goods_paid_uzs),
         total_uzs: BigInt(totals.total_uzs),
+        promo_id: calc.applied?.promotion_id ?? null,
+        promo_code: calc.promo?.code ?? null,
+        pricing_json: calc.snapshot as unknown as Prisma.InputJsonValue,
         created_at: now,
         reserved_until: cod ? null : new Date(now.getTime() + method.timeout_minutes * 60_000),
         items: {
-          create: priced.map((l) => ({
-            product_id: l.product_id,
-            sku_snapshot: l.sku,
-            name_ru_snapshot: l.name_ru,
-            qty: l.qty,
-            unit_price_uzs: BigInt(l.unit_price_uzs),
-            line_total_uzs: BigInt(l.line_total_uzs),
-            discount_uzs: 0n,
-            paid_line_total_uzs: BigInt(l.line_total_uzs),
-          })),
+          create: priced.map((l) => {
+            const s = calc.snapshot.lines.find((x) => x.product_id === l.product_id)!;
+            return {
+              product_id: l.product_id,
+              sku_snapshot: l.sku,
+              name_ru_snapshot: l.name_ru,
+              qty: l.qty,
+              unit_price_uzs: BigInt(l.unit_price_uzs),
+              line_total_uzs: BigInt(l.line_total_uzs),
+              discount_uzs: BigInt(s.promo_discount_uzs),
+              // the basis of a refund: what the customer really paid for the line
+              paid_line_total_uzs: BigInt(s.paid_line_total_uzs),
+            };
+          }),
         },
         payments: {
           create: {
@@ -417,6 +453,13 @@ export class OrdersService {
       },
     });
 
+    // 3.3: the activation is held by the order; any cancellation gives it back (OrderLifecycleService.addHistory)
+    if (calc.promo && calc.applied) {
+      await tx.promotion_usages.create({
+        data: { promotion_id: calc.applied.promotion_id, user_id: userId, order_id: orderId, discount_uzs: BigInt(calc.promo.discount_uzs), status: 'reserved' },
+      });
+    }
+
     const customer = { type: 'customer' as const, id: userId };
     if (cod) {
       await this.lifecycle.addHistory(tx, orderId, null, 'new', customer, `Order created. Payment method: ${method.code}`, now);
@@ -426,9 +469,10 @@ export class OrdersService {
     }
     await this.notifications.toOrderStaff(tx, 'staff.new_order', orderId);
 
-    // "Купить сейчас" never touches the cart; a cart checkout removes only the ordered lines.
+    // "Купить сейчас" never touches the cart; a cart checkout removes only the ordered lines (and the used code).
     if (cartId) {
       await tx.cart_items.deleteMany({ where: { cart_id: cartId, product_id: { in: lines.map((l) => l.product_id) } } });
+      if (calc.promo) await tx.carts.update({ where: { id: cartId }, data: { promo_code: null } });
     }
 
     return toOrderView(await tx.orders.findUniqueOrThrow({ where: { id: orderId }, include: orderViewInclude }));
@@ -437,7 +481,7 @@ export class OrdersService {
   /** Cart checkout takes sellable lines only; out-of-stock / archived lines stay in the cart (TZ §6). */
   private async resolveLines(db: Tx | PrismaService, userId: string, dto: OrderPreviewDto) {
     if (dto.source === 'buy_now') {
-      return { lines: [{ product_id: dto.buy_now!.product_id, qty: dto.buy_now!.qty }] as StockLine[], skipped: [] as string[], cartId: null };
+      return { lines: [{ product_id: dto.buy_now!.product_id, qty: dto.buy_now!.qty }] as StockLine[], skipped: [] as string[], cartId: null, cartPromo: null };
     }
     const cart = await db.carts.findFirst({
       where: { user_id: userId, status: 'active' },
@@ -453,6 +497,7 @@ export class OrdersService {
       lines: sellable.map((i) => ({ product_id: i.product_id, qty: i.qty })),
       skipped: items.filter((i) => !sellable.includes(i)).map((i) => i.product_id),
       cartId: cart!.id,
+      cartPromo: cart!.promo_code,
     };
   }
 
@@ -477,26 +522,6 @@ export class OrdersService {
         line_total_uzs: price * l.qty,
       };
     });
-  }
-
-  /** No promos/bonuses yet: discount = 0, bonus = 0. Free shipping uses goods after discounts (TZ §9). */
-  private async computeTotals(db: Tx | PrismaService, lines: PricedLine[], dto: OrderPreviewDto, userId: string): Promise<{ totals: Totals; delivery: DeliveryQuote }> {
-    const goods = lines.reduce((s, l) => s + l.line_total_uzs, 0);
-    const discount = 0;
-    const bonus = 0;
-    const delivery = await this.delivery.quote(dto.region_id, dto.city_id, goods - discount, db, { userId });
-    const goodsPaid = goods - discount - bonus;
-    return {
-      totals: {
-        goods_total_uzs: goods,
-        discount_total_uzs: discount,
-        bonus_used_uzs: bonus,
-        goods_paid_uzs: goodsPaid,
-        delivery_cost_uzs: delivery.cost_uzs,
-        total_uzs: goodsPaid + delivery.cost_uzs,
-      },
-      delivery,
-    };
   }
 
   private async resolvePaymentMethod(db: Tx | PrismaService, code: string) {

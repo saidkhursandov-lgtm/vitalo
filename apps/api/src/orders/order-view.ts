@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { listImage, listInclude } from '../catalog/product.mapper';
+import type { PricingSnapshot } from '../promo/promo.service';
 import { CUSTOMER_CANCELLABLE } from './order-state';
 
 export const orderViewInclude = {
@@ -65,6 +66,7 @@ export function toOrderView(o: OrderForView) {
       delivery_cost_uzs: num(o.delivery_cost_uzs),
       total_uzs: num(o.total_uzs),
     },
+    promo: promoOf(o),
     payment: payment
       ? {
           method: payment.method.code,
@@ -87,3 +89,10 @@ export function toOrderView(o: OrderForView) {
 }
 
 export type OrderView = ReturnType<typeof toOrderView>;
+
+/** 3.3: the order's promo code from its frozen calculation: «Промокод VITALO10: −20 000 сум» / free delivery. */
+export function promoOf(o: { promo_code: string | null; pricing_json: Prisma.JsonValue | null }): { code: string; discount_uzs: number; free_delivery: boolean } | null {
+  if (!o.promo_code) return null;
+  const d = (o.pricing_json as unknown as PricingSnapshot | null)?.discounts?.find((x) => x.kind === 'promo');
+  return { code: o.promo_code, discount_uzs: d?.amount_uzs ?? 0, free_delivery: d?.type === 'free_delivery' };
+}

@@ -13,6 +13,8 @@ import { AdminOrdersController, AdminOrdersService } from './admin-orders';
 import { AdminProductsController, AdminProductsService } from './admin-products';
 import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
 import { AdminWaitlistController, AdminWaitlistService } from './admin-waitlist';
+import { AdminPromoCodesController, AdminPromoCodesService } from './admin-promo-codes';
+import { PromoModule } from '../promo/promo.module';
 import { PromoController, PromoService } from '../notifications/notification-centre';
 import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from './admin-receipts';
 import { BotSecretGuard } from '../bot-internal/bot-internal.module';
@@ -42,7 +44,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
  * YandexWebhookController (/api/yandex/notifications/<secret>): off by default, secret path + Yandex networks only.
  */
 @Module({
-  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule, OnlinePaymentsModule],
+  imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule, OnlinePaymentsModule, PromoModule],
   controllers: [
     StaffAuthController,
     AdminBannersController,
@@ -70,6 +72,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AuditController,
     AdminLegalController,
     AdminWaitlistController,
+    AdminPromoCodesController,
     PromoController,
     AdminReceiptsController,
     BotReceiptsController,
@@ -77,6 +80,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
   providers: [
     AdminBannersService,
     AdminBrandsService,
+    AdminPromoCodesService,
     StaffAuthService,
     StaffGuard,
     AuditService,

@@ -5,6 +5,7 @@ import { CUSTOMER_STATUS_TEMPLATES, type CentreCategory, type Lang, type Templat
 import { tashkentDateTime } from '../common/tashkent';
 import { SETTING_DEFAULTS, SETTING_KEYS, supportLink } from '../settings/settings.service';
 import { productTitle } from '../waitlist/waitlist';
+import { promoOf } from '../orders/order-view';
 
 /** 3.2: «Как принимать ваш заказ» lines — one per product with a memo in the language (Russian as a fallback), no repeats. */
 export function intakeGuideItems(
@@ -50,7 +51,7 @@ export class NotificationsService {
     // Release 1: cash on delivery is not «Оплачен» when the manager confirms it — the customer pays the courier.
     if (status === 'paid' && cod) template = 'order.cod_confirmed';
     const lang = order.user.language;
-    const payload: TemplatePayload = { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang, open_path: `/orders/${order.id}` };
+    const payload: TemplatePayload = { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang, open_path: `/orders/${order.id}`, promo: promoOf(order) };
     if (status === 'awaiting_payment') {
       payload.open_path = `/orders/${order.id}/pay`;
       payload.open_button = 'pay';
@@ -187,6 +188,7 @@ export class NotificationsService {
           customer: order.recipient_name,
           phone: order.recipient_phone,
           payment: order.payments[0]?.method.code,
+          promo: promoOf(order),
           lang: 'ru',
         },
       })),
