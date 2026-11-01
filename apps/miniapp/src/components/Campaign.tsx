@@ -12,14 +12,14 @@ export const saleTitle = (c: { title_ru: string; title_uz: string | null }, lang
 
 const skinKey = (skin: Exclude<CampaignSkin, 'none'>) => `sale.skin.${skin}` as MessageKey;
 
-/** The badge in the top left corner of the photo: «Black Friday −30%». */
+/** The badge in the top left corner of the photo: «−30% Black Friday»; the % first, so a narrow card never cuts it. */
 export function SaleBadge({ campaign, className = '' }: { campaign: Pick<ShopCampaign, 'skin' | 'discount_pct'>; className?: string }) {
   const { t } = useI18n();
   if (campaign.skin === 'none') return null;
   return (
     <span className={`sale-badge sale-${campaign.skin} ${className}`}>
-      <span className="sale-badge-name">{t(skinKey(campaign.skin))}</span>
       <span className="sale-badge-pct">−{campaign.discount_pct}%</span>
+      <span className="sale-badge-name">{t(skinKey(campaign.skin))}</span>
     </span>
   );
 }

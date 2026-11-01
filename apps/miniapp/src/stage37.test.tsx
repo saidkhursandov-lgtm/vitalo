@@ -68,11 +68,11 @@ function show(lang: Lang, ui: ReactNode, path = '/', pattern = '*') {
 const events = (name: string) => posted.filter((p) => p.body?.event === name);
 
 describe('3.7 sale skins on the card', () => {
-  it('Black Friday: dark badge «Black Friday −30%», dark frame, old price crossed out over the new one', () => {
+  it('Black Friday: dark badge «−30% Black Friday», dark frame, old price crossed out over the new one', () => {
     const { container } = show('ru', <ProductTile product={product('black_friday')} />);
     const badge = container.querySelector('.tile-sale')!;
     expect(badge.className).toContain('sale-black_friday');
-    expect(badge.textContent).toBe('Black Friday−30%');
+    expect(badge.textContent).toBe('−30%Black Friday');
     expect(container.querySelector('.tile')!.className).toContain('sale-card-black_friday');
     expect(plain(container.querySelector('.tile-price-old')?.textContent)).toBe('100 000 сум');
     expect(container.querySelector('.tile-price-old')!.tagName).toBe('S');
@@ -84,11 +84,11 @@ describe('3.7 sale skins on the card', () => {
 
   it('11.11 — orange badge with dark text; «Акция» — «Chegirma» in Uzbek; «Без плашки» — only the prices', () => {
     const { container, unmount } = show('ru', <ProductTile product={product('eleven_eleven')} />);
-    expect(container.querySelector('.tile-sale')!.textContent).toBe('11.11−30%');
+    expect(container.querySelector('.tile-sale')!.textContent).toBe('−30%11.11');
     expect(container.querySelector('.tile-price')!.className).toContain('sale-text-eleven_eleven');
     unmount();
     const uz = show('uz', <ProductTile product={product('sale')} />);
-    expect(uz.container.querySelector('.tile-sale')!.textContent).toBe('Chegirma−30%');
+    expect(uz.container.querySelector('.tile-sale')!.textContent).toBe('−30%Chegirma');
     uz.unmount();
     const none = show('ru', <ProductTile product={product('none')} />);
     expect(none.container.querySelector('.sale-badge')).toBeNull();

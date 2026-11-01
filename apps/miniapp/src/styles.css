@@ -911,7 +911,8 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
   display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 7px; border-radius: 6px;
   font-size: 11px; line-height: 1.25; font-weight: 700; white-space: nowrap;
 }
-.tile-sale { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 56px); overflow: hidden; }
+/* on a narrow card the skin name wraps under the % instead of being cut */
+.tile-sale { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 56px); flex-wrap: wrap; column-gap: 4px; row-gap: 0; }
 .sale-black_friday { background: var(--skin-dark); color: var(--on-skin); }
 .sale-black_friday .sale-badge-pct { color: var(--skin-gold); }
 .sale-eleven_eleven { background: var(--skin-orange); color: var(--skin-dark); }
