@@ -41,6 +41,9 @@ function setup(opts: { user?: Partial<UserSummary> | 'down'; staff?: StaffInfo; 
     rejectReceipt: async () => {
       throw new Error('not used here');
     },
+    compatAnswer: async () => {
+      throw new Error('not used here');
+    },
   };
   const bot = createBot({
     token: '1:TEST',

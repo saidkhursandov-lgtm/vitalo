@@ -2,6 +2,7 @@ import { Bot, Context, InlineKeyboard, Keyboard } from 'grammy';
 import type { UserFromGetMe } from 'grammy/types';
 import type { UserSummary, VitaloApi } from './api-client';
 import { installReceipts } from './receipts';
+import { installCompat } from './compat';
 import { bothLangs, langFromTelegram, money, t, type Lang, type TextKey } from './texts';
 
 /** Used when the API has no contact saved (the admin edits it in Настройки). */
@@ -93,6 +94,9 @@ export function createBot({ token, api, urls, botInfo, download }: BotDeps): Bot
         return new Uint8Array(await res.arrayBuffer());
       }),
   });
+
+  // 3.4: the specialist's answers to «Проверить совместимость» (buttons and own text)
+  installCompat(bot, { api });
 
   async function replyWithShop(ctx: Context, lang: Lang, text: string, label: TextKey = 'openShop', path = '/', startParam?: string) {
     const kb = shopButton(lang, label, path, startParam);

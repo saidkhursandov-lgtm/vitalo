@@ -60,6 +60,12 @@ export interface ReceiptDecision {
   reason?: string | null;
 }
 
+/** 3.4: what the API did with the specialist's answer. */
+export type CompatAnswer =
+  | { result: 'answered'; verdict: string; by: string }
+  | { result: 'already'; verdict: string | null; by: string | null }
+  | { result: 'closed' };
+
 /** The API refused: `code` says why (ORDER_PAID, FORBIDDEN_FOR_ROLE, …). */
 export class ApiError extends Error {
   constructor(
@@ -83,6 +89,8 @@ export interface VitaloApi {
   sendReceipt(telegramId: number, orderId: string | null, file: ReceiptFile): Promise<ReceiptSaved>;
   confirmReceipt(staffTelegramId: number, receiptId: string): Promise<ReceiptDecision>;
   rejectReceipt(staffTelegramId: number, receiptId: string, reason: { code?: string; text?: string }): Promise<ReceiptDecision>;
+  /** 3.4: the specialist's answer — code c | s | k (Совместимы / Разнести / Консультация), optional own text. */
+  compatAnswer(staffTelegramId: number, requestId: string, code: string, text?: string): Promise<CompatAnswer>;
 }
 
 /** Calls /api/internal/bot/* with the shared secret header. */
@@ -103,6 +111,8 @@ export class HttpVitaloApi implements VitaloApi {
   confirmReceipt = (staffId: number, receiptId: string) => this.post<ReceiptDecision>(`/internal/bot/receipts/${receiptId}/confirm`, { telegram_id: String(staffId) });
   rejectReceipt = (staffId: number, receiptId: string, reason: { code?: string; text?: string }) =>
     this.post<ReceiptDecision>(`/internal/bot/receipts/${receiptId}/reject`, { telegram_id: String(staffId), ...reason });
+  compatAnswer = (staffId: number, requestId: string, code: string, text?: string) =>
+    this.post<CompatAnswer>(`/internal/bot/compat/${requestId}/answer`, { telegram_id: String(staffId), verdict: code, ...(text !== undefined && { text }) });
 
   async sendReceipt(id: number, orderId: string | null, file: ReceiptFile): Promise<ReceiptSaved> {
     const form = new FormData();
