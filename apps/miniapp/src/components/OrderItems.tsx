@@ -43,8 +43,19 @@ export function OrderItems({ items, note }: { items: OrderItemLine[]; note?: (it
   );
 }
 
-/** Goods, delivery («Бесплатно» as an accent, the first-order badge) and a big «Итого». delivery null = city not chosen. */
-export function OrderTotals({ goods, goodsCount, delivery, firstOrder = false, total }: { goods: number; goodsCount?: number; delivery: number | null; firstOrder?: boolean; total: number }) {
+/**
+ * Goods, the promo discount as its own line (3.3), delivery («Бесплатно» as an accent, the first-order or promo badge)
+ * and a big «Итого». delivery null = city not chosen. `goods` is before the discount.
+ */
+export function OrderTotals({ goods, goodsCount, discount = 0, promo, delivery, firstOrder = false, total }: {
+  goods: number;
+  goodsCount?: number;
+  discount?: number;
+  promo?: { code: string; free_delivery: boolean } | null;
+  delivery: number | null;
+  firstOrder?: boolean;
+  total: number;
+}) {
   const { t, lang } = useI18n();
   return (
     <div className="order-totals">
@@ -52,11 +63,18 @@ export function OrderTotals({ goods, goodsCount, delivery, firstOrder = false, t
         <span>{goodsCount != null ? t('cart.goods', { n: goodsCount }) : t('order.goods')}</span>
         <span>{money(goods, lang)}</span>
       </div>
+      {discount > 0 && (
+        <div className="sum-row promo-row">
+          <span>{promo ? t('promo.line', { code: promo.code }) : t('promo.label')}</span>
+          <span className="promo-amount">−{money(discount, lang)}</span>
+        </div>
+      )}
       {delivery != null && (
         <div className="sum-row">
           <span>
             {t('cart.delivery')}
             {firstOrder && <span className="first-order-badge">{t('order.firstOrder')}</span>}
+            {!firstOrder && promo?.free_delivery && delivery === 0 && <span className="first-order-badge">{t('promo.badge')} {promo.code}</span>}
           </span>
           {delivery === 0 ? <span className="free-accent">{t('cart.free')}</span> : <span>{money(delivery, lang)}</span>}
         </div>

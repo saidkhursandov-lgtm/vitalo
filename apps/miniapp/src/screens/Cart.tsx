@@ -10,7 +10,8 @@ import { RegionCitySelect } from '../components/PlacePicker';
 import { OrderTotals } from '../components/OrderItems';
 import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import { useCart, useCartActions, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
+import { useCart, useCartActions, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
+import { PromoBox } from '../components/Promo';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
 
 /** Human text for a cart warning (price changed / qty reduced / out of stock). */
@@ -24,6 +25,8 @@ export function warningText(w: CartWarning, cart: CartData, lang: Lang, t: (k: M
       return t('cart.warn.qty_reduced', { name, n: w.available_qty });
     case 'out_of_stock':
       return t('cart.warn.out_of_stock', { name });
+    case 'promo_removed':
+      return `${t('promo.line', { code: w.promo_code })}: ${lang === 'uz' ? w.message_uz : w.message_ru}`;
   }
 }
 
@@ -110,6 +113,7 @@ export function Cart() {
   };
   const cart = useCart(selected);
   const { setQty, remove } = useCartActions();
+  const promo = useCartPromo(selected, lang);
   // The API reports each warning once (then stores the correction). Any screen may have loaded the cart
   // first (cards with quick add do), so warnings are kept in a shared store until seen here.
   const client = useQueryClient();
@@ -189,9 +193,12 @@ export function Cart() {
       </section>
 
       <section className="card summary">
+        <PromoBox applied={data.promo} place="cart" onApply={promo.apply} onRemove={promo.remove} />
         <OrderTotals
-          goods={data.goods_total_uzs - data.discount_total_uzs}
+          goods={data.goods_total_uzs}
           goodsCount={data.items_count}
+          discount={data.discount_total_uzs}
+          promo={data.promo}
           delivery={delivery ? (delivery.is_free ? 0 : delivery.cost_uzs) : null}
           firstOrder={!!delivery?.first_order}
           total={payable}

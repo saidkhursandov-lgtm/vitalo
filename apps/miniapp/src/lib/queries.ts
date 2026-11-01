@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, qs } from './api';
+import { api, ApiError, qs } from './api';
+import type { PromoApplyResult } from '../components/Promo';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
 import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CartUpsell, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
@@ -134,6 +135,33 @@ export function useCartActions() {
       onSuccess: done,
     }),
   };
+}
+
+/**
+ * 3.3: the cart's promo code. Apply → the cart with the code, or the server's reason and text (422 PROMO_REJECTED);
+ * the code stays on the cart for the checkout. With the district the server also checks free delivery.
+ */
+export function useCartPromo(city: CityRef | null, lang: Lang) {
+  const client = useQueryClient();
+  const apply = async (code: string): Promise<PromoApplyResult> => {
+    try {
+      const cart = await api<Cart>('/cart/promo', { method: 'POST', body: { code, ...city } });
+      applyCart(client, cart);
+      if (city) client.setQueryData(['cart', city], cart);
+      return { ok: true, promo: cart.promo! };
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'PROMO_REJECTED') {
+        return { ok: false, reason: String(e.body.reason), message: String(lang === 'uz' ? e.body.message_uz : e.body.message_ru) };
+      }
+      throw e;
+    }
+  };
+  const remove = async () => {
+    const cart = await api<Cart>(`/cart/promo${qs({ ...city })}`, { method: 'DELETE' });
+    applyCart(client, cart);
+    if (city) client.setQueryData(['cart', city], cart);
+  };
+  return { apply, remove };
 }
 
 // ---------- favorites ----------

@@ -157,6 +157,32 @@ export interface DeliveryQuote {
   note_uz?: string | null;
   /** free because it is the customer's first order */
   first_order?: boolean;
+  /** 3.3: free because of a free-delivery promo code */
+  promo?: boolean;
+}
+
+/** 3.3: the applied promo code (the server computes everything; the app only shows it). */
+export interface PromoView {
+  code: string;
+  kind: 'percent' | 'fixed' | 'free_delivery';
+  value: number;
+  /** goods discount, or the delivery cost saved by a free-delivery code */
+  discount_uzs: number;
+  free_delivery: boolean;
+  /** the margin protection made the discount smaller than the code promises */
+  capped: boolean;
+  description_ru: string | null;
+  description_uz: string | null;
+  message_ru: string;
+  message_uz: string;
+}
+
+/** 3.3: why a code does not fit, with the customer text. */
+export interface PromoRejection {
+  code: string;
+  reason: string;
+  message_ru: string;
+  message_uz: string;
 }
 
 /** Delivery term in working days (null = not set for this city). */
@@ -224,7 +250,8 @@ export interface LegalStatus {
 export type CartWarning =
   | { code: 'price_changed'; product_id: string; old_price_uzs: number; new_price_uzs: number }
   | { code: 'qty_reduced'; product_id: string; requested_qty: number; available_qty: number }
-  | { code: 'out_of_stock'; product_id: string };
+  | { code: 'out_of_stock'; product_id: string }
+  | { code: 'promo_removed'; product_id?: undefined; promo_code: string; reason: string; message_ru: string; message_uz: string };
 
 export interface CartLine extends Named {
   short_name_ru?: string | null;
@@ -249,6 +276,8 @@ export interface Cart {
   items_count: number;
   can_checkout: boolean;
   delivery: DeliveryQuote | null;
+  /** 3.3 */
+  promo?: PromoView | null;
 }
 
 export interface Region extends Named {
@@ -297,6 +326,8 @@ export interface Order {
   customer_comment: string | null;
   items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null })[];
   totals: Totals;
+  /** 3.3: the order's promo code (frozen at creation) */
+  promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null } | null;
   can_cancel: boolean;
   delivery_eta?: DeliveryEta | null;
@@ -368,6 +399,9 @@ export interface OrderPreview {
   skipped_unavailable: string[];
   totals: Totals;
   delivery: DeliveryQuote;
+  /** 3.3: the applied code / why the requested code does not fit */
+  promo?: PromoView | null;
+  promo_rejection?: PromoRejection | null;
   problems: { code: string; product_id: string; requested: number; available: number }[];
   can_place: boolean;
   /** «Оплата при получении» is offered only for the city of Tashkent and up to the limit. */

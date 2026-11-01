@@ -8,7 +8,8 @@ import { useUser } from '../lib/auth';
 import { money, normalizePhone, prettyPhone } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { createIdempotencyKeys } from '../lib/idempotency';
-import { useAddressActions, useAddresses, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
+import { useAddressActions, useAddresses, useCartPromo, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
+import { PromoBox, type PromoApplyResult } from '../components/Promo';
 import { canRequestPhone, haptic, requestPhone } from '../lib/telegram';
 import { track } from '../lib/analytics';
 import { PhoneIcon } from '../components/Icons';
@@ -69,6 +70,9 @@ export function Checkout() {
   const [method, setMethod] = useState<PaymentMethodCode>('card_transfer');
   const [errors, setErrors] = useState<Partial<Record<keyof Form, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 3.3: «Купить сейчас» keeps its code here; a cart checkout uses the code saved on the cart (the server reads it)
+  const [buyPromo, setBuyPromo] = useState<string | null>(null);
+  const [promoNotice, setPromoNotice] = useState<string | null>(null);
 
   // Prefill once: last order's recipient; the address = the delivery city chosen in the cart (3.1: shared with the
   // cart, starts as the primary address). A saved address in that city is selected (the primary one first);
@@ -100,9 +104,10 @@ export function Checkout() {
       ? { region_id: form.region_id, city_id: form.city_id }
       : null;
 
+  const promoBody = buyId ? { promo_code: buyPromo ?? '' } : {};
   const preview = useQuery({
-    queryKey: ['preview', source, city, method],
-    queryFn: () => api<OrderPreview>('/orders/preview', { method: 'POST', body: { ...source, ...city, payment_method: method } }),
+    queryKey: ['preview', source, city, method, buyPromo],
+    queryFn: () => api<OrderPreview>('/orders/preview', { method: 'POST', body: { ...source, ...city, payment_method: method, ...promoBody } }),
     enabled: !!city,
     placeholderData: keepPreviousData, // no flicker of the payment options while the method or the address changes
   });
@@ -112,6 +117,38 @@ export function Checkout() {
   useEffect(() => {
     if (method === 'cod' && codOption && !codOption.cod) setMethod('card_transfer');
   }, [method, codOption]);
+
+  // 3.3: the code stopped fitting (another district, the cart changed…): it is removed, the customer sees why
+  const rejected = preview.data?.promo_rejection;
+  useEffect(() => {
+    if (!rejected) return;
+    setPromoNotice(`${t('promo.line', { code: rejected.code })}: ${lang === 'uz' ? rejected.message_uz : rejected.message_ru}`);
+    if (buyId) setBuyPromo(null);
+    else void client.invalidateQueries({ queryKey: ['cart'] });
+  }, [rejected, buyId, client, lang, t]);
+
+  const cartPromo = useCartPromo(city, lang);
+  async function applyPromo(code: string): Promise<PromoApplyResult> {
+    setPromoNotice(null);
+    if (!buyId) {
+      const r = await cartPromo.apply(code);
+      if (r.ok) await preview.refetch();
+      return r;
+    }
+    const r = await api<OrderPreview>('/orders/preview', { method: 'POST', body: { ...source, ...city, payment_method: method, promo_code: code } });
+    if (r.promo) {
+      setBuyPromo(r.promo.code);
+      return { ok: true, promo: r.promo };
+    }
+    const why = r.promo_rejection!;
+    return { ok: false, reason: why.reason, message: lang === 'uz' ? why.message_uz : why.message_ru };
+  }
+  async function removePromo() {
+    setPromoNotice(null);
+    if (buyId) return setBuyPromo(null);
+    await cartPromo.remove();
+    await preview.refetch();
+  }
 
   const placeOrder = useMutation({
     mutationFn: ({ body, key }: { body: object; key: string }) => api<Order>('/orders', { method: 'POST', body, headers: { 'Idempotency-Key': key } }),
@@ -165,6 +202,8 @@ export function Checkout() {
       address_text: saved ? saved.address_text : form.address_text.trim(),
       customer_comment: form.comment.trim() || undefined,
       payment_method: method,
+      // 3.3: exactly the code of the shown total ('' = none)
+      promo_code: preview.data.promo?.code ?? '',
       expected_total_uzs: preview.data.totals.total_uzs,
     };
     try {
@@ -181,8 +220,11 @@ export function Checkout() {
     } catch (err) {
       haptic('error');
       const code = err instanceof ApiError ? err.code : undefined;
-      setSubmitError(isNetworkError(err) ? `${errorText(lang, code)} ${t('checkout.retrySafe')}` : errorText(lang, code));
-      if (code === 'PRICE_CHANGED' || code === 'INSUFFICIENT_STOCK') {
+      const body = err instanceof ApiError ? err.body : {};
+      const promoText = code === 'PROMO_REJECTED' ? String(lang === 'uz' ? body.message_uz : body.message_ru) : null;
+      setSubmitError(promoText ?? (isNetworkError(err) ? `${errorText(lang, code)} ${t('checkout.retrySafe')}` : errorText(lang, code)));
+      if (code === 'PROMO_REJECTED' && buyId) setBuyPromo(null);
+      if (code === 'PRICE_CHANGED' || code === 'INSUFFICIENT_STOCK' || code === 'PROMO_REJECTED') {
         void preview.refetch();
         void client.invalidateQueries({ queryKey: ['cart'] });
       }
@@ -330,8 +372,12 @@ export function Checkout() {
                 }}
               />
               {p.skipped_unavailable.length > 0 && <p className="hint small">{t('checkout.skipped')}</p>}
+              {promoNotice && <div className="notice notice-warn" role="alert">{promoNotice}</div>}
+              <PromoBox applied={p.promo} place="checkout" onApply={applyPromo} onRemove={removePromo} />
               <OrderTotals
-                goods={p.totals.total_uzs - p.totals.delivery_cost_uzs}
+                goods={p.totals.goods_total_uzs}
+                discount={p.totals.discount_total_uzs}
+                promo={p.promo}
                 delivery={p.totals.delivery_cost_uzs}
                 firstOrder={!!p.delivery.first_order}
                 total={p.totals.total_uzs}

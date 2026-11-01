@@ -116,7 +116,7 @@ export function OrderDetail() {
 
       <section className="card summary">
         <OrderItems items={o.items} />
-        <OrderTotals goods={o.totals.total_uzs - o.totals.delivery_cost_uzs} delivery={o.totals.delivery_cost_uzs} total={o.totals.total_uzs} />
+        <OrderTotals goods={o.totals.goods_total_uzs} discount={o.totals.discount_total_uzs} promo={o.promo} delivery={o.totals.delivery_cost_uzs} total={o.totals.total_uzs} />
       </section>
 
       {o.intake_guide && <IntakeGuideBlock guide={o.intake_guide} orderNumber={o.order_number} />}
