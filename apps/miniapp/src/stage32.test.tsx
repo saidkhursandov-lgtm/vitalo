@@ -7,7 +7,7 @@ import { ActiveOrderBar, IntakeGuideBlock } from './components/OrderNotices';
 import { SheetsProvider } from './components/Sheets';
 import { ToastProvider } from './components/Toast';
 import { I18nProvider } from './lib/i18n';
-import type { ActiveOrder, CentreList, IntakeGuide, Lang } from './lib/types';
+import type { ActiveOrder, CentreItem, CentreList, IntakeGuide, Lang } from './lib/types';
 import { Notifications } from './screens/Notifications';
 
 vi.mock('./lib/telegram', async (orig) => {
@@ -24,7 +24,7 @@ beforeEach(() => {
   events = [];
   posts = [];
   active = { order: null, more: 0 };
-  centre = { unread: 0, items: [] };
+  centre = { unread: 0, tabs: { orders: 0, promo: 0, service: 0 }, items: [] };
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     const json = (b: unknown) => new Response(JSON.stringify(b));
     if (url.includes('/analytics/events')) {
@@ -33,8 +33,8 @@ beforeEach(() => {
     }
     if (init.method === 'POST') posts.push(url);
     if (url.includes('/orders/active')) return json(active);
-    if (url.includes('/notifications/read-all')) return json({ marked: centre.unread, unread: 0 });
-    if (url.match(/\/notifications\/[^/]+\/read/)) return json({ unread: Math.max(0, centre.unread - 1) });
+    if (url.includes('/notifications/read-all')) return json({ marked: centre.unread, unread: 0, tabs: { orders: 0, promo: 0, service: 0 } });
+    if (url.match(/\/notifications\/[^/]+\/read/)) return json({ unread: Math.max(0, centre.unread - 1), tabs: centre.tabs });
     if (url.includes('/notifications')) return json(centre);
     if (url.includes('/catalog/texts')) return json({ support_url: 'https://t.me/VITALO_support', delivery_days_label: { ru: 'рабочих дней', uz: 'ish kuni' } });
     return json([]);
@@ -108,29 +108,50 @@ describe('3.2 active order plaque', () => {
 });
 
 describe('3.2 notification centre', () => {
-  it('newest first, unread highlighted; a tap marks it read, opens the order and reports notification_open', async () => {
+  const card = (c: Partial<CentreItem>): CentreItem => ({
+    id: 'n1', tab: 'orders', category: 'order', template: 'order.paid', title: 'Заказ №VTL-1', body: 'Оплата подтверждена',
+    steps: [], has_guide: false, path: '/orders/o1', read: true, created_at: '2026-11-01T10:00:00Z', ...c,
+  });
+
+  it('opens on the first tab with unread; one order card with its steps and the memo note; a tap marks it read and opens the order', async () => {
     centre = {
       unread: 1,
+      tabs: { orders: 1, promo: 0, service: 0 },
       items: [
-        { id: 'n2', category: 'order', template: 'order.paid', title: 'Заказ №VTL-1', body: 'Оплата подтверждена', path: '/orders/o1', read: false, created_at: '2026-11-01T10:00:00Z' },
-        { id: 'n1', category: 'waitlist', template: 'waitlist.back_in_stock', title: 'Омега-3', body: 'Снова в наличии', path: '/product/p1', read: true, created_at: '2026-10-31T10:00:00Z' },
+        card({ id: 'n2', read: false, steps: ['Принят', 'Оплачен'], has_guide: true }),
+        card({ id: 'n1', tab: 'service', category: 'waitlist', template: 'waitlist.back_in_stock', title: 'Омега-3', body: 'Снова в наличии', path: '/product/p1', created_at: '2026-10-31T10:00:00Z' }),
       ],
     };
     const { container } = show('ru', <Notifications />);
     expect(await screen.findByText('Оплата подтверждена')).toBeTruthy();
-    expect([...container.querySelectorAll('.centre-item strong')].map((e) => e.textContent)).toEqual(['Заказ №VTL-1', 'Омега-3']);
+    expect([...container.querySelectorAll('[role=tab]')].map((e) => e.textContent)).toEqual(['Заказы1', 'Акции и бонусы', 'Сервисные']);
+    expect(screen.getByRole('tab', { name: /Заказы/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Принят → Оплачен')).toBeTruthy();
+    expect(screen.getByText('Памятка по приёму — в заказе')).toBeTruthy();
+    expect(screen.queryByText('Омега-3')).toBeNull();
     expect(container.querySelectorAll('.centre-item.is-unread')).toHaveLength(1);
 
     fireEvent.click(screen.getByText('Оплата подтверждена'));
     expect(screen.getByTestId('where').textContent).toBe('/orders/o1');
     await waitFor(() => expect(posts.some((u) => u.includes('/notifications/n2/read'))).toBe(true));
-    await waitFor(() => expect(events).toContainEqual({ event: 'notification_open', props: { category: 'order', template: 'order.paid' } }));
+    await waitFor(() => expect(events).toContainEqual({ event: 'notification_open', props: { category: 'order', template: 'order.paid', tab: 'orders' } }));
+  });
+
+  it('switching tabs; an empty tab says so', async () => {
+    centre = { unread: 0, tabs: { orders: 0, promo: 0, service: 0 }, items: [card({ tab: 'service', category: 'waitlist', template: 'waitlist.back_in_stock', title: 'Омега-3', body: 'Снова в наличии' })] };
+    show('uz', <Notifications />);
+    expect(await screen.findByText('Bu yerda hozircha bo‘sh')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Xizmat' }));
+    expect(screen.getByText('Омега-3')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Aksiya va bonuslar' }));
+    expect(screen.getByText('Bu yerda hozircha bo‘sh')).toBeTruthy();
   });
 
   it('«Прочитать все» only with unread ones; reports notification_read_all', async () => {
-    centre = { unread: 3, items: [{ id: 'n1', category: 'promo', template: 'promo.message', title: 'Акция', body: '−15%', path: null, read: false, created_at: '2026-11-01T10:00:00Z' }] };
+    centre = { unread: 3, tabs: { orders: 0, promo: 3, service: 0 }, items: [card({ tab: 'promo', category: 'promo', template: 'promo.message', title: 'Акция', body: '−15%', path: null, read: false })] };
     show('uz', <Notifications />);
-    fireEvent.click(await screen.findByText('Hammasini o‘qish'));
+    expect(await screen.findByText('−15%')).toBeTruthy();
+    fireEvent.click(screen.getByText('Hammasini o‘qish'));
     await waitFor(() => expect(posts.some((u) => u.includes('/notifications/read-all'))).toBe(true));
     await waitFor(() => expect(events).toContainEqual({ event: 'notification_read_all', props: { count: 3 } }));
   });

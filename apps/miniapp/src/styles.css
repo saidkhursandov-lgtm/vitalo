@@ -1137,6 +1137,14 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .centre-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
 .centre-text strong { font-size: 15px; }
 .centre-dot { flex: none; width: 10px; height: 10px; margin-top: 6px; border-radius: 50%; background: var(--accent); }
+/* tabs: a scrolling strip so «Aksiya va bonuslar» stays on one line at 320 px; the count is an orange pill with a navy digit */
+.centre-tabs .chip { gap: 6px; }
+.centre-tab-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700;
+}
+.centre-steps { color: var(--muted); font-size: 13px; }
+.centre-guide { color: var(--primary-text); font-size: 13px; font-weight: 600; }
 
 .active-order { margin: 0 0 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .active-order-main { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 10px 8px 10px 12px; color: var(--text); text-decoration: none; }

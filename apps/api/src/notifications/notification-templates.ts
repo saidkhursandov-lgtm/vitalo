@@ -333,3 +333,27 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
   if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
   return { title: lang === 'uz' ? `№${payload.order_number} buyurtma` : `Заказ №${payload.order_number}`, body: line ?? renderNotification(template, { ...payload, lang }) };
 }
+
+/** 3.2 (after the owner's check): tabs of the centre. «promo» also holds bonuses (release 4); «service» — everything else. */
+export type CentreTab = 'orders' | 'promo' | 'service';
+export function centreTab(category: string | null): CentreTab {
+  if (category === 'order') return 'orders';
+  if (category === 'promo' || category === 'bonus') return 'promo';
+  return 'service';
+}
+
+/** Short step names for the order path «Принят → Оплачен → Собирается» (other order messages are not steps). */
+const CENTRE_STEPS: Partial<Record<TemplateName, Record<Lang, string>>> = {
+  'order.accepted_pay': { ru: 'Принят', uz: 'Qabul qilindi' },
+  'order.accepted_cod': { ru: 'Принят', uz: 'Qabul qilindi' },
+  'order.paid': { ru: 'Оплачен', uz: 'To‘landi' },
+  'order.cod_confirmed': { ru: 'Подтверждён', uz: 'Tasdiqlandi' },
+  'order.picking': { ru: 'Собирается', uz: 'Yig‘ilmoqda' },
+  'order.handed_to_delivery': { ru: 'Передан курьеру', uz: 'Kuryerga topshirildi' },
+  'order.in_transit': { ru: 'В пути', uz: 'Yo‘lda' },
+  'order.delivered': { ru: 'Доставлен', uz: 'Yetkazildi' },
+  'order.cancelled': { ru: 'Отменён', uz: 'Bekor qilindi' },
+};
+export function centreStep(template: string, lang: Lang): string | null {
+  return isTemplate(template) ? (CENTRE_STEPS[template]?.[lang] ?? null) : null;
+}

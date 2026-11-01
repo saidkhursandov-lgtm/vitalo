@@ -317,18 +317,24 @@ export interface IntakeGuide {
 }
 
 /** 3.2: one entry of the notification centre (title and line already in the requested language). */
+/** 3.2: «Заказы», «Акции и бонусы», «Сервисные». */
+export type CentreTab = 'orders' | 'promo' | 'service';
+export type CentreCounts = { unread: number; tabs: Record<CentreTab, number> };
+/** One card per order (latest status, its steps, a note about the intake memo); other notices one card each. */
 export interface CentreItem {
   id: string;
+  tab: CentreTab;
   category: 'order' | 'waitlist' | 'promo';
   template: string;
   title: string;
   body: string;
+  steps: string[];
+  has_guide: boolean;
   path: string | null;
   read: boolean;
   created_at: string;
 }
-export interface CentreList {
-  unread: number;
+export interface CentreList extends CentreCounts {
   items: CentreItem[];
 }
 

@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, qs } from './api';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CartUpsell, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
+import type { Address, BankTransfer, BrandCard, BrandPage, Cart, CartCount, CartUpsell, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -236,20 +236,20 @@ export const useActiveOrder = () => useQuery({ queryKey: ['orders', 'active'], q
 
 /** 3.2: unread counter on the bell; refreshed every minute and when the app comes back to the screen. */
 export const useUnreadCount = () =>
-  useQuery({ queryKey: ['notifications', 'unread'], queryFn: () => api<{ unread: number }>('/notifications/unread'), refetchInterval: 60_000 });
+  useQuery({ queryKey: ['notifications', 'unread'], queryFn: () => api<CentreCounts>('/notifications/unread'), refetchInterval: 60_000 });
 
 /** 3.2: the notification centre in the current language (titles and lines come ready from the server). */
 export const useNotifications = (lang: Lang) => useQuery({ queryKey: ['notifications', 'list', lang], queryFn: () => api<CentreList>(`/notifications${qs({ lang })}`) });
 
 export function useNotificationActions() {
   const client = useQueryClient();
-  const refresh = (r: { unread: number }) => {
-    client.setQueryData(['notifications', 'unread'], { unread: r.unread });
+  const refresh = (r: CentreCounts) => {
+    client.setQueryData(['notifications', 'unread'], { unread: r.unread, tabs: r.tabs });
     void client.invalidateQueries({ queryKey: ['notifications', 'list'] });
   };
   return {
-    read: useMutation({ mutationFn: (id: string) => api<{ unread: number }>(`/notifications/${id}/read`, { method: 'POST', body: {} }), onSuccess: refresh }),
-    readAll: useMutation({ mutationFn: () => api<{ marked: number; unread: number }>('/notifications/read-all', { method: 'POST', body: {} }), onSuccess: refresh }),
+    read: useMutation({ mutationFn: (id: string) => api<CentreCounts>(`/notifications/${id}/read`, { method: 'POST', body: {} }), onSuccess: refresh }),
+    readAll: useMutation({ mutationFn: () => api<CentreCounts & { marked: number }>('/notifications/read-all', { method: 'POST', body: {} }), onSuccess: refresh }),
   };
 }
 

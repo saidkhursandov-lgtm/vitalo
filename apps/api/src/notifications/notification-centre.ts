@@ -9,12 +9,15 @@ import { CurrentAuth, SessionGuard } from '../auth/session.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../staff/audit.service';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
-import { CENTRE_CATEGORIES, renderCentre, type TemplatePayload } from './notification-templates';
+import type { notifications } from '@prisma/client';
+import { CENTRE_CATEGORIES, centreStep, centreTab, renderCentre, type CentreTab, type Lang, type TemplatePayload } from './notification-templates';
 import { quietUntil } from './notification-worker';
 
 /** 3.2: the centre keeps 90 days. Older rows stay in the database (admin history), they are only not shown. */
 export const CENTRE_DAYS = 90;
 const PAGE = 50;
+/** Rows read to build the cards (several rows of one order make one card). */
+const ROWS = 300;
 
 /**
  * Rows the customer sees in the centre: their own, of a shown section, not older than 90 days. A promo appears only
@@ -30,49 +33,106 @@ function centreWhere(userId: string, now: Date) {
   };
 }
 
+export interface CentreCard {
+  id: string;
+  tab: CentreTab;
+  category: string | null;
+  template: string;
+  title: string;
+  body: string;
+  /** orders: «Принят → Оплачен → Собирается» */
+  steps: string[];
+  /** orders: «Как принимать ваш заказ» was sent — the memo is in the order card */
+  has_guide: boolean;
+  path: string | null;
+  read: boolean;
+  created_at: Date;
+}
+
+// where a tap leads: the order, the product or the promo link (the bot button opens the same page)
+const pathOf = (n: notifications, p: TemplatePayload) =>
+  p.open_path ?? (n.order_id ? `/orders/${n.order_id}` : n.product_id ? `/product/${n.product_id}` : null);
+
+/**
+ * After the owner's check (3.2): one card per order instead of a row per status — the latest status, the path of the
+ * order, a note about the intake memo; it is unread while any of its messages is unread and goes up on every change.
+ * The bot still sends a message per status (an edited Telegram message makes no sound). Other rows stay one card each.
+ */
+export function buildCards(rows: notifications[], lang: Lang): CentreCard[] {
+  const cards: CentreCard[] = [];
+  const byOrder = new Map<string, notifications[]>();
+  for (const n of rows) {
+    if (n.category === 'order' && n.order_id) {
+      byOrder.set(n.order_id, [...(byOrder.get(n.order_id) ?? []), n]);
+      continue;
+    }
+    const p = (n.payload ?? {}) as unknown as TemplatePayload;
+    cards.push({ id: n.id, tab: centreTab(n.category), category: n.category, template: n.template, ...renderCentre(n.template, p, lang), steps: [], has_guide: false, path: pathOf(n, p), read: !!n.read_at, created_at: n.created_at });
+  }
+  for (const list of byOrder.values()) {
+    const asc = [...list].sort((a, b) => a.created_at.getTime() - b.created_at.getTime());
+    const latest = asc[asc.length - 1];
+    // the card text is the latest message about the order; the memo is only a note under it
+    const main = [...asc].reverse().find((n) => n.template !== 'order.intake_guide') ?? latest;
+    const p = (main.payload ?? {}) as unknown as TemplatePayload;
+    const steps: string[] = [];
+    for (const n of asc) {
+      const s = centreStep(n.template, lang);
+      if (s && steps[steps.length - 1] !== s) steps.push(s);
+    }
+    cards.push({
+      id: latest.id,
+      tab: 'orders',
+      category: 'order',
+      template: main.template,
+      ...renderCentre(main.template, p, lang),
+      steps,
+      has_guide: asc.some((n) => n.template === 'order.intake_guide'),
+      path: pathOf(main, p),
+      read: asc.every((n) => n.read_at),
+      created_at: latest.created_at,
+    });
+  }
+  return cards.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+}
+
+/** Unread cards per tab; the bell shows the sum — one per order, not one per message. */
+function counts(cards: CentreCard[]) {
+  const tabs: Record<CentreTab, number> = { orders: 0, promo: 0, service: 0 };
+  for (const c of cards) if (!c.read) tabs[c.tab]++;
+  return { unread: tabs.orders + tabs.promo + tabs.service, tabs };
+}
+
 @Injectable()
 export class NotificationCentreService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(userId: string, lang: 'ru' | 'uz', limit = PAGE) {
-    const now = new Date();
-    const where = centreWhere(userId, now);
-    const [rows, unread] = await this.prisma.$transaction([
-      this.prisma.notifications.findMany({ where, orderBy: { created_at: 'desc' }, take: limit }),
-      this.prisma.notifications.count({ where: { ...where, read_at: null } }),
-    ]);
-    return {
-      unread,
-      items: rows.map((n) => {
-        const payload = (n.payload ?? {}) as unknown as TemplatePayload;
-        return {
-          id: n.id,
-          category: n.category,
-          template: n.template,
-          ...renderCentre(n.template, payload, lang),
-          // where a tap leads: the order, the product or the promo link (the bot button opens the same page)
-          path: payload.open_path ?? (n.order_id ? `/orders/${n.order_id}` : n.product_id ? `/product/${n.product_id}` : null),
-          read: !!n.read_at,
-          created_at: n.created_at,
-        };
-      }),
-    };
+  private async cards(userId: string, lang: Lang) {
+    const rows = await this.prisma.notifications.findMany({ where: centreWhere(userId, new Date()), orderBy: { created_at: 'desc' }, take: ROWS });
+    return buildCards(rows, lang);
+  }
+
+  async list(userId: string, lang: Lang, limit = PAGE) {
+    const cards = await this.cards(userId, lang);
+    return { ...counts(cards), items: cards.slice(0, limit) };
   }
 
   async unread(userId: string) {
-    return { unread: await this.prisma.notifications.count({ where: { ...centreWhere(userId, new Date()), read_at: null } }) };
+    return counts(await this.cards(userId, 'ru'));
   }
 
+  /** Opening an order card marks every message of that order read. */
   async read(userId: string, id: string) {
-    const n = await this.prisma.notifications.findFirst({ where: { id, user_id: userId }, select: { id: true, read_at: true } });
+    const n = await this.prisma.notifications.findFirst({ where: { id, user_id: userId }, select: { id: true, order_id: true, category: true } });
     if (!n) throw new NotFoundException('Notification not found');
-    if (!n.read_at) await this.prisma.notifications.update({ where: { id }, data: { read_at: new Date() } });
+    const where = n.category === 'order' && n.order_id ? { user_id: userId, order_id: n.order_id, category: 'order' } : { id };
+    await this.prisma.notifications.updateMany({ where: { ...where, read_at: null }, data: { read_at: new Date() } });
     return this.unread(userId);
   }
 
   async readAll(userId: string) {
     const res = await this.prisma.notifications.updateMany({ where: { ...centreWhere(userId, new Date()), read_at: null }, data: { read_at: new Date() } });
-    return { marked: res.count, unread: 0 };
+    return { marked: res.count, unread: 0, tabs: { orders: 0, promo: 0, service: 0 } };
   }
 }
 
