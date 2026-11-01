@@ -481,6 +481,8 @@ export interface CompatState {
 
 export interface CartUpsell {
   items: ProductListItem[];
+  /** 3.5: next products, shown in place of a card added from the strip */
+  spare?: ProductListItem[];
   source: 'auto' | 'manual' | null;
   remaining_uzs: number;
 }

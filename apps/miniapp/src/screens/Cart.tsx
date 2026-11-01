@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { QuoteTerm } from '../components/Delivery';
-import { QuickAdd } from '../components/QuickAdd';
+import { useQuickNotify } from '../components/QuickAdd';
+import { useQuickCart } from '../lib/quick-cart';
+import { tapHaptic } from '../lib/telegram';
 import { track } from '../lib/analytics';
 import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui';
 import { RegionCitySelect } from '../components/PlacePicker';
@@ -58,13 +60,47 @@ export function FreeShippingProgress({ quote }: { quote: DeliveryQuote }) {
 }
 
 /**
+ * 3.5: [+] in the strip adds one piece and takes the card out of the strip at once (no stepper here, it squeezed the
+ * name and the price into a column); the product shows at the top of the cart list with its normal stepper, and the next
+ * product (`spare`) takes the free place. A refused add brings the card back.
+ */
+function UpsellAdd({ productId, onAdd, onFail }: { productId: string; onAdd: () => void; onFail: () => void }) {
+  const { t } = useI18n();
+  const notify = useQuickNotify();
+  const { set } = useQuickCart(productId, (n) => {
+    if (n.kind === 'error' || (n.kind === 'left' && n.n === 0)) onFail();
+    notify(n);
+  });
+  return (
+    <button
+      type="button"
+      className="quick-round"
+      aria-label={t('product.addToCart')}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        tapHaptic();
+        set(1);
+        track('add_to_cart', { product_id: productId, source: 'upsell' });
+        onAdd();
+      }}
+    >
+      <span className="quick-round-dot">
+        <PlusIcon width={20} height={20} />
+      </span>
+    </button>
+  );
+}
+
+/**
  * 3.1: 2–3 products under the free-delivery bar with a [+]. The server decides when there is a strip (see
  * CartService.upsell); upsell_shown is reported once per set of products, upsell_add on each [+].
  */
-export function UpsellStrip({ city, goodsTotal }: { city: CityRef | null; goodsTotal: number }) {
+export function UpsellStrip({ city, goodsTotal, inCart }: { city: CityRef | null; goodsTotal: number; inCart: string[] }) {
   const { t, lang } = useI18n();
   const upsell = useUpsell(city, goodsTotal);
-  const items = upsell.data?.items ?? [];
+  const [added, setAdded] = useState<string[]>([]);
+  const items = [...(upsell.data?.items ?? []), ...(upsell.data?.spare ?? [])].filter((p) => !inCart.includes(p.id) && !added.includes(p.id)).slice(0, 3);
   const shown = useRef('');
   const key = items.map((p) => p.id).join(',');
   useEffect(() => {
@@ -86,7 +122,14 @@ export function UpsellStrip({ city, goodsTotal }: { city: CityRef | null; goodsT
                 <strong className="upsell-price">{money(p.price_uzs, lang)}</strong>
               </span>
               <span className="upsell-add tile-action">
-                <QuickAdd productId={p.id} inStock={p.in_stock} onAdd={() => track('upsell_add', { product_id: p.id, source: upsell.data?.source ?? 'auto' })} />
+                <UpsellAdd
+                  productId={p.id}
+                  onAdd={() => {
+                    setAdded((a) => [...a, p.id]);
+                    track('upsell_add', { product_id: p.id, source: upsell.data?.source ?? 'auto' });
+                  }}
+                  onFail={() => setAdded((a) => a.filter((id) => id !== p.id))}
+                />
               </span>
             </Link>
           </li>
@@ -188,7 +231,7 @@ export function Cart() {
           <>
             <QuoteTerm min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />
             <FreeShippingProgress quote={delivery} />
-            <UpsellStrip city={selected} goodsTotal={data.goods_total_uzs} />
+            <UpsellStrip city={selected} goodsTotal={data.goods_total_uzs} inCart={data.items.map((l) => l.product_id)} />
           </>
         ) : (
           <p className="hint small">{t('cart.chooseCity')}</p>

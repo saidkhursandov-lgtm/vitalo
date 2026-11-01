@@ -6,6 +6,8 @@
  */
 export const UPSELL_COUNT = 3;
 export const UPSELL_MIN_COUNT = 2;
+/** 3.5: products after the first 3, sent as `spare`: a card added from the strip is replaced at once by the next one. */
+export const UPSELL_SPARE = 3;
 
 export interface UpsellCandidate {
   id: string;

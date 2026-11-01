@@ -97,7 +97,7 @@ function show(lang: Lang, ui: ReactNode) {
 
 describe('3.1 upsell under the free-delivery bar', () => {
   it('shows the products with [+], reports upsell_shown once and upsell_add on a tap', async () => {
-    show('ru', <UpsellStrip city={CITY} goodsTotal={200_000} />);
+    show('ru', <UpsellStrip city={CITY} goodsTotal={200_000} inCart={[]} />);
     expect(await screen.findByText('Добавьте к заказу')).toBeTruthy();
     expect(screen.getByText('Товар a')).toBeTruthy();
     expect(screen.getByText('Товар b')).toBeTruthy();
@@ -109,12 +109,12 @@ describe('3.1 upsell under the free-delivery bar', () => {
 
   it('nothing at all when the server offers fewer than 2 products or no district is chosen', async () => {
     upsellItems = [];
-    const { container } = show('uz', <UpsellStrip city={CITY} goodsTotal={200_000} />);
+    const { container } = show('uz', <UpsellStrip city={CITY} goodsTotal={200_000} inCart={[]} />);
     await new Promise((r) => setTimeout(r, 30));
     expect(container.querySelector('.upsell')).toBeNull();
     cleanup();
     upsellItems = [product('a', 100_000), product('b', 110_000)];
-    const none = show('uz', <UpsellStrip city={null} goodsTotal={200_000} />);
+    const none = show('uz', <UpsellStrip city={null} goodsTotal={200_000} inCart={[]} />);
     await new Promise((r) => setTimeout(r, 30));
     expect(none.container.querySelector('.upsell')).toBeNull();
     expect(events).toEqual([]);

@@ -255,6 +255,24 @@ describe('Stage 3.1 cart upsell (e2e)', () => {
     expect(body.items[0].price_uzs).toBe(100_000);
   });
 
+  it('3.5: up to 3 spare products after the first 3; the cart lists the newest line first', async () => {
+    const { token, inCart } = await customerWithCart();
+    for (const price of [100_000, 105_000, 110_000, 115_000, 120_000]) await createTestProduct(prisma, { price, stock: 3 });
+    const body = (await upsell(token)).body;
+    expect(body.items).toHaveLength(3);
+    expect(body.spare.length).toBeGreaterThanOrEqual(2);
+    expect(body.spare.length).toBeLessThanOrEqual(3);
+    const ids = [...body.items, ...body.spare].map((p: { id: string }) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).not.toContain(inCart);
+
+    // the product added from the strip comes first in the cart and leaves the strip
+    const added = body.items[0].id;
+    await http().post('/api/cart/items').set(bearer(token)).send({ product_id: added, qty: 1 }).expect(201);
+    const cart = (await http().get('/api/cart').query(addr.tashkent).set(bearer(token)).expect(200)).body;
+    expect(cart.items.map((l: { product_id: string }) => l.product_id)).toEqual([added, inCart]);
+  });
+
   it('manual list: only the listed products, in stock and not already in the cart', async () => {
     const { token, inCart } = await customerWithCart();
     const a = await createTestProduct(prisma, { price: 120_000, stock: 2 });
@@ -267,14 +285,14 @@ describe('Stage 3.1 cart upsell (e2e)', () => {
 
     // fewer than 2 fit → no strip at all
     await setUpsell({ enabled: true, product_ids: [inCart, a.id, out.id] });
-    expect((await upsell(token)).body).toEqual({ items: [], source: null, remaining_uzs: 0 });
+    expect((await upsell(token)).body).toEqual({ items: [], spare: [], source: null, remaining_uzs: 0 });
   });
 
   it('nothing when the block is off, no district is chosen, the threshold is reached or the first order is free', async () => {
     const { token } = await customerWithCart();
     await createTestProduct(prisma, { price: 100_000, stock: 3 });
     await createTestProduct(prisma, { price: 105_000, stock: 3 });
-    const none = { items: [], source: null, remaining_uzs: 0 };
+    const none = { items: [], spare: [], source: null, remaining_uzs: 0 };
 
     await setUpsell({ enabled: false, product_ids: [] });
     expect((await upsell(token)).body).toEqual(none);

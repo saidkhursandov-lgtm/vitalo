@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PromoCodesService, PromoView } from '../promo/promo.service';
 import { SettingsService } from '../settings/settings.service';
 import { CartWarning, MAX_LINE_QTY, reconcileCartLine } from './cart-reconcile';
-import { rankUpsell, UPSELL_MIN_COUNT } from './upsell';
+import { rankUpsell, UPSELL_COUNT, UPSELL_MIN_COUNT, UPSELL_SPARE } from './upsell';
 
 export interface CartLineView {
   product_id: string;
@@ -53,9 +53,10 @@ export class CartService {
    * 3.1: products under «Добавьте ещё X сум — доставка бесплатна»: in stock, not in the cart, priced close to the
    * missing amount (see rankUpsell). Nothing when the block is off, the threshold is reached, the delivery is free as
    * the first order, no city is chosen yet, or fewer than 2 products fit. Read-only, like count().
+   * 3.5: up to 3 more products come as `spare`: the strip shows the next one in place of a card just added.
    */
   async upsell(userId: string, address?: { region_id: string; city_id: string }) {
-    const none = { items: [] as ReturnType<typeof toProductListItem>[], source: null as 'auto' | 'manual' | null, remaining_uzs: 0 };
+    const none = { items: [] as ReturnType<typeof toProductListItem>[], spare: [] as ReturnType<typeof toProductListItem>[], source: null as 'auto' | 'manual' | null, remaining_uzs: 0 };
     const cfg = await this.settings.getOrDefault('cart_upsell');
     if (!cfg.enabled || !address) return none;
     const lines = await this.countLines(userId);
@@ -73,15 +74,16 @@ export class CartService {
       where: { status: 'active', id: source === 'manual' ? { in: manual } : { notIn: inCart }, price_uzs: { gt: 0 } },
       include: listInclude,
     });
-    const items = rankUpsell(products.map(toProductListItem).filter((p) => p.in_stock), quote.remaining_for_free_uzs);
-    return items.length >= UPSELL_MIN_COUNT ? { items, source, remaining_uzs: quote.remaining_for_free_uzs } : none;
+    const ranked = rankUpsell(products.map(toProductListItem).filter((p) => p.in_stock), quote.remaining_for_free_uzs, UPSELL_COUNT + UPSELL_SPARE);
+    const items = ranked.slice(0, UPSELL_COUNT);
+    return items.length >= UPSELL_MIN_COUNT ? { items, spare: ranked.slice(UPSELL_COUNT), source, remaining_uzs: quote.remaining_for_free_uzs } : none;
   }
 
-  /** Opening the cart re-validates every line (price, stock, product status) and persists corrections. */
+  /** Opening the cart re-validates every line (price, stock, product status) and persists corrections. 3.5: the newest line first. */
   async getCart(userId: string, address?: { region_id: string; city_id: string }, extraWarnings: CartWarning[] = []): Promise<CartView> {
     const cart = await this.prisma.carts.findFirst({
       where: { user_id: userId, status: 'active' },
-      include: { items: { orderBy: { created_at: 'asc' }, include: { product: { include: listInclude } } } },
+      include: { items: { orderBy: { created_at: 'desc' }, include: { product: { include: listInclude } } } },
     });
     const items = cart?.items ?? [];
     const available = await this.stock.availability(items.map((i) => i.product_id));
