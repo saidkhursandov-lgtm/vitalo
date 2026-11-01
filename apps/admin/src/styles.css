@@ -398,3 +398,13 @@ textarea { resize: vertical; }
 .promo-cond { min-width: 160px; }
 .promo-code-btn { border: 1px solid var(--border-strong); cursor: pointer; color: var(--primary); min-height: 32px; }
 .nowrap { white-space: nowrap; }
+
+/* 3.4: «Совместимость» */
+.compat-products { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.compat-table td { vertical-align: top; }
+.compat-comment { max-width: 280px; white-space: pre-line; overflow-wrap: anywhere; }
+.compat-answer-cell { max-width: 360px; }
+.compat-answer-cell .pre { margin: 4px 0; white-space: pre-line; }
+.compat-template { margin-bottom: 8px; }
+.compat-template h3 { margin: 8px 0; }
+.compat-table .pre, .compat-template .pre { white-space: pre-line; overflow-wrap: anywhere; }

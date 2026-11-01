@@ -183,6 +183,7 @@ interface StaffRow {
   name: string;
   role: string;
   status: 'active' | 'blocked';
+  is_specialist: boolean;
   active_sessions: number;
   created_at: string;
 }
@@ -194,7 +195,7 @@ function Staff() {
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const update = useMutation({
-    mutationFn: ({ id, ...body }: { id: string; role?: string; status?: string }) => api<StaffRow[]>(`/staff/users/${id}`, { method: 'PATCH', body }),
+    mutationFn: ({ id, ...body }: { id: string; role?: string; status?: string; is_specialist?: boolean }) => api<StaffRow[]>(`/staff/users/${id}`, { method: 'PATCH', body }),
     onSuccess: (list) => client.setQueryData(['settings', 'staff'], list),
   });
   const revoke = useMutation({
@@ -227,6 +228,7 @@ function Staff() {
               <th>Telegram ID</th>
               <th>Роль</th>
               <th>Статус</th>
+              <th title="Отвечает на запросы «Проверить совместимость» и видит комментарий клиента">Специалист</th>
               <th className="num">Активных сессий</th>
               <th />
             </tr>
@@ -252,6 +254,12 @@ function Staff() {
                   </td>
                   <td>
                     <Badge tone={s.status === 'active' ? 'ok' : 'bad'}>{s.status === 'active' ? 'Активен' : 'Заблокирован'}</Badge>
+                  </td>
+                  <td>
+                    {/* 3.4: answers «Проверить совместимость» (an admin answers anyway) */}
+                    <label className="check">
+                      <input type="checkbox" checked={s.role === 'admin' || s.is_specialist} disabled={s.role === 'admin' || update.isPending} onChange={(e) => update.mutate({ id: s.id, is_specialist: e.target.checked })} aria-label="Специалист" />
+                    </label>
                   </td>
                   <td className="num">{s.active_sessions}</td>
                   <td className="ops">

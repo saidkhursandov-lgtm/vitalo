@@ -46,6 +46,10 @@ const EXTRA_NAMES: Record<string, string> = {
   promo_apply_success: 'Применили промокод',
   promo_apply_fail: 'Промокод не подошёл',
   promo_remove: 'Убрали промокод',
+  compat_request: 'Отправили запрос совместимости',
+  compat_instant_answer: 'Получили сохранённый ответ о совместимости',
+  compat_answered: 'Получили ответ специалиста о совместимости',
+  compat_view: 'Увидели ответ о совместимости в корзине',
 };
 /** Sub-rows: payment systems of «Скоро» and (3.3) reasons a promo code did not fit. */
 const SYSTEM_NAMES: Record<string, string> = {

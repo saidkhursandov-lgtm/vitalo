@@ -22,6 +22,8 @@ export const NAV: NavItem[] = [
   { to: '/promo', label: 'Акции', permission: 'promo.send' },
   // 3.3: promo codes — admin, marketer (change), manager (view only)
   { to: '/promo-codes', label: 'Промокоды', permission: 'promo.view' },
+  // 3.4: compatibility requests — admin and «специалист» answer, manager only looks (without the comment)
+  { to: '/compat', label: 'Совместимость', permission: 'compat.view' },
   // Stage 3: money — admin only
   { to: '/analytics', label: 'Аналитика', permission: 'finance.manage' },
   { to: '/finance', label: 'Финансы', permission: 'finance.manage' },

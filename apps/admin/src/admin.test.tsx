@@ -21,7 +21,7 @@ afterEach(cleanup);
 const PERMS: Record<string, Permission[]> = {
   warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision'],
   marketer: ['dashboard.view', 'products.view', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send'],
-  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label', 'yandex.orders.view', 'promo.view'],
+  manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label', 'yandex.orders.view', 'promo.view', 'compat.view'],
 };
 
 describe('menu by role', () => {
@@ -44,7 +44,7 @@ describe('menu by role', () => {
   });
 
   it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {
-    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты', 'Лист ожидания', 'Промокоды']);
+    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты', 'Лист ожидания', 'Промокоды', 'Совместимость']);
   });
 });
 

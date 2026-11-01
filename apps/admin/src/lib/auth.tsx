@@ -48,10 +48,12 @@ export type Permission =
   | 'products.aliases'
   | 'promo.send'
   | 'promo.view'
-  | 'promo.manage';
+  | 'promo.manage'
+  | 'compat.view'
+  | 'compat.answer';
 
 export interface Me {
-  staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer' };
+  staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer'; is_specialist?: boolean };
   permissions: Permission[];
 }
 
