@@ -8,6 +8,6 @@ import { SystemErrorsService } from './system-errors';
 @Global()
 @Module({
   providers: [NotificationsService, NotificationWorker, SystemErrorsService, { provide: TELEGRAM_SENDER, useClass: HttpTelegramSender }],
-  exports: [NotificationsService, NotificationWorker, SystemErrorsService],
+  exports: [NotificationsService, NotificationWorker, SystemErrorsService, TELEGRAM_SENDER],
 })
 export class NotificationsModule {}

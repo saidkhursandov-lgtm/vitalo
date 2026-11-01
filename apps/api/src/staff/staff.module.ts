@@ -18,6 +18,7 @@ import { PromoModule } from '../promo/promo.module';
 import { PromoController, PromoService } from '../notifications/notification-centre';
 import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from './admin-receipts';
 import { BotSecretGuard } from '../bot-internal/bot-internal.module';
+import { AdminCompatController, BotCompatController, CompatController, CompatService } from '../compat/compat.service';
 import { AdminSettingsController, AdminSettingsService, AuditController, StaffUsersController } from './admin-settings';
 import { AuditService } from './audit.service';
 import { DashboardController, DashboardService } from './dashboard';
@@ -76,6 +77,9 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     PromoController,
     AdminReceiptsController,
     BotReceiptsController,
+    CompatController,
+    AdminCompatController,
+    BotCompatController,
   ],
   providers: [
     AdminBannersService,
@@ -107,6 +111,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminWaitlistService,
     PromoService,
     ReceiptsService,
+    CompatService,
     BotSecretGuard,
   ],
 })

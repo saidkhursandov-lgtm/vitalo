@@ -21,9 +21,12 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
  * (props.order_id, props.action = open | pay) — from the app; intake_guide_sent (props.order_id, props.products) — server only.
  * 3.3: promo_apply_success (props.code, props.discount_uzs, props.place = cart | checkout), promo_apply_fail (props.code,
  * props.reason), promo_remove (props.code, props.place) — from the app.
+ * 3.4: compat_view (props.verdict, props.source, props.changed) — the answer card seen in the cart, from the app;
+ * compat_request (props.products, props.has_comment, props.lang), compat_instant_answer (props.verdict), compat_answered
+ * (props.verdict, props.via = bot | admin, props.minutes) — server only. The comment itself never goes to analytics (D-40).
  */
-export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove'] as const;
-export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent'] as const;
+export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove', 'compat_view'] as const;
+export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent', 'compat_request', 'compat_instant_answer', 'compat_answered'] as const;
 export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;
 

@@ -57,15 +57,20 @@ export const PERMISSIONS = {
   'yandex.sync': [],
   'promo.view': ['manager', 'marketer'], // 3.3: «Промокоды» — the table and stats (D-39 Б: the manager only looks)
   'promo.manage': ['marketer'], // 3.3: create / change / switch off promo codes
+  'compat.view': ['manager'], // 3.4: «Совместимость» — requests and answers, without the customer's comment (D-40)
+  'compat.answer': [], // 3.4: answer, saved combinations, templates; also any employee marked «специалист»
   'promo.send': ['marketer'], // 3.2: «Акции» — a promo to customers with «Получать акции и новости» (bot + Mini App centre) // Stage 2D: «Синхронизация Яндекса», «Проверить сейчас», «Требует внимания», «Закрыть как неактуальный»
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
 
-export function can(role: StaffRole, permission: Permission): boolean {
-  return role === 'admin' || (PERMISSIONS[permission] as readonly StaffRole[]).includes(role);
+/** 3.4: what the «специалист» mark adds to any role (it may read the customer's comment — D-40). */
+export const SPECIALIST_PERMISSIONS: readonly Permission[] = ['compat.view', 'compat.answer'];
+
+export function can(role: StaffRole, permission: Permission, specialist = false): boolean {
+  return role === 'admin' || (PERMISSIONS[permission] as readonly StaffRole[]).includes(role) || (specialist && SPECIALIST_PERMISSIONS.includes(permission));
 }
 
-export function permissionsOf(role: StaffRole): Permission[] {
-  return (Object.keys(PERMISSIONS) as Permission[]).filter((p) => can(role, p));
+export function permissionsOf(role: StaffRole, specialist = false): Permission[] {
+  return (Object.keys(PERMISSIONS) as Permission[]).filter((p) => can(role, p, specialist));
 }

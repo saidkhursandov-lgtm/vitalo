@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { notifications } from '@prisma/client';
+import { Prisma, notifications } from '@prisma/client';
+import { VERDICT_CODES, VERDICT_LABELS, VERDICTS } from '../compat/compat';
 import { PrismaService } from '../prisma/prisma.service';
 import { ADMIN_BUTTON, SUPPORT_BUTTON, openButtonText, renderNotification, type TemplatePayload } from './notification-templates';
 import { TELEGRAM_SENDER, TelegramSendError, type TelegramSender } from './telegram-sender';
@@ -27,6 +28,12 @@ export function quietUntil(now: Date): Date | null {
   if (h >= QUIET_TO_HOUR && h < QUIET_FROM_HOUR) return null;
   const morning = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), QUIET_TO_HOUR) - TASHKENT_OFFSET_MS);
   return h >= QUIET_FROM_HOUR ? new Date(morning.getTime() + 24 * 3600_000) : morning;
+}
+
+/** 3.4: quick answers of the specialist (the bot handles cp:<code>:<id>, cp:t:<id> = own text). */
+export function compatButtons(id: string) {
+  const quick = VERDICTS.map((v) => ({ text: VERDICT_LABELS[v].ru, data: `cp:${VERDICT_CODES[v]}:${id}` }));
+  return [[quick[0], quick[1]], [quick[2]], [{ text: 'Ответить своим текстом', data: `cp:t:${id}` }]];
 }
 
 export interface ProcessResult {
@@ -67,14 +74,16 @@ export class NotificationWorker {
     }
   }
 
-  async processOnce(now = new Date()): Promise<ProcessResult> {
+  /** `only` (tests): deliver just these rows, so parallel suites never take each other's messages. */
+  async processOnce(now = new Date(), only?: string[]): Promise<ProcessResult> {
     const result: ProcessResult = { sent: 0, failed: 0, retried: 0, skipped: 0, deferred: 0 };
     const batch = await this.prisma.$queryRaw<notifications[]>`
       UPDATE notifications SET status = 'sending'
       WHERE id IN (
         SELECT id FROM notifications
-        WHERE (status = 'queued' AND next_attempt_at <= ${now})
-           OR (status = 'sending' AND next_attempt_at <= ${new Date(now.getTime() - STUCK_MS)})
+        WHERE ((status = 'queued' AND next_attempt_at <= ${now})
+           OR (status = 'sending' AND next_attempt_at <= ${new Date(now.getTime() - STUCK_MS)}))
+          ${only ? Prisma.sql`AND id = ANY(${only}::uuid[])` : Prisma.empty}
         ORDER BY created_at
         LIMIT ${BATCH}
         FOR UPDATE SKIP LOCKED
@@ -113,8 +122,19 @@ export class NotificationWorker {
               ? { text: ADMIN_BUTTON, url: `${admin}${payload.admin_path}` }
               : undefined;
         const link = payload.support_url ? { text: SUPPORT_BUTTON[lang], url: payload.support_url } : undefined;
-        await this.sender.sendMessage(n.chat_id, text, { ...(button && { webApp: button }), ...(link && { link }) });
-        await this.prisma.notifications.update({ where: { id: n.id }, data: { status: 'sent', sent_at: new Date(), attempts: n.attempts + 1, error: null } });
+        // 3.4: the specialist answers with buttons of the bot; at night the message comes without a sound
+        const compat = n.template === 'staff.compat_request' && payload.compat_id ? { buttons: compatButtons(payload.compat_id), silent: !!quietUntil(now) } : {};
+        const messageId = await this.sender.sendMessage(n.chat_id, text, { ...(button && { webApp: button }), ...(link && { link }), ...compat });
+        await this.prisma.notifications.update({
+          where: { id: n.id },
+          data: {
+            status: 'sent',
+            sent_at: new Date(),
+            attempts: n.attempts + 1,
+            error: null,
+            ...(compat.buttons && messageId && { payload: { ...payload, tg_message_id: messageId } as unknown as Prisma.InputJsonObject }),
+          },
+        });
         result.sent++;
       } catch (e) {
         const outcome = await this.handleFailure(n, e, now);

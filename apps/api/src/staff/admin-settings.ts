@@ -263,6 +263,8 @@ export class StaffUserPatch {
   @ApiPropertyOptional() @IsOptional() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) name?: string;
   @ApiPropertyOptional({ enum: StaffRole }) @IsOptional() @IsEnum(StaffRole) role?: StaffRole;
   @ApiPropertyOptional({ enum: StaffStatus }) @IsOptional() @IsEnum(StaffStatus) status?: StaffStatus;
+  /** 3.4: answers «Проверить совместимость» (any role; an admin answers anyway) */
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() is_specialist?: boolean;
 }
 
 export class AuditQuery extends PageQuery {
@@ -575,6 +577,7 @@ export class AdminSettingsService {
       name: s.name,
       role: s.role,
       status: s.status,
+      is_specialist: s.is_specialist,
       active_sessions: s._count.sessions,
       created_at: s.created_at,
     }));

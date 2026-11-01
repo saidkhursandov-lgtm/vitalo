@@ -45,7 +45,7 @@ export class StaffAuthService {
     await this.prisma.staff_sessions.create({
       data: { staff_user_id: staff.id, token_hash: hashSessionToken(token), expires_at: expiresAt },
     });
-    return { token, expires_at: expiresAt.toISOString(), staff: { id: staff.id, name: staff.name, role: staff.role } };
+    return { token, expires_at: expiresAt.toISOString(), staff: { id: staff.id, name: staff.name, role: staff.role, is_specialist: staff.is_specialist } };
   }
 
   async logout(sessionId: string): Promise<void> {
@@ -92,7 +92,7 @@ export class StaffGuard implements CanActivate {
     if (!auth) throw new UnauthorizedException();
 
     const needed = this.reflector.getAllAndOverride<Permission[] | undefined>(PERMISSIONS_KEY, [ctx.getHandler(), ctx.getClass()]);
-    if (needed && !needed.some((p) => can(auth.staff.role, p))) {
+    if (needed && !needed.some((p) => can(auth.staff.role, p, auth.staff.is_specialist))) {
       throw new ForbiddenException({ code: 'FORBIDDEN_FOR_ROLE', message: `Role ${auth.staff.role} cannot do this` });
     }
     req.staffAuth = auth;

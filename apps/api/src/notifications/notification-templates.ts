@@ -1,4 +1,5 @@
 import { formatUzs } from '../common/tashkent';
+import { VERDICT_LABELS, type Verdict } from '../compat/compat';
 
 export type Lang = 'ru' | 'uz';
 
@@ -30,6 +31,8 @@ export type TemplateName =
   | 'staff.finance_before_due'
   | 'staff.finance_due_day'
   | 'staff.waitlist_new'
+  | 'staff.compat_request'
+  | 'compat.answered'
   | 'order.payment_reminder'
   | 'order.cod_confirmed'
   | 'order.receipt_rejected'
@@ -68,7 +71,7 @@ export interface TemplatePayload {
   /** 2.4: product name for waiting-list messages */
   product?: string;
   /** 2.4: which page the button opens (text of the button); default: the order. 3.2: 'pay', 'link' */
-  open_button?: 'order' | 'product' | 'pay' | 'link';
+  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart';
   /** 3.3: the order's promo code — one more line under the total */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   /** 3.2: «Как принимать ваш заказ» — short product name and its intake memo, in the customer's language */
@@ -80,6 +83,16 @@ export interface TemplatePayload {
   title_uz?: string;
   text_ru?: string;
   text_uz?: string;
+  /** 3.4: the compatibility request (staff message: buttons of the bot; customer: the answer) */
+  compat_id?: string;
+  /** 3.4: the customer's language, shown to the specialist */
+  client_lang?: Lang;
+  /** 3.4: the customer's comment (may hold health data — removed from the row after 90 days, D-40) */
+  comment?: string | null;
+  verdict?: Verdict;
+  answer?: string;
+  /** 3.4: Telegram's id of the sent staff message — its buttons are removed once somebody answers */
+  tg_message_id?: number;
 }
 
 /** Text of the button under a message that has open_path. */
@@ -90,6 +103,8 @@ export const OPEN_PRODUCT_BUTTON: Record<Lang, string> = { ru: 'Открыть �
 export const PAY_BUTTON: Record<Lang, string> = { ru: 'Оплатить / Отправить чек', uz: 'To‘lash / Chek yuborish' };
 /** 3.2: button under a promo message. */
 export const LINK_BUTTON: Record<Lang, string> = { ru: 'Открыть', uz: 'Ochish' };
+/** 3.4: button under the specialist's answer. */
+export const CART_BUTTON: Record<Lang, string> = { ru: 'Открыть корзину', uz: 'Savatni ochish' };
 /** 3.2: second button under «Как принимать ваш заказ». */
 export const SUPPORT_BUTTON: Record<Lang, string> = { ru: 'Спросить специалиста', uz: 'Mutaxassisdan so‘rash' };
 
@@ -97,6 +112,7 @@ export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang)
   if (kind === 'product') return OPEN_PRODUCT_BUTTON[lang];
   if (kind === 'pay') return PAY_BUTTON[lang];
   if (kind === 'link') return LINK_BUTTON[lang];
+  if (kind === 'cart') return CART_BUTTON[lang];
   return OPEN_BUTTON[lang];
 }
 
@@ -282,6 +298,19 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
     uz: (p: TemplatePayload) => `🔔 Kutish roʻyxati: ${p.product ?? ''}
 Kutmoqda: ${p.count ?? 0}`,
   },
+  // 3.4: a customer asked to check the cart (admins and specialists, Russian). The buttons are added by the worker.
+  'staff.compat_request': {
+    ru: (p: TemplatePayload) =>
+      `Проверка совместимости\nЯзык клиента: ${p.client_lang === 'uz' ? 'узбекский (UZ)' : 'русский (RU)'}\n\nСостав корзины:\n${p.items ?? ''}\n\nКомментарий: ${p.comment || '—'}`,
+    uz: (p: TemplatePayload) => `Moslikni tekshirish\n${p.items ?? ''}`,
+  },
+  // 3.4: the specialist's answer to the customer (bot + «Заказы» of the Mini App centre).
+  'compat.answered': {
+    ru: (p: TemplatePayload) =>
+      `Специалист VITALO ответил на запрос о совместимости\n\n${p.verdict ? VERDICT_LABELS[p.verdict].ru : ''}\n${p.answer ?? ''}\n\nНе является медицинской консультацией.`,
+    uz: (p: TemplatePayload) =>
+      `VITALO mutaxassisi moslik haqidagi soʻrovingizga javob berdi\n\n${p.verdict ? VERDICT_LABELS[p.verdict].uz : ''}\n${p.answer ?? ''}\n\nTibbiy maslahat hisoblanmaydi.`,
+  },
   // 2.4: the product a customer waited for is available again. order_number is not used.
   'waitlist.back_in_stock': {
     ru: (p: TemplatePayload) => `${p.product ?? ''} снова в наличии`,
@@ -311,7 +340,7 @@ export function renderNotification(template: string, payload: TemplatePayload): 
 }
 
 /** 3.2: sections of the Mini App notification centre. «bonus» is reserved for release 4 and not shown yet. */
-export const CENTRE_CATEGORIES = ['order', 'waitlist', 'promo'] as const;
+export const CENTRE_CATEGORIES = ['order', 'waitlist', 'promo', 'compat'] as const;
 export type CentreCategory = (typeof CENTRE_CATEGORIES)[number] | 'bonus';
 
 /** Short plain lines for the centre (no emoji: the Mini App draws SVG icons). */
@@ -340,13 +369,17 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
   }
   const line = isTemplate(template) ? CENTRE_LINES[template]?.[lang](payload) : undefined;
   if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
+  if (template === 'compat.answered') {
+    const label = payload.verdict ? VERDICT_LABELS[payload.verdict][lang] : '';
+    return { title: lang === 'uz' ? 'Moslikni tekshirish' : 'Проверка совместимости', body: [label, payload.answer].filter(Boolean).join('. ') };
+  }
   return { title: lang === 'uz' ? `№${payload.order_number} buyurtma` : `Заказ №${payload.order_number}`, body: line ?? renderNotification(template, { ...payload, lang }) };
 }
 
 /** 3.2 (after the owner's check): tabs of the centre. «promo» also holds bonuses (release 4); «service» — everything else. */
 export type CentreTab = 'orders' | 'promo' | 'service';
 export function centreTab(category: string | null): CentreTab {
-  if (category === 'order') return 'orders';
+  if (category === 'order' || category === 'compat') return 'orders'; // 3.4: «заказ / консультация»
   if (category === 'promo' || category === 'bonus') return 'promo';
   return 'service';
 }

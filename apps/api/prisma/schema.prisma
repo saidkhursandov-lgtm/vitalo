@@ -346,6 +346,7 @@ model users {
   cancel_requests   cancel_requests[]
   waitlist          product_waitlist[]
   payment_receipts  payment_receipts[]
+  compat_requests   compat_requests[]
 
   @@index([status])
 }
@@ -415,6 +416,8 @@ model staff_users {
   name             String
   role             StaffRole
   status           StaffStatus @default(active)
+  /// 3.4: answers «Проверить совместимость» (an admin answers anyway)
+  is_specialist    Boolean     @default(false)
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 
@@ -435,6 +438,8 @@ model staff_users {
   unit_events        physical_unit_events[]
   marketplace_orders marketplace_orders[]
   reviewed_receipts  payment_receipts[]
+  compat_answered    compat_requests[]
+  compat_saved       compat_answers[]
 }
 
 model staff_sessions {
@@ -1680,6 +1685,56 @@ model favorites {
 
 /// 2.4: «Сообщить о поступлении». One row per customer and product; notified_at is set when the bot has written
 /// «снова в наличии» (then the row is closed; subscribing again after that reopens it).
+/// 3.4: «Проверить совместимость у специалиста» — one request per cart composition (D-40).
+model compat_requests {
+  id                String          @id @default(uuid()) @db.Uuid
+  user_id           String          @db.Uuid
+  /// product ids of the cart, sorted (quantities and order do not matter)
+  product_ids       String[]        @db.Uuid
+  /// the sorted ids joined with "," — the same cart composition gives the same key
+  set_key           String
+  /// [{ product_id, sku, name_ru, name_uz }] at the time of the request
+  items             Json
+  lang              String // ru | uz — the customer's language, the answer is written in it
+  /// may hold health data: only admins and specialists see it; the text is cleared after 90 days (D-40)
+  comment           String?
+  comment_purged_at DateTime?
+  status            String          @default("pending") // pending | answered | closed (the cart changed before an answer)
+  source            String          @default("specialist") // specialist | instant (a saved answer for the same set)
+  verdict           String? // compatible | spread | consult
+  answer_text       String?
+  answered_by       String?         @db.Uuid
+  answered_at       DateTime?
+  saved_answer_id   String?         @db.Uuid
+  created_at        DateTime        @default(now())
+  user              users           @relation(fields: [user_id], references: [id])
+  answerer          staff_users?    @relation(fields: [answered_by], references: [id])
+  saved_answer      compat_answers? @relation(fields: [saved_answer_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at])
+  @@index([status, created_at])
+}
+
+/// 3.4: answers a specialist marked «Можно использовать повторно» — by product set and language; switched off, never deleted.
+model compat_answers {
+  id                String            @id @default(uuid()) @db.Uuid
+  set_key           String
+  product_ids       String[]          @db.Uuid
+  items             Json
+  lang              String
+  verdict           String
+  text              String
+  enabled           Boolean           @default(true)
+  source_request_id String?           @db.Uuid
+  created_by        String?           @db.Uuid
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @default(now()) @updatedAt
+  author            staff_users?      @relation(fields: [created_by], references: [id], onDelete: SetNull)
+  requests          compat_requests[]
+
+  @@unique([set_key, lang])
+}
+
 model product_waitlist {
   id           String    @id @default(uuid()) @db.Uuid
   product_id   String    @db.Uuid

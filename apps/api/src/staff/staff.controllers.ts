@@ -13,7 +13,7 @@ export class StaffAuthController {
   @HttpCode(200)
   async login(@Body() dto: TelegramLoginDto) {
     const res = await this.auth.login(dto.initData);
-    return { ...res, permissions: permissionsOf(res.staff.role) };
+    return { ...res, permissions: permissionsOf(res.staff.role, res.staff.is_specialist) };
   }
 
   /** Current employee + what they may do (the admin UI builds its menu from this). */
@@ -22,7 +22,7 @@ export class StaffAuthController {
   @UseGuards(StaffGuard)
   me(@CurrentStaff() me: StaffContext) {
     const s = me.staff;
-    return { staff: { id: s.id, name: s.name, role: s.role }, permissions: permissionsOf(s.role) };
+    return { staff: { id: s.id, name: s.name, role: s.role, is_specialist: s.is_specialist }, permissions: permissionsOf(s.role, s.is_specialist) };
   }
 
   @Post('logout')
