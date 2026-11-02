@@ -3,7 +3,7 @@ import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
+import type { Address, AiState, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -102,6 +102,10 @@ export function useCart(city?: CityRef | null) {
  * changes; an empty list = no strip (block off, threshold reached, free first order, not enough products).
  */
 /** 3.4: the compatibility block of the cart; refetched when the set of products or the language changes. */
+/** 3.8: VITALO AI in the cart; same keys as the specialist block. */
+export const useAiCompat = (setKey: string, lang: Lang) =>
+  useQuery({ queryKey: ['compat-ai', setKey, lang], queryFn: () => api<AiState>('/compat/ai'), placeholderData: (prev) => prev });
+
 export const useCompat = (setKey: string, lang: Lang) =>
   useQuery({ queryKey: ['compat', setKey, lang], queryFn: () => api<CompatState>('/compat'), placeholderData: (prev) => prev });
 

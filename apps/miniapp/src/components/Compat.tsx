@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import { useCompat } from '../lib/queries';
+import { useAiCompat, useCompat } from '../lib/queries';
+import { AiCompat } from './AiCompat';
 import type { CompatRequest, CompatState, CompatVerdict } from '../lib/types';
 import { AlertIcon, CheckIcon, ChevronIcon, CloseIcon, ShieldIcon } from './Icons';
 
@@ -13,7 +14,7 @@ export const setKeyOf = (ids: string[]) => [...new Set(ids)].sort().join(',');
 const VERDICT_KEY: Record<CompatVerdict, MessageKey> = { compatible: 'compat.v.compatible', spread: 'compat.v.spread', consult: 'compat.v.consult' };
 
 /**
- * 3.4: «Проверить совместимость у специалиста» in the cart (2+ different products). Shows, in this order: the answer for
+ * 3.8: VITALO AI first (from one product, AiCompat). 3.4: «Проверить совместимость у специалиста» (2+ different products): the answer for
  * the latest request (with «Состав корзины изменился — проверьте снова» when the cart is another set now), «ждём ответа»
  * while a specialist has it, or the widget that opens the request sheet.
  */
@@ -21,17 +22,33 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
   const { t, lang } = useI18n();
   const setKey = setKeyOf(productIds);
   const compat = useCompat(setKey, lang);
+  const ai = useAiCompat(setKey, lang);
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const s = compat.data;
-  if (!s || !s.eligible) return null;
+  // 3.8: VITALO AI works from one product; the specialist (3.4) from two
+  const aiOn = !!ai.data?.available && !!ai.data.eligible;
+  if (!s || (!s.eligible && !aiOn)) return null;
   const r = s.request;
   const waiting = r?.status === 'pending' && !r.changed;
-  const answered = r?.status === 'answered' ? r : null;
+  // an AI answer is shown by its own card
+  const answered = r?.status === 'answered' && r.source !== 'ai' && r.source !== 'ai_cache' ? r : null;
   return (
     <div className="compat">
+      {aiOn && (
+        <AiCompat
+          state={ai.data!}
+          products={s.products}
+          canAskSpecialist={s.eligible && !waiting}
+          onAsk={() => setOpen(true)}
+          onChange={(next) => {
+            client.setQueryData(['compat-ai', setKey, lang], next);
+            void client.invalidateQueries({ queryKey: ['compat', setKey, lang] });
+          }}
+        />
+      )}
       {answered && <CompatAnswer request={answered} />}
-      {waiting ? (
+      {!s.eligible ? null : waiting ? (
         <div className="compat-pending" role="status">
           <ShieldIcon width={20} height={20} aria-hidden />
           <span>

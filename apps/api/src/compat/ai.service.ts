@@ -36,7 +36,7 @@ import { OVERLAP_TEXT, applyOverlapFloor, overlapsForProducts, rulesForProducts,
 const CANDIDATES_MAX = 10;
 const MAX_TOKENS = 4000;
 
-type Fallback = 'off' | 'no_key' | 'budget' | 'error' | 'timeout' | 'invalid';
+type Fallback = 'disabled' | 'no_key' | 'budget' | 'error' | 'timeout' | 'invalid';
 
 /** What the cart shows besides the text: when to take each product, suggestions, overlaps and medicine lines. */
 export interface AiView {
@@ -152,7 +152,7 @@ export class AiService {
 
     // switched off in «Настройки → VITALO AI»: no AI answers at all, cached ones too
     const s = await this.settings();
-    if (!s.enabled) return this.fallback(userId, items, lang, 'off', now);
+    if (!s.enabled) return this.fallback(userId, items, lang, 'disabled', now);
 
     // 2. the same set was answered by the AI after the latest change of the knowledge base
     const cached = await this.cached(setKey, lang);

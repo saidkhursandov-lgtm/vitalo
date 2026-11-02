@@ -158,8 +158,8 @@ describe('2.4: manifest «Как VITALO отбирает добавки»', () =
   });
 });
 
-describe('2.4: «AI-подбор» in the bottom menu', () => {
-  it('5 items with the centre «AI-подбор»; it opens the preview with locked chips, «Спросить специалиста» and the manifest', async () => {
+describe('2.4: the centre «VITALO AI» (3.8, was «AI-подбор»)', () => {
+  it('5 items with the centre «VITALO AI»; it opens the preview with locked chips, «Спросить специалиста» and the manifest', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -175,8 +175,8 @@ describe('2.4: «AI-подбор» in the bottom menu', () => {
       </QueryClientProvider>,
     );
     const nav = await screen.findByRole('navigation');
-    expect(within(nav).getAllByText(/^(Главная|Каталог|AI-подбор|Избранное|Профиль)$/).map((x) => x.textContent)).toEqual(['Главная', 'Каталог', 'AI-подбор', 'Избранное', 'Профиль']);
-    fireEvent.click(within(nav).getByRole('button', { name: 'AI-подбор' }));
+    expect(within(nav).getAllByText(/^(Главная|Каталог|VITALO AI|Избранное|Профиль)$/).map((x) => x.textContent)).toEqual(['Главная', 'Каталог', 'VITALO AI', 'Избранное', 'Профиль']);
+    fireEvent.click(within(nav).getByRole('button', { name: 'VITALO AI' }));
     const sheet = await screen.findByRole('dialog');
     expect(within(sheet).getByText('Персональный AI-подбор курса витаминов')).toBeTruthy();
     expect(within(sheet).getByText('VITALO AI • по правилам отбора VITALO')).toBeTruthy();

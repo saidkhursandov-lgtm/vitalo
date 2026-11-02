@@ -529,7 +529,7 @@ export type CompatVerdict = 'compatible' | 'spread' | 'consult';
 export interface CompatRequest {
   id: string;
   status: 'pending' | 'answered';
-  source: 'specialist' | 'instant';
+  source: 'specialist' | 'instant' | 'ai' | 'ai_cache' | 'ai_fallback';
   verdict: CompatVerdict | null;
   text: string | null;
   created_at: string;
@@ -552,4 +552,29 @@ export interface CartUpsell {
   spare?: ProductListItem[];
   source: 'auto' | 'manual' | null;
   remaining_uzs: number;
+}
+
+/** 3.8: VITALO AI in the cart (GET /api/compat/ai). */
+export interface AiAnswer {
+  answer_id: string;
+  verdict: CompatVerdict;
+  text: string;
+  timing: { product_id: string; name: string; when: string }[];
+  suggestions: { product_id: string; name: string }[];
+  /** substances in 2+ products of the cart and the fixed line about them (D-47) */
+  overlaps: string[];
+  overlap_text: string | null;
+  /** approved «осторожно с лекарствами» rules for the substances of the cart */
+  drugs: string[];
+}
+export interface AiState {
+  /** false — no key or switched off: only the specialist */
+  available: boolean;
+  consent: boolean;
+  eligible: boolean;
+  left_today: number;
+  /** the latest AI answer for the cart as it is now */
+  answer: AiAnswer | null;
+  result?: 'instant' | 'ai' | 'ai_cache' | 'specialist' | 'unavailable';
+  reason?: string;
 }
