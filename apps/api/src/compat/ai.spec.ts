@@ -127,3 +127,32 @@ describe('the instruction in the code is the one in docs/releases/vitalo-ai-prom
     expect(blocks[1].split('\n\nСхема ответа:')[0]).toBe(SYSTEM_CART);
   });
 });
+
+describe('architect edits 02.11', () => {
+  it('new forbidden words, any apostrophe in Uzbek', () => {
+    expect(findForbidden('Это безопасно и без побочных эффектов')).toEqual(['безопасн', 'без побочных']);
+    expect(findForbidden('Полностью совместимы, не имеет противопоказаний')).toEqual(['не имеет противопоказаний', 'полностью совместим']);
+    expect(findForbidden('Xavfsiz, nojoʼya taʻsirsiz va to‘liq mos')).toEqual(['xavfsiz', "nojo'ya ta'sirsiz", "to'liq mos"]);
+  });
+
+  it('no rules and no overlaps between 2+ products: the fixed first words', () => {
+    const ok = checkCartAnswer(answer(), data(), 'compatible') as { answer: { text: string } };
+    expect(ok.answer.text).toMatch(/^В наших правилах нет известных конфликтов между этими добавками\. Магний/);
+    const already = checkCartAnswer(answer({ text: 'В наших правилах нет известных конфликтов между этими добавками. Принимайте по памятке.' }), data(), 'compatible') as { answer: { text: string } };
+    expect(already.answer.text.match(/В наших правилах/g)).toHaveLength(1);
+    const withRule = data({ rules: [{ a: 'Магний', b: 'Витамин D3', kind: 'synergy', interval_hours: null, when_a: null, when_b: null, text: 'x' }] });
+    expect((checkCartAnswer(answer(), withRule, 'compatible') as { answer: { text: string } }).answer.text).toMatch(/^Магний/);
+    expect((checkCartAnswer(answer(), data({ overlaps: [{ substance: 'D3', refs: ['A003', 'A014'] }] }), 'spread') as { answer: { text: string } }).answer.text).toMatch(/^Магний/);
+  });
+
+  it('an amount in the time only when the memo has it', () => {
+    const t = (when: string) => answer({ timing: [{ productId: 'A003', when }, { productId: 'A014', when: 'Вечер' }] });
+    expect(checkCartAnswer(t('Утро, 1 капсула с едой'), data(), 'compatible')).toMatchObject({ ok: true });
+    expect(checkCartAnswer(t('Утро, 2 капсулы с едой'), data(), 'compatible')).toEqual({ ok: false, error: 'timing_amount' });
+  });
+
+  it('Uzbek with a Cyrillic letter goes to the specialist', () => {
+    const uz = answer({ text: 'Magniy va D3 vitamini bir-birini toʻldiradi, ertalab va kechqurun qabul qiling.', timing: [{ productId: 'A003', when: 'Ertalab' }, { productId: 'A014', when: 'Кечқурун' }] });
+    expect(checkCartAnswer(uz, data({ lang: 'uz' }), 'compatible')).toEqual({ ok: false, error: 'language' });
+  });
+});
