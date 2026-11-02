@@ -8,7 +8,7 @@ type LinkType = 'product' | 'category' | 'brand';
 
 interface Banner {
   id: string;
-  kind: 'doctor' | 'delivery' | 'image';
+  kind: 'doctor' | 'delivery' | 'ai' | 'image';
   enabled: boolean;
   sort_order: number;
   image_ru_url: string | null;
@@ -29,7 +29,8 @@ interface CategoryNode {
   children?: CategoryNode[];
 }
 
-const BUILT_IN: Record<'doctor' | 'delivery', { title: string; text: string }> = {
+const BUILT_IN: Record<'doctor' | 'delivery' | 'ai', { title: string; text: string }> = {
+  ai: { title: 'VITALO AI — «Соберите свой сет в корзине…»', text: 'Тёмно-синий баннер магазина (3.8): «Соберите свой сет в корзине и проверьте совместимость за пару секунд». Нажатие — в каталог.' },
   doctor: { title: '«Отбор врачом • 4,9 ★ на Яндекс Маркете»', text: 'Тёмно-синий баннер магазина. Текст и рисунок встроены.' },
   delivery: {
     title: 'Доставка',

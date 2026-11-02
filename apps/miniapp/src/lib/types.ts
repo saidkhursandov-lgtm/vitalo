@@ -503,7 +503,7 @@ export interface CheckoutDefaults {
 /** Home banner (Настройки → Главная → Баннеры): doctor / delivery are drawn by the Mini App, image is a picture from the admin panel. */
 export interface ShopBanner {
   id: string;
-  kind: 'doctor' | 'delivery' | 'image' | 'campaign';
+  kind: 'doctor' | 'delivery' | 'ai' | 'image' | 'campaign';
   image_url: string | null;
   image_jpeg_url: string | null;
   link: { type: 'product' | 'category' | 'brand' | 'campaign'; value: string } | null;

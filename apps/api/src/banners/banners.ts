@@ -8,10 +8,11 @@ import type { FileStorage } from '../storage/file-storage';
  * Stage 2.1: banners of the home screen (Настройки → Главная → Баннеры).
  *  - doctor / delivery: the two navy slides the shop already had; the Mini App draws them itself
  *    (the delivery slide keeps its rule: a new customer sees «первый заказ бесплатно», everybody else the tariff threshold);
+ *  - ai (3.8): «Соберите свой сет в корзине…» — VITALO AI, drawn by the Mini App, leads to the catalog;
  *  - image: a picture uploaded in the admin panel, RU and/or UZ (one picture is shown in both languages).
  */
 export const MAX_BANNERS = 5;
-export const BANNER_KINDS = ['doctor', 'delivery', 'image'] as const;
+export const BANNER_KINDS = ['doctor', 'delivery', 'ai', 'image'] as const;
 export type BannerKind = (typeof BANNER_KINDS)[number];
 export const BANNER_LINK_TYPES = ['product', 'category', 'brand'] as const;
 export type BannerLinkType = (typeof BANNER_LINK_TYPES)[number];

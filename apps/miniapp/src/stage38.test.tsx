@@ -162,3 +162,21 @@ describe('3.8 VITALO AI in the cart', () => {
     expect(within(dialog).getByRole('button', { name: 'Roziman' })).toBeTruthy();
   });
 });
+
+describe('3.8 the VITALO AI slide of the home banner', () => {
+  it('draws the sentence and leads to the catalog', async () => {
+    const { HomeCarousel } = await import('./components/HomeBlocks');
+    const client = new QueryClient();
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <I18nProvider lang="uz" setLang={() => undefined}>
+            <HomeCarousel firstOrderFree={false} freeFromUzs={null} banners={[{ id: 'b3', kind: 'ai', image_url: null, image_jpeg_url: null, link: null }]} />
+          </I18nProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const link = screen.getByRole('link', { name: /Savatda oʻz toʻplamingizni yigʻing/ });
+    expect(link.getAttribute('href')).toBe('/catalog');
+  });
+});

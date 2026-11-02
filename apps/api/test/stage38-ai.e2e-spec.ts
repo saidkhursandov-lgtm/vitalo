@@ -1,4 +1,6 @@
 import { INestApplication } from '@nestjs/common';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import request from 'supertest';
 import { AI_MODEL, type AiCompletion, type AiModel } from '../src/compat/ai-client';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -77,6 +79,7 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
   });
   afterAll(async () => {
     await prisma.settings.deleteMany({ where: { key: 'vitalo_ai' } });
+    await prisma.home_banners.deleteMany({ where: { kind: 'ai' } }); // test database only: other suites expect the seeded two
     await prisma.compat_rules.updateMany({ where: { OR: [{ substance_a_id: { in: Object.values(s) } }, { substance_b_id: { in: Object.values(s) } }] }, data: { status: 'off' } });
     await archiveTestProducts(prisma);
     await app.close();
@@ -178,5 +181,17 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     await add(token, p.a.id);
     expect((await check(token).expect(200)).body).toMatchObject({ result: 'specialist', reason: 'budget' });
     expect(fake.calls).toHaveLength(before);
+  });
+
+  it('the home banner has the VITALO AI slide after the built-in ones (migration 20261110100000, safe to repeat)', async () => {
+    // the test database is truncated and seeded before the run: the migration's own SQL is applied here, twice
+    const sql = readFileSync(join(__dirname, '../prisma/migrations/20261110100000_stage38_ai_banner/migration.sql'), 'utf8');
+    await prisma.$executeRawUnsafe(sql);
+    await prisma.$executeRawUnsafe(sql);
+    expect(await prisma.home_banners.count({ where: { kind: 'ai' } })).toBe(1);
+    const list = (await http().get('/api/catalog/banners?lang=ru').expect(200)).body as { id: string; kind: string }[];
+    const ai = list.find((b) => b.kind === 'ai');
+    expect(ai).toMatchObject({ id: '00000000-0000-4000-8000-00000000b003' });
+    expect(list.findIndex((b) => b.kind === 'ai')).toBeGreaterThan(list.findIndex((b) => b.kind === 'doctor'));
   });
 });

@@ -1397,3 +1397,5 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .ai-meds .btn { min-height: 44px; white-space: nowrap; }
 .ai-consent p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
 .ai-overlap { color: var(--warning); }
+/* 3.8: the VITALO AI slide has a longer sentence */
+.hero-slide h2.hero-ai-title { font-size: clamp(14px, 4.3vw, 17px); line-height: 1.25; max-width: 86%; }

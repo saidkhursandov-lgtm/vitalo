@@ -83,6 +83,17 @@ export function HomeCarousel({
       );
       return [{ key: b.id, className: 'hero-slide hero-image', href, body: picture, campaignId: undefined as string | undefined }];
     }
+    // 3.8: «Соберите свой сет в корзине…» — to the catalog
+    if (b.kind === 'ai') {
+      const body = (
+        <>
+          <HeroArt />
+          <h2 className="hero-ai-title">{t('home.slideAi.title')}</h2>
+          <p>VITALO AI</p>
+        </>
+      );
+      return [{ key: b.id, className: 'hero-slide', href: href ?? '/catalog', body, campaignId: undefined as string | undefined }];
+    }
     const text =
       b.kind === 'doctor'
         ? {
