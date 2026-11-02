@@ -6,6 +6,8 @@
  */
 // .env first: on the server it says NODE_ENV=production, and then this demo seed refuses to run.
 import 'dotenv/config';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { Prisma, PrismaClient, TreeType } from '@prisma/client';
 import { assertDevOrTestDatabase } from '../src/common/db-target';
 import { SETTING_DEFAULTS } from '../src/settings/settings.service';
@@ -225,11 +227,24 @@ async function seedProducts(categoryIds: Map<string, string>) {
   }
 }
 
+/**
+ * 3.8: the starting dictionary of substances — the same SQL as in the migration (from its «starting dictionary» line
+ * to the end), so the list lives in one place. ON CONFLICT DO NOTHING: an edit is never overwritten.
+ */
+async function seedSubstances() {
+  const sql = readFileSync(join(__dirname, 'migrations/20261109100000_stage38_vitalo_ai/migration.sql'), 'utf8');
+  const part = sql.slice(sql.indexOf('-- The starting dictionary'));
+  for (const statement of part.split(/;s*$/m).map((x) => x.replace(/^s*--.*$/gm, '').trim()).filter(Boolean)) {
+    await prisma.$executeRawUnsafe(statement);
+  }
+}
+
 async function main() {
   await seedRegions();
   const categoryIds = await seedCategories();
   await seedProducts(categoryIds);
   await seedCheckoutSettings();
+  await seedSubstances();
   console.log(
     `Seed done: ${REGIONS.length} regions, ${categoryIds.size} categories, ${PRODUCTS.length} products, ` +
       `${TARIFFS.length} tariffs, ${PAYMENT_METHODS.length} payment methods, ${DEV_STAFF.length} dev staff.`,

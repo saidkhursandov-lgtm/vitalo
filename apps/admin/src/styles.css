@@ -416,6 +416,9 @@ textarea { resize: vertical; }
 .compat-template { margin-bottom: 8px; }
 .compat-template h3 { margin: 8px 0; }
 .compat-table .pre, .compat-template .pre { white-space: pre-line; overflow-wrap: anywhere; }
+/* 3.8: «Правила», «Вещества», «Товары и вещества» */
+.compat-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.compat-substance-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 16px; margin: 8px 0 12px; }
 
 /* ───────────── 3.7: «Акции» ───────────── */
 .link-btn { background: none; border: 0; padding: 0; color: var(--primary-text); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }

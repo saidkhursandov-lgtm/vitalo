@@ -29,7 +29,8 @@
     "content:load": "ts-node scripts/content-load.ts",
     "content:card": "ts-node scripts/card-load.ts",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "compat:knowledge": "ts-node scripts/compat-knowledge.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

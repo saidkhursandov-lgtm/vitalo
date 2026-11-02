@@ -59,6 +59,7 @@ export const PERMISSIONS = {
   'promo.manage': ['marketer'], // 3.3: create / change / switch off promo codes
   'compat.view': ['manager'], // 3.4: «Совместимость» — requests and answers, without the customer's comment (D-40)
   'compat.answer': [], // 3.4: answer, saved combinations, templates; also any employee marked «специалист»
+  'compat.rules.approve': [], // 3.8: approve a compatibility rule — VITALO AI sees approved rules only (D-45); admin only, not «специалист»
   'promo.send': ['marketer'], // 3.2: «Акции» — a promo to customers with «Получать акции и новости» (bot + Mini App centre) // Stage 2D: «Синхронизация Яндекса», «Проверить сейчас», «Требует внимания», «Закрыть как неактуальный»
 } as const satisfies Record<string, readonly StaffRole[]>;
 

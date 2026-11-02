@@ -340,6 +340,8 @@ model users {
   phone            String?
   language         Lang       @default(ru)
   marketing_opt_in Boolean    @default(true)
+  /// 3.8: one consent for every VITALO AI scenario (D-45); null = not asked yet
+  ai_consent_at    DateTime?
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
   deleted_at       DateTime?
@@ -444,25 +446,27 @@ model staff_users {
   created_at       DateTime    @default(now())
   updated_at       DateTime    @updatedAt
 
-  sessions           staff_sessions[]
-  audit_logs         audit_logs[]
-  order_edits        order_edit_log[]
-  movements          inventory_movements[]
-  campaigns          marketing_campaigns[]
-  ledger             bonus_ledger[]
-  returns_approved   returns[]
-  manual_payments    manual_payment_confirmations[]
-  tasks              manager_tasks[]
-  cancel_decisions   cancel_requests[]
-  notifications      notifications[]
-  purchases          purchases[]
-  purchase_events    purchase_events[]
-  receiving          receiving_sessions[]
-  unit_events        physical_unit_events[]
-  marketplace_orders marketplace_orders[]
-  reviewed_receipts  payment_receipts[]
-  compat_answered    compat_requests[]
-  compat_saved       compat_answers[]
+  sessions              staff_sessions[]
+  audit_logs            audit_logs[]
+  order_edits           order_edit_log[]
+  movements             inventory_movements[]
+  campaigns             marketing_campaigns[]
+  ledger                bonus_ledger[]
+  returns_approved      returns[]
+  manual_payments       manual_payment_confirmations[]
+  tasks                 manager_tasks[]
+  cancel_decisions      cancel_requests[]
+  notifications         notifications[]
+  purchases             purchases[]
+  purchase_events       purchase_events[]
+  receiving             receiving_sessions[]
+  unit_events           physical_unit_events[]
+  compat_rules_approved compat_rules[]                 @relation("RuleApprover")
+  ai_answers_reviewed   ai_compat_answers[]
+  marketplace_orders    marketplace_orders[]
+  reviewed_receipts     payment_receipts[]
+  compat_answered       compat_requests[]
+  compat_saved          compat_answers[]
 }
 
 model staff_sessions {
@@ -599,6 +603,7 @@ model products {
   promo_targets           promotion_targets[]
   block_items             content_block_items[]
   waitlist                product_waitlist[]
+  substances              product_substances[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -1727,10 +1732,10 @@ model favorites {
 /// «снова в наличии» (then the row is closed; subscribing again after that reopens it).
 /// 3.4: «Проверить совместимость у специалиста» — one request per cart composition (D-40).
 model compat_requests {
-  id                String          @id @default(uuid()) @db.Uuid
-  user_id           String          @db.Uuid
+  id                String             @id @default(uuid()) @db.Uuid
+  user_id           String             @db.Uuid
   /// product ids of the cart, sorted (quantities and order do not matter)
-  product_ids       String[]        @db.Uuid
+  product_ids       String[]           @db.Uuid
   /// the sorted ids joined with "," — the same cart composition gives the same key
   set_key           String
   /// [{ product_id, sku, name_ru, name_uz }] at the time of the request
@@ -1739,17 +1744,20 @@ model compat_requests {
   /// may hold health data: only admins and specialists see it; the text is cleared after 90 days (D-40)
   comment           String?
   comment_purged_at DateTime?
-  status            String          @default("pending") // pending | answered | closed (the cart changed before an answer)
-  source            String          @default("specialist") // specialist | instant (a saved answer for the same set)
+  status            String             @default("pending") // pending | answered | closed (the cart changed before an answer)
+  source            String             @default("specialist") // specialist | instant (a saved answer for the same set)
   verdict           String? // compatible | spread | consult
   answer_text       String?
-  answered_by       String?         @db.Uuid
+  answered_by       String?            @db.Uuid
   answered_at       DateTime?
-  saved_answer_id   String?         @db.Uuid
-  created_at        DateTime        @default(now())
-  user              users           @relation(fields: [user_id], references: [id])
-  answerer          staff_users?    @relation(fields: [answered_by], references: [id])
-  saved_answer      compat_answers? @relation(fields: [saved_answer_id], references: [id], onDelete: SetNull)
+  saved_answer_id   String?            @db.Uuid
+  created_at        DateTime           @default(now())
+  user              users              @relation(fields: [user_id], references: [id])
+  answerer          staff_users?       @relation(fields: [answered_by], references: [id])
+  saved_answer      compat_answers?    @relation(fields: [saved_answer_id], references: [id], onDelete: SetNull)
+  /// 3.8: source ai | ai_cache — the VITALO AI answer shown for this request
+  ai_answer_id      String?            @db.Uuid
+  ai_answer         ai_compat_answers? @relation(fields: [ai_answer_id], references: [id], onDelete: SetNull)
 
   @@index([user_id, created_at])
   @@index([status, created_at])
@@ -1757,22 +1765,138 @@ model compat_requests {
 
 /// 3.4: answers a specialist marked «Можно использовать повторно» — by product set and language; switched off, never deleted.
 model compat_answers {
-  id                String            @id @default(uuid()) @db.Uuid
+  id                String              @id @default(uuid()) @db.Uuid
   set_key           String
-  product_ids       String[]          @db.Uuid
+  product_ids       String[]            @db.Uuid
   items             Json
   lang              String
   verdict           String
   text              String
-  enabled           Boolean           @default(true)
-  source_request_id String?           @db.Uuid
-  created_by        String?           @db.Uuid
-  created_at        DateTime          @default(now())
-  updated_at        DateTime          @default(now()) @updatedAt
-  author            staff_users?      @relation(fields: [created_by], references: [id], onDelete: SetNull)
+  enabled           Boolean             @default(true)
+  source_request_id String?             @db.Uuid
+  created_by        String?             @db.Uuid
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @default(now()) @updatedAt
+  author            staff_users?        @relation(fields: [created_by], references: [id], onDelete: SetNull)
   requests          compat_requests[]
+  ai_answers        ai_compat_answers[]
 
   @@unique([set_key, lang])
+}
+
+/// 3.8: «Справочник веществ» for VITALO AI (D-45), edited in «Совместимость → Вещества». Synonyms are lower case
+/// («d3», «холекальциферол»); a form points at its substance (P-5-P → B6: B6 rules apply to it); a drug group is
+/// only used in «осторожно с лекарствами» rules. Never deleted — switched off.
+model substances {
+  id         String               @id @default(uuid()) @db.Uuid
+  code       String               @unique
+  kind       String               @default("substance") // substance | form | drug_group
+  name_ru    String
+  name_uz    String
+  synonyms   String[]
+  parent_id  String?              @db.Uuid
+  enabled    Boolean              @default(true)
+  sort_order Int                  @default(0)
+  created_at DateTime             @default(now())
+  updated_at DateTime             @default(now()) @updatedAt
+  parent     substances?          @relation("SubstanceForms", fields: [parent_id], references: [id], onDelete: SetNull)
+  forms      substances[]         @relation("SubstanceForms")
+  products   product_substances[]
+  rules_a    compat_rules[]       @relation("RuleA")
+  rules_b    compat_rules[]       @relation("RuleB")
+}
+
+/// 3.8: active substances of a product for the compatibility rules (chosen from the dictionary).
+model product_substances {
+  product_id   String     @db.Uuid
+  substance_id String     @db.Uuid
+  created_at   DateTime   @default(now())
+  product      products   @relation(fields: [product_id], references: [id])
+  substance    substances @relation(fields: [substance_id], references: [id])
+
+  @@id([product_id, substance_id])
+}
+
+/// 3.8: compatibility rules between two substances. VITALO AI sees only approved ones (an admin approves, D-45).
+/// kind: synergy | spread | avoid | drug_caution; when_*: morning | day | evening | with_food | empty_stomach | any.
+model compat_rules {
+  id             String       @id @default(uuid()) @db.Uuid
+  substance_a_id String       @db.Uuid
+  substance_b_id String       @db.Uuid
+  kind           String
+  interval_hours Int?
+  when_a         String?
+  when_b         String?
+  text_ru        String
+  text_uz        String
+  /// where the rule comes from (study, «комментарий врача»); staff only
+  source         String?
+  origin         String       @default("admin") // xlsx | vitalo (proposed by VITALO) | admin
+  status         String       @default("draft") // draft | approved | off
+  approved_by    String?      @db.Uuid
+  approved_at    DateTime?
+  created_at     DateTime     @default(now())
+  updated_at     DateTime     @default(now()) @updatedAt
+  substance_a    substances   @relation("RuleA", fields: [substance_a_id], references: [id])
+  substance_b    substances   @relation("RuleB", fields: [substance_b_id], references: [id])
+  approver       staff_users? @relation("RuleApprover", fields: [approved_by], references: [id], onDelete: SetNull)
+
+  @@unique([substance_a_id, substance_b_id])
+  @@index([status])
+}
+
+/// 3.8: every call to the model — for the budget and «Расход AI». No customer text here (privacy, D-45).
+/// status: ok | invalid (the answer failed the checks) | error | timeout
+model ai_requests {
+  id            String   @id @default(uuid()) @db.Uuid
+  scenario      String // cart | chat
+  user_id       String?  @db.Uuid
+  set_key       String?
+  lang          String
+  model         String
+  status        String
+  input_tokens  Int      @default(0)
+  output_tokens Int      @default(0)
+  cost_usd      Decimal  @default(0) @db.Decimal(12, 6)
+  latency_ms    Int?
+  /// why it failed: a check name or an error code, never the customer's text
+  error         String?
+  created_at    DateTime @default(now())
+
+  @@index([created_at])
+  @@index([user_id, scenario, created_at])
+}
+
+/// 3.8: VITALO AI answers of the cart, cached by product set (no quantities, no order) and language. A new answer is
+/// shown at once and waits in «Совместимость → AI-ответы»; red (consult) ones first (D-45).
+/// review: new | approved (saved as a specialist answer) | fixed (corrected into one) | hidden (not used any more)
+model ai_compat_answers {
+  id              String            @id @default(uuid()) @db.Uuid
+  set_key         String
+  product_ids     String[]          @db.Uuid
+  items           Json
+  lang            String
+  verdict         String // compatible | spread | consult
+  text            String
+  /// [{ product_id, when_ru, when_uz }]
+  timing          Json?
+  /// one product in the cart: 2–3 products in stock that go well with it
+  suggested_ids   String[]          @db.Uuid
+  model           String
+  ai_request_id   String?           @db.Uuid
+  review          String            @default("new")
+  reviewed_by     String?           @db.Uuid
+  reviewed_at     DateTime?
+  saved_answer_id String?           @db.Uuid
+  used_count      Int               @default(0)
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @default(now()) @updatedAt
+  reviewer        staff_users?      @relation(fields: [reviewed_by], references: [id], onDelete: SetNull)
+  saved_answer    compat_answers?   @relation(fields: [saved_answer_id], references: [id], onDelete: SetNull)
+  requests        compat_requests[]
+
+  @@index([set_key, lang])
+  @@index([review, created_at])
 }
 
 model product_waitlist {

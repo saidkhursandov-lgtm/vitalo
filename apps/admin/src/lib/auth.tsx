@@ -50,7 +50,8 @@ export type Permission =
   | 'promo.view'
   | 'promo.manage'
   | 'compat.view'
-  | 'compat.answer';
+  | 'compat.answer'
+  | 'compat.rules.approve';
 
 export interface Me {
   staff: { id: string; name: string; role: 'admin' | 'manager' | 'warehouse' | 'marketer'; is_specialist?: boolean };
