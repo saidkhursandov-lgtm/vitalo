@@ -4,10 +4,14 @@
  *   npm run compat:knowledge                         -> check only: tables of what will be added, writes nothing
  *   npm run compat:knowledge -- --out plan.md        -> the same, also saved to a file
  *   npm run compat:knowledge -- --apply              -> adds the rules as drafts and the first substances of products
+ *   npm run compat:knowledge -- --apply --update-drafts
+ *                                                    -> also rewrites the rules still in draft by the source (new text,
+ *                                                       interval) and adds missing substances to filled products
  *
  *   --file <xlsx>   default docs/content/VITALO_catalog.xlsx (sheets «Правила совместимости» and «Товары»)
  *
- * Nothing existing is changed or deleted; rules work only after an admin approves them («Совместимость → Правила»).
+ * Without --update-drafts nothing existing is changed; nothing is ever deleted, and an approved rule is never touched.
+ * Rules work only after an admin approves them («Совместимость → Правила»).
  * Only *_dev / *_test databases; the shop's database needs --allow-production and its name typed in.
  * Run after the migration 20261109100000_stage38_vitalo_ai (it adds the dictionary of substances).
  */
@@ -40,8 +44,11 @@ async function main() {
       console.log('Чтобы добавить: npm run compat:knowledge -- --apply');
       return;
     }
-    const r = await applyKnowledgePlan(prisma, plan);
-    console.log(`ДОБАВЛЕНО: правил-черновиков ${r.rules}, товаров с веществами ${r.products}. Одобрить правила: админка → Совместимость → Правила.`);
+    const r = await applyKnowledgePlan(prisma, plan, { updateDrafts: process.argv.includes('--update-drafts') });
+    console.log(
+      `ДОБАВЛЕНО: веществ ${r.substances}, правил-черновиков ${r.rules}, товаров с веществами ${r.products}; ` +
+        `обновлено черновиков ${r.updated}, добавлено связок товар-вещество ${r.added}. Одобрить правила: админка → Совместимость → Правила.`,
+    );
   } finally {
     await prisma.$disconnect();
   }

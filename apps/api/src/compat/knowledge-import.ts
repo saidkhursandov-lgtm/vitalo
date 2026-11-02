@@ -8,13 +8,16 @@ import ExcelJS from 'exceljs';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
   PROPOSED_PRODUCT_SUBSTANCES,
+  PROPOSED_SUBSTANCES,
   PROPOSED_RULES,
   RULE_KIND_LABELS,
+  SHEET_RULE_EDITS,
   SHEET_RULE_KIND,
   SHEET_WHEN,
   WHEN_LABELS,
   matchSubstances,
   normalizeText,
+  pairKey,
   substanceOfCell,
   type DictEntry,
   type RuleDraft,
@@ -67,34 +70,54 @@ export async function readKnowledgeSheets(file: string): Promise<SheetData> {
   return out;
 }
 
-type DbSubstance = DictEntry & { id: string };
+type DbSubstance = DictEntry & { id: string | null };
+
+type PlannedRule = RuleDraft & { origin: 'xlsx' | 'vitalo'; row: number | null };
 
 export interface KnowledgePlan {
-  rules: (RuleDraft & { origin: 'xlsx' | 'vitalo'; row: number | null })[];
+  /** substances of PROPOSED_SUBSTANCES that the dictionary does not have yet */
+  substances: (typeof PROPOSED_SUBSTANCES)[number][];
+  rules: PlannedRule[];
+  /** draft rules whose text, interval or time differ from the source (applied only with `--update-drafts`) */
+  ruleUpdates: (PlannedRule & { id: string })[];
   skippedRules: { row: number | null; a: string; b: string; why: string }[];
   products: { id: string; sku: string; name: string; codes: string[]; sheet: string | null; sheetCodes: string[] }[];
+  /** filled products lacking some proposed substances (added only with `--update-drafts`; nothing is removed) */
+  productAdds: { id: string; sku: string; name: string; codes: string[] }[];
   productsKept: { sku: string; name: string; codes: string[] }[];
   dict: DbSubstance[];
 }
 
 const num = (v: string | number | null) => (v == null || v === '' ? null : Number(v));
 
+const RULE_FIELDS = ['kind', 'interval_hours', 'when_a', 'when_b', 'text_ru', 'text_uz', 'source'] as const;
+
 export async function buildKnowledgePlan(prisma: PrismaService, sheet: SheetData): Promise<KnowledgePlan> {
   const subs = await prisma.substances.findMany({ orderBy: { sort_order: 'asc' } });
   const dict: DbSubstance[] = subs.map((s) => ({ id: s.id, code: s.code, synonyms: s.synonyms, name_ru: s.name_ru, name_uz: s.name_uz }));
-  const idOf = new Map(dict.map((d) => [d.code, d.id]));
-  const existing = await prisma.compat_rules.findMany({ select: { substance_a_id: true, substance_b_id: true } });
-  const taken = new Set(existing.flatMap((r) => [`${r.substance_a_id}|${r.substance_b_id}`, `${r.substance_b_id}|${r.substance_a_id}`]));
-  const plan: KnowledgePlan = { rules: [], skippedRules: [], products: [], productsKept: [], dict };
+  const newSubstances = PROPOSED_SUBSTANCES.filter((p) => !dict.some((d) => d.code === p.code));
+  dict.push(...newSubstances.map((s) => ({ id: null, code: s.code, synonyms: s.synonyms, name_ru: s.name_ru, name_uz: s.name_uz })));
+  const known = new Set(dict.map((d) => d.code));
+  const codeOf = new Map(subs.map((s) => [s.id, s.code]));
+  const existing = await prisma.compat_rules.findMany();
+  const ruleOf = new Map(existing.map((r) => [pairKey(codeOf.get(r.substance_a_id) ?? r.substance_a_id, codeOf.get(r.substance_b_id) ?? r.substance_b_id), r]));
+  const taken = new Set<string>();
+  const plan: KnowledgePlan = { substances: newSubstances, rules: [], ruleUpdates: [], skippedRules: [], products: [], productAdds: [], productsKept: [], dict };
 
   const take = (draft: RuleDraft, origin: 'xlsx' | 'vitalo', row: number | null) => {
-    const a = idOf.get(draft.a);
-    const b = idOf.get(draft.b);
-    if (!a || !b) return plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'вещества нет в справочнике' });
-    if (a === b) return plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'A и B — одно вещество' });
-    if (taken.has(`${a}|${b}`)) return plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'правило для этой пары уже есть' });
-    taken.add(`${a}|${b}`).add(`${b}|${a}`);
-    plan.rules.push({ ...draft, origin, row });
+    if (!known.has(draft.a) || !known.has(draft.b)) return plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'вещества нет в справочнике' });
+    if (draft.a === draft.b) return plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'A и B — одно вещество' });
+    const key = pairKey(draft.a, draft.b);
+    const rule: PlannedRule = { ...draft, ...SHEET_RULE_EDITS[key], origin, row };
+    if (taken.has(key)) return plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'пара уже встречалась выше' });
+    taken.add(key);
+    const old = ruleOf.get(key);
+    if (!old) return plan.rules.push(rule);
+    if (old.status !== 'draft' || old.origin !== origin) return plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'правило одобрено, выключено или заведено в админке — меняется только там' });
+    // the stored rule keeps the A → B order of its first import: compare the fields in that order
+    const same = codeOf.get(old.substance_a_id) === rule.a ? rule : { ...rule, a: rule.b, b: rule.a, when_a: rule.when_b, when_b: rule.when_a };
+    if (RULE_FIELDS.some((f) => (old[f] ?? null) !== (same[f] ?? null))) plan.ruleUpdates.push({ ...same, id: old.id });
+    else plan.skippedRules.push({ row, a: draft.a, b: draft.b, why: 'правило для этой пары уже есть' });
   };
 
   for (const { row, cells } of sheet.rules) {
@@ -135,12 +158,16 @@ export async function buildKnowledgePlan(prisma: PrismaService, sheet: SheetData
   });
   for (const p of products) {
     const name = p.short_name_ru || p.name_ru;
+    const proposed = (PROPOSED_PRODUCT_SUBSTANCES[p.sku] ?? []).filter((c) => known.has(c));
     if (p.substances.length) {
-      plan.productsKept.push({ sku: p.sku, name, codes: p.substances.map((s) => s.substance.code) });
+      const has = p.substances.map((s) => s.substance.code);
+      plan.productsKept.push({ sku: p.sku, name, codes: has });
+      const missing = proposed.filter((c) => !has.includes(c));
+      if (missing.length) plan.productAdds.push({ id: p.id, sku: p.sku, name, codes: missing });
       continue;
     }
     const sheetText = sheet.productSubstances[p.sku] ?? null;
-    plan.products.push({ id: p.id, sku: p.sku, name, codes: (PROPOSED_PRODUCT_SUBSTANCES[p.sku] ?? []).filter((c) => idOf.has(c)), sheet: sheetText, sheetCodes: sheetText ? matchSubstances(sheetText, dict) : [] });
+    plan.products.push({ id: p.id, sku: p.sku, name, codes: proposed, sheet: sheetText, sheetCodes: sheetText ? matchSubstances(sheetText, dict) : [] });
   }
   return plan;
 }
@@ -149,12 +176,21 @@ export function formatKnowledgePlan(plan: KnowledgePlan): string {
   const nameOf = new Map(plan.dict.map((d) => [d.code, d.name_ru]));
   const n = (c: string) => nameOf.get(c) ?? c;
   const w = (v: keyof typeof WHEN_LABELS | null) => (v ? WHEN_LABELS[v].ru : '—');
+  const head = ['| # | Откуда | A | B | Тип | Интервал, ч | Когда A | Когда B | Объяснение RU |', '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'];
+  const ruleRow = (r: PlannedRule, i: number) =>
+    `| ${i + 1} | ${r.origin === 'xlsx' ? `таблица, стр. ${r.row}` : 'предложение VITALO'} | ${n(r.a)} | ${n(r.b)} | ${RULE_KIND_LABELS[r.kind].ru} | ${r.interval_hours ?? '—'} | ${w(r.when_a)} | ${w(r.when_b)} | ${r.text_ru} |`;
   const lines: string[] = [];
-  lines.push(`## Правила — будут добавлены черновиками (${plan.rules.length})`, '');
-  lines.push('| # | Откуда | A | B | Тип | Интервал, ч | Когда A | Когда B | Объяснение RU |', '| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
-  plan.rules.forEach((r, i) =>
-    lines.push(`| ${i + 1} | ${r.origin === 'xlsx' ? `таблица, стр. ${r.row}` : 'предложение VITALO'} | ${n(r.a)} | ${n(r.b)} | ${RULE_KIND_LABELS[r.kind].ru} | ${r.interval_hours ?? '—'} | ${w(r.when_a)} | ${w(r.when_b)} | ${r.text_ru} |`),
-  );
+  if (plan.substances.length) {
+    lines.push(`## Вещества — будут добавлены в справочник (${plan.substances.length})`, '');
+    for (const s of plan.substances) lines.push(`- ${s.name_ru} / ${s.name_uz}: ${s.synonyms.join(', ')}`);
+    lines.push('');
+  }
+  lines.push(`## Правила — будут добавлены черновиками (${plan.rules.length})`, '', ...head);
+  plan.rules.forEach((r, i) => lines.push(ruleRow(r, i)));
+  if (plan.ruleUpdates.length) {
+    lines.push('', `## Черновики правил с новым текстом — обновятся только с --update-drafts (${plan.ruleUpdates.length})`, '', ...head);
+    plan.ruleUpdates.forEach((r, i) => lines.push(ruleRow(r, i)));
+  }
   if (plan.skippedRules.length) {
     lines.push('', `## Строки правил, которые не добавляются (${plan.skippedRules.length})`, '');
     for (const s of plan.skippedRules) lines.push(`- ${s.row ? `стр. ${s.row}` : 'предложение'}: ${s.a} + ${s.b} — ${s.why}`);
@@ -165,15 +201,25 @@ export function formatKnowledgePlan(plan: KnowledgePlan): string {
     const sheet = p.sheet ? `${p.sheet}${p.sheetCodes.length ? ` → ${p.sheetCodes.map(n).join(', ')}` : ' → не распознано'}` : '—';
     lines.push(`| ${p.sku} | ${p.name} | ${p.codes.length ? p.codes.map(n).join(', ') : '**нет — заполнить в админке**'} | ${sheet} |`);
   }
+  if (plan.productAdds.length) {
+    lines.push('', `## Товарам не хватает веществ по полному составу — добавятся только с --update-drafts (${plan.productAdds.length})`, '');
+    for (const p of plan.productAdds) lines.push(`- ${p.sku} ${p.name}: + ${p.codes.map(n).join(', ')}`);
+  }
   if (plan.productsKept.length) {
-    lines.push('', `Уже заполнены в админке, не меняются: ${plan.productsKept.map((p) => p.sku).join(', ')}.`);
+    lines.push('', `Уже заполнены, ничего не убирается: ${plan.productsKept.map((p) => p.sku).join(', ')}.`);
   }
   return lines.join('\n');
 }
 
-export async function applyKnowledgePlan(prisma: PrismaService, plan: KnowledgePlan) {
-  const idOf = new Map(plan.dict.map((d) => [d.code, d.id]));
+export async function applyKnowledgePlan(prisma: PrismaService, plan: KnowledgePlan, opts: { updateDrafts?: boolean } = {}) {
   return prisma.$transaction(async (tx) => {
+    let substances = 0;
+    for (const s of plan.substances) {
+      if (await tx.substances.findUnique({ where: { code: s.code } })) continue;
+      await tx.substances.create({ data: { code: s.code, kind: s.kind, name_ru: s.name_ru, name_uz: s.name_uz, synonyms: s.synonyms, sort_order: s.sort_order } });
+      substances++;
+    }
+    const idOf = new Map((await tx.substances.findMany({ select: { id: true, code: true } })).map((d) => [d.code, d.id]));
     let rules = 0;
     for (const r of plan.rules) {
       const a = idOf.get(r.a)!;
@@ -192,6 +238,22 @@ export async function applyKnowledgePlan(prisma: PrismaService, plan: KnowledgeP
       await tx.product_substances.createMany({ data: p.codes.map((c) => ({ product_id: p.id, substance_id: idOf.get(c)! })), skipDuplicates: true });
       products++;
     }
-    return { rules, products };
+    let updated = 0;
+    let added = 0;
+    if (opts.updateDrafts) {
+      for (const r of plan.ruleUpdates) {
+        // only while it is still a draft: an approved rule belongs to the admin
+        const res = await tx.compat_rules.updateMany({
+          where: { id: r.id, status: 'draft' },
+          data: { kind: r.kind, interval_hours: r.interval_hours, when_a: r.when_a, when_b: r.when_b, text_ru: r.text_ru, text_uz: r.text_uz, source: r.source },
+        });
+        updated += res.count;
+      }
+      for (const p of plan.productAdds) {
+        const res = await tx.product_substances.createMany({ data: p.codes.map((c) => ({ product_id: p.id, substance_id: idOf.get(c)! })), skipDuplicates: true });
+        added += res.count;
+      }
+    }
+    return { substances, rules, products, updated, added };
   });
 }

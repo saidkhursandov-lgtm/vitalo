@@ -234,7 +234,7 @@ async function seedProducts(categoryIds: Map<string, string>) {
 async function seedSubstances() {
   const sql = readFileSync(join(__dirname, 'migrations/20261109100000_stage38_vitalo_ai/migration.sql'), 'utf8');
   const part = sql.slice(sql.indexOf('-- The starting dictionary'));
-  for (const statement of part.split(/;s*$/m).map((x) => x.replace(/^s*--.*$/gm, '').trim()).filter(Boolean)) {
+  for (const statement of part.split(/;\s*$/m).map((x) => x.replace(/^\s*--.*$/gm, '').trim()).filter(Boolean)) {
     await prisma.$executeRawUnsafe(statement);
   }
 }

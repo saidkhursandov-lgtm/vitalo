@@ -1,4 +1,4 @@
-import { matchSubstances, normalizeText, PROPOSED_PRODUCT_SUBSTANCES, PROPOSED_RULES, rulesForProducts, substanceOfCell, withParents, type DictEntry } from './knowledge';
+import { applyOverlapFloor, matchSubstances, normalizeText, OVERLAP_TEXT, overlapsForProducts, pairKey, PROPOSED_PRODUCT_SUBSTANCES, PROPOSED_RULES, PROPOSED_SUBSTANCES, rulesForProducts, SHEET_RULE_EDITS, substanceOfCell, withParents, type DictEntry } from './knowledge';
 
 const dict: DictEntry[] = [
   { code: 'magnesium', name_ru: 'Магний', synonyms: ['магний', 'цитрат магния', 'бисглицинат магния'] },
@@ -75,5 +75,59 @@ describe('3.8: starting proposals', () => {
 
   it('every product proposal has at least one substance', () => {
     expect(Object.values(PROPOSED_PRODUCT_SUBSTANCES).every((l) => l.length > 0)).toBe(true);
+  });
+});
+
+describe('3.8: wording of the rules (D-33, D-45)', () => {
+  const drugRules = [...PROPOSED_RULES.filter((r) => r.kind === 'drug_caution'), ...Object.entries(SHEET_RULE_EDITS).filter(([k]) => k.includes('drugs_')).map(([, e]) => e)];
+
+  it('no «можно / нельзя» on behalf of AI, a doctor or a VITALO specialist every time', () => {
+    const texts = [...PROPOSED_RULES, ...Object.values(SHEET_RULE_EDITS)].flatMap((r) => [r.text_ru ?? '', r.text_uz ?? '']);
+    for (const t of texts) expect(t.toLowerCase()).not.toMatch(/(^|\s)(можно|нельзя)(\s|[.,]|$)|(qilish|ichish) mumkin|mumkin emas|идеальн|ideal /);
+    for (const r of drugRules) {
+      expect(r.text_ru).toMatch(/врач|эндокринолог/);
+      expect(r.text_ru).toContain('специалист');
+      expect(r.text_uz).toMatch(/shifokor/);
+    }
+  });
+
+  it('the usual interval in hours: 4 for L-thyroxine, 3 for antibiotics; none for blood thinners', () => {
+    for (const r of PROPOSED_RULES.filter((x) => x.b === 'drugs_thyroid')) expect([r.interval_hours, /4 час/.test(r.text_ru)]).toEqual([4, true]);
+    for (const r of PROPOSED_RULES.filter((x) => x.b === 'drugs_antibiotics')) expect([r.interval_hours, /3 час/.test(r.text_ru)]).toEqual([3, true]);
+    expect(SHEET_RULE_EDITS[pairKey('omega3', 'drugs_anticoagulants')]).toMatchObject({ interval_hours: null, text_ru: expect.stringContaining('не решает') });
+    expect(SHEET_RULE_EDITS[pairKey('iodine', 'drugs_thyroid')]).toMatchObject({ interval_hours: 4 });
+  });
+
+  it('a pair key does not depend on the order', () => {
+    expect(pairKey('zinc', 'iron')).toBe(pairKey('iron', 'zinc'));
+  });
+});
+
+describe('3.8: the same substance in different products (Overlap Check, D-47)', () => {
+  const parentOf = new Map<string, string | null>([['p5p', 'vitamin_b6']]);
+  const multi = { id: 'multi', substances: ['multivitamin', 'vitamin_d3', 'iron', 'zinc', 'vitamin_c'] };
+  const d3 = { id: 'd3', substances: ['vitamin_d3'] };
+  const collagen = { id: 'collagen', substances: ['collagen', 'vitamin_c'] };
+
+  it('finds a substance in 2+ different products, forms included', () => {
+    expect(overlapsForProducts([multi, d3], parentOf)).toEqual([{ substance: 'vitamin_d3', products: ['multi', 'd3'] }]);
+    expect(overlapsForProducts([{ id: 'a', substances: ['p5p'] }, { id: 'b', substances: ['vitamin_b6'] }], parentOf).map((o) => o.substance)).toEqual(['vitamin_b6']);
+    expect(overlapsForProducts([d3], parentOf)).toEqual([]);
+  });
+
+  it('any overlap — at least yellow; red only from rules, never lowered', () => {
+    const iron = overlapsForProducts([multi, { id: 'fe', substances: ['iron'] }], parentOf);
+    expect(applyOverlapFloor('compatible', iron)).toBe('spread');
+    expect(applyOverlapFloor('compatible', overlapsForProducts([multi, collagen], parentOf))).toBe('spread');
+    expect(applyOverlapFloor('consult', iron)).toBe('consult');
+    expect(applyOverlapFloor('compatible', [])).toBe('compatible');
+    expect(OVERLAP_TEXT.ru).toContain('суммарную дозировку');
+  });
+
+  it('the starting product proposals use only dictionary codes of the migration or of PROPOSED_SUBSTANCES', () => {
+    const codes = new Set(Object.values(PROPOSED_PRODUCT_SUBSTANCES).flat());
+    expect(codes.has('vitamin_k1')).toBe(true);
+    expect(codes.has('vitamin_k2')).toBe(false); // no product has K2 (MK-7): the multivitamins have K1
+    expect(PROPOSED_SUBSTANCES.map((s) => s.code)).toContain('vitamin_k1');
   });
 });

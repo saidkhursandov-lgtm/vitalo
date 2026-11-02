@@ -3,7 +3,7 @@
  * between two substances and the starting proposals. No database access here: the service, the import script and the
  * tests use the same functions.
  */
-import type { Lang } from './compat';
+import type { Lang, Verdict } from './compat';
 
 export const SUBSTANCE_KINDS = ['substance', 'form', 'drug_group'] as const;
 export type SubstanceKind = (typeof SUBSTANCE_KINDS)[number];
@@ -146,6 +146,52 @@ export interface RuleDraft {
   source: string | null;
 }
 
+/** One key for a pair of substances, whatever their order. */
+export const pairKey = (a: string, b: string) => [a, b].sort().join('|');
+
+const THYROID_RU = (what: string) =>
+  `${what} может снижать усвоение L-тироксина. Обычно их разносят минимум на 4 часа; схему приёма при лечении гормонами щитовидной железы согласуйте с врачом или специалистом VITALO.`;
+const THYROID_UZ = (what: string) =>
+  `${what} L-tiroksin soʻrilishini kamaytirishi mumkin. Odatda ular kamida 4 soat farq bilan ichiladi; qalqonsimon bez gormonlari bilan davolanishda qabul sxemasini shifokor yoki VITALO mutaxassisi bilan kelishing.`;
+const ANTIBIOTICS_RU = (what: string) =>
+  `${what} может снижать усвоение некоторых антибиотиков (тетрациклины, фторхинолоны). Обычно их разносят минимум на 3 часа, но интервал зависит от препарата — уточните у врача или специалиста VITALO.`;
+const ANTIBIOTICS_UZ = (what: string) =>
+  `${what} baʼzi antibiotiklar (tetratsiklinlar, ftorxinolonlar) soʻrilishini kamaytirishi mumkin. Odatda ular kamida 3 soat farq bilan ichiladi, lekin oraliq doriga bogʻliq — shifokor yoki VITALO mutaxassisidan aniqlang.`;
+
+/**
+ * VITALO edits on top of the sheet «Правила совместимости» (by the pair of substances): softer wording by D-33 and the
+ * medicine rules by D-45 — no «можно / нельзя» on behalf of AI, the usual interval in hours and a doctor or a VITALO
+ * specialist named every time. They replace the sheet's text on import and with `--update-drafts`.
+ */
+export const SHEET_RULE_EDITS: Record<string, Partial<Pick<RuleDraft, 'interval_hours' | 'text_ru' | 'text_uz'>>> = {
+  [pairKey('vitamin_d3', 'vitamin_k2')]: {
+    text_ru: 'Витамин K2 (MK-7) помогает направлять усвоенный с помощью D3 кальций в костную ткань.',
+    text_uz: 'K2 vitamini (MK-7) D3 yordamida soʻrilgan kalsiyni suyak toʻqimalariga yoʻnaltirishga yordam beradi.',
+  },
+  [pairKey('iron', 'vitamin_c')]: {
+    text_ru: 'Витамин С переводит железо в более доступную для усвоения форму и заметно повышает его всасывание в кишечнике.',
+    text_uz: 'C vitamini temirning ichakda soʻrilishini sezilarli darajada yaxshilaydi — ularni birga qabul qilish qulay.',
+  },
+  [pairKey('omega3', 'magnesium')]: {
+    text_ru: 'Хорошо дополняют друг друга в поддержке нервной системы и сосудов: Омега-3 принимайте утром с едой, а Магний B6 — вечером.',
+    text_uz: 'Asab tizimi va qon tomirlarni qoʻllab-quvvatlashda bir-birini yaxshi toʻldiradi: Omega-3 ni ertalab ovqat bilan, Magniy B6 ni esa kechqurun qabul qiling.',
+  },
+  [pairKey('creatine', 'protein')]: {
+    text_ru: 'Хорошо сочетаются в спортивном курсе: белок и углеводы из коктейля вызывают мягкий инсулиновый отклик, который помогает транспорту креатина в мышцы.',
+    text_uz: 'Sport kursida yaxshi mos keladi: protein kokteyli kreatinning mushak hujayralariga yetib borishiga va tiklanishga yordam beradi.',
+  },
+  [pairKey('omega3', 'drugs_anticoagulants')]: {
+    interval_hours: null,
+    text_ru: 'Высокие дозы Омега-3 могут усиливать действие препаратов, разжижающих кровь. Простой разнос по времени здесь вопрос не решает — при приёме антикоагулянтов обсудите Омега-3 с лечащим врачом или специалистом VITALO.',
+    text_uz: 'Omega-3 ning yuqori dozalari qon suyultiruvchi dorilar taʼsirini kuchaytirishi mumkin. Bu holatda qabul vaqtini ajratish masalani hal qilmaydi — antikoagulyantlar qabul qilsangiz, Omega-3 ni davolovchi shifokoringiz yoki VITALO mutaxassisi bilan muhokama qiling.',
+  },
+  [pairKey('iodine', 'drugs_thyroid')]: {
+    interval_hours: 4,
+    text_ru: 'При приёме гормонов щитовидной железы добавки с йодом согласуют с эндокринологом. Обычно их разносят с утренним L-тироксином минимум на 4 часа — уточните схему у врача или специалиста VITALO.',
+    text_uz: 'Qalqonsimon bez gormonlarini qabul qilsangiz, yodli qoʻshimchalar endokrinolog bilan kelishiladi. Odatda ular ertalabki L-tiroksindan kamida 4 soat farq bilan ichiladi — sxemani shifokor yoki VITALO mutaxassisidan aniqlang.',
+  },
+};
+
 /**
  * Rules VITALO proposes in addition to the sheet (origin «vitalo»). Drafts, like the sheet's: VITALO AI sees a rule only
  * after an admin approves it.
@@ -180,8 +226,8 @@ export const PROPOSED_RULES: RuleDraft[] = [
     interval_hours: null,
     when_a: 'morning',
     when_b: 'morning',
-    text_ru: 'Коллаген и гиалуроновая кислота дополняют друг друга в поддержке кожи и суставов — их можно принимать вместе.',
-    text_uz: 'Kollagen va gialuron kislotasi teri va boʻgʻimlarni qoʻllab-quvvatlashda bir-birini toʻldiradi — ularni birga qabul qilish mumkin.',
+    text_ru: 'Коллаген и гиалуроновая кислота дополняют друг друга в поддержке кожи и суставов — их удобно сочетать в утреннем приёме.',
+    text_uz: 'Kollagen va gialuron kislotasi teri va boʻgʻimlarni qoʻllab-quvvatlashda bir-birini toʻldiradi — ertalabki qabulda birga ichish qulay.',
     source: 'Предложение VITALO: частое сочетание в составе товаров',
   },
   {
@@ -191,8 +237,8 @@ export const PROPOSED_RULES: RuleDraft[] = [
     interval_hours: 4,
     when_a: 'evening',
     when_b: 'empty_stomach',
-    text_ru: 'Кальций снижает усвоение L-тироксина — при приёме гормонов щитовидной железы согласуйте добавку с врачом и разносите их минимум на 4 часа.',
-    text_uz: 'Kalsiy L-tiroksin soʻrilishini kamaytiradi — qalqonsimon bez gormonlarini qabul qilsangiz, qoʻshimchani shifokor bilan kelishing va kamida 4 soat oraliq qiling.',
+    text_ru: THYROID_RU('Кальций'),
+    text_uz: THYROID_UZ('Kalsiy'),
     source: 'Предложение VITALO: инструкции к препаратам L-тироксина',
   },
   {
@@ -202,8 +248,8 @@ export const PROPOSED_RULES: RuleDraft[] = [
     interval_hours: 4,
     when_a: 'morning',
     when_b: 'empty_stomach',
-    text_ru: 'Железо снижает усвоение L-тироксина — при приёме гормонов щитовидной железы согласуйте добавку с врачом и разносите их минимум на 4 часа.',
-    text_uz: 'Temir L-tiroksin soʻrilishini kamaytiradi — qalqonsimon bez gormonlarini qabul qilsangiz, qoʻshimchani shifokor bilan kelishing va kamida 4 soat oraliq qiling.',
+    text_ru: THYROID_RU('Железо'),
+    text_uz: THYROID_UZ('Temir'),
     source: 'Предложение VITALO: инструкции к препаратам L-тироксина',
   },
   {
@@ -213,8 +259,8 @@ export const PROPOSED_RULES: RuleDraft[] = [
     interval_hours: 3,
     when_a: 'evening',
     when_b: 'any',
-    text_ru: 'Магний может снижать действие некоторых антибиотиков — при их приёме уточните у врача, как разнести время приёма.',
-    text_uz: 'Magniy baʼzi antibiotiklar taʼsirini kamaytirishi mumkin — ularni qabul qilsangiz, vaqtni qanday ajratishni shifokordan soʻrang.',
+    text_ru: ANTIBIOTICS_RU('Магний'),
+    text_uz: ANTIBIOTICS_UZ('Magniy'),
     source: 'Предложение VITALO: тетрациклины и фторхинолоны связываются с минералами',
   },
   {
@@ -224,8 +270,8 @@ export const PROPOSED_RULES: RuleDraft[] = [
     interval_hours: 3,
     when_a: 'evening',
     when_b: 'any',
-    text_ru: 'Кальций может снижать действие некоторых антибиотиков — при их приёме уточните у врача, как разнести время приёма.',
-    text_uz: 'Kalsiy baʼzi antibiotiklar taʼsirini kamaytirishi mumkin — ularni qabul qilsangiz, vaqtni qanday ajratishni shifokordan soʻrang.',
+    text_ru: ANTIBIOTICS_RU('Кальций'),
+    text_uz: ANTIBIOTICS_UZ('Kalsiy'),
     source: 'Предложение VITALO: тетрациклины и фторхинолоны связываются с минералами',
   },
   {
@@ -235,8 +281,8 @@ export const PROPOSED_RULES: RuleDraft[] = [
     interval_hours: 3,
     when_a: 'morning',
     when_b: 'any',
-    text_ru: 'Железо может снижать действие некоторых антибиотиков — при их приёме уточните у врача, как разнести время приёма.',
-    text_uz: 'Temir baʼzi antibiotiklar taʼsirini kamaytirishi mumkin — ularni qabul qilsangiz, vaqtni qanday ajratishni shifokordan soʻrang.',
+    text_ru: ANTIBIOTICS_RU('Железо'),
+    text_uz: ANTIBIOTICS_UZ('Temir'),
     source: 'Предложение VITALO: тетрациклины и фторхинолоны связываются с минералами',
   },
   {
@@ -246,9 +292,21 @@ export const PROPOSED_RULES: RuleDraft[] = [
     interval_hours: 3,
     when_a: 'day',
     when_b: 'any',
-    text_ru: 'Цинк может снижать действие некоторых антибиотиков — при их приёме уточните у врача, как разнести время приёма.',
-    text_uz: 'Sink baʼzi antibiotiklar taʼsirini kamaytirishi mumkin — ularni qabul qilsangiz, vaqtni qanday ajratishni shifokordan soʻrang.',
+    text_ru: ANTIBIOTICS_RU('Цинк'),
+    text_uz: ANTIBIOTICS_UZ('Sink'),
     source: 'Предложение VITALO: тетрациклины и фторхинолоны связываются с минералами',
+  },
+];
+
+/** Substances VITALO adds to the starting dictionary of the migration (the import adds a code that is missing). */
+export const PROPOSED_SUBSTANCES: (DictEntry & { name_uz: string; kind: SubstanceKind; sort_order: number })[] = [
+  {
+    code: 'vitamin_k1',
+    kind: 'substance',
+    name_ru: 'Витамин K1',
+    name_uz: 'K1 vitamini',
+    synonyms: ['витамин k1', 'витамин к1', 'k1', 'к1', 'филлохинон', 'phylloquinone', 'vitamin k1', 'k1 vitamini'],
+    sort_order: 21,
   },
 ];
 
@@ -260,7 +318,8 @@ export const PROPOSED_PRODUCT_SUBSTANCES: Record<string, string[]> = {
   'OZN-A001': ['collagen', 'vitamin_c', 'hyaluronic'],
   'OZN-A002': ['magnesium', 'vitamin_b6', 'omega3', 'vitamin_d3'],
   'OZN-A003': ['vitamin_d3'],
-  'OZN-A004': ['multivitamin', 'vitamin_a', 'vitamin_c', 'vitamin_d3', 'vitamin_e', 'b_complex', 'zinc', 'iron', 'selenium', 'iodine'],
+  // full composition: K is phylloquinone (K1, not K2); «кальция D-пантотенат» is vitamin B5, not a calcium supplement
+  'OZN-A004': ['multivitamin', 'vitamin_a', 'vitamin_c', 'vitamin_d3', 'vitamin_e', 'vitamin_k1', 'b_complex', 'vitamin_b6', 'vitamin_b12', 'folate', 'zinc', 'iron', 'copper', 'selenium', 'iodine'],
   'OZN-A005': ['collagen', 'vitamin_c', 'hyaluronic'],
   'OZN-A006': ['omega3', 'vitamin_e'],
   'OZN-A007': ['creatine'],
@@ -272,12 +331,52 @@ export const PROPOSED_PRODUCT_SUBSTANCES: Record<string, string[]> = {
   'OZN-A013': ['collagen', 'vitamin_c'],
   'OZN-A014': ['magnesium', 'vitamin_b6'],
   'OZN-A015': ['vitamin_c'],
-  'OZN-A016': ['protein'],
-  'OZN-A017': ['multivitamin', 'vitamin_a', 'vitamin_c', 'vitamin_d3', 'vitamin_e', 'b_complex', 'zinc', 'iron'],
-  'OZN-A018': ['multivitamin', 'zinc', 'magnesium', 'selenium', 'b_complex', 'vitamin_d3'],
+  // the premix of the sachet: A, C, D3, E, B1, B2, B6, B12, biotin, iron, zinc
+  'OZN-A016': ['protein', 'vitamin_a', 'vitamin_c', 'vitamin_d3', 'vitamin_e', 'b_complex', 'vitamin_b6', 'vitamin_b12', 'iron', 'zinc'],
+  'OZN-A017': ['multivitamin', 'vitamin_a', 'vitamin_c', 'vitamin_d3', 'vitamin_e', 'vitamin_k1', 'b_complex', 'vitamin_b6', 'vitamin_b12', 'folate', 'zinc', 'iron', 'copper', 'selenium', 'iodine'],
+  // the label names «витамины группы B» without B12 / B9 separately
+  'OZN-A018': ['multivitamin', 'vitamin_a', 'vitamin_c', 'vitamin_d3', 'vitamin_e', 'vitamin_k1', 'b_complex', 'zinc', 'magnesium', 'iron', 'copper', 'selenium', 'iodine'],
   'OZN-A019': ['magnesium', 'vitamin_b6'],
   'OZN-A020': ['magnesium', 'vitamin_b6'],
   'OZN-A021': ['vitamin_d3'],
   'OZN-A022': ['magnesium', 'vitamin_b6'],
   'OZN-A023': ['omega3'],
 };
+
+// ---------------- the same substance in different products (Overlap Check) ----------------
+
+/**
+ * Owner's decision 02.11.2026 (D-47): any substance in 2+ different products raises the label to at least yellow with
+ * this line, whatever the model says. Red comes only from explicit compatibility rules.
+ */
+export const OVERLAP_TEXT: Record<Lang, string> = {
+  ru: 'Одно вещество есть в нескольких товарах — проверьте суммарную дозировку или уточните у специалиста',
+  uz: 'Bir modda bir nechta mahsulotda bor — umumiy dozani tekshiring yoki mutaxassisdan soʻrang',
+};
+
+const VERDICT_RANK: Record<Verdict, number> = { compatible: 0, spread: 1, consult: 2 };
+
+export interface Overlap {
+  substance: string;
+  products: string[];
+}
+
+/**
+ * Substances that 2+ **different** products of a cart have; a form counts as its substance (P-5-P and B6 are one).
+ * Two jars of one product are not an overlap.
+ */
+export function overlapsForProducts(products: { id: string; substances: Iterable<string> }[], parentOf: Map<string, string | null>): Overlap[] {
+  const holders = new Map<string, string[]>();
+  for (const p of products) {
+    for (const s of withParents(p.substances, parentOf)) {
+      const list = holders.get(s) ?? [];
+      if (!list.includes(p.id)) holders.set(s, [...list, p.id]);
+    }
+  }
+  return [...holders].filter(([, ids]) => ids.length > 1).map(([substance, ids]) => ({ substance, products: ids }));
+}
+
+/** The label after the Overlap Check: any overlap makes it at least yellow; a red label is never lowered. */
+export function applyOverlapFloor(verdict: Verdict, overlaps: Overlap[]): Verdict {
+  return overlaps.length && VERDICT_RANK[verdict] < VERDICT_RANK.spread ? 'spread' : verdict;
+}
