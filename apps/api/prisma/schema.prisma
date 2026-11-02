@@ -1745,7 +1745,7 @@ model compat_requests {
   comment           String?
   comment_purged_at DateTime?
   status            String             @default("pending") // pending | answered | closed (the cart changed before an answer)
-  source            String             @default("specialist") // specialist | instant (a saved answer for the same set)
+  source            String             @default("specialist") // specialist | instant (a saved answer for the same set) | ai | ai_cache | ai_fallback (3.8)
   verdict           String? // compatible | spread | consult
   answer_text       String?
   answered_by       String?            @db.Uuid
@@ -1878,7 +1878,7 @@ model ai_compat_answers {
   lang            String
   verdict         String // compatible | spread | consult
   text            String
-  /// [{ product_id, when_ru, when_uz }]
+  /// [{ product_id, when }] — in the language of the answer
   timing          Json?
   /// one product in the cart: 2–3 products in stock that go well with it
   suggested_ids   String[]          @db.Uuid

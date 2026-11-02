@@ -22,6 +22,8 @@ import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from 
 import { BotSecretGuard } from '../bot-internal/bot-internal.module';
 import { AdminCompatController, BotCompatController, CompatController, CompatService } from '../compat/compat.service';
 import { AdminKnowledgeController, KnowledgeService } from '../compat/knowledge.service';
+import { AdminAiController, AiController, AiService } from '../compat/ai.service';
+import { AI_MODEL, AnthropicModel } from '../compat/ai-client';
 import { AdminSettingsController, AdminSettingsService, AuditController, StaffUsersController } from './admin-settings';
 import { AuditService } from './audit.service';
 import { DashboardController, DashboardService } from './dashboard';
@@ -84,6 +86,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     CompatController,
     AdminCompatController,
     BotCompatController,
+    AiController,
+    AdminAiController,
     AdminKnowledgeController,
   ],
   providers: [
@@ -119,6 +123,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     ReceiptsService,
     CompatService,
     KnowledgeService,
+    AiService,
+    { provide: AI_MODEL, useClass: AnthropicModel },
     BotSecretGuard,
   ],
 })

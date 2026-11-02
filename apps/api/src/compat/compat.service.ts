@@ -55,9 +55,11 @@ import {
   type Verdict,
 } from './compat';
 
-type Item = { product_id: string; sku: string; name_ru: string; name_uz: string };
+export type Item = { product_id: string; sku: string; name_ru: string; name_uz: string };
 
-const langOf = (l: string | null | undefined): Lang => (l === 'uz' ? 'uz' : 'ru');
+export const langOf = (l: string | null | undefined): Lang => (l === 'uz' ? 'uz' : 'ru');
+/** specialist | instant (a saved answer) | ai | ai_cache (VITALO AI, 3.8) | ai_fallback (AI could not answer — the specialist does) */
+export type CompatSource = 'specialist' | 'instant' | 'ai' | 'ai_cache' | 'ai_fallback';
 const itemsOf = (json: Prisma.JsonValue): Item[] => (Array.isArray(json) ? (json as unknown as Item[]) : []);
 const nameIn = (i: Item, lang: Lang) => (lang === 'uz' ? i.name_uz || i.name_ru : i.name_ru);
 
@@ -93,7 +95,7 @@ export class CompatService {
 
   // ---------------- customer ----------------
 
-  private async cartItems(userId: string): Promise<Item[]> {
+  async cartItems(userId: string): Promise<Item[]> {
     const cart = await this.prisma.carts.findFirst({
       where: { user_id: userId, status: 'active' },
       include: { items: { include: { product: { select: { id: true, sku: true, name_ru: true, name_uz: true, short_name_ru: true, short_name_uz: true } } }, orderBy: { created_at: 'asc' } } },
@@ -116,7 +118,7 @@ export class CompatService {
     return {
       id: r.id,
       status: r.status as 'pending' | 'answered',
-      source: r.source as 'specialist' | 'instant',
+      source: r.source as CompatSource,
       verdict: (r.verdict as Verdict | null) ?? null,
       text: answerIn(r.answer_text, r.verdict as Verdict | null, langOf(r.lang), lang, templates),
       created_at: r.created_at,
@@ -149,34 +151,45 @@ export class CompatService {
     const items = await this.cartItems(userId);
     if (items.length < 2) throw new BadRequestException({ code: 'NOT_ENOUGH_ITEMS', message: 'Two or more different products are needed' });
     const setKey = setKeyOf(items.map((i) => i.product_id));
-    const productIds = setKey.split(',');
-    const itemsJson = items as unknown as Prisma.InputJsonArray;
 
     // one waiting request per cart composition
     const pending = await this.prisma.compat_requests.findFirst({ where: { user_id: userId, status: 'pending', set_key: setKey } });
     if (pending) throw new ConflictException({ code: 'ALREADY_PENDING', message: 'The request for this cart is already with the specialist' });
 
     // a saved answer for the same set and language — only without a comment (a comment is for a person to read)
-    if (!comment) {
-      const saved = await this.prisma.compat_answers.findUnique({ where: { set_key_lang: { set_key: setKey, lang } } });
-      if (saved?.enabled) {
-        await this.prisma.compat_requests.create({
-          data: { user_id: userId, product_ids: productIds, set_key: setKey, items: itemsJson, lang, status: 'answered', source: 'instant', verdict: saved.verdict, answer_text: saved.text, answered_at: now, saved_answer_id: saved.id },
-        });
-        await this.analytics.track(userId, 'compat_instant_answer', { products: items.length, verdict: saved.verdict, lang });
-        return { result: 'instant' as const, ...(await this.state(userId, now)) };
-      }
-    }
+    if (!comment && (await this.answerFromSaved(userId, items, lang, now))) return { result: 'instant' as const, ...(await this.state(userId, now)) };
 
     if ((await this.sentToday(userId, now)) >= DAILY_LIMIT) {
       throw new HttpException({ code: 'DAILY_LIMIT', message: `No more than ${DAILY_LIMIT} requests a day` }, HttpStatus.TOO_MANY_REQUESTS);
     }
+    await this.queue(userId, items, lang, comment, 'specialist');
+    await this.analytics.track(userId, 'compat_request', { products: items.length, has_comment: !!comment, lang });
+    return { result: 'sent' as const, ...(await this.state(userId, now)) };
+  }
 
+  /** A saved specialist answer for this set and language, given at once (source «instant»). False — there is none. */
+  async answerFromSaved(userId: string, items: Item[], lang: Lang, now = new Date()): Promise<boolean> {
+    const setKey = setKeyOf(items.map((i) => i.product_id));
+    const saved = await this.prisma.compat_answers.findUnique({ where: { set_key_lang: { set_key: setKey, lang } } });
+    if (!saved?.enabled) return false;
+    await this.prisma.compat_requests.create({
+      data: { user_id: userId, product_ids: setKey.split(','), set_key: setKey, items: items as unknown as Prisma.InputJsonArray, lang, status: 'answered', source: 'instant', verdict: saved.verdict, answer_text: saved.text, answered_at: now, saved_answer_id: saved.id },
+    });
+    await this.analytics.track(userId, 'compat_instant_answer', { products: items.length, verdict: saved.verdict, lang });
+    return true;
+  }
+
+  /**
+   * A waiting request for the specialists: older waiting ones of this customer are closed, admins and specialists get
+   * it in the bot. source «ai_fallback» — VITALO AI could not answer (3.8); it does not count in the 5 a day.
+   */
+  async queue(userId: string, items: Item[], lang: Lang, comment: string | null, source: 'specialist' | 'ai_fallback') {
+    const setKey = setKeyOf(items.map((i) => i.product_id));
     const closed = await this.prisma.$transaction(async (tx) => {
       // the cart changed while an older request waited: it is closed, the specialist answers the new one
       const old = await tx.compat_requests.findMany({ where: { user_id: userId, status: 'pending' }, select: { id: true } });
       if (old.length) await tx.compat_requests.updateMany({ where: { id: { in: old.map((o) => o.id) }, status: 'pending' }, data: { status: 'closed' } });
-      const req = await tx.compat_requests.create({ data: { user_id: userId, product_ids: productIds, set_key: setKey, items: itemsJson, lang, comment } });
+      const req = await tx.compat_requests.create({ data: { user_id: userId, product_ids: setKey.split(','), set_key: setKey, items: items as unknown as Prisma.InputJsonArray, lang, comment, source } });
       const staff = await tx.staff_users.findMany({ where: { status: 'active', OR: [{ role: 'admin' }, { is_specialist: true }] } });
       if (staff.length) {
         const payload: TemplatePayload = {
@@ -195,8 +208,6 @@ export class CompatService {
       return old.map((o) => o.id);
     });
     for (const id of closed) await this.settleStaffMessages(id, 'Клиент изменил корзину — запрос закрыт, пришёл новый.');
-    await this.analytics.track(userId, 'compat_request', { products: items.length, has_comment: !!comment, lang });
-    return { result: 'sent' as const, ...(await this.state(userId, now)) };
   }
 
   // ---------------- specialist ----------------
