@@ -445,7 +445,7 @@ export class AiService {
 // ---------------- DTOs and controllers ----------------
 
 export class AiSettingsDto {
-  @ApiProperty({ example: { enabled: true, model: 'claude-haiku-5-5', monthly_budget_usd: 20, cart_daily_limit: 1, chat_daily_limit: 20 } }) @IsObject() settings!: Record<string, unknown>;
+  @ApiProperty({ example: { enabled: true, model: 'claude-haiku-5-5', monthly_budget_usd: 10, cart_daily_limit: 1, chat_daily_limit: 20 } }) @IsObject() settings!: Record<string, unknown>;
 }
 
 @ApiTags('compat')

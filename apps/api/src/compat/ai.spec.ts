@@ -40,8 +40,8 @@ const answer = (over: Record<string, unknown> = {}) => ({
 
 describe('VITALO AI core (3.8)', () => {
   it('settings: wrong values fall back to the defaults', () => {
-    expect(mergeAiSettings(null)).toEqual({ enabled: true, model: 'claude-haiku-5-5', monthly_budget_usd: 20, cart_daily_limit: 1, chat_daily_limit: 20 });
-    expect(mergeAiSettings({ enabled: false, model: 'gpt-5', monthly_budget_usd: -1, cart_daily_limit: 2.6 })).toMatchObject({ enabled: false, model: 'claude-haiku-5-5', monthly_budget_usd: 20, cart_daily_limit: 3 });
+    expect(mergeAiSettings(null)).toEqual({ enabled: true, model: 'claude-haiku-5-5', monthly_budget_usd: 10, cart_daily_limit: 1, chat_daily_limit: 20 });
+    expect(mergeAiSettings({ enabled: false, model: 'gpt-5', monthly_budget_usd: -1, cart_daily_limit: 2.6 })).toMatchObject({ enabled: false, model: 'claude-haiku-5-5', monthly_budget_usd: 10, cart_daily_limit: 3 });
     expect(mergeAiSettings({ model: 'claude-sonnet-5-5' }).model).toBe('claude-sonnet-5-5');
   });
 

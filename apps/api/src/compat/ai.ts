@@ -25,7 +25,7 @@ export interface AiSettings {
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   enabled: true,
   model: 'claude-haiku-5-5',
-  monthly_budget_usd: 20,
+  monthly_budget_usd: 10,
   cart_daily_limit: 1,
   chat_daily_limit: 20,
 };
