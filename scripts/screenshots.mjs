@@ -9,6 +9,8 @@
 // mock.patch may be an array: the whole answer is replaced (lists such as /api/staff/promo-codes)
 // js: a script run after click/type (e.g. open a block and press a button); "file" may be omitted for a setup step
 // geo: { "lat": 41.36, "lon": 69.28 } — «Моё местоположение» answers with this point (permission granted for the shot)
+// preload: a script run in the page before its own code (e.g. a stand-in window.fetch for one endpoint, so a state is shown
+//          without calling an outside service); it is removed after the shot
 // scrollOffset: after scrollTo, scroll back up this many px (the fixed top bar would cover the element otherwise)
 // Uses headless Chrome over the DevTools protocol; nothing is installed. Signs in with the dev login (test users only).
 import { spawn } from 'node:child_process';
@@ -107,6 +109,7 @@ for (const shot of plan) {
     await send('Browser.grantPermissions', { permissions: ['geolocation'], origin: BASE[app] });
     await send('Emulation.setGeolocationOverride', { latitude: shot.geo.lat, longitude: shot.geo.lon, accuracy: 20 });
   }
+  const pre = shot.preload ? await send('Page.addScriptToEvaluateOnNewDocument', { source: shot.preload }) : null;
   if (mock) await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/*', requestStage: 'Response' }] });
   else await send('Fetch.disable');
   await go(shot.url ?? BASE[app] + shot.path);
@@ -115,6 +118,7 @@ for (const shot of plan) {
   // type: fills a React input (native setter + input event), e.g. the search field of a sheet
   if (shot.type) { await evaluate(`(() => { const el=document.querySelector(${JSON.stringify(shot.type[0])}); if(!el) return; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el, ${JSON.stringify(shot.type[1])}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`); await sleep(800); }
   if (shot.js) { await evaluate(shot.js); await sleep(shot.jsWait ?? 1500); }
+  if (pre) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: pre.identifier });
   if (!shot.file) continue;
   if (shot.scrollTo) await evaluate(`document.querySelector(${JSON.stringify(shot.scrollTo)})?.scrollIntoView({block:'start'})`);
   if (shot.scrollOffset) await evaluate(`window.scrollBy(0, -${Number(shot.scrollOffset)})`);

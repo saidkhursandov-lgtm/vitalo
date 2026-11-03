@@ -34,7 +34,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={confirm}>
       {children}
       {open && (
-        <div className="sheet-backdrop" onClick={() => close(false)}>
+        <div className="sheet-backdrop confirm-backdrop" onClick={() => close(false)}>
           <div className="sheet confirm-sheet" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" aria-hidden />
             <p className="confirm-text">{open.message}</p>

@@ -50,6 +50,8 @@ export interface AiView {
   overlap_text: string | null;
   /** approved «осторожно с лекарствами» rules for the substances of the cart — always shown (D-45) */
   drugs: string[];
+  /** why the label is what it is — the badge words (3.8 fix): a synergy rule, a spread / avoid rule, a repeated substance */
+  reasons: { synergy: boolean; spread: boolean; avoid: boolean; overlap: boolean };
 }
 
 interface Knowledge {
@@ -94,7 +96,11 @@ export class AiService {
 
   // ---------------- customer ----------------
 
-  /** The cart block: whether VITALO AI works now, whether the customer agreed, new checks left today, the latest answer. */
+  /**
+   * The cart block: whether VITALO AI works now, whether the customer agreed, new checks left today, the latest answer.
+   * cached — an answer for this set is ready without a new check (a saved specialist answer or the AI cache): the app
+   * then plays the short animation and does not show the daily limit (3.8 fix).
+   */
   async state(userId: string, now = new Date()) {
     const s = await this.settings();
     const user = await this.prisma.users.findUniqueOrThrow({ where: { id: userId }, select: { ai_consent_at: true, language: true } });
@@ -106,11 +112,13 @@ export class AiService {
       include: { ai_answer: true },
     });
     const lang = langOf(user.language);
+    const saved = items.length >= 2 ? await this.prisma.compat_answers.findUnique({ where: { set_key_lang: { set_key: setKey, lang } } }) : null;
     return {
       available: s.enabled && this.model.ready(),
       consent: !!user.ai_consent_at,
       eligible: items.length >= 1,
       left_today: Math.max(0, s.cart_daily_limit - (await this.newToday(userId, now))),
+      cached: !!saved?.enabled || (s.enabled && items.length > 0 && !!(await this.cached(setKey, lang))),
       answer: latest?.ai_answer && latest.ai_answer.review !== 'hidden' && latest.ai_answer.lang === lang ? await this.view(latest.ai_answer, items, lang) : null,
     };
   }
@@ -393,6 +401,9 @@ export class AiService {
     const drugs = k.rules
       .filter((r) => (all.has(r.substance_a_id) && isDrug(r.substance_b_id)) || (all.has(r.substance_b_id) && isDrug(r.substance_a_id)))
       .map((r) => (lang === 'uz' ? r.text_uz : r.text_ru));
+    // rules between different products of the cart (one product: none) — what the badge says
+    const supplements = k.rules.filter((r) => r.kind !== 'drug_caution' && !isDrug(r.substance_a_id) && !isDrug(r.substance_b_id));
+    const between = withSubs.length >= 2 ? rulesForProducts(withSubs, supplements).map((r) => r.kind) : [];
     const itemName = new Map(items.map((i) => [i.product_id, lang === 'uz' ? i.name_uz || i.name_ru : i.name_ru]));
     const timing = (Array.isArray(a.timing) ? (a.timing as { product_id: string; when: string }[]) : []).map((t) => ({ product_id: t.product_id, name: itemName.get(t.product_id) ?? '', when: t.when }));
     const sugg = a.suggested_ids.length
@@ -410,6 +421,7 @@ export class AiService {
       overlaps,
       overlap_text: overlaps.length ? OVERLAP_TEXT[lang] : null,
       drugs: [...new Set(drugs)],
+      reasons: { synergy: between.includes('synergy'), spread: between.includes('spread'), avoid: between.includes('avoid'), overlap: overlaps.length > 0 },
     };
   }
 

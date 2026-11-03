@@ -96,6 +96,15 @@ export const NO_CONFLICT_TEXT: Record<Lang, string> = {
   uz: 'Bizning qoidalarimizda bu qoʻshimchalar orasida maʼlum ziddiyatlar yoʻq',
 };
 
+/** Sentences about the total dose of a repeated substance: the app shows its own line for that (3.8 fix). */
+const OVERLAP_SENTENCE = /суммарн|общую дозировк|повтор|umumiy doz|takrorlan/i;
+export function withoutOverlapLines(text: string): string {
+  return (text.match(/[^.!?]+[.!?]*\s*/g) ?? [])
+    .filter((s) => !OVERLAP_SENTENCE.test(s))
+    .join('')
+    .trim();
+}
+
 /** «2 капсулы», «1 tabletka»: an amount in a time line is allowed only when the memo of the product has it word for word. */
 const AMOUNT = /\d+\s*(капсул\p{L}*|таблет\p{L}*|kapsul\p{L}*|tabletka\p{L}*)/giu;
 
@@ -167,7 +176,7 @@ export const SYSTEM_CART = `СЦЕНАРИЙ: проверка совмести�
    - "spread" — есть правило «разнести по времени» ИЛИ есть хотя бы один повтор вещества;
    - "compatible" — иначе. Предупреждения о лекарствах метку не меняют: покупатель о лекарствах не писал.
 2. text — 2–3 предложения: что с чем сочетается и почему (по объяснениям правил), что разнести и на сколько часов.
-   Если есть повторы — назови вещество и скажи: «проверьте суммарную дозировку или уточните у специалиста».
+   О повторах веществ в text не пиши — их показывает приложение отдельной строкой; повторы нужны только для метки.
    Не повторяй строку про лекарства — её показывает приложение.
    Если в корзине 2+ товара и между ними НЕТ правил и повторов — метка "compatible", а text начинается со слов
    «В наших правилах нет известных конфликтов между этими добавками» (по-узбекски: «Bizning qoidalarimizda bu
@@ -245,7 +254,7 @@ export function cartDataBlock(d: CartData): string {
   const out = ['<данные>', `язык: ${d.lang === 'uz' ? 'uz (узбекский, латиница)' : 'ru (русский)'}`, 'товары корзины:', ...d.cart.map(line)];
   out.push('правила между товарами:', ...(d.rules.length ? d.rules.map((r) => ruleLine(r, d.lang)) : ['- нет']));
   if (d.drugRules.length) out.push('предупреждения о лекарствах:', ...d.drugRules.map((r) => ruleLine(r, d.lang)));
-  out.push('повторы веществ:', ...(d.overlaps.length ? d.overlaps.map((o) => `- ${o.substance} — ${o.refs.join(', ')}`) : ['- нет']));
+  out.push('повторы веществ (только для метки, в text не упоминать):', ...(d.overlaps.length ? d.overlaps.map((o) => `- ${o.substance} — ${o.refs.join(', ')}`) : ['- нет']));
   if (d.candidates.length) out.push('можно предложить (в наличии):', ...d.candidates.map(line));
   out.push('</данные>');
   return out.join('\n');
@@ -273,7 +282,8 @@ export function checkCartAnswer(raw: unknown, d: CartData, floor: Verdict): { ok
   if (!raw || typeof raw !== 'object') return { ok: false, error: 'not_json' };
   const r = raw as Record<string, unknown>;
   if (r.verdict !== 'compatible' && r.verdict !== 'spread' && r.verdict !== 'consult') return { ok: false, error: 'verdict' };
-  let text = typeof r.text === 'string' ? r.text.trim() : '';
+  // the app names a repeated substance itself (D-47): a sentence of the model about it would say it twice
+  let text = withoutOverlapLines(typeof r.text === 'string' ? r.text.trim() : '');
   if (text.length < 20) return { ok: false, error: 'text_length' };
   const verdict = maxVerdict(r.verdict, floor);
   // nothing known between the products: say so in the fixed words, whatever the model wrote first

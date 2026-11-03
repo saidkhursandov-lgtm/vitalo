@@ -206,7 +206,7 @@ describe('3.6 address on the Yandex map', () => {
     fireEvent.click(screen.getByRole('button', { name: /Моё местоположение/ }));
     expect(await screen.findByText(/только чтобы поставить метку доставки/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Разрешить' }));
-    expect(await screen.findByText(/Нет доступа к местоположению/)).toBeTruthy();
+    expect(await screen.findByText('Включите геолокацию в настройках телефона или выберите точку вручную')).toBeTruthy();
     expect(events()).toEqual(expect.arrayContaining([{ event: 'map_locate_me', props: { result: 'denied' } }]));
     expect((screen.getByRole('button', { name: 'Подтвердить адрес' }) as HTMLButtonElement).disabled).toBe(false);
   });

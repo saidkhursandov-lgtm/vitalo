@@ -4,19 +4,38 @@ import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useAiCompat, useCompat } from '../lib/queries';
-import { AiCompat } from './AiCompat';
+import { AiCompat, SpecialistBox } from './AiCompat';
 import type { CompatRequest, CompatState, CompatVerdict } from '../lib/types';
-import { AlertIcon, CheckIcon, ChevronIcon, CloseIcon, ShieldIcon } from './Icons';
+import { AlertIcon, CheckIcon, CloseIcon, ShieldIcon } from './Icons';
 
 /** Same products in any order and quantity → the same key (the API compares sets the same way). */
 export const setKeyOf = (ids: string[]) => [...new Set(ids)].sort().join(',');
 
 const VERDICT_KEY: Record<CompatVerdict, MessageKey> = { compatible: 'compat.v.compatible', spread: 'compat.v.spread', consult: 'compat.v.consult' };
 
+/** «Не сейчас» on the VITALO AI consent: the cart offers the specialist until the app is opened again. */
+const REFUSED_KEY = 'vitalo.ai-refused';
+const readRefused = () => {
+  try {
+    return sessionStorage.getItem(REFUSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+const writeRefused = (on: boolean) => {
+  try {
+    if (on) sessionStorage.setItem(REFUSED_KEY, '1');
+    else sessionStorage.removeItem(REFUSED_KEY);
+  } catch {
+    // storage blocked: the choice lives until the screen is left
+  }
+};
+
 /**
- * 3.8: VITALO AI first (from one product, AiCompat). 3.4: «Проверить совместимость у специалиста» (2+ different products): the answer for
- * the latest request (with «Состав корзины изменился — проверьте снова» when the cart is another set now), «ждём ответа»
- * while a specialist has it, or the widget that opens the request sheet.
+ * 3.8 fix: one block. VITALO AI (from one product, AiCompat) — «Спросить специалиста лично» only inside it (the answer,
+ * the limit, an error). The AI is off, has no key or the customer closed the consent — the same block leads to the
+ * specialist (3.4, 2+ different products). Above it — the specialist's answer for the latest request (with «Состав
+ * корзины изменился — проверьте снова» when the cart is another set now) or «ждём ответа» while a specialist has it.
  */
 export function CompatBlock({ productIds }: { productIds: string[] }) {
   const { t, lang } = useI18n();
@@ -25,6 +44,8 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
   const ai = useAiCompat(setKey, lang);
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [refused, setRefused] = useState(readRefused);
+  const [askConsent, setAskConsent] = useState(false);
   const s = compat.data;
   // 3.8: VITALO AI works from one product; the specialist (3.4) from two
   const aiOn = !!ai.data?.available && !!ai.data.eligible;
@@ -33,22 +54,13 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
   const waiting = r?.status === 'pending' && !r.changed;
   // an AI answer is shown by its own card
   const answered = r?.status === 'answered' && r.source !== 'ai' && r.source !== 'ai_cache' ? r : null;
+  const canAsk = s.eligible && !waiting && (!answered || answered.changed);
+  // a refusal counts only while there is no consent; with one product the specialist cannot help, the AI block stays
+  const showAi = aiOn && !(refused && !ai.data!.consent && s.eligible);
   return (
     <div className="compat">
-      {aiOn && (
-        <AiCompat
-          state={ai.data!}
-          products={s.products}
-          canAskSpecialist={s.eligible && !waiting}
-          onAsk={() => setOpen(true)}
-          onChange={(next) => {
-            client.setQueryData(['compat-ai', setKey, lang], next);
-            void client.invalidateQueries({ queryKey: ['compat', setKey, lang] });
-          }}
-        />
-      )}
       {answered && <CompatAnswer request={answered} />}
-      {!s.eligible ? null : waiting ? (
+      {s.eligible && waiting && (
         <div className="compat-pending" role="status">
           <ShieldIcon width={20} height={20} aria-hidden />
           <span>
@@ -56,18 +68,39 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
             <span>{t('compat.hours')}</span>
           </span>
         </div>
+      )}
+      {showAi ? (
+        <AiCompat
+          key={askConsent ? 'consent' : 'idle'}
+          state={ai.data!}
+          products={s.products}
+          canAskSpecialist={canAsk}
+          askConsent={askConsent}
+          onAsk={() => setOpen(true)}
+          onRefuse={() => {
+            setAskConsent(false);
+            writeRefused(true);
+            setRefused(true);
+          }}
+          onChange={(next) => {
+            if (next.consent) writeRefused(false);
+            client.setQueryData(['compat-ai', setKey, lang], next);
+            void client.invalidateQueries({ queryKey: ['compat', setKey, lang] });
+          }}
+        />
       ) : (
-        (!answered || answered.changed) && (
-          <button type="button" className="ask-card compat-card" onClick={() => setOpen(true)}>
-            <span className="ask-icon" aria-hidden>
-              <ShieldIcon width={20} height={20} />
-            </span>
-            <span className="ask-text">
-              <strong>{t('compat.title')}</strong>
-              <span>{t('compat.hours')}</span>
-            </span>
-            <ChevronIcon className="ask-chevron" width={20} height={20} aria-hidden />
-          </button>
+        canAsk && (
+          <SpecialistBox
+            onAsk={() => setOpen(true)}
+            onTryAi={
+              aiOn
+                ? () => {
+                    setAskConsent(true);
+                    setRefused(false);
+                  }
+                : undefined
+            }
+          />
         )
       )}
       {open && <CompatSheet state={s} onClose={() => setOpen(false)} onDone={(next) => client.setQueryData(['compat', setKey, lang], next)} />}

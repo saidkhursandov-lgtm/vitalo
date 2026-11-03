@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
+import { CartIcon, MinusIcon, PinIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { QuoteTerm } from '../components/Delivery';
 import { useQuickNotify } from '../components/QuickAdd';
 import { useQuickCart } from '../lib/quick-cart';
@@ -11,7 +11,7 @@ import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui'
 import { RegionCitySelect } from '../components/PlacePicker';
 import { MapPickerButton } from '../components/MapPicker';
 import { OrderTotals } from '../components/OrderItems';
-import { formLabel, money, shortNameOf } from '../lib/format';
+import { formLabel, money, nameOf, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useCartActions, useCartMapPick, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
 import { PromoBox } from '../components/Promo';
@@ -160,6 +160,7 @@ export function Cart() {
   };
   // 3.6: «Выбрать на карте» here sets the district; the point and the street wait for the checkout
   const [mapPick, setMapPick] = useCartMapPick();
+  const [editPlace, setEditPlace] = useState(false);
   const cart = useCart(selected);
   const { setQty, remove } = useCartActions();
   const promo = useCartPromo(selected, lang);
@@ -184,6 +185,9 @@ export function Cart() {
 
   const delivery = data.delivery;
   const busy = setQty.isPending || remove.isPending;
+  const region = regions.data?.find((r) => r.id === selected?.region_id);
+  const district = region?.cities.find((c) => c.id === selected?.city_id);
+  const placeLine = region && district ? `${nameOf(region, lang)}, ${nameOf(district, lang)}` : null;
   // Amount to pay: goods after discounts + delivery once the city is known (updates with every change).
   const payable = data.goods_total_uzs - data.discount_total_uzs + (delivery?.cost_uzs ?? 0);
 
@@ -196,27 +200,27 @@ export function Cart() {
         {data.items.map((l) => (
           <li key={l.product_id} className={`cart-line ${l.status === 'unavailable' ? 'is-out' : ''}`}>
             <Link to={`/product/${l.product_id}`} className="cart-img">
-              {l.image_url && <img src={l.image_url} alt="" width={72} height={72} loading="lazy" decoding="async" />}
+              {l.image_url && <img src={l.image_url} alt="" width={56} height={56} loading="lazy" decoding="async" />}
             </Link>
+            {/* 3.8 fix: compact — the name, then one row: the price on the left, a small stepper on the right */}
             <div className="cart-info">
-              <Link to={`/product/${l.product_id}`} className="cart-name">
+              <Link to={`/product/${l.product_id}`} className="cart-name" title={[l.brand, l.form && formLabel(l.form, lang)].filter(Boolean).join(' · ')}>
                 {shortNameOf(l, lang)}
               </Link>
-              <div className="hint small">{[l.brand, l.form && formLabel(l.form, lang)].filter(Boolean).join(' · ')}</div>
               {l.status === 'unavailable' ? (
                 <div className="error-text small">{t('cart.unavailable')}</div>
               ) : (
                 <div className="cart-row">
-                  <div className="stepper">
+                  <strong>{money(l.line_total_uzs, lang)}</strong>
+                  <div className="stepper stepper-sm">
                     <button aria-label="−" disabled={busy || l.qty <= 1} onClick={() => setQty.mutate({ product_id: l.product_id, qty: l.qty - 1 })}>
-                      <MinusIcon width={18} height={18} />
+                      <MinusIcon width={16} height={16} />
                     </button>
                     <span>{l.qty}</span>
                     <button aria-label="+" disabled={busy || l.qty >= l.available_qty} onClick={() => setQty.mutate({ product_id: l.product_id, qty: l.qty + 1 })}>
-                      <PlusIcon width={18} height={18} />
+                      <PlusIcon width={16} height={16} />
                     </button>
                   </div>
-                  <strong>{money(l.line_total_uzs, lang)}</strong>
                 </div>
               )}
             </div>
@@ -231,17 +235,30 @@ export function Cart() {
 
       <section className="card">
         <h2>{t('cart.deliveryTo')}</h2>
-        {regions.data && <RegionCitySelect regions={regions.data} regionId={city.region_id} cityId={city.city_id} onChange={setCity} />}
-        <MapPickerButton
-          place="cart"
-          start={mapPick}
-          chosen={!!mapPick}
-          onPick={(p) => {
-            setMapPick(p);
-            if (p.region_id) setCity({ region_id: p.region_id, city_id: p.city_id ?? '' });
-          }}
-        />
-        {mapPick && <p className={`hint small map-note ${mapPick.city_id ? 'is-ok' : ''}`}>{mapPick.city_id ? t('map.districtAuto') : t('map.districtManual')}</p>}
+        {/* 3.8 fix: a chosen region and district fold into one line; «Изменить» opens the choice and the map again */}
+        {placeLine && !editPlace ? (
+          <div className="place-line">
+            <PinIcon width={18} height={18} aria-hidden />
+            <span>{placeLine}</span>
+            <button type="button" className="link place-change" onClick={() => setEditPlace(true)}>
+              {t('cart.changePlace')}
+            </button>
+          </div>
+        ) : (
+          <>
+            {regions.data && <RegionCitySelect regions={regions.data} regionId={city.region_id} cityId={city.city_id} onChange={setCity} />}
+            <MapPickerButton
+              place="cart"
+              start={mapPick}
+              chosen={!!mapPick}
+              onPick={(p) => {
+                setMapPick(p);
+                if (p.region_id) setCity({ region_id: p.region_id, city_id: p.city_id ?? '' });
+              }}
+            />
+            {mapPick && <p className={`hint small map-note ${mapPick.city_id ? 'is-ok' : ''}`}>{mapPick.city_id ? t('map.districtAuto') : t('map.districtManual')}</p>}
+          </>
+        )}
         {delivery ? (
           <>
             <QuoteTerm min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />

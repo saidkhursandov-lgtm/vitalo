@@ -566,6 +566,8 @@ export interface AiAnswer {
   overlap_text: string | null;
   /** approved «осторожно с лекарствами» rules for the substances of the cart */
   drugs: string[];
+  /** why the label is what it is: the badge words (3.8 fix) */
+  reasons: { synergy: boolean; spread: boolean; avoid: boolean; overlap: boolean };
 }
 export interface AiState {
   /** false — no key or switched off: only the specialist */
@@ -573,6 +575,8 @@ export interface AiState {
   consent: boolean;
   eligible: boolean;
   left_today: number;
+  /** an answer for this set is ready without a new check: no daily limit, the short animation */
+  cached: boolean;
   /** the latest AI answer for the cart as it is now */
   answer: AiAnswer | null;
   result?: 'instant' | 'ai' | 'ai_cache' | 'specialist' | 'unavailable';

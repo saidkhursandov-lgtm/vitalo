@@ -12,6 +12,7 @@ import {
   SYSTEM_CART,
   SYSTEM_COMMON,
   tashkentMonthStart,
+  withoutOverlapLines,
   type CartData,
 } from './ai';
 
@@ -154,5 +155,19 @@ describe('architect edits 02.11', () => {
   it('Uzbek with a Cyrillic letter goes to the specialist', () => {
     const uz = answer({ text: 'Magniy va D3 vitamini bir-birini toʻldiradi, ertalab va kechqurun qabul qiling.', timing: [{ productId: 'A003', when: 'Ertalab' }, { productId: 'A014', when: 'Кечқурун' }] });
     expect(checkCartAnswer(uz, data({ lang: 'uz' }), 'compatible')).toEqual({ ok: false, error: 'language' });
+  });
+});
+
+describe('repeated substances are named only by the app (3.8 fix)', () => {
+  it('the instruction forbids writing about repeats; the data block marks them «только для метки»', () => {
+    expect(SYSTEM_CART).toContain('О повторах веществ в text не пиши');
+    expect(cartDataBlock(data({ overlaps: [{ substance: 'D3', refs: ['A003', 'A014'] }] }))).toContain('повторы веществ (только для метки, в text не упоминать):');
+  });
+
+  it('a sentence about the total dose is cut from the text, the rest stays', () => {
+    expect(withoutOverlapLines('Принимайте D3 утром. Учитывайте суммарную дозировку D3 в двух товарах. Магний — вечером.')).toBe('Принимайте D3 утром. Магний — вечером.');
+    expect(withoutOverlapLines('D3 ertalab. Umumiy dozani hisobga oling, D3 takrorlanadi. Magniy kechqurun.')).toBe('D3 ertalab. Magniy kechqurun.');
+    const ok = checkCartAnswer(answer({ text: 'D3 утром, магний вечером, с едой. Витамин D3 повторяется — следите за суммарной дозой.' }), data({ overlaps: [{ substance: 'D3', refs: ['A003', 'A014'] }] }), 'spread') as { answer: { text: string } };
+    expect(ok.answer.text).toBe('D3 утром, магний вечером, с едой.');
   });
 });

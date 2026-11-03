@@ -113,6 +113,8 @@ export function MapScreen({
   const [address, setAddress] = useState<AddressState>({ kind: 'idle' });
   const [locating, setLocating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [geoOff, setGeoOff] = useState(false);
+  const dragged = useRef(false);
 
   async function lookUp([lon, lat]: LngLat) {
     const my = ++seq.current;
@@ -144,6 +146,7 @@ export function MapScreen({
               center.current = location.center;
               clearTimeout(timer.current);
               if (mapInAction) {
+                dragged.current = true;
                 seq.current++; // an answer for the old point is not shown any more
                 setAddress({ kind: 'moving' });
                 return;
@@ -189,7 +192,14 @@ export function MapScreen({
       }
     }
     setLocating(true);
-    const r = await getLocation();
+    setGeoOff(false);
+    dragged.current = false;
+    // 3.8 fix: the quick point moves the map at once; the precise one follows unless the customer moved the map meanwhile
+    const r = await getLocation((p) => {
+      if (dragged.current || !map.current) return;
+      center.current = [p.lon, p.lat];
+      map.current.update({ location: { center: [p.lon, p.lat], zoom: 17, duration: 300 } });
+    });
     setLocating(false);
     track('map_locate_me', { result: r.status });
     if (r.status === 'ok') {
@@ -197,8 +207,9 @@ export function MapScreen({
       map.current?.update({ location: { center: [r.lon, r.lat], zoom: 17, duration: 300 } });
       return;
     }
+    // switched off in the phone or refused: the hint goes on top of the map, picking by hand still works
     haptic('warning');
-    setNotice(r.status === 'denied' ? t('map.locateDenied') : t('map.locateFailed'));
+    setGeoOff(true);
   }
 
   const answer = address.kind === 'done' ? address.answer : null;
@@ -234,6 +245,14 @@ export function MapScreen({
         <button type="button" className="map-locate" disabled={!ready || locating} onClick={() => void locate()}>
           <LocateIcon width={18} height={18} aria-hidden /> {locating ? t('map.locating') : t('map.locate')}
         </button>
+        {geoOff && (
+          <div className="map-geo-hint" role="alert">
+            <span>{t('map.geoOff')}</span>
+            <button type="button" className="icon-btn" aria-label={t('common.close')} onClick={() => setGeoOff(false)}>
+              <CloseIcon width={18} height={18} />
+            </button>
+          </div>
+        )}
       </div>
       <div className="map-panel">
         <p className={`map-address ${answer?.found ? '' : 'is-muted'}`} aria-live="polite">

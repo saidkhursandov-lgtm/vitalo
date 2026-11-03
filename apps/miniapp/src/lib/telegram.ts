@@ -75,9 +75,10 @@ const LOCATION_TIMEOUT_MS = 15_000;
 
 /**
  * 3.6: «Моё местоположение» on the map. Inside Telegram (8.0+) — Telegram's LocationManager with its own permission
- * dialog; elsewhere (and in older Telegram) — the browser. Never throws; a refusal is 'denied'.
+ * dialog; elsewhere (and in older Telegram) — the browser: a quick point, then a precise one through `onRefine`.
+ * Never throws; a refusal is 'denied'.
  */
-export function getLocation(): Promise<LocationResult> {
+export function getLocation(onRefine?: (r: { lat: number; lon: number }) => void): Promise<LocationResult> {
   const lm = telegram()?.LocationManager;
   if (lm && telegram()!.isVersionAtLeast('8.0')) {
     return new Promise((resolve) => {
@@ -97,18 +98,44 @@ export function getLocation(): Promise<LocationResult> {
       else lm.init(ask);
     });
   }
-  return browserLocation();
+  return browserLocation(onRefine);
 }
 
-function browserLocation(): Promise<LocationResult> {
-  if (!('geolocation' in navigator)) return Promise.resolve({ status: 'unavailable' });
-  return new Promise((resolve) =>
+/** A refined point moves the map only when it is this far from the quick one (metres). */
+export const REFINE_MIN_METRES = 30;
+const QUICK_TIMEOUT_MS = 3_000;
+
+/** Distance between two points in metres (good enough inside a city). */
+export function metresBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const k = 111_320;
+  const dx = (a.lon - b.lon) * k * Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
+  const dy = (a.lat - b.lat) * k;
+  return Math.hypot(dx, dy);
+}
+
+const position = (opts: PositionOptions) =>
+  new Promise<LocationResult>((resolve) =>
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ status: 'ok', lat: p.coords.latitude, lon: p.coords.longitude }),
       (e) => resolve({ status: e.code === e.PERMISSION_DENIED ? 'denied' : 'unavailable' }),
-      { enableHighAccuracy: true, timeout: LOCATION_TIMEOUT_MS, maximumAge: 60_000 },
+      opts,
     ),
   );
+
+/**
+ * 3.8 fix: a quick rough point first (network, a minute-old one is fine, 3 s) so the map moves at once; then the precise
+ * one in the background, passed to `onRefine` when it is noticeably elsewhere. No quick point — the precise one is waited for.
+ */
+async function browserLocation(onRefine?: (r: { lat: number; lon: number }) => void): Promise<LocationResult> {
+  if (!('geolocation' in navigator)) return { status: 'unavailable' };
+  const quick = await position({ enableHighAccuracy: false, timeout: QUICK_TIMEOUT_MS, maximumAge: 60_000 });
+  if (quick.status === 'denied') return quick;
+  const precise = position({ enableHighAccuracy: true, timeout: LOCATION_TIMEOUT_MS, maximumAge: 0 });
+  if (quick.status !== 'ok') return precise;
+  void precise.then((p) => {
+    if (p.status === 'ok' && metresBetween(p, quick) >= REFINE_MIN_METRES) onRefine?.({ lat: p.lat, lon: p.lon });
+  });
+  return quick;
 }
 
 /** A light tap (quick add, quantity change). */

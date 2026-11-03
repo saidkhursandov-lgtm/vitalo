@@ -88,7 +88,7 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
   it('works only after «Я согласен»', async () => {
     const token = await customer(false);
     await add(token, p.a.id);
-    expect((await http().get('/api/compat/ai').set(bearer(token)).expect(200)).body).toMatchObject({ available: true, consent: false, left_today: 1, answer: null });
+    expect((await http().get('/api/compat/ai').set(bearer(token)).expect(200)).body).toMatchObject({ available: true, consent: false, left_today: 1, cached: false, answer: null });
     expect((await check(token).expect(403)).body.code).toBe('CONSENT_REQUIRED');
     expect((await http().post('/api/compat/ai/consent').set(bearer(token)).expect(200)).body.consent).toBe(true);
     expect(fake.calls).toHaveLength(0);
@@ -113,6 +113,8 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
 
     // «compatible» from the model, but a spread rule and the overlap of Z make it yellow
     expect(res.answer).toMatchObject({ verdict: 'spread', overlaps: [`Вещество Z ${run}`], overlap_text: expect.stringContaining('суммарную дозировку'), drugs: [`X и лекарства ${run}: согласуйте с врачом.`] });
+    // the badge: «Разнести по времени» because of the rule, the repeat of Z as well; the medicine rule is not a reason
+    expect(res.answer.reasons).toEqual({ synergy: false, spread: true, avoid: false, overlap: true });
     expect(res.answer.timing).toHaveLength(2);
     expect(res.left_today).toBe(0);
     const log = await prisma.ai_requests.findFirstOrThrow({ where: { set_key: [p.a.id, p.b.id].sort().join(',') }, orderBy: { created_at: 'desc' } });
@@ -130,6 +132,8 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     await add(token, p.b.id);
     await add(token, p.a.id);
     const before = fake.calls.length;
+    // the app knows beforehand: the answer is ready, no limit and the short animation
+    expect((await http().get('/api/compat/ai').set(bearer(token)).expect(200)).body).toMatchObject({ cached: true, answer: null });
     const res = (await check(token).expect(200)).body;
     expect(res.result).toBe('ai_cache');
     expect(fake.calls).toHaveLength(before);

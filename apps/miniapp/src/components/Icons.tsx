@@ -29,6 +29,7 @@ import {
   ShieldPlus,
   Sparkle,
   Sparkles,
+  Sun,
   Venus,
   CalendarClock,
   Clock,
@@ -114,6 +115,9 @@ export const BellIcon = make(Bell);
 export const BellCheckIcon = make(BellCheck);
 /** 2.4: centre «Подбор» button */
 export const SparkIcon = make(Sparkle);
+/** 3.8: «Когда принимать» in the VITALO AI answer */
+export const SunIcon = make(Sun);
+export const MoonIcon = make(Moon);
 /** 2.4 patch: manifest cards «Не берём» / «Стандарт VITALO»; «Скоро» chips of AI-подбор */
 export const RejectIcon = make(CircleX);
 export const AcceptIcon = make(CircleCheck);

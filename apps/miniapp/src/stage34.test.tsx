@@ -71,8 +71,8 @@ describe('3.4 «Проверить совместимость у специал�
   it('the widget opens the sheet: the cart, an optional comment, the disclaimer; sending shows «Запрос отправлен специалисту»', async () => {
     mock(base, { status: 200, body: { ...base, result: 'sent', left_today: 4, request: answered({ status: 'pending', verdict: null, text: null }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /Проверить совместимость у специалиста/ }));
-    expect(screen.getByText('Ответим в рабочее время 8:00–22:00', { selector: '.ask-text span' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /Спросить специалиста лично/ }));
+    expect(screen.getByText('Ответим в рабочее время 8:00–22:00', { selector: '.ai-box-text > span' })).toBeTruthy();
     const dialog = screen.getByRole('dialog');
     expect(dialog.textContent).toContain('Магний B6');
     expect(dialog.textContent).toContain('Не является медицинской консультацией');
@@ -88,7 +88,7 @@ describe('3.4 «Проверить совместимость у специал�
   it('the daily limit is explained', async () => {
     mock(base, { status: 429, body: { code: 'DAILY_LIMIT' } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /Проверить совместимость/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Спросить специалиста лично/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Сегодня можно отправить не больше 5 запросов. Попробуйте завтра.');
     expect(posted).toEqual([{}]); // an empty comment is not sent
@@ -117,7 +117,7 @@ describe('3.4 «Проверить совместимость у специал�
     show();
     expect((await screen.findByText('Нужна консультация специалиста')).className).toContain('is-consult');
     expect(screen.getByText(/Состав корзины изменился — проверьте снова/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Проверить совместимость у специалиста/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Спросить специалиста лично/ })).toBeTruthy();
   });
 
   it('UZ widget title fits the owner’s wording', () => {
