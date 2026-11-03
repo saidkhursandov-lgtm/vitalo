@@ -1,18 +1,21 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, HttpException, HttpStatus, Inject, Injectable, Logger, Post, Put, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Prisma, type ai_compat_answers, type staff_users } from '@prisma/client';
-import { IsObject } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 import { AnalyticsService } from '../analytics/analytics.module';
 import { AuthContext } from '../auth/auth.types';
 import { CurrentAuth, SessionGuard } from '../auth/session.guard';
 import { availableQty } from '../catalog/product.mapper';
+import type { TemplatePayload } from '../notifications/notification-templates';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../staff/audit.service';
 import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '../staff/staff-auth';
 import { productTitle } from '../waitlist/waitlist';
 import {
   CART_SCHEMA,
+  AI_MODELS,
   DEFAULT_AI_SETTINGS,
+  MODEL_PRICES,
   SETTING_AI,
   SYSTEM_CART,
   SYSTEM_COMMON,
@@ -226,6 +229,16 @@ export class AiService {
         },
       });
       await this.answeredRequest(userId, items, lang, 'ai', row, now, tx);
+      // «Нужна консультация»: admins and specialists hear about it in the bot (spec 1.8)
+      if (row.verdict === 'consult') {
+        const staff = await tx.staff_users.findMany({ where: { status: 'active', OR: [{ role: 'admin' }, { is_specialist: true }] } });
+        const payload: TemplatePayload = { order_number: '', lang: 'ru', client_lang: lang, items: items.map((i) => `• ${i.name_ru} (${i.sku})`).join('\n'), admin_path: '/compat' };
+        if (staff.length) {
+          await tx.notifications.createMany({
+            data: staff.map((m) => ({ staff_user_id: m.id, chat_id: m.telegram_user_id, kind: 'service', template: 'staff.ai_red', payload: payload as unknown as Prisma.InputJsonObject })),
+          });
+        }
+      }
       return row;
     });
     await this.analytics.track(userId, 'compat_ai_request', { products: items.length, verdict: answer.verdict, lang, latency_ms: req.latency_ms, model: s.model });
@@ -438,6 +451,74 @@ export class AiService {
     return this.adminSettings();
   }
 
+  // ---------------- admin: «Совместимость → AI-ответы» ----------------
+
+  /** AI answers of the cart for review (spec 1.8): red ones waiting for review first («Проверить в первую очередь»), then the newest. */
+  async adminAnswers(filter: 'new' | 'all' = 'new') {
+    const rows = await this.prisma.ai_compat_answers.findMany({
+      where: filter === 'new' ? { review: 'new' } : {},
+      orderBy: { created_at: 'desc' },
+      take: 200,
+      include: { reviewer: { select: { name: true } } },
+    });
+    const ids = rows.map((r) => r.ai_request_id).filter((id): id is string => !!id);
+    const costs = new Map((await this.prisma.ai_requests.findMany({ where: { id: { in: ids } }, select: { id: true, cost_usd: true } })).map((r) => [r.id, Number(r.cost_usd)]));
+    const urgent = (r: ai_compat_answers) => r.review === 'new' && r.verdict === 'consult';
+    return [...rows]
+      .sort((a, b) => Number(urgent(b)) - Number(urgent(a)))
+      .map((r) => {
+        const items = (Array.isArray(r.items) ? r.items : []) as unknown as Item[];
+        const name = new Map(items.map((i) => [i.product_id, i.name_ru]));
+        const timing = (Array.isArray(r.timing) ? r.timing : []) as { product_id: string; when: string }[];
+        return {
+          id: r.id,
+          created_at: r.created_at,
+          lang: r.lang as Lang,
+          verdict: r.verdict as Verdict,
+          text: r.text,
+          products: items.map((i) => ({ product_id: i.product_id, sku: i.sku, name: i.name_ru })),
+          timing: timing.map((x) => ({ name: name.get(x.product_id) ?? '', when: x.when })),
+          suggestions: r.suggested_ids.length,
+          model: r.model,
+          cost_usd: r.ai_request_id ? (costs.get(r.ai_request_id) ?? 0) : 0,
+          used: r.used_count,
+          review: r.review as 'new' | 'approved' | 'fixed' | 'hidden',
+          reviewed_by: r.reviewer?.name ?? null,
+          reviewed_at: r.reviewed_at,
+          urgent: urgent(r),
+        };
+      });
+  }
+
+  /**
+   * «Одобрить и сохранить» — the answer becomes a saved specialist answer (3.4) for this set and language; «Исправить» —
+   * the same with the specialist's text and label; «Скрыть» — out of the cache, the next customer gets a new answer.
+   */
+  async reviewAnswer(me: staff_users, id: string, dto: { action: 'approve' | 'fix' | 'hide'; verdict?: Verdict; text?: string }) {
+    const before = await this.prisma.ai_compat_answers.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException({ code: 'NOT_FOUND', message: 'AI answer not found' });
+    const text = dto.action === 'fix' ? dto.text?.trim() : before.text;
+    if (!text) throw new BadRequestException({ code: 'EMPTY_TEXT', message: 'The answer cannot be empty' });
+    const verdict = dto.action === 'fix' ? (dto.verdict ?? (before.verdict as Verdict)) : (before.verdict as Verdict);
+    await this.prisma.$transaction(async (tx) => {
+      let saved: string | null = before.saved_answer_id;
+      if (dto.action !== 'hide') {
+        const data = { verdict, text, enabled: true, created_by: me.id };
+        saved = (
+          await tx.compat_answers.upsert({
+            where: { set_key_lang: { set_key: before.set_key, lang: before.lang } },
+            create: { set_key: before.set_key, product_ids: before.product_ids, items: before.items as Prisma.InputJsonValue, lang: before.lang, ...data },
+            update: data,
+          })
+        ).id;
+      }
+      const review = dto.action === 'approve' ? 'approved' : dto.action === 'fix' ? 'fixed' : 'hidden';
+      const after = await tx.ai_compat_answers.update({ where: { id }, data: { review, reviewed_by: me.id, reviewed_at: new Date(), saved_answer_id: saved } });
+      await this.audit.log({ staffId: me.id, action: `compat.ai_${review}`, entityType: 'ai_compat_answer', entityId: id, before: { review: before.review, verdict: before.verdict, text: before.text }, after: { review: after.review, verdict, text } }, tx);
+    });
+    return this.adminAnswers('all');
+  }
+
   /** «Настройки → VITALO AI»: the settings, whether the key is set (never the key itself) and the spend. */
   async adminSettings(now = new Date()) {
     const sum = async (from: Date) => {
@@ -448,13 +529,22 @@ export class AiService {
       settings: await this.settings(),
       defaults: DEFAULT_AI_SETTINGS,
       key_set: this.model.ready(),
+      models: AI_MODELS.map((id) => ({ id, ...MODEL_PRICES[id] })),
       today: await sum(tashkentDayStart(now)),
       month: await sum(tashkentMonthStart(now)),
+      // the model was asked but its answer was not shown (a check failed, an error, a timeout): the specialist answered
+      month_failed: await this.prisma.ai_requests.count({ where: { created_at: { gte: tashkentMonthStart(now) }, status: { not: 'ok' } } }),
     };
   }
 }
 
 // ---------------- DTOs and controllers ----------------
+
+export class AiReviewDto {
+  @ApiProperty({ enum: ['approve', 'fix', 'hide'] }) @IsIn(['approve', 'fix', 'hide']) action!: 'approve' | 'fix' | 'hide';
+  @ApiPropertyOptional({ enum: ['compatible', 'spread', 'consult'] }) @IsOptional() @IsIn(['compatible', 'spread', 'consult']) verdict?: Verdict;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) text?: string;
+}
 
 export class AiSettingsDto {
   @ApiProperty({ example: { enabled: true, model: 'claude-haiku-5-5', monthly_budget_usd: 10, cart_daily_limit: 1, chat_daily_limit: 20 } }) @IsObject() settings!: Record<string, unknown>;
@@ -491,6 +581,19 @@ export class AiController {
 @Controller('staff/ai')
 export class AdminAiController {
   constructor(private readonly ai: AiService) {}
+
+  @Get('answers')
+  @RequirePermission('compat.view')
+  answers(@Query('filter') filter?: string) {
+    return this.ai.adminAnswers(filter === 'all' ? 'all' : 'new');
+  }
+
+  @Post('answers/:id/review')
+  @HttpCode(200)
+  @RequirePermission('compat.answer')
+  review(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: AiReviewDto) {
+    return this.ai.reviewAnswer(me.staff, id, dto);
+  }
 
   @Get('settings')
   @RequirePermission('settings.manage')

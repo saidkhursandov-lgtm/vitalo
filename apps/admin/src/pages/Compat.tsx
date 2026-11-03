@@ -16,6 +16,7 @@ import {
   RulesTab,
   SubstancesTab,
 } from "./CompatKnowledge";
+import { AiAnswersTab } from "./CompatAi";
 
 type Verdict = "compatible" | "spread" | "consult";
 type Lang = "ru" | "uz";
@@ -67,6 +68,7 @@ const LANG: Record<Lang, string> = { ru: "RU", uz: "UZ" };
 type Tab =
   | "pending"
   | "answered"
+  | "ai"
   | "saved"
   | "templates"
   | "rules"
@@ -75,6 +77,7 @@ type Tab =
 const TABS: [Tab, string][] = [
   ["pending", "Новые"],
   ["answered", "Отвеченные"],
+  ["ai", "AI-ответы"],
   ["saved", "Сохранённые сочетания"],
   ["templates", "Шаблоны"],
   ["rules", "Правила"],
@@ -105,7 +108,9 @@ export function Compat() {
           ))}
         </div>
       </PageHead>
-      {tab === "rules" ? (
+      {tab === "ai" ? (
+        <AiAnswersTab canEdit={answer} />
+      ) : tab === "rules" ? (
         <RulesTab canEdit={answer} canApprove={can("compat.rules.approve")} />
       ) : tab === "substances" ? (
         <SubstancesTab canEdit={answer} />

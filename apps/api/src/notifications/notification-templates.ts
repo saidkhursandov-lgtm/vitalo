@@ -32,6 +32,7 @@ export type TemplateName =
   | 'staff.finance_due_day'
   | 'staff.waitlist_new'
   | 'staff.compat_request'
+  | 'staff.ai_red'
   | 'compat.answered'
   | 'order.payment_reminder'
   | 'order.cod_confirmed'
@@ -329,6 +330,12 @@ Kutmoqda: ${p.count ?? 0}`,
     ru: (p: TemplatePayload) =>
       `Проверка совместимости\nЯзык клиента: ${p.client_lang === 'uz' ? 'узбекский (UZ)' : 'русский (RU)'}\n\nСостав корзины:\n${p.items ?? ''}\n\nКомментарий: ${p.comment || '—'}`,
     uz: (p: TemplatePayload) => `Moslikni tekshirish\n${p.items ?? ''}`,
+  },
+  // 3.8: VITALO AI answered «Нужна консультация» (admins and specialists, Russian): check it in «Совместимость → AI-ответы».
+  'staff.ai_red': {
+    ru: (p: TemplatePayload) =>
+      `VITALO AI: «Нужна консультация» — проверьте ответ в первую очередь\nЯзык клиента: ${p.client_lang === 'uz' ? 'узбекский (UZ)' : 'русский (RU)'}\n\nСостав корзины:\n${p.items ?? ''}\n\nАдминка → Совместимость → AI-ответы`,
+    uz: (p: TemplatePayload) => `VITALO AI: «Maslahat kerak»\n${p.items ?? ''}`,
   },
   // 3.4: the specialist's answer to the customer (bot + «Заказы» of the Mini App centre).
   'compat.answered': {

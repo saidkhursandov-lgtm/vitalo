@@ -16,8 +16,9 @@ import { BonusTeaserForm, HomeSettings } from './settings/Home';
 import { ManifestSettings } from './settings/Manifest';
 import { LabelSizeSettings } from './settings/LabelSize';
 import { LegalSettings } from './settings/Legal';
+import { VitaloAiSettings } from './settings/VitaloAi';
 
-const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', home: 'Главная', cart: 'Корзина', tariffs: 'Доставка', dicts: 'Справочники', print: 'Печать', docs: 'Документы', staff: 'Сотрудники' } as const;
+const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', home: 'Главная', cart: 'Корзина', tariffs: 'Доставка', dicts: 'Справочники', print: 'Печать', docs: 'Документы', ai: 'VITALO AI', staff: 'Сотрудники' } as const;
 type Tab = keyof typeof TABS;
 
 export function Settings() {
@@ -61,6 +62,7 @@ export function Settings() {
       {tab === 'dicts' && <DictionariesSettings />}
       {tab === 'print' && <LabelSizeSettings />}
       {tab === 'docs' && <LegalSettings />}
+      {tab === 'ai' && <VitaloAiSettings />}
       {tab === 'staff' && <Staff />}
     </>
   );

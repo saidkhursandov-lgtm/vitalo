@@ -447,3 +447,15 @@ textarea { resize: vertical; }
 .skin-price-eleven_eleven { color: var(--skin-orange-text); }
 .skin-price-sale { color: var(--skin-teal); }
 .camp-items td { vertical-align: top; }
+
+/* 3.8: «Совместимость → AI-ответы» and «Настройки → VITALO AI» */
+.row-urgent td { background: var(--bad-soft); }
+.row-urgent td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+.ops-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-top: 6px; }
+.ops-row .btn { white-space: nowrap; }
+.ai-answers-table td.ops { min-width: 190px; }
+.ai-answers-table .urgent-line { margin-bottom: 6px; }
+.meter { height: 8px; border-radius: 999px; background: var(--primary-soft); overflow: hidden; margin: 4px 0 8px; }
+.meter > span { display: block; height: 100%; background: var(--primary); }
+.meter > span.is-warn { background: var(--warn); }
+.meter > span.is-bad { background: var(--bad); }

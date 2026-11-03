@@ -187,6 +187,46 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     expect(fake.calls).toHaveLength(before);
   });
 
+  it('«AI-ответы»: red first with a bot message to admins; approve, fix and hide; a manager only looks', async () => {
+    await http().put('/api/staff/ai/settings').set(bearer(tokens.admin)).send({ settings: { monthly_budget_usd: 10 } }).expect(200);
+    const token = await customer();
+    await add(token, p.c.id);
+    await add(token, p.d.id);
+    fake.reply = goodReply('consult');
+    const res = (await check(token).expect(200)).body;
+    expect(res.answer.verdict).toBe('consult');
+    const id = res.answer.answer_id as string;
+    const red = await prisma.notifications.findMany({ where: { template: 'staff.ai_red' }, include: { staff: true } });
+    expect(red.length).toBeGreaterThan(0);
+    expect(red.every((n) => n.staff?.role === 'admin' || n.staff?.is_specialist)).toBe(true);
+
+    const list = (await http().get('/api/staff/ai/answers').set(bearer(tokens.manager)).expect(200)).body as { id: string; urgent: boolean; review: string; products: unknown[]; cost_usd: number }[];
+    expect(list[0]).toMatchObject({ id, urgent: true, review: 'new' });
+    expect(list[0].products).toHaveLength(2);
+    expect(list[0].cost_usd).toBeGreaterThan(0);
+    await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.manager)).send({ action: 'hide' }).expect(403);
+
+    // «Исправить»: the specialist's text and label become the saved answer of the set; the next customer gets it at once
+    await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.admin)).send({ action: 'fix', verdict: 'spread', text: '' }).expect(400);
+    const after = (await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.admin)).send({ action: 'fix', verdict: 'spread', text: 'Разнесите C и D на 2 часа.' }).expect(200)).body as { id: string; review: string }[];
+    expect(after.find((a) => a.id === id)).toMatchObject({ review: 'fixed' });
+    const saved = await prisma.compat_answers.findUniqueOrThrow({ where: { set_key_lang: { set_key: [p.c.id, p.d.id].sort().join(','), lang: 'ru' } } });
+    expect(saved).toMatchObject({ verdict: 'spread', text: 'Разнесите C и D на 2 часа.', enabled: true });
+    expect((await http().get('/api/staff/ai/answers').set(bearer(tokens.admin)).expect(200)).body.find((a: { id: string }) => a.id === id)).toBeUndefined();
+    const next = await customer();
+    await add(next, p.d.id);
+    await add(next, p.c.id);
+    expect((await check(next).expect(200)).body.result).toBe('instant');
+
+    // «Скрыть»: out of the cache; «Одобрить» — the AI text as is
+    await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.admin)).send({ action: 'hide' }).expect(200);
+    expect((await prisma.ai_compat_answers.findUniqueOrThrow({ where: { id } })).review).toBe('hidden');
+    await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.admin)).send({ action: 'approve' }).expect(200);
+    expect(await prisma.ai_compat_answers.findUniqueOrThrow({ where: { id } })).toMatchObject({ review: 'approved', saved_answer_id: saved.id });
+    expect(await prisma.audit_logs.count({ where: { entity_type: 'ai_compat_answer', entity_id: id } })).toBe(3);
+    await prisma.compat_answers.update({ where: { id: saved.id }, data: { enabled: false } });
+  });
+
   it('the home banner has the VITALO AI slide after the built-in ones (migration 20261110100000, safe to repeat)', async () => {
     // the test database is truncated and seeded before the run: the migration's own SQL is applied here, twice
     const sql = readFileSync(join(__dirname, '../prisma/migrations/20261110100000_stage38_ai_banner/migration.sql'), 'utf8');
