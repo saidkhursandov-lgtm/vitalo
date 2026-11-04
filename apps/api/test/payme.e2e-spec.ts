@@ -57,7 +57,7 @@ describe('Payme Merchant API (e2e)', () => {
         .send({ source: 'cart', ...addr.tashkent, payment_method: 'payme', recipient_name: 'Тест', recipient_phone: '90 123-45-67', address_text: 'ул. Тестовая, 1' })
         .expect(201)
     ).body;
-    return { order, token, product: p, amount: Number(order.totals.total_uzs) * 100, account: { order_id: order.order_number } };
+    return { order, token, product: p, amount: Number(order.totals.total_uzs) * 100, account: { order_id: order.order_number.replace(/\D/g, '') } };
   }
 
   beforeAll(async () => {
@@ -81,7 +81,7 @@ describe('Payme Merchant API (e2e)', () => {
 
   describe('access and settings', () => {
     it('wrong or missing key: -32504, nothing is touched', async () => {
-      const { account, amount } = await paymeOrder();
+      const { account, amount, order } = await paymeOrder();
       for (const headers of [auth('wrong-key'), {}, { Authorization: 'Bearer x' }]) {
         const r = await rpc('CheckPerformTransaction', { amount, account }, headers);
         expect(r.error?.code).toBe(-32504);
@@ -89,7 +89,7 @@ describe('Payme Merchant API (e2e)', () => {
       }
       const r = await rpc('CreateTransaction', { id: paymeId(), time: Date.now(), amount, account }, auth('wrong'));
       expect(r.error?.code).toBe(-32504);
-      expect(await prisma.payme_transactions.count({ where: { order: { order_number: account.order_id } } })).toBe(0);
+      expect(await prisma.payme_transactions.count({ where: { order: { order_number: order.order_number } } })).toBe(0);
     });
 
     it('unknown method -32601; the answer keeps the request id', async () => {
@@ -148,7 +148,7 @@ describe('Payme Merchant API (e2e)', () => {
       const start = (await http().post(`/api/payments/online/payme/orders/${order.id}/start`).set(bearer(token)).send({ lang: 'uz' }).expect(200)).body;
       expect(start.checkout_url.startsWith('https://checkout.test.paycom.uz/')).toBe(true);
       const decoded = Buffer.from(start.checkout_url.split('/').pop(), 'base64').toString('utf8');
-      expect(decoded).toBe(`m=${PAYME_ENV.PAYME_MERCHANT_ID};ac.order_id=${order.order_number};a=${amount};l=uz;c=https://t.me/vitalo_e2e_bot`);
+      expect(decoded).toBe(`m=${PAYME_ENV.PAYME_MERCHANT_ID};ac.order_id=${order.order_number.replace(/\D/g, '')};a=${amount};l=uz;c=https://t.me/vitalo_e2e_bot`);
       const again = (await http().post(`/api/payments/online/payme/orders/${order.id}/start`).set(bearer(token)).send({}).expect(200)).body;
       expect(again.payment_id).toBe(start.payment_id);
       expect(await prisma.payments.count({ where: { order_id: order.id } })).toBe(1);
@@ -174,10 +174,14 @@ describe('Payme Merchant API (e2e)', () => {
     });
 
     it('wrong amount -31001; unknown order -31050 (data order_id); no account -31050', async () => {
-      const { amount, account } = await paymeOrder();
+      const { amount, account, order } = await paymeOrder();
+      // digits only (agreed with Payme); the full number with VTL- is understood too
+      expect(account.order_id).toMatch(/^\d{12}$/);
+      expect((await rpc('CheckPerformTransaction', { amount, account: { order_id: order.order_number } })).result?.allow).toBe(true);
+      expect((await rpc('CheckPerformTransaction', { amount, account: { order_id: 'abc' } })).error?.code).toBe(-31050);
       expect((await rpc('CheckPerformTransaction', { amount: amount + 100, account })).error?.code).toBe(-31001);
       expect((await rpc('CheckPerformTransaction', { amount: amount - 100, account })).error?.code).toBe(-31001);
-      const missing = await rpc('CheckPerformTransaction', { amount, account: { order_id: 'VTL-19990101-9999' } });
+      const missing = await rpc('CheckPerformTransaction', { amount, account: { order_id: '199901019999' } });
       expect(missing.error).toMatchObject({ code: -31050, data: 'order_id' });
       expect(missing.error!.message.ru).toBeTruthy();
       expect((await rpc('CheckPerformTransaction', { amount, account: {} })).error?.code).toBe(-31050);

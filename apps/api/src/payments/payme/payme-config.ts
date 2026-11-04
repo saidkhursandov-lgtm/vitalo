@@ -40,6 +40,20 @@ export function paymeConfig(env: NodeJS.ProcessEnv = process.env): PaymeConfig {
 }
 
 /**
+ * Payme's account field `order_id` takes digits only (as agreed with Payme): VTL-20261103-0001 -> 202611030001,
+ * the same digits the customer sees in the order number.
+ */
+export const paymeAccount = (orderNumber: string) => orderNumber.replace(/\D/g, '');
+
+/** Back from Payme: 202611030001 -> VTL-20261103-0001; the full number is accepted too. Null = not an order number. */
+export function orderNumberFromAccount(value: string): string | null {
+  const v = value.trim().toUpperCase();
+  const digits = /^(\d{8})(\d{4,})$/.exec(v);
+  if (digits) return `VTL-${digits[1]}-${digits[2]}`;
+  return /^VTL-\d{8}-\d{4,}$/.test(v) ? v : null;
+}
+
+/**
  * The customer's payment page: base + base64("m=…;ac.order_id=…;a=…;l=…;c=…"). The amount is in tiyin (сум × 100);
  * c = where Payme sends the customer back after paying (the order screen of the Mini App).
  */
@@ -47,7 +61,7 @@ export function paymeCheckoutUrl(
   cfg: Pick<PaymeConfig, 'merchantId' | 'checkoutBase'>,
   p: { orderNumber: string; amountUzs: number; lang: 'ru' | 'uz'; returnUrl?: string | null },
 ): string {
-  const parts = [`m=${cfg.merchantId}`, `ac.order_id=${p.orderNumber}`, `a=${Math.round(p.amountUzs * 100)}`, `l=${p.lang}`];
+  const parts = [`m=${cfg.merchantId}`, `ac.order_id=${paymeAccount(p.orderNumber)}`, `a=${Math.round(p.amountUzs * 100)}`, `l=${p.lang}`];
   if (p.returnUrl) parts.push(`c=${p.returnUrl}`);
   return `${cfg.checkoutBase}/${Buffer.from(parts.join(';'), 'utf8').toString('base64')}`;
 }

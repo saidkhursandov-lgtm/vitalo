@@ -1,4 +1,4 @@
-import { paymeCheckoutUrl, paymeConfig, PAYME_CHECKOUT_LIVE, PAYME_CHECKOUT_TEST } from './payme-config';
+import { orderNumberFromAccount, paymeAccount, paymeCheckoutUrl, paymeConfig, PAYME_CHECKOUT_LIVE, PAYME_CHECKOUT_TEST } from './payme-config';
 import { fiscalGaps, paymeReceipt, type FiscalOrder } from './payme-fiscal';
 
 const cfg = { deliveryIkpu: '10112006002000000', deliveryPackageCode: '1209885', vatPercent: 12 };
@@ -22,7 +22,15 @@ describe('Payme link', () => {
     const url = paymeCheckoutUrl({ merchantId: 'M1', checkoutBase: PAYME_CHECKOUT_TEST }, { orderNumber: 'VTL-20261103-0001', amountUzs: 255_000, lang: 'ru', returnUrl: 'https://t.me/shop_bot' });
     const [base, b64] = [url.slice(0, url.lastIndexOf('/')), url.slice(url.lastIndexOf('/') + 1)];
     expect(base).toBe(PAYME_CHECKOUT_TEST);
-    expect(Buffer.from(b64, 'base64').toString()).toBe('m=M1;ac.order_id=VTL-20261103-0001;a=25500000;l=ru;c=https://t.me/shop_bot');
+    expect(Buffer.from(b64, 'base64').toString()).toBe('m=M1;ac.order_id=202611030001;a=25500000;l=ru;c=https://t.me/shop_bot');
+  });
+
+  it('order_id: digits only for Payme; both forms are understood back', () => {
+    expect(paymeAccount('VTL-20261103-0001')).toBe('202611030001');
+    expect(orderNumberFromAccount('202611030001')).toBe('VTL-20261103-0001');
+    expect(orderNumberFromAccount(' vtl-20261103-0001 ')).toBe('VTL-20261103-0001');
+    expect(orderNumberFromAccount('12345')).toBeNull();
+    expect(orderNumberFromAccount('abc')).toBeNull();
   });
 
   it('a bad VAT value falls back to 0', () => {

@@ -4,7 +4,7 @@ import { timingSafeEqual } from 'crypto';
 import { PAYME_CANCELLED_REASON_CODE } from '../../notifications/notification-templates';
 import { OrderLifecycleService } from '../../orders/order-lifecycle.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PAYME_TX_TIMEOUT_MS, paymeConfig } from './payme-config';
+import { orderNumberFromAccount, PAYME_TX_TIMEOUT_MS, paymeAccount, paymeConfig } from './payme-config';
 import { PAYME_ERRORS, PaymeError, paymeErrors } from './payme-errors';
 import { fiscalGaps, paymeReceipt, type FiscalOrder } from './payme-fiscal';
 
@@ -34,7 +34,7 @@ type Outcome = { result: unknown } | { error: PaymeError };
 
 /**
  * Payme Merchant API (JSON-RPC 2.0, https://developer.help.paycom.uz): one-time payments for an order, the account is
- * `order_id` = the order number (VTL-…). Payme calls, in this order:
+ * `order_id` = the digits of the order number (VTL-20261103-0001 -> 202611030001; the full form is accepted too). Payme calls, in this order:
  *   CheckPerformTransaction (can this order be paid with this amount? + the fiscal receipt) →
  *   CreateTransaction (the money is held) → PerformTransaction (paid: the order becomes «Оплачен») —
  *   or CancelTransaction (before: the order keeps waiting; after: the order is cancelled, Payme returns the money).
@@ -226,7 +226,7 @@ export class PaymeService {
           id: t.payme_id,
           time: Number(t.payme_time),
           amount: Number(t.amount_tiyin),
-          account: { order_id: t.order.order_number },
+          account: { order_id: paymeAccount(t.order.order_number) },
           create_time: Number(t.create_time),
           perform_time: Number(t.perform_time ?? 0),
           cancel_time: Number(t.cancel_time ?? 0),
@@ -315,6 +315,8 @@ export class PaymeService {
     const account = p.account as { order_id?: unknown } | undefined;
     const value = account?.order_id;
     if (typeof value !== 'string' && typeof value !== 'number') throw paymeErrors.orderNotFound();
-    return String(value).trim().toUpperCase();
+    const orderNumber = orderNumberFromAccount(String(value));
+    if (!orderNumber) throw paymeErrors.orderNotFound();
+    return orderNumber;
   }
 }

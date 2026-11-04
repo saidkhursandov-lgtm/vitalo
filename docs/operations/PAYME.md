@@ -7,7 +7,8 @@
 1. Покупатель выбирает «Payme» при оформлении. Способ виден, только когда в админке «Настройки → Оплата» для Payme
    стоит «Работает». Включить «Работает» можно, только если ключи есть в `.env`.
 2. Заказ создаётся «Ждёт оплаты». Экран `/orders/:id/payme` → кнопка «Оплатить через Payme» открывает
-   `checkout.paycom.uz` (в тесте `checkout.test.paycom.uz`) + base64(`m=…;ac.order_id=VTL-…;a=сумма в тийинах;l=ru|uz;c=https://t.me/<бот>`).
+   `checkout.paycom.uz` (в тесте `checkout.test.paycom.uz`) + base64(`m=…;ac.order_id=202611030001;a=сумма в тийинах;l=ru|uz;c=https://t.me/<бот>`).
+   `order_id` — только цифры номера заказа (так согласовано с Payme): `VTL-20261103-0001` → `202611030001`; сервер понимает и полную запись.
    Ссылка открывается только через `apps/miniapp/src/lib/telegram.ts` (`openLink`).
 3. Payme сам вызывает наш сервер: `POST https://api.vitalo.uz/api/payments/payme` (JSON-RPC 2.0, заголовок
    `Authorization: Basic base64("Paycom:" + PAYME_KEY)`).
