@@ -514,6 +514,10 @@ details.card[open] summary { margin-bottom: 4px; }
 .pay-option input { width: 22px; height: 22px; margin: 0; accent-color: var(--primary); flex: none; }
 .pay-option.is-disabled { cursor: default; align-items: center; background: var(--surface-2); border-color: var(--border); color: var(--muted); }
 .pay-option.is-disabled span:nth-child(2) { flex: 1; }
+/* Payme: the logo instead of a title; the logo keeps its own colours (D-19: no orange fill) */
+.pay-option-logo { display: block; height: 22px; width: auto; margin: 0 0 4px; }
+.pay-option.is-disabled .pay-option-logo { opacity: 0.5; }
+.btn img[aria-hidden] { flex: none; border-radius: 4px; background: #fff; }
 .soon-badge { flex: none; padding: 3px 10px; border-radius: 10px; background: var(--neutral-soft); color: var(--muted); font-size: 12px; font-weight: 600; }
 
 /* ---------- payment / orders / profile ---------- */

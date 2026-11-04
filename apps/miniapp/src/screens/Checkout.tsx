@@ -12,6 +12,7 @@ import { createIdempotencyKeys } from '../lib/idempotency';
 import { useAddressActions, useAddresses, useCartMapPick, useCartPromo, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
 import { PromoBox, type PromoApplyResult } from '../components/Promo';
 import { canRequestPhone, haptic, requestPhone } from '../lib/telegram';
+import { payPath } from '../lib/shop';
 import { track } from '../lib/analytics';
 import { PhoneIcon } from '../components/Icons';
 import type { Order, OrderPreview, PaymentMethodCode } from '../lib/types';
@@ -125,7 +126,11 @@ export function Checkout() {
   const codOption = preview.data?.payment_options;
   useEffect(() => {
     if (method === 'cod' && codOption && !codOption.cod) setMethod('card_transfer');
+    // Payme: a product without ИКПУ (or Payme switched off) — back to the card transfer
+    if (method === 'payme' && codOption && !codOption.payme) setMethod('card_transfer');
   }, [method, codOption]);
+  // Payme is a real method only in «Работает»; «Скоро» stays the logo row (D-20)
+  const paymeLive = shop.data?.checkout?.online?.payme === 'live';
 
   // 3.3: the code stopped fitting (another district, the cart changed…): it is removed, the customer sees why
   const rejected = preview.data?.promo_rejection;
@@ -229,8 +234,8 @@ export function Checkout() {
       void client.invalidateQueries({ queryKey: ['cart'] });
       void client.invalidateQueries({ queryKey: ['orders'] });
       void client.invalidateQueries({ queryKey: ['free-shipping'] }); // the first-order offer is gone now
-      // Cash on delivery has no transfer screen: the order waits for the manager's call
-      navigate(order.payment?.method === 'cod' ? `/orders/${order.id}` : `/orders/${order.id}/pay`, { replace: true });
+      // Cash on delivery has no transfer screen: the order waits for the manager's call; Payme has its own screen
+      navigate(order.payment?.method === 'cod' ? `/orders/${order.id}` : payPath(order.id, order.payment?.method), { replace: true });
     } catch (err) {
       haptic('error');
       const code = err instanceof ApiError ? err.code : undefined;
@@ -238,7 +243,7 @@ export function Checkout() {
       const promoText = code === 'PROMO_REJECTED' ? String(lang === 'uz' ? body.message_uz : body.message_ru) : null;
       setSubmitError(promoText ?? (isNetworkError(err) ? `${errorText(lang, code)} ${t('checkout.retrySafe')}` : errorText(lang, code)));
       if (code === 'PROMO_REJECTED' && buyId) setBuyPromo(null);
-      if (code === 'PRICE_CHANGED' || code === 'INSUFFICIENT_STOCK' || code === 'PROMO_REJECTED') {
+      if (code === 'PRICE_CHANGED' || code === 'INSUFFICIENT_STOCK' || code === 'PROMO_REJECTED' || code === 'PAYME_RECEIPT_INCOMPLETE') {
         void preview.refetch();
         void client.invalidateQueries({ queryKey: ['cart'] });
       }
@@ -335,6 +340,16 @@ export function Checkout() {
         <h2>{t('checkout.payment')}</h2>
         {/* 3.5: Payme / Click / Uzum «Скоро подключим» above the working methods; the card transfer stays chosen */}
         <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon')} />
+        {/* Payme «Работает»: a real method; a product without ИКПУ shows it disabled with the reason */}
+        {paymeLive && codOption && codOption.payme_unavailable !== 'off' && (
+          <label className={`pay-option pay-option-online ${method === 'payme' ? 'is-on' : ''} ${codOption.payme ? '' : 'is-disabled'}`}>
+            <input type="radio" name="payment" checked={method === 'payme'} disabled={!codOption.payme} onChange={() => setMethod('payme')} />
+            <span>
+              <img className="pay-option-logo" src="/payment/payme.png" alt={t('pay.paymeTitle')} height={22} />
+              <span className="hint small block">{codOption.payme ? t('pay.paymeDesc') : t('pay.paymeIkpu')}</span>
+            </span>
+          </label>
+        )}
         <label className={`pay-option ${method === 'card_transfer' ? 'is-on' : ''}`}>
           <input type="radio" name="payment" checked={method === 'card_transfer'} onChange={() => setMethod('card_transfer')} />
           <span>
@@ -365,7 +380,7 @@ export function Checkout() {
             </span>
           </label>
         )}
-        <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : 'checkout.bankTransferHint')}</p>
+        <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : method === 'payme' ? 'pay.paymeHint' : 'checkout.bankTransferHint')}</p>
       </section>
 
       <section className="card summary">

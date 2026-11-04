@@ -576,6 +576,10 @@ model products {
   intake_memo_uz           String?
   admin_note               String? // staff comment, e.g. «сверить при следующей поставке»
 
+  // Payme: fiscal receipt data (the tax office). ИКПУ (MXIK, 17 digits) and the package code from tasnif.soliq.uz
+  ikpu_code    String?
+  package_code String?
+
   brand_entry        brands?        @relation(fields: [brand_id], references: [id])
   manufacturer_entry manufacturers? @relation(fields: [manufacturer_id], references: [id])
   country_entry      countries?     @relation(fields: [country_id], references: [id])
@@ -1354,6 +1358,7 @@ model orders {
   tasks           manager_tasks[]
   notifications   notifications[]
   receipts        payment_receipts[]
+  payme_txs       payme_transactions[]
 
   @@index([user_id, status, created_at])
   @@index([status, reserved_until]) // reservation-expiry job
@@ -1448,9 +1453,33 @@ model payments {
   method              payment_methods                @relation(fields: [payment_method_id], references: [id])
   attempts            payment_attempts[]
   manual              manual_payment_confirmations[]
+  payme_txs           payme_transactions[]
 
   @@unique([payment_method_id, provider_payment_id]) // webhook duplicate protection
   @@index([order_id, status])
+}
+
+/// Payme (Merchant API): one row per Payme transaction. state 1 created, 2 performed, -1 cancelled before the
+/// payment, -2 cancelled after it. Times are milliseconds (as Payme sends and expects them).
+model payme_transactions {
+  id           String    @id @default(uuid()) @db.Uuid
+  payme_id     String    @unique
+  order_id     String    @db.Uuid
+  payment_id   String?   @db.Uuid
+  amount_tiyin BigInt
+  state        Int
+  payme_time   BigInt // `time` from Payme's CreateTransaction (GetStatement filters by it)
+  create_time  BigInt
+  perform_time BigInt?
+  cancel_time  BigInt?
+  reason       Int?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @default(now()) @updatedAt
+  order        orders    @relation(fields: [order_id], references: [id])
+  payment      payments? @relation(fields: [payment_id], references: [id])
+
+  @@index([order_id, state])
+  @@index([payme_time])
 }
 
 model payment_attempts {

@@ -12,6 +12,8 @@ interface TelegramWebApp {
   requestContact?(cb: (shared: boolean, res?: { responseUnsafe?: { contact?: { phone_number?: string } } }) => void): void;
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
+  /** Opens an outside link (Telegram's browser or the system one); the Mini App stays open behind it. */
+  openLink?(url: string, options?: { try_instant_view?: boolean }): void;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
   HapticFeedback?: { notificationOccurred(type: 'error' | 'success' | 'warning'): void; impactOccurred?(style: 'light' | 'medium' | 'heavy'): void };
   /** Bot API 8.0+: the location with Telegram's own permission dialog. */
@@ -109,6 +111,16 @@ function browserLocation(): Promise<LocationResult> {
       { enableHighAccuracy: true, timeout: LOCATION_TIMEOUT_MS, maximumAge: 60_000 },
     ),
   );
+}
+
+/**
+ * An outside page, e.g. Payme's payment page: inside Telegram through openLink (the Mini App keeps running and can
+ * see the payment when the customer comes back); in a browser a new tab. Call it inside the tap.
+ */
+export function openLink(url: string) {
+  const app = telegram();
+  if (app?.openLink) app.openLink(url);
+  else window.open(url, '_blank', 'noopener');
 }
 
 /** A light tap (quick add, quantity change). */

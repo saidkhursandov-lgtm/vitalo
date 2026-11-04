@@ -27,6 +27,9 @@ import { AnalyticsService } from '../analytics/analytics.module';
 import { BotInfoService } from './receipts';
 import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
 import { PromoCodesService } from '../promo/promo.service';
+import { paymeReceiptGaps, paymeSwitchedOn, paymeUnavailable } from '../payments/payme/payme-availability';
+
+const PAYME_METHOD = 'payme';
 
 type Tx = Prisma.TransactionClient;
 
@@ -106,8 +109,10 @@ export class OrdersService {
     const totals = calc.totals;
     const cod = await this.codAvailable(this.prisma, dto.region_id, totals.total_uzs);
     // «Оплата при получении» is offered only when it is possible for this address and total (Tashkent, the limit).
-    const payment_options = { cod: cod === 'ok', cod_unavailable: cod === 'ok' ? null : cod };
-    const codBlocked = dto.payment_method === COD_METHOD && cod !== 'ok';
+    // Payme: only when «Работает» and every product (and a paid delivery) has ИКПУ for the fiscal receipt
+    const payme = await paymeUnavailable(this.prisma, await this.settings.getOrDefault('checkout_options'), lines.map((l) => l.product_id), totals.delivery_cost_uzs);
+    const payment_options = { cod: cod === 'ok', cod_unavailable: cod === 'ok' ? null : cod, payme: payme === null, payme_unavailable: payme };
+    const codBlocked = (dto.payment_method === COD_METHOD && cod !== 'ok') || (dto.payment_method === PAYME_METHOD && payme !== null);
 
     return {
       items: priced.map((l) => ({ ...l, discount_uzs: calc.snapshot.lines.find((s) => s.product_id === l.product_id)?.promo_discount_uzs ?? 0 })),
@@ -404,6 +409,17 @@ export class OrdersService {
         throw new UnprocessableEntityException({ code: 'COD_UNAVAILABLE', reason: why, message: 'Cash on delivery is available only in Tashkent (and up to the limit)' });
       }
     }
+    if (method.code === PAYME_METHOD) {
+      const gaps = await paymeReceiptGaps(tx, lines.map((l) => l.product_id), totals.delivery_cost_uzs);
+      if (gaps.skus.length || gaps.delivery) {
+        throw new UnprocessableEntityException({
+          code: 'PAYME_RECEIPT_INCOMPLETE',
+          skus: gaps.skus,
+          delivery: gaps.delivery,
+          message: 'Payme needs an IKPU code for every product of the order; choose another payment method',
+        });
+      }
+    }
 
     const now = new Date();
     const orderNumber = await this.nextOrderNumber(tx, now);
@@ -538,8 +554,10 @@ export class OrdersService {
 
   private async resolvePaymentMethod(db: Tx | PrismaService, code: string) {
     const method = await db.payment_methods.findUnique({ where: { code } });
+    // Payme: its row stays as it is; the switch is «Работает» in Настройки → Оплата (+ the keys in .env)
+    if (method && code === PAYME_METHOD && paymeSwitchedOn(await this.settings.getOrDefault('checkout_options'))) return method;
     if (!method || method.status !== 'enabled' || !(isManualMethod(code) || code === COD_METHOD)) {
-      // Online providers (Payme/Click/Uzum) come in the payments stage.
+      // Click / Uzum are not connected yet.
       throw new UnprocessableEntityException({ code: 'PAYMENT_METHOD_UNAVAILABLE', message: `Payment method ${code} is not available` });
     }
     return method;

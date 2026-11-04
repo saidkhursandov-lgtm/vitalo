@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { OrderLifecycleService } from '../../orders/order-lifecycle.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../../settings/settings.service';
+import { paymeReceiptGaps } from '../payme/payme-availability';
 import {
   isOnlineProvider,
   ONLINE_GATEWAYS,
@@ -22,7 +23,8 @@ const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
  *   2. the Mini App sends the customer to checkout_url;
  *   3. callback() — the system confirms (its module checks the signature and the amount);
  *   4. the order is marked paid (OrderLifecycleService.confirmOnlinePayment), exactly once.
- * In 2.1 no system module is registered, so start() and callback() answer «не подключено».
+ * Payme is registered (Merchant API: its confirmations come to POST /api/payments/payme); Click and Uzum are not,
+ * so for them start() and callback() answer «не подключено».
  */
 @Injectable()
 export class OnlinePaymentsService {
@@ -73,21 +75,40 @@ export class OnlinePaymentsService {
     if (!gateway || !this.connected(provider) || (await this.modes())[provider] !== 'live') {
       throw new ConflictException({ code: 'ONLINE_PAYMENT_NOT_CONNECTED', message: `${PROVIDER_NAMES[provider]} is not connected yet` });
     }
-    const order = await this.prisma.orders.findFirst({ where: { id: orderId, user_id: userId } });
+    const order = await this.prisma.orders.findFirst({ where: { id: orderId, user_id: userId }, include: { items: { select: { product_id: true } } } });
     if (!order) throw new NotFoundException('Order not found');
-    if (order.status !== 'awaiting_payment') throw new ConflictException({ code: 'ORDER_NOT_AWAITING_PAYMENT', message: 'Order does not wait for a payment' });
+    if (order.status !== 'awaiting_payment' || order.payment_status !== 'payment_pending') {
+      throw new ConflictException({ code: 'ORDER_NOT_AWAITING_PAYMENT', message: 'Order does not wait for a payment' });
+    }
+    if (order.reserved_until && order.reserved_until <= new Date()) {
+      throw new ConflictException({ code: 'RESERVATION_EXPIRED', message: 'Payment time is over; the order will be cancelled' });
+    }
     const method = await this.prisma.payment_methods.findUnique({ where: { code: provider } });
     if (!method) throw new ConflictException({ code: 'ONLINE_PAYMENT_NOT_CONNECTED', message: 'Payment method row is missing' });
+    if (provider === 'payme') {
+      const gaps = await paymeReceiptGaps(this.prisma, order.items.map((i) => i.product_id), Number(order.delivery_cost_uzs));
+      if (gaps.skus.length || gaps.delivery) {
+        throw new ConflictException({ code: 'PAYME_RECEIPT_INCOMPLETE', skus: gaps.skus, delivery: gaps.delivery, message: 'Payme needs an IKPU code for every product' });
+      }
+    }
 
-    const payment = await this.prisma.payments.create({
-      data: { order_id: order.id, payment_method_id: method.id, amount_uzs: order.total_uzs, attempts: { create: { attempt_no: 1 } } },
-    });
+    // The order was placed with this method: its pending payment is reused, so «Оплатить» pressed again gives the
+    // same payment and link (Payme then reports the money for the order number, not for a payment row).
+    const payment =
+      (await this.prisma.payments.findFirst({ where: { order_id: order.id, payment_method_id: method.id, status: 'payment_pending' }, orderBy: { created_at: 'desc' } })) ??
+      (await this.prisma.payments.create({
+        data: { order_id: order.id, payment_method_id: method.id, amount_uzs: order.total_uzs, attempts: { create: { attempt_no: 1 } } },
+      }));
     const created = await gateway.createPayment({ paymentId: payment.id, orderNumber: order.order_number, amountUzs: Number(order.total_uzs), lang });
     await this.prisma.payments.update({
       where: { id: payment.id },
-      data: { provider_payment_id: created.providerPaymentId, checkout_url: created.checkoutUrl, expires_at: created.expiresAt ?? null },
+      data: {
+        ...(created.providerPaymentId && { provider_payment_id: created.providerPaymentId }),
+        checkout_url: created.checkoutUrl,
+        expires_at: created.expiresAt ?? order.reserved_until ?? null,
+      },
     });
-    return { payment_id: payment.id, checkout_url: created.checkoutUrl };
+    return { payment_id: payment.id, checkout_url: created.checkoutUrl, pay_until: order.reserved_until };
   }
 
   /** Step 3: a confirmation from the payment system. Not connected -> 501 «не подключено», nothing is stored. */

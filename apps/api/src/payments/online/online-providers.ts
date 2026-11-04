@@ -46,7 +46,8 @@ export function onlineModes(saved: { online?: Partial<OnlineModes> | null } | nu
 
 /** What a system module returns when a payment is created: the page the customer is sent to. */
 export interface CreatedOnlinePayment {
-  providerPaymentId: string;
+  /** Payme: unknown until Payme creates its transaction (CreateTransaction) */
+  providerPaymentId?: string;
   checkoutUrl: string;
   expiresAt?: Date;
 }
@@ -75,5 +76,5 @@ export interface OnlinePaymentGateway {
   handleCallback(input: { headers: Record<string, string | string[] | undefined>; body: unknown; rawBody?: Buffer }): Promise<CallbackReply>;
 }
 
-/** DI token: the list of registered system modules (empty in 2.1). */
+/** DI token: the list of registered system modules (Payme). */
 export const ONLINE_GATEWAYS = Symbol('ONLINE_GATEWAYS');

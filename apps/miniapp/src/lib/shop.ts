@@ -26,6 +26,9 @@ export function paymentCheckWhen(hours: { from: string; to: string }, now: Date 
   return 'now';
 }
 
+/** «Оплатить»: Payme has its own screen, a transfer the card / requisites screen. */
+export const payPath = (orderId: string, method: string | null | undefined) => `/orders/${orderId}/${method === 'payme' ? 'payme' : 'pay'}`;
+
 /** Opens the support chat inside Telegram (or a new tab in a browser). */
 export function openSupport(url: string | null | undefined) {
   if (!url) return;

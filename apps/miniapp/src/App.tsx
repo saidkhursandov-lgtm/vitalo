@@ -20,6 +20,7 @@ import { Home } from './screens/Home';
 import { OrderDetail, Orders } from './screens/Orders';
 import { Notifications } from './screens/Notifications';
 import { Payment } from './screens/Payment';
+import { PaymePayment } from './screens/PaymePayment';
 import { Product } from './screens/Product';
 import { Profile } from './screens/Profile';
 import { Search } from './screens/Search';
@@ -96,6 +97,7 @@ function Shop() {
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/pay" element={<Payment />} />
+        <Route path="orders/:id/payme" element={<PaymePayment />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="profile" element={<Profile />} />
         <Route path="profile/addresses" element={<Addresses />} />

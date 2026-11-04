@@ -8,6 +8,9 @@ import { CurrentAuth, SessionGuard } from '../../auth/session.guard';
 import { OrdersModule } from '../../orders/orders.module';
 import { ONLINE_GATEWAYS, type OnlinePaymentGateway } from './online-providers';
 import { OnlinePaymentsService } from './online-payments.service';
+import { PaymeController } from '../payme/payme.controller';
+import { PaymeGateway } from '../payme/payme.gateway';
+import { PaymeService } from '../payme/payme.service';
 
 class StartOnlinePaymentDto {
   @IsOptional() @IsIn(['ru', 'uz']) lang?: 'ru' | 'uz';
@@ -41,13 +44,16 @@ export class OnlinePaymentsController {
   }
 }
 
-/** Registered system modules (Payme, Click, Uzum) go here, each one separately; none in 2.1. */
-const GATEWAYS: OnlinePaymentGateway[] = [];
-
+/** Registered system modules (Payme, Click, Uzum) go here, each one separately: Payme (Merchant API) is connected. */
 @Module({
   imports: [AuthModule, OrdersModule],
-  controllers: [OnlinePaymentsController],
-  providers: [OnlinePaymentsService, { provide: ONLINE_GATEWAYS, useValue: GATEWAYS }],
+  controllers: [OnlinePaymentsController, PaymeController],
+  providers: [
+    OnlinePaymentsService,
+    PaymeService,
+    PaymeGateway,
+    { provide: ONLINE_GATEWAYS, useFactory: (payme: PaymeGateway): OnlinePaymentGateway[] => [payme], inject: [PaymeGateway] },
+  ],
   exports: [OnlinePaymentsService],
 })
 export class OnlinePaymentsModule {}

@@ -6,6 +6,7 @@ import { SystemErrorsService } from '../notifications/system-errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { OrderLifecycleService } from './order-lifecycle.service';
+import { PAYME_TX_TIMEOUT_MS } from '../payments/payme/payme-config';
 
 const BATCH = 100;
 const COD_REMINDER_HOURS = 3;
@@ -185,6 +186,9 @@ export class ReservationExpiryService {
         payment_status: 'payment_pending',
         reserved_until: { lt: now },
         payments: { none: { manual: { some: { customer_confirmed_at: { not: null } } } } },
+        // Payme holds the customer's money (CreateTransaction) and is about to confirm or cancel it: wait for it
+        // (at most 12 hours, then Payme's own rule cancels the transaction)
+        payme_txs: { none: { state: 1, created_at: { gt: new Date(now.getTime() - PAYME_TX_TIMEOUT_MS) } } },
       },
       select: { id: true },
       orderBy: { reserved_until: 'asc' },
@@ -196,9 +200,11 @@ export class ReservationExpiryService {
       const result = await this.prisma.$transaction(async (tx) => {
         const order = await this.lifecycle.lockOrder(tx, id);
         // Re-check under the lock: it may have been paid, cancelled or reported as paid meanwhile.
-        const reported = await tx.manual_payment_confirmations.count({
-          where: { payment: { order_id: id }, customer_confirmed_at: { not: null } },
-        });
+        const reported =
+          (await tx.manual_payment_confirmations.count({
+            where: { payment: { order_id: id }, customer_confirmed_at: { not: null } },
+          })) +
+          (await tx.payme_transactions.count({ where: { order_id: id, state: 1, created_at: { gt: new Date(now.getTime() - PAYME_TX_TIMEOUT_MS) } } }));
         const stillExpired =
           (order.status === 'new' || order.status === 'awaiting_payment') &&
           order.payment_status === 'payment_pending' &&

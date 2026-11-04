@@ -150,6 +150,8 @@ export const ADMIN_BUTTON = 'Открыть в админке';
 
 /** Stored instead of a text when the system cancelled an unpaid order; rendered in the customer's language. */
 export const EXPIRED_REASON_CODE = '@expired';
+/** Payme: the payment system cancelled a paid order's payment and returns the money itself. */
+export const PAYME_CANCELLED_REASON_CODE = '@payme_cancelled';
 
 function reasonLine(p: TemplatePayload, lang: Lang): string {
   if (!p.reason) return '';
@@ -158,7 +160,11 @@ function reasonLine(p: TemplatePayload, lang: Lang): string {
       ? lang === 'uz'
         ? 'buyurtma belgilangan muddatda to‘lanmadi'
         : 'заказ не был оплачен вовремя'
-      : p.reason;
+      : p.reason === PAYME_CANCELLED_REASON_CODE
+        ? lang === 'uz'
+          ? 'to‘lov Payme’da bekor qilindi, pul kartangizga qaytariladi'
+          : 'оплата отменена в Payme, деньги вернутся на карту'
+        : p.reason;
   return lang === 'uz' ? `\nSabab: ${text}` : `\nПричина: ${text}`;
 }
 

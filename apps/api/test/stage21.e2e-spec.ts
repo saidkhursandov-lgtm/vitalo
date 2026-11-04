@@ -72,7 +72,9 @@ describe('Stage 2.1 (e2e)', () => {
       const opts = (await get()).body;
       expect(opts.online).toEqual({ payme: 'soon', click: 'soon', uzum: 'soon' });
       expect(opts.show_online_soon).toBe(true);
-      expect(opts.online_status.payme).toEqual({ keys_present: expect.any(Boolean), module_ready: false, can_go_live: false });
+      // Payme's module is connected, but the tests have no keys (test-env.ts); Click has neither
+      expect(opts.online_status.payme).toEqual({ keys_present: false, module_ready: true, can_go_live: false });
+      expect(opts.online_status.click).toEqual({ keys_present: false, module_ready: false, can_go_live: false });
       const token = await newCustomer();
       const shop = (await http().get('/api/catalog/texts').set(bearer(token)).expect(200)).body;
       expect(shop.checkout.online).toEqual({ payme: 'soon', click: 'soon', uzum: 'soon' });

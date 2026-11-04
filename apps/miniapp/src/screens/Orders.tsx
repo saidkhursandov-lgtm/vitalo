@@ -6,7 +6,7 @@ import { api, ApiError } from '../lib/api';
 import { dateTime, money, nameOf, orderNo, prettyPhone } from '../lib/format';
 import { errorText, statusKey, useI18n } from '../lib/i18n';
 import { useOrder, useOrders, useShopTexts } from '../lib/queries';
-import { daysText } from '../lib/shop';
+import { daysText, payPath } from '../lib/shop';
 import { haptic } from '../lib/telegram';
 import { useConfirm } from '../components/Confirm';
 import { SupportButton } from '../components/Support';
@@ -160,8 +160,8 @@ export function OrderDetail() {
       {unpaid && reported && <p className="hint small">{t('orders.checkingNoCancel')}</p>}
 
       <div className="actions">
-        {unpaid && !reported && (o.payment?.method === 'card_transfer' || o.payment?.method === 'bank_transfer') && (
-          <Link to={`/orders/${o.id}/pay`} className="btn btn-block">
+        {unpaid && !reported && (o.payment?.method === 'card_transfer' || o.payment?.method === 'bank_transfer' || o.payment?.method === 'payme') && (
+          <Link to={payPath(o.id, o.payment?.method)} className="btn btn-block">
             {t('orders.pay')}
           </Link>
         )}
