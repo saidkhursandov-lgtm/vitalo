@@ -12,7 +12,6 @@ export const PAYME_ERRORS = {
   // -31050…-31099: problems with the account (our order); `data` names the field — order_id
   orderNotFound: -31050,
   orderNotPayable: -31051,
-  orderBusy: -31052,
   orderNoFiscal: -31053,
 } as const;
 
@@ -53,12 +52,6 @@ export const paymeErrors = {
     new PaymeError(
       PAYME_ERRORS.orderNotPayable,
       m('Заказ уже оплачен, отменён или время оплаты истекло', 'Buyurtma to‘langan, bekor qilingan yoki to‘lov muddati tugagan', 'The order is paid, cancelled or its payment time is over'),
-      'order_id',
-    ),
-  orderBusy: () =>
-    new PaymeError(
-      PAYME_ERRORS.orderBusy,
-      m('Заказ ожидает оплаты по другой транзакции', 'Buyurtma boshqa tranzaksiya bo‘yicha to‘lovni kutmoqda', 'The order is waiting for another transaction'),
       'order_id',
     ),
   orderNoFiscal: () =>

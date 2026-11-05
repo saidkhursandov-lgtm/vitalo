@@ -127,7 +127,8 @@ export class PaymeService {
 
       await this.payable(tx, orderId, amount);
       const busy = await tx.payme_transactions.findFirst({ where: { order_id: orderId, state: PAYME_STATE.created } });
-      if (busy && !(await this.expireIfOld(tx, busy))) return { error: paymeErrors.orderBusy() };
+      // one-time account: another transaction already waits -> -31008, as the Payme sandbox expects
+      if (busy && !(await this.expireIfOld(tx, busy))) return { error: paymeErrors.cannotPerform() };
 
       const payment = await this.pendingPayment(tx, orderId);
       const now = Date.now();

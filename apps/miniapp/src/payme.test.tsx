@@ -14,7 +14,7 @@ vi.mock('./lib/telegram', async (orig) => {
   return { ...real, openLink: (u: string) => tg.opened.push(u) };
 });
 
-const CHECKOUT = 'https://checkout.test.paycom.uz/bT0xMjM7YWMub3JkZXJfaWQ9VlRMLTE7YT0xMDA7bD1ydQ==';
+const CHECKOUT = 'https://test.paycom.uz/bT0xMjM7YWMub3JkZXJfaWQ9VlRMLTE7YT0xMDA7bD1ydQ==';
 let order: Order;
 let starts: { lang: string }[];
 let startError: { code: string } | null;

@@ -169,7 +169,7 @@ describe('Payme Merchant API (e2e)', () => {
         expect(sp.payment_options).toMatchObject({ payme: true, payme_unavailable: null });
         const order = (await http().post('/api/orders').set(bearer(staff)).set('Idempotency-Key', randomUUID()).send(place).expect(201)).body;
         const start = (await http().post(`/api/payments/online/payme/orders/${order.id}/start`).set(bearer(staff)).send({}).expect(200)).body;
-        expect(start.checkout_url.startsWith('https://checkout.test.paycom.uz/')).toBe(true);
+        expect(start.checkout_url.startsWith('https://test.paycom.uz/')).toBe(true);
 
         // blocked staff: like any customer
         await prisma.staff_users.update({ where: { telegram_user_id: BigInt(staffTg) }, data: { status: 'blocked' } });
@@ -182,11 +182,11 @@ describe('Payme Merchant API (e2e)', () => {
       }
     });
 
-    it('the link: checkout.test.paycom.uz + base64(m;ac.order_id;a in tiyin;l;c); the same payment when pressed again', async () => {
+    it('the link: test.paycom.uz (sandbox) + base64(m;ac.order_id;a in tiyin;l;c); the same payment when pressed again', async () => {
       const { order, token, amount } = await paymeOrder();
       expect(order.status).toBe('awaiting_payment');
       const start = (await http().post(`/api/payments/online/payme/orders/${order.id}/start`).set(bearer(token)).send({ lang: 'uz' }).expect(200)).body;
-      expect(start.checkout_url.startsWith('https://checkout.test.paycom.uz/')).toBe(true);
+      expect(start.checkout_url.startsWith('https://test.paycom.uz/')).toBe(true);
       const decoded = Buffer.from(start.checkout_url.split('/').pop(), 'base64').toString('utf8');
       expect(decoded).toBe(`m=${PAYME_ENV.PAYME_MERCHANT_ID};ac.order_id=${order.order_number.replace(/\D/g, '')};a=${amount};l=uz;c=https://t.me/vitalo_e2e_bot`);
       const again = (await http().post(`/api/payments/online/payme/orders/${order.id}/start`).set(bearer(token)).send({}).expect(200)).body;
@@ -274,11 +274,11 @@ describe('Payme Merchant API (e2e)', () => {
       expect((await rpc('CreateTransaction', { id: paymeId(), time: Date.now(), amount, account })).error?.code).toBe(-31051);
     });
 
-    it('a second transaction for the same order while the first one waits: -31052', async () => {
+    it('a second transaction for the same order while the first one waits: -31008 (Payme sandbox)', async () => {
       const { amount, account } = await paymeOrder();
       expect((await rpc('CreateTransaction', { id: paymeId(), time: Date.now(), amount, account })).result?.state).toBe(1);
       const second = await rpc('CreateTransaction', { id: paymeId(), time: Date.now(), amount, account });
-      expect(second.error).toMatchObject({ code: -31052, data: 'order_id' });
+      expect(second.error?.code).toBe(-31008);
     });
 
     it('wrong amount on create -31001; unknown transaction -31003 for perform / cancel / check', async () => {

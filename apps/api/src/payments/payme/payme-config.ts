@@ -2,7 +2,7 @@
  * Payme (Merchant API) settings. Everything comes from .env; the key never leaves it (not in the DB, logs or answers).
  *   PAYME_MERCHANT_ID — the cash desk id from Payme Business (it is also in the customer's payment link);
  *   PAYME_KEY         — the cash desk key: the test key while PAYME_TEST_MODE=true, the live key after;
- *   PAYME_TEST_MODE   — true: links go to the Payme sandbox (checkout.test.paycom.uz);
+ *   PAYME_TEST_MODE   — true: links go to the Payme sandbox (test.paycom.uz, as in Payme docs «Песочница»);
  *   PAYME_DELIVERY_IKPU, PAYME_DELIVERY_PACKAGE_CODE — the receipt line «Доставка» (ИКПУ of the delivery service);
  *   PAYME_VAT_PERCENT — VAT in the receipt for every line (0 when the shop does not pay VAT).
  */
@@ -17,7 +17,8 @@ export interface PaymeConfig {
 }
 
 export const PAYME_CHECKOUT_LIVE = 'https://checkout.paycom.uz';
-export const PAYME_CHECKOUT_TEST = 'https://checkout.test.paycom.uz';
+/** Payme docs («Песочница»): «URL отправки чека в песочницу: https://test.paycom.uz» (checkout.test.paycom.uz answers «Поставщик не найден»). */
+export const PAYME_CHECKOUT_TEST = 'https://test.paycom.uz';
 
 /** Payme's rule: a created transaction that was not performed within 12 hours is cancelled (reason 4). */
 export const PAYME_TX_TIMEOUT_MS = 12 * 3600_000;
