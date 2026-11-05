@@ -16,7 +16,7 @@ export interface ShortNamed {
 }
 
 export type OnlineProvider = 'payme' | 'click' | 'uzum';
-export type OnlineMode = 'hidden' | 'soon' | 'live';
+export type OnlineMode = 'hidden' | 'soon' | 'test' | 'live';
 
 export interface UserProfile {
   id: string;

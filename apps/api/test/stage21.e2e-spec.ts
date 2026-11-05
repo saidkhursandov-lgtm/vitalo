@@ -86,6 +86,8 @@ describe('Stage 2.1 (e2e)', () => {
 
       const live = await put({ ...base, online: { payme: 'live', click: 'hidden', uzum: 'soon' } }).expect(400);
       expect(live.body).toMatchObject({ code: 'ONLINE_PROVIDER_NOT_CONNECTED', provider: 'payme' });
+      // «Тест (сотрудники)» takes real payments too: the same keys are needed
+      expect((await put({ ...base, online: { payme: 'test', click: 'hidden', uzum: 'soon' } }).expect(400)).body).toMatchObject({ code: 'ONLINE_PROVIDER_NOT_CONNECTED', provider: 'payme' });
       expect(live.body.message).toContain('Payme нельзя включить');
       await put({ ...base, online: { payme: 'maybe', click: 'hidden', uzum: 'soon' } }).expect(400);
 

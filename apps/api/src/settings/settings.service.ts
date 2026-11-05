@@ -38,7 +38,7 @@ export interface CheckoutOptions {
   cod_max_total_uzs: number | null;
   show_online_soon: boolean;
   first_order_free_delivery: boolean;
-  online?: Partial<Record<'payme' | 'click' | 'uzum', 'hidden' | 'soon' | 'live'>>;
+  online?: Partial<Record<'payme' | 'click' | 'uzum', 'hidden' | 'soon' | 'test' | 'live'>>;
 }
 
 /** Physical ID label paper (XP-365B: print width up to 76 mm). */

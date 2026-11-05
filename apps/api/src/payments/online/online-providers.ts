@@ -7,8 +7,12 @@
 export const ONLINE_PROVIDERS = ['payme', 'click', 'uzum'] as const;
 export type OnlineProvider = (typeof ONLINE_PROVIDERS)[number];
 
-/** hidden = not shown at checkout; soon = shown, a tap explains it is coming; live = a real payment method. */
-export const ONLINE_MODES = ['hidden', 'soon', 'live'] as const;
+/**
+ * hidden = not shown at checkout; soon = shown, a tap explains it is coming; live = a real payment method;
+ * test = a real payment method for staff only (their Telegram account is an active staff account), «Скоро» for
+ * everybody else — to check a system on the live server (Payme's sandbox and their own tests) before customers see it.
+ */
+export const ONLINE_MODES = ['hidden', 'soon', 'test', 'live'] as const;
 export type OnlineMode = (typeof ONLINE_MODES)[number];
 export type OnlineModes = Record<OnlineProvider, OnlineMode>;
 
@@ -43,6 +47,14 @@ export function onlineModes(saved: { online?: Partial<OnlineModes> | null } | nu
   }
   return out;
 }
+
+/** What customers are told (shop texts): «Тест» looks like «Скоро»; staff learn the truth per order (preview). */
+export function customerModes(modes: OnlineModes): OnlineModes {
+  return Object.fromEntries(ONLINE_PROVIDERS.map((p) => [p, modes[p] === 'test' ? 'soon' : modes[p]])) as OnlineModes;
+}
+
+/** The system takes payments for this customer: «Работает», or «Тест» and the customer is staff. */
+export const modeOpenFor = (mode: OnlineMode, staffCustomer: boolean) => mode === 'live' || (mode === 'test' && staffCustomer);
 
 /** What a system module returns when a payment is created: the page the customer is sent to. */
 export interface CreatedOnlinePayment {

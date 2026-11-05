@@ -129,8 +129,8 @@ export function Checkout() {
     // Payme: a product without ИКПУ (or Payme switched off) — back to the card transfer
     if (method === 'payme' && codOption && !codOption.payme) setMethod('card_transfer');
   }, [method, codOption]);
-  // Payme is a real method only in «Работает»; «Скоро» stays the logo row (D-20)
-  const paymeLive = shop.data?.checkout?.online?.payme === 'live';
+  // the server decides per customer: «Работает» for all, «Тест» only for staff (others see «Скоро»)
+  const paymeOpen = !!codOption && codOption.payme_unavailable !== 'off';
 
   // 3.3: the code stopped fitting (another district, the cart changed…): it is removed, the customer sees why
   const rejected = preview.data?.promo_rejection;
@@ -339,9 +339,9 @@ export function Checkout() {
       <section className="card">
         <h2>{t('checkout.payment')}</h2>
         {/* 3.5: Payme / Click / Uzum «Скоро подключим» above the working methods; the card transfer stays chosen */}
-        <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon')} />
+        <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon' && !(s === 'payme' && paymeOpen))} />
         {/* Payme «Работает»: a real method; a product without ИКПУ shows it disabled with the reason */}
-        {paymeLive && codOption && codOption.payme_unavailable !== 'off' && (
+        {paymeOpen && codOption && (
           <label className={`pay-option pay-option-online ${method === 'payme' ? 'is-on' : ''} ${codOption.payme ? '' : 'is-disabled'}`}>
             <input type="radio" name="payment" checked={method === 'payme'} disabled={!codOption.payme} onChange={() => setMethod('payme')} />
             <span>

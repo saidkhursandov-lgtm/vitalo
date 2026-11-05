@@ -37,7 +37,7 @@ describe('Payme Merchant API (e2e)', () => {
   };
   const paymeId = () => randomUUID().replace(/-/g, '').slice(0, 24);
 
-  const setModes = (payme: 'hidden' | 'soon' | 'live') =>
+  const setModes = (payme: 'hidden' | 'soon' | 'test' | 'live') =>
     http()
       .put('/api/staff/settings/checkout-options')
       .set(bearer(admin))
@@ -138,6 +138,46 @@ describe('Payme Merchant API (e2e)', () => {
         const r = await http().post('/api/orders/preview').set(bearer(token)).send({ source: 'cart', ...addr.tashkent, payment_method: 'payme' }).expect(422);
         expect(r.body.code).toBe('PAYMENT_METHOD_UNAVAILABLE');
       } finally {
+        await setModes('live').expect(200);
+      }
+    });
+
+    it('«Тест (сотрудники)»: staff pay with Payme, customers see «Скоро» and cannot choose it; a blocked staff account is a customer', async () => {
+      const staffTg = ++tg;
+      await prisma.staff_users.create({ data: { telegram_user_id: BigInt(staffTg), name: 'Payme тест', role: 'manager' } });
+      await setModes('test').expect(200);
+      try {
+        const opts = (await http().get('/api/staff/settings/checkout-options').set(bearer(admin)).expect(200)).body;
+        expect(opts.online.payme).toBe('test');
+        const p = await createTestProduct(prisma, { price: 50_000, stock: 5 });
+        await prisma.products.update({ where: { id: p.id }, data: { ikpu_code: IKPU, package_code: PACKAGE } });
+        const body = { source: 'cart', ...addr.tashkent, payment_method: 'payme' };
+        const place = { ...body, recipient_name: 'Тест', recipient_phone: '90 123-45-67', address_text: 'ул. Тестовая, 1' };
+
+        // a customer: «Скоро» in the shop texts, Payme refused in the preview and in the order
+        const customer = await loginCustomer(app, ++tg);
+        expect((await http().get('/api/catalog/texts').set(bearer(customer)).expect(200)).body.checkout.online.payme).toBe('soon');
+        await http().post('/api/cart/items').set(bearer(customer)).send({ product_id: p.id, qty: 1 }).expect(201);
+        const cp = (await http().post('/api/orders/preview').set(bearer(customer)).send({ ...body, payment_method: 'card_transfer' }).expect(200)).body;
+        expect(cp.payment_options).toMatchObject({ payme: false, payme_unavailable: 'off' });
+        expect((await http().post('/api/orders/preview').set(bearer(customer)).send(body).expect(422)).body.code).toBe('PAYMENT_METHOD_UNAVAILABLE');
+
+        // staff (their Telegram is an active staff account): Payme works end to end
+        const staff = await loginCustomer(app, staffTg);
+        await http().post('/api/cart/items').set(bearer(staff)).send({ product_id: p.id, qty: 1 }).expect(201);
+        const sp = (await http().post('/api/orders/preview').set(bearer(staff)).send(body).expect(200)).body;
+        expect(sp.payment_options).toMatchObject({ payme: true, payme_unavailable: null });
+        const order = (await http().post('/api/orders').set(bearer(staff)).set('Idempotency-Key', randomUUID()).send(place).expect(201)).body;
+        const start = (await http().post(`/api/payments/online/payme/orders/${order.id}/start`).set(bearer(staff)).send({}).expect(200)).body;
+        expect(start.checkout_url.startsWith('https://checkout.test.paycom.uz/')).toBe(true);
+
+        // blocked staff: like any customer
+        await prisma.staff_users.update({ where: { telegram_user_id: BigInt(staffTg) }, data: { status: 'blocked' } });
+        await http().post('/api/cart/items').set(bearer(staff)).send({ product_id: p.id, qty: 1 }).expect(201); // the order emptied the cart
+        expect((await http().post('/api/orders/preview').set(bearer(staff)).send({ ...body, payment_method: 'card_transfer' }).expect(200)).body.payment_options.payme_unavailable).toBe('off');
+        expect((await http().post(`/api/payments/online/payme/orders/${order.id}/start`).set(bearer(staff)).send({}).expect(409)).body.code).toBe('ONLINE_PAYMENT_NOT_CONNECTED');
+      } finally {
+        await prisma.staff_users.updateMany({ where: { telegram_user_id: BigInt(staffTg) }, data: { status: 'blocked' } });
         await setModes('live').expect(200);
       }
     });

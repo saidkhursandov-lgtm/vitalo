@@ -2,9 +2,10 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { OrderLifecycleService } from '../../orders/order-lifecycle.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../../settings/settings.service';
-import { paymeReceiptGaps } from '../payme/payme-availability';
+import { isStaffCustomer, paymeReceiptGaps } from '../payme/payme-availability';
 import {
   isOnlineProvider,
+  modeOpenFor,
   ONLINE_GATEWAYS,
   ONLINE_PROVIDERS,
   onlineModes,
@@ -55,10 +56,10 @@ export class OnlinePaymentsService {
     return onlineModes(await this.settings.getOrDefault('checkout_options'));
   }
 
-  /** «Работает» only with keys and a connected module; the message is shown in the admin panel as is. */
+  /** «Работает» and «Тест» only with keys and a connected module; the message is shown in the admin panel as is. */
   assertModesAllowed(modes: Partial<OnlineModes>) {
     for (const p of ONLINE_PROVIDERS) {
-      if (modes[p] !== 'live' || this.connected(p)) continue;
+      if ((modes[p] !== 'live' && modes[p] !== 'test') || this.connected(p)) continue;
       const missing = [!providerKeysPresent(p) && 'ключи в .env на сервере', !this.gateways.has(p) && 'модуль подключения'].filter(Boolean).join(' и ');
       throw new BadRequestException({
         code: 'ONLINE_PROVIDER_NOT_CONNECTED',
@@ -72,7 +73,8 @@ export class OnlinePaymentsService {
   async start(userId: string, orderId: string, provider: string, lang: 'ru' | 'uz') {
     if (!isOnlineProvider(provider)) throw new NotFoundException('Unknown payment system');
     const gateway = this.gateways.get(provider);
-    if (!gateway || !this.connected(provider) || (await this.modes())[provider] !== 'live') {
+    const mode = (await this.modes())[provider];
+    if (!gateway || !this.connected(provider) || !modeOpenFor(mode, mode === 'test' && (await isStaffCustomer(this.prisma, userId)))) {
       throw new ConflictException({ code: 'ONLINE_PAYMENT_NOT_CONNECTED', message: `${PROVIDER_NAMES[provider]} is not connected yet` });
     }
     const order = await this.prisma.orders.findFirst({ where: { id: orderId, user_id: userId }, include: { items: { select: { product_id: true } } } });

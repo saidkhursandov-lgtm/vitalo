@@ -1,15 +1,23 @@
 import { Prisma } from '@prisma/client';
-import { onlineModes, providerKeysPresent } from '../online/online-providers';
+import { modeOpenFor, onlineModes, providerKeysPresent } from '../online/online-providers';
 import { paymeConfig } from './payme-config';
 
 type Db = Prisma.TransactionClient | { products: Prisma.TransactionClient['products'] };
+type StaffDb = { users: Prisma.TransactionClient['users']; staff_users: Prisma.TransactionClient['staff_users'] };
 
 /** Why Payme cannot be chosen for an order: off = not «Работает» or no keys; ikpu = a product or delivery has no ИКПУ. */
 export type PaymeUnavailable = 'off' | 'ikpu';
 
-/** «Работает» in Настройки → Оплата and both keys in .env (the module itself is always registered). */
-export function paymeSwitchedOn(checkoutOptions: Parameters<typeof onlineModes>[0]): boolean {
-  return onlineModes(checkoutOptions).payme === 'live' && providerKeysPresent('payme');
+/** The customer's Telegram account is an active staff account (mode «Тест — только сотрудники»). */
+export async function isStaffCustomer(db: StaffDb, userId: string): Promise<boolean> {
+  const user = await db.users.findUnique({ where: { id: userId }, select: { telegram_user_id: true } });
+  if (!user?.telegram_user_id) return false;
+  return !!(await db.staff_users.findFirst({ where: { telegram_user_id: user.telegram_user_id, status: 'active' }, select: { id: true } }));
+}
+
+/** «Работает» (or «Тест» and the customer is staff) in Настройки → Оплата and both keys in .env (the module itself is always registered). */
+export function paymeSwitchedOn(checkoutOptions: Parameters<typeof onlineModes>[0], staffCustomer: boolean): boolean {
+  return modeOpenFor(onlineModes(checkoutOptions).payme, staffCustomer) && providerKeysPresent('payme');
 }
 
 /**
@@ -26,10 +34,11 @@ export async function paymeReceiptGaps(db: Db, productIds: string[], deliveryCos
 export async function paymeUnavailable(
   db: Db,
   checkoutOptions: Parameters<typeof onlineModes>[0],
+  staffCustomer: boolean,
   productIds: string[],
   deliveryCostUzs: number,
 ): Promise<PaymeUnavailable | null> {
-  if (!paymeSwitchedOn(checkoutOptions)) return 'off';
+  if (!paymeSwitchedOn(checkoutOptions, staffCustomer)) return 'off';
   const gaps = await paymeReceiptGaps(db, productIds, deliveryCostUzs);
   return gaps.skus.length || gaps.delivery ? 'ikpu' : null;
 }

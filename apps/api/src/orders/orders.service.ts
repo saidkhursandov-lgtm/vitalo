@@ -27,7 +27,8 @@ import { AnalyticsService } from '../analytics/analytics.module';
 import { BotInfoService } from './receipts';
 import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
 import { PromoCodesService } from '../promo/promo.service';
-import { paymeReceiptGaps, paymeSwitchedOn, paymeUnavailable } from '../payments/payme/payme-availability';
+import { isStaffCustomer, paymeReceiptGaps, paymeSwitchedOn, paymeUnavailable } from '../payments/payme/payme-availability';
+import { onlineModes } from '../payments/online/online-providers';
 
 const PAYME_METHOD = 'payme';
 
@@ -101,7 +102,7 @@ export class OrdersService {
     const problems = lines
       .filter((l) => (available.get(l.product_id) ?? 0) < l.qty)
       .map((l) => ({ code: 'INSUFFICIENT_STOCK', product_id: l.product_id, requested: l.qty, available: available.get(l.product_id) ?? 0 }));
-    await this.resolvePaymentMethod(this.prisma, dto.payment_method);
+    await this.resolvePaymentMethod(this.prisma, dto.payment_method, userId);
     const code = this.promoCodeOf(dto, cartPromo);
     const calc = await this.promo.calculate(this.prisma, userId, priced, { address: dto, code });
     // the code saved in the cart stopped fitting: it is removed there too (the customer sees the hint)
@@ -110,7 +111,8 @@ export class OrdersService {
     const cod = await this.codAvailable(this.prisma, dto.region_id, totals.total_uzs);
     // «Оплата при получении» is offered only when it is possible for this address and total (Tashkent, the limit).
     // Payme: only when «Работает» and every product (and a paid delivery) has ИКПУ for the fiscal receipt
-    const payme = await paymeUnavailable(this.prisma, await this.settings.getOrDefault('checkout_options'), lines.map((l) => l.product_id), totals.delivery_cost_uzs);
+    const checkoutOptions = await this.settings.getOrDefault('checkout_options');
+    const payme = await paymeUnavailable(this.prisma, checkoutOptions, await this.paymeStaff(this.prisma, checkoutOptions, userId), lines.map((l) => l.product_id), totals.delivery_cost_uzs);
     const payment_options = { cod: cod === 'ok', cod_unavailable: cod === 'ok' ? null : cod, payme: payme === null, payme_unavailable: payme };
     const codBlocked = (dto.payment_method === COD_METHOD && cod !== 'ok') || (dto.payment_method === PAYME_METHOD && payme !== null);
 
@@ -375,7 +377,7 @@ export class OrdersService {
 
   private async createInTx(tx: Tx, userId: string, dto: CreateOrderDto): Promise<OrderView> {
     const { lines, cartId, cartPromo } = await this.resolveLines(tx, userId, dto);
-    const method = await this.resolvePaymentMethod(tx, dto.payment_method);
+    const method = await this.resolvePaymentMethod(tx, dto.payment_method, userId);
     const orderId = randomUUID();
 
     // 1. Stock first: all-or-nothing, throws 409 INSUFFICIENT_STOCK and rolls the whole order back.
@@ -552,10 +554,18 @@ export class OrdersService {
     });
   }
 
-  private async resolvePaymentMethod(db: Tx | PrismaService, code: string) {
+  /** Payme in «Тест — только сотрудники»: is this customer staff? Asked only in that mode. */
+  private async paymeStaff(db: Tx | PrismaService, checkoutOptions: Parameters<typeof onlineModes>[0], userId: string) {
+    return onlineModes(checkoutOptions).payme === 'test' && (await isStaffCustomer(db, userId));
+  }
+
+  private async resolvePaymentMethod(db: Tx | PrismaService, code: string, userId: string) {
     const method = await db.payment_methods.findUnique({ where: { code } });
-    // Payme: its row stays as it is; the switch is «Работает» in Настройки → Оплата (+ the keys in .env)
-    if (method && code === PAYME_METHOD && paymeSwitchedOn(await this.settings.getOrDefault('checkout_options'))) return method;
+    // Payme: its row stays as it is; the switch is «Работает» (or «Тест» for staff) in Настройки → Оплата (+ the keys in .env)
+    if (method && code === PAYME_METHOD) {
+      const checkoutOptions = await this.settings.getOrDefault('checkout_options');
+      if (paymeSwitchedOn(checkoutOptions, await this.paymeStaff(db, checkoutOptions, userId))) return method;
+    }
     if (!method || method.status !== 'enabled' || !(isManualMethod(code) || code === COD_METHOD)) {
       // Click / Uzum are not connected yet.
       throw new UnprocessableEntityException({ code: 'PAYMENT_METHOD_UNAVAILABLE', message: `Payment method ${code} is not available` });

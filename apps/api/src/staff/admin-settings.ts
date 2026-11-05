@@ -25,7 +25,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { manifestOrDefault } from '../settings/home-content';
 import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService } from '../settings/settings.service';
 import { OnlinePaymentsService } from '../payments/online/online-payments.service';
-import { ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
+import { customerModes, ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
 import { MapsService } from '../maps/maps.service';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
@@ -480,7 +480,7 @@ export class AdminSettingsService {
   async checkoutOptions() {
     const saved = await this.settings.getOrDefault('checkout_options');
     const online = onlineModes(saved);
-    return { ...saved, online, show_online_soon: Object.values(online).includes('soon'), online_status: this.online.providersStatus() };
+    return { ...saved, online, show_online_soon: Object.values(customerModes(online)).includes('soon'), online_status: this.online.providersStatus() };
   }
 
   async setCheckoutOptions(staffId: string, dto: CheckoutOptionsDto) {
@@ -489,7 +489,7 @@ export class AdminSettingsService {
     this.online.assertModesAllowed(online);
     const value = {
       cod_max_total_uzs: dto.cod_max_total_uzs ?? null,
-      show_online_soon: Object.values(online).includes('soon'),
+      show_online_soon: Object.values(customerModes(online)).includes('soon'),
       first_order_free_delivery: dto.first_order_free_delivery,
       online,
     };
