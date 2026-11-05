@@ -219,6 +219,7 @@ describe('Stage 0: permissions, payment check reminder, reservation time (e2e)',
       expect(list.map((m: { code: string; timeout_minutes: number }) => [m.code, m.timeout_minutes])).toEqual([
         ['bank_transfer', 720],
         ['card_transfer', 720],
+        ['payme', 30],
       ]);
       const before = await placeOrder('card_transfer');
       const reservedUntil = (await prisma.orders.findUniqueOrThrow({ where: { id: before.order.id } })).reserved_until;
@@ -242,9 +243,20 @@ describe('Stage 0: permissions, payment check reminder, reservation time (e2e)',
       for (const bad of [20, 1441, 90.5, '600', null]) await put('card_transfer', { timeout_minutes: bad }).expect(400);
       const short = await put('card_transfer', { timeout_minutes: 120 }).expect(400); // reminder: 3 h before cancellation
       expect(short.body.code).toBe('TIMEOUT_SHORTER_THAN_REMINDER');
-      await put('payme', { timeout_minutes: 600 }).expect(404);
+      await put('click', { timeout_minutes: 600 }).expect(404);
       await put('card_transfer', { timeout_minutes: 600 }, 'manager').expect(403);
       expect((await prisma.payment_methods.findUniqueOrThrow({ where: { code: 'card_transfer' } })).timeout_minutes).toBe(720);
+    });
+
+    it('Payme: 30 minutes to 3 days (its checks of test orders), no reminder rule; other methods stay up to a day', async () => {
+      const list = (await http().get('/api/staff/settings/payment-methods').set(bearer(tokens.admin)).expect(200)).body;
+      expect(list.find((m: { code: string }) => m.code === 'payme')).toMatchObject({ timeout_minutes: 30, max_minutes: 4320 });
+      await put('payme', { timeout_minutes: 4321 }).expect(400);
+      expect((await put('card_transfer', { timeout_minutes: 4320 }).expect(400)).body.code).toBe('TIMEOUT_TOO_LONG');
+      await put('payme', { timeout_minutes: 4320 }).expect(200);
+      expect((await prisma.payment_methods.findUniqueOrThrow({ where: { code: 'payme' } })).timeout_minutes).toBe(4320);
+      await put('payme', { timeout_minutes: 30 }).expect(200); // shorter than the reminder: allowed for Payme
+      await put('payme', { timeout_minutes: 600 }, 'manager').expect(403);
     });
   });
 
