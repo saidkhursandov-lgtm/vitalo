@@ -57,6 +57,9 @@ const ru = {
   'card.halalVege': 'Halal и VEGE',
   'card.verdict': 'Вердикт врача',
   'card.whyBrand': 'Почему {brand} отобран в VITALO',
+  // 06.11: long verdicts and brand stories — four lines, then «Читать полностью»
+  'text.more': 'Читать полностью',
+  'text.less': 'Свернуть',
   'card.shell': 'Оболочка / форма',
   'card.daysShort': '{n} дн.',
   // 2.4 patch: the mini-card line «На 45 дн. · 2 770 сум/день»
@@ -543,6 +546,8 @@ const uz: Record<MessageKey, string> = {
   'card.halalVege': 'Halal va VEGE',
   'card.verdict': 'Shifokor xulosasi',
   'card.whyBrand': 'Nega {brand} VITALOda',
+  'text.more': 'Toʻliq oʻqish',
+  'text.less': 'Yopish',
   'card.shell': 'Qobiq / shakl',
   'card.daysShort': '{n} kun',
   'card.tileDays': '{n} kun',

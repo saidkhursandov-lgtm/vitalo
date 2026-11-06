@@ -13,6 +13,7 @@ import type { ProductCard } from '../lib/types';
 import { tapHaptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
 import { Picture } from '../components/Picture';
+import { ClampText } from '../components/ClampText';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip } from '../components/ui';
 
 /** Accordions; «Описание» comes first and is folded — the expert text on the first screen is the verdict (2.3 fixes). */
@@ -101,7 +102,7 @@ export function Product() {
           <h2>
             <DoctorIcon width={18} height={18} /> {t('card.verdict')}
           </h2>
-          <p className="pre">{verdict}</p>
+          <ClampText className="pre" text={verdict} />
         </section>
       )}
       <AskSpecialist name={short} />
@@ -113,7 +114,7 @@ export function Product() {
             <PlusIcon width={11} height={11} strokeWidth={3.4} aria-hidden /> {t('card.brandMark')}
           </p>
           <h2>{t('card.whyBrand', { brand: brandName })}</h2>
-          <p className="pre">{brandWhy}</p>
+          <ClampText className="pre" text={brandWhy} />
         </section>
       )}
 

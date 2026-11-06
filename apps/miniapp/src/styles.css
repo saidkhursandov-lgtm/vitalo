@@ -1453,3 +1453,18 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .place-line svg { flex: none; color: var(--primary); }
 .place-line span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .place-change { flex: none; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 4px; border: 0; background: none; font: inherit; font-weight: 600; }
+
+/* 06.11: long «Вердикт врача» and «Почему бренд в VITALO» — four lines, «Читать полностью» opens the rest smoothly */
+.clamp-text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4;
+  overflow: hidden; max-height: 6.2em; transition: max-height 0.3s ease;
+}
+.clamp-text.is-open { display: block; -webkit-line-clamp: unset; line-clamp: none; max-height: 200em; }
+.clamp-toggle {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0; border: 0; background: none;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--primary-text); cursor: pointer;
+}
+.clamp-toggle svg { flex: none; transition: transform 0.2s ease; }
+.clamp-toggle[aria-expanded='true'] svg { transform: rotate(180deg); }
+.why-brand .clamp-toggle { color: var(--on-primary); }
+@media (prefers-reduced-motion: reduce) { .clamp-text, .clamp-toggle svg { transition: none; } }

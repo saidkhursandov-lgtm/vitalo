@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BrandLogo, BrandStrip, CategoryLink } from '../components/CatalogLayers';
 import { ChevronIcon, CloseIcon, FilterIcon } from '../components/Icons';
+import { ClampText } from '../components/ClampText';
 import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { formLabel, nameOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
@@ -81,7 +82,7 @@ export function BrandScreen() {
           {why && (
             <section className="card brand-why">
               <h2>{t('brand.why', { brand: b.name })}</h2>
-              <p>{why}</p>
+              <ClampText text={why} />
             </section>
           )}
           <h2 className="brand-products-title">{t('brand.products')}</h2>
