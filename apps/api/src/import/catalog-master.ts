@@ -182,6 +182,12 @@ const PRODUCT_SERVICE = ['sku', 'action', 'course', 'translate', 'comment'];
 const PRODUCT_NUMBERS = ['pack', 'per_day', 'price', 'cost', 'market', 'weight', 'shelf'];
 const PRODUCT_TEXT_UZ = ['name_uz', 'short_uz', 'sform_uz', 'desc_uz', 'comp_uz', 'dir_uz', 'warn_uz', 'verdict_uz', 'memo_uz'];
 /** Required for «Новый» and «Изменить» (the same columns are highlighted orange in the file). */
+/**
+ * «Вердикт врача» and «Почему бренд в VITALO»: full stories of brands and doctors' reviews (owner, 06.11.2026); the Mini App
+ * shows the first four lines and «Читать полностью».
+ */
+export const LONG_TEXT_LIMIT = 1500;
+
 export const PRODUCT_REQUIRED = ['brand', 'name_ru', 'short_ru', 'need1', 'type', 'pack', 'price', 'comp_ru'];
 
 export const BRAND_COLUMNS: ColumnDef[] = [
@@ -930,7 +936,7 @@ function checkBrands(sheets: CatalogSheets, db: CatalogDb, out: CatalogCheck): S
       err(`бренда «${name}» нет в базе — для нового поставьте «Новый»`);
       continue;
     }
-    for (const k of ['why_ru', 'why_uz'] as const) if (clean(v[k]).length > 350) err(`«Почему в VITALO» ${k === 'why_ru' ? 'RU' : 'UZ'} длиннее 350 знаков (${clean(v[k]).length})`);
+    for (const k of ['why_ru', 'why_uz'] as const) if (clean(v[k]).length > LONG_TEXT_LIMIT) err(`«Почему в VITALO» ${k === 'why_ru' ? 'RU' : 'UZ'} длиннее ${LONG_TEXT_LIMIT} знаков (${clean(v[k]).length})`);
     const showText = clean(v.show);
     if (showText && showText !== YES && showText !== NO) err(`Показывать в витрине: «${showText}» — нужно Да или Нет`);
     const order = toNumber(v.order);
@@ -1030,7 +1036,7 @@ function checkProducts(
     const market = toNumber(v.market);
     if (market != null && !Number.isNaN(market) && market > 50) err('Выгоднее Маркета — не больше 50%');
     for (const k of ['short_ru', 'short_uz']) if (clean(v[k]).length > 40) err(`${label.get(k)} длиннее 40 знаков (${clean(v[k]).length})`);
-    for (const k of ['verdict_ru', 'verdict_uz']) if (clean(v[k]).length > 350) err(`${label.get(k)} длиннее 350 знаков (${clean(v[k]).length})`);
+    for (const k of ['verdict_ru', 'verdict_uz']) if (clean(v[k]).length > LONG_TEXT_LIMIT) err(`${label.get(k)} длиннее ${LONG_TEXT_LIMIT} знаков (${clean(v[k]).length})`);
 
     // active substances: every name must be in the dictionary
     const subs = resolveSubstances(v.substances, ctx.dict, ctx.lookup);

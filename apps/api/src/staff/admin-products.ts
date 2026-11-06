@@ -137,8 +137,8 @@ export class ProductInput {
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) shell_uz?: string | null;
   @ApiPropertyOptional({ description: 'Откуда данные Halal/VEGE (только админка)' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) halal_vege_source?: string | null;
   @ApiPropertyOptional({ nullable: true, description: 'На X% выгоднее Маркета, 0–50' }) @IsOptional() @IsInt() @Min(0) @Max(50) market_advantage_percent?: number | null;
-  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(400) doctor_verdict_ru?: string | null;
-  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(400) doctor_verdict_uz?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1500) doctor_verdict_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1500) doctor_verdict_uz?: string | null;
   @ApiPropertyOptional({ description: 'Памятка приёма (покупателю — с релиза 3)' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) intake_memo_ru?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) intake_memo_uz?: string | null;
   @ApiPropertyOptional({ description: 'Комментарий сотрудникам' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) admin_note?: string | null;

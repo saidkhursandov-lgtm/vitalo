@@ -75,7 +75,7 @@ describe('Stage 2.3 (e2e)', () => {
     const patch = (body: object) => http().patch(`/api/staff/products/${p.id}`).set(bearer(admin)).send(body);
     await patch({ market_advantage_percent: 51 }).expect(400);
     await patch({ halal_vege: 'maybe' }).expect(400);
-    await patch({ doctor_verdict_ru: 'x'.repeat(401) }).expect(400);
+    await patch({ doctor_verdict_ru: 'x'.repeat(1501) }).expect(400);
     await patch({ servings_per_day: 0 }).expect(400);
     await patch({ halal_vege: null, market_advantage_percent: null }).expect(200);
   });
