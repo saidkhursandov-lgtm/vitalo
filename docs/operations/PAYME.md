@@ -43,7 +43,9 @@
 ## Настройки (`.env`, значения — только там)
 
 `PAYME_MERCHANT_ID`, `PAYME_KEY`, `PAYME_TEST_MODE`, `PAYME_DELIVERY_IKPU`, `PAYME_DELIVERY_PACKAGE_CODE`,
-`PAYME_VAT_PERCENT`. Шаблоны без значений: `.env.example`, `apps/api/.env.production.example`.
+`PAYME_VAT_PERCENT`. **Ключ — всегда в одинарных кавычках:** `PAYME_KEY='…'`. В ключе бывает `#`, и без кавычек
+всё после него читается как комментарий: сервер отвечает «Недостаточно привилегий», Payme пишет «Сервис поставщика работает
+некорректно» (так было 06.11.2026 с боевым ключом). Шаблоны без значений: `.env.example`, `apps/api/.env.production.example`.
 
 ## Проверка в песочнице (до выкладки)
 
