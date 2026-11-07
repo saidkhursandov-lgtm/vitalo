@@ -1034,7 +1034,13 @@ function checkProducts(
     if (action === ACTION.create && old) err(`артикул ${sku} уже есть в базе — для правки поставьте «Изменить»`);
     if (action !== ACTION.create && !old) err(sku ? `артикула ${sku} нет в базе (или товар в архиве) — для нового товара поставьте «Новый»` : 'нет артикула — для нового товара поставьте «Новый»');
     const editing = action === ACTION.create || action === ACTION.change;
-    if (editing) for (const k of PRODUCT_REQUIRED) if (!clean(v[k])) err(`не заполнено обязательное поле «${label.get(k)}»`);
+    // «Изменить» never erases a required field; a field empty in the database too is only a reminder (owner, 07.11.2026: OZN-A023)
+    if (editing)
+      for (const k of PRODUCT_REQUIRED) {
+        if (clean(v[k])) continue;
+        if (action === ACTION.change && old && !clean(old.cells[k])) out.warnings.push({ sheet: S, row: r.row, message: `${who}: не заполнено «${label.get(k)}» (в базе тоже пусто) — заполните, когда будут данные` });
+        else err(`не заполнено обязательное поле «${label.get(k)}»`);
+      }
 
     // values must be from the lists of the file; an old value of the database that is not changed is not an error
     const inList = (k: string, list: string[]) => {

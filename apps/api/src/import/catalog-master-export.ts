@@ -174,13 +174,26 @@ function writeProducts(wb: ExcelJS.Workbook, db: CatalogDb, sum: ExportSummary) 
   const { at } = mapColumns(ws.getRow(2), PRODUCT_COLUMNS);
   const L = (k: string) => letter(ws, at[k]);
   const rowOf = new Map<string, number>();
+  const noSku = new Map<string, number>();
   let last = FIRST_ROW - 1;
   for (let i = FIRST_ROW; i <= LAST_ROW; i++) {
     const sku = clean(cellValue(ws.getCell(i, at.sku).value)).toUpperCase();
     if (sku) rowOf.set(sku, i);
+    else {
+      // a row «Новый» of a product loaded by catalog:load: it gets its SKU here instead of a second row below
+      const name = clean(cellValue(ws.getCell(i, at.name_ru).value)).toLowerCase();
+      if (name && !noSku.has(name)) noSku.set(name, i);
+    }
     if (PRODUCT_COLUMNS.some((c) => at[c.key] && c.key !== 'course' && clean(cellValue(ws.getCell(i, at[c.key]).value)))) last = i;
   }
   const products = db.products.filter((p) => !EXCLUDED_SKUS.includes(p.sku));
+  for (const p of products) {
+    const row = noSku.get(clean(p.cells.name_ru).toLowerCase());
+    if (!rowOf.has(p.sku.toUpperCase()) && row) {
+      rowOf.set(p.sku.toUpperCase(), row);
+      noSku.delete(clean(p.cells.name_ru).toLowerCase());
+    }
+  }
   for (const p of products) {
     let row = rowOf.get(p.sku.toUpperCase());
     if (!row) {
@@ -220,12 +233,15 @@ function writeBrands(wb: ExcelJS.Workbook, db: CatalogDb, sum: ExportSummary) {
   const ws = wb.getWorksheet(BRANDS_SHEET)!;
   const { at } = mapColumns(ws.getRow(2), BRAND_COLUMNS);
   const names = new Set<string>();
+  const inDb = new Set(db.brands.map((b) => b.name.toLowerCase()));
   let last = FIRST_ROW - 1;
   for (let i = FIRST_ROW; i <= LAST_ROW; i++) {
     const n = clean(cellValue(ws.getCell(i, at.name).value));
     if (n) {
       names.add(n.toLowerCase());
       last = i;
+      // a brand «Новый» that is in the database now (catalog:load): the next edit is «Изменить», not a second «Новый»
+      if (inDb.has(n.toLowerCase()) && clean(cellValue(ws.getCell(i, at.action).value)) === ACTION.create) ws.getCell(i, at.action).value = ACTION.same;
     }
   }
   for (const b of db.brands) {

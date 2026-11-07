@@ -177,6 +177,24 @@ describe('catalog master table: export → check', () => {
     expect(row(sheets.rules, (r) => r.v.id === 'r-mg-ab').v).toMatchObject({ a: 'Магний', status: 'Одобрено', action: 'Без изменений', approve: 'Нет', kind: 'Осторожно с лекарствами' });
   });
 
+  it('after catalog:load the export puts the SKU into the row «Новый» (no second row) and the new brand gets «Без изменений»', async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(join(dir, 'out.xlsx'));
+    const col = (ws: ExcelJS.Worksheet, head: string) => (ws.getRow(2).values as unknown[]).findIndex((v) => String(v ?? '').toLowerCase().startsWith(head));
+    const goods = wb.getWorksheet('Товары')!;
+    goods.getCell(4, col(goods, 'артикул')).value = null; // the owner's new row: no SKU yet
+    goods.getCell(4, col(goods, 'действие')).value = 'Новый';
+    const brands = wb.getWorksheet('Бренды')!;
+    brands.getCell(4, col(brands, 'действие')).value = 'Новый';
+    await wb.xlsx.writeFile(join(dir, 'loaded.xlsx'));
+    await writeCatalogWorkbook(join(dir, 'loaded.xlsx'), join(dir, 'again.xlsx'), DB, '07.11.2026');
+    const again = await readCatalogFile(join(dir, 'again.xlsx'));
+    expect(again.products).toHaveLength(1);
+    expect(again.products![0].v).toMatchObject({ sku: 'OZN-T001', action: 'Без изменений' });
+    expect(again.brands![0].v.action).toBe('Без изменений');
+    expect(checkCatalog(again, DB)).toMatchObject({ errors: [], changes: [] });
+  });
+
   it('an unknown substance of a product is an error with a hint; a synonym is fine', () => {
     const p = row(sheets.products, (r) => r.v.sku === 'OZN-T001');
     p.v.substances = 'пиридоксин, Магнии';
