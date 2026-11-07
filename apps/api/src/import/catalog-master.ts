@@ -187,6 +187,25 @@ const PRODUCT_TEXT_UZ = ['name_uz', 'short_uz', 'sform_uz', 'desc_uz', 'comp_uz'
  */
 export const LONG_TEXT_LIMIT = 1500;
 
+/** Text limits of the admin panel's product form (ProductInput); the short names have their own, stricter limit of 40. */
+export const PRODUCT_TEXT_LIMITS: Record<string, number> = {
+  name_ru: 200,
+  name_uz: 200,
+  sform_ru: 60,
+  sform_uz: 60,
+  desc_ru: 1000,
+  desc_uz: 1000,
+  comp_ru: 5000,
+  comp_uz: 5000,
+  dir_ru: 5000,
+  dir_uz: 5000,
+  warn_ru: 5000,
+  warn_uz: 5000,
+  memo_ru: 1000,
+  memo_uz: 1000,
+  halal_src: 300,
+};
+
 /** Required for «Новый» and «Изменить» (the same columns are highlighted orange in the file). */
 export const PRODUCT_REQUIRED = ['brand', 'name_ru', 'short_ru', 'need1', 'type', 'pack', 'price', 'comp_ru'];
 
@@ -672,11 +691,20 @@ export interface CatalogCheck {
   translate: Issue[];
   /** counts for the summary */
   rows: Record<string, number>;
+  /** the dictionary of substances as the table will have it (codes of new substances included): the loader uses it */
+  dict: DictItem[];
 }
 
 const show = (v: Cell | undefined) => {
   const t = clean(v);
   return t === '' ? '—' : t;
+};
+
+/** «Оболочка: Не знаю» is stored as no shell at all (the same as an empty cell); an empty badge cell is «Нет». */
+export const productCell = (k: string, v: Cell | undefined): Cell | undefined => {
+  if (k === 'shell' && lc(clean(v)) === lc('Не знаю')) return null;
+  if (['std_bio', 'std_tested', 'std_orig'].includes(k) && !clean(v)) return NO;
+  return v;
 };
 
 /** Same value? Numbers compared as numbers, texts after `clean`. */
@@ -688,10 +716,11 @@ export function sameCell(a: Cell | undefined, b: Cell | undefined): boolean {
 }
 
 export function checkCatalog(sheets: CatalogSheets, db: CatalogDb): CatalogCheck {
-  const out: CatalogCheck = { errors: [], warnings: [], changes: [], translate: [], rows: {} };
+  const out: CatalogCheck = { errors: [], warnings: [], changes: [], translate: [], rows: {}, dict: [] };
   for (const m of sheets.missing) out.errors.push({ sheet: m.sheet, row: 2, message: `нет столбцов: ${m.columns.join(', ')}` });
 
   const dict = checkSubstances(sheets, db, out);
+  out.dict = dict;
   const lookup = dictLookup(dict);
   const categories = checkCategories(sheets, db, out);
   const brands = checkBrands(sheets, db, out);
@@ -1037,6 +1066,8 @@ function checkProducts(
     if (market != null && !Number.isNaN(market) && market > 50) err('Выгоднее Маркета — не больше 50%');
     for (const k of ['short_ru', 'short_uz']) if (clean(v[k]).length > 40) err(`${label.get(k)} длиннее 40 знаков (${clean(v[k]).length})`);
     for (const k of ['verdict_ru', 'verdict_uz']) if (clean(v[k]).length > LONG_TEXT_LIMIT) err(`${label.get(k)} длиннее ${LONG_TEXT_LIMIT} знаков (${clean(v[k]).length})`);
+    // the same limits as the product form of the admin panel (otherwise the loading refuses the row)
+    for (const [k, max] of Object.entries(PRODUCT_TEXT_LIMITS)) if (clean(v[k]).length > max) err(`${label.get(k)} длиннее ${max} знаков (${clean(v[k]).length})`);
 
     // active substances: every name must be in the dictionary
     const subs = resolveSubstances(v.substances, ctx.dict, ctx.lookup);
@@ -1058,7 +1089,7 @@ function checkProducts(
       const k = d.key;
       if (PRODUCT_SERVICE.includes(k) || PRODUCT_NO_DB.includes(k) || ['need1', 'need2', 'need3', 'substances'].includes(k)) continue;
       if (k === 'status' && !clean(v.status) && !old) continue;
-      if (!sameCell(base[k], v[k])) fields.push({ label: d.label, before: show(base[k]), after: show(v[k]) });
+      if (!sameCell(productCell(k, base[k]), productCell(k, v[k]))) fields.push({ label: d.label, before: show(base[k]), after: show(v[k]) });
     }
     // needs: the order does not matter; a fourth need of the database stays (the sheet has room for three)
     const dbNeeds = old?.needs ?? [];
