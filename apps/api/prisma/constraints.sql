@@ -36,6 +36,10 @@ CREATE TRIGGER bonus_ledger_immutable
 -- Products are never physically deleted
 CREATE OR REPLACE FUNCTION forbid_product_delete() RETURNS trigger AS $$
 BEGIN
+  -- D-54: the admin «Удалить» switches the protection off for its own transaction only
+  IF current_setting('vitalo.allow_delete', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
   RAISE EXCEPTION 'products cannot be deleted; set status = archived';
 END; $$ LANGUAGE plpgsql;
 

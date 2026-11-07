@@ -138,6 +138,37 @@ export class AdminBrandsService {
     await this.audit.log({ staffId, action: 'brand.logo_removed', entityType: 'brands', entityId: id, before: { url: before.logo_url } });
     return b;
   }
+
+  /**
+   * D-54 «Удалить»: erases the brand from everywhere (showcase, promotions, banners, logo). While the shop still has
+   * products of the brand (not archived) it refuses: delete or move those first. Archived products keep the brand
+   * name as text (orders show it) and lose only the link to the erased brand.
+   */
+  async remove(staffId: string, id: string) {
+    const before = await this.get(id);
+    await this.prisma.$transaction(async (tx) => {
+      const live = await tx.products.count({ where: { brand_id: id, status: { not: 'archived' } } });
+      if (live > 0) {
+        throw new ConflictException({
+          code: 'BRAND_HAS_PRODUCTS',
+          message: `У бренда ${live} товар(ов). Сначала удалите их или поменяйте им бренд — потом удалите бренд.`,
+          products: live,
+        });
+      }
+      await tx.products.updateMany({ where: { brand_id: id }, data: { brand_id: null } });
+      await tx.promotion_targets.deleteMany({ where: { brand_id: id } });
+      await tx.home_banners.updateMany({
+        where: { link_type: 'brand', link_value: { in: [before.name_ru, ...(before.slug ? [before.slug] : [])] } },
+        data: { link_type: null, link_value: null },
+      });
+      await tx.$executeRaw`SELECT set_config('vitalo.allow_delete', 'on', true)`;
+      await tx.brands.delete({ where: { id } });
+      await tx.$executeRaw`SELECT set_config('vitalo.allow_delete', 'off', true)`;
+      await this.audit.log({ staffId, action: 'brand.deleted', entityType: 'brands', entityId: id, before }, tx);
+    });
+    if (before.logo_url) await this.storage.remove(before.logo_url).catch(() => undefined);
+    return { result: 'deleted' as const };
+  }
 }
 
 @ApiTags('staff: brands')
@@ -164,6 +195,13 @@ export class AdminBrandsController {
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1 } }))
   upload(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @UploadedFile() file?: Express.Multer.File) {
     return this.brands.uploadLogo(me.staff.id, id, file);
+  }
+
+  /** D-54 «Удалить» — admin only (the class permission is overridden here). */
+  @Delete(':id')
+  @RequirePermission('catalog.delete')
+  remove(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.brands.remove(me.staff.id, id);
   }
 
   @Delete(':id/logo')

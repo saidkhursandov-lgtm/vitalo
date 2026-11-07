@@ -6,7 +6,7 @@ describe('staff permissions', () => {
   });
 
   it('only admin manages settings, staff and reads the audit log', () => {
-    for (const p of ['settings.manage', 'staff.manage', 'audit.view', 'products.edit', 'costs.view', 'settings.dictionaries', 'purchases.manage', 'purchases.view_costs'] as Permission[]) {
+    for (const p of ['settings.manage', 'staff.manage', 'audit.view', 'products.edit', 'costs.view', 'settings.dictionaries', 'catalog.delete', 'purchases.manage', 'purchases.view_costs'] as Permission[]) {
       expect(['manager', 'warehouse', 'marketer'].filter((r) => can(r as never, p))).toEqual([]);
     }
   });

@@ -250,11 +250,11 @@ describe('Admin panel operations (e2e)', () => {
       await http().post(`/api/staff/products/${id}/photos`).set(bearer(t.admin)).attach('file', big, 'big.png').expect(413);
     });
 
-    it('archiving hides the product from the shop; there is no way to delete it', async () => {
+    it('archiving hides the product from the shop; a plain DELETE is still refused by the DB (D-54: only «Удалить»)', async () => {
       await as(t.admin).post(`/staff/products/${id}/archive`).expect(200);
       await http().get(`/api/catalog/products/${id}`).expect(404);
       expect(await audits(id, 'product.archived')).toHaveLength(1);
-      await http().delete(`/api/staff/products/${id}`).set(bearer(t.admin)).expect(404); // no such endpoint
+      // D-54: «Удалить» exists now (d54-delete.e2e-spec.ts); a DELETE that bypasses it is still refused by the trigger
       await expect(prisma.products.delete({ where: { id } })).rejects.toThrow(/cannot be deleted/); // DB trigger
     });
   });

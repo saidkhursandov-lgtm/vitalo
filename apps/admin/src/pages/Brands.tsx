@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
 import { api, errorText } from '../lib/api';
+import { useSession } from '../lib/auth';
+import { dictionaryKey } from '../components/DictionarySelect';
 
 interface Brand {
   id: string;
@@ -51,14 +53,27 @@ export function Brands() {
   const q = useQuery({ queryKey: ['brands', 'admin'], queryFn: () => api<BrandList>('/staff/brands') });
   const [editing, setEditing] = useState<string | null>(null);
   const brand = q.data?.items.find((b) => b.id === editing);
+  const [adding, setAdding] = useState(false);
+  const { can } = useSession();
+  const client = useQueryClient();
+  // D-54 «Удалить»: erases the brand everywhere; refused while the shop still has its products
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/staff/brands/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ['brands'] }),
+  });
 
   return (
     <>
-      <PageHead title="Бренды" />
+      <PageHead title="Бренды">
+        <button className="btn" onClick={() => setAdding(true)}>
+          + Добавить бренд
+        </button>
+      </PageHead>
       <p className="muted">
-        Лента «Проверенные бренды» в Mini App показывает включённые бренды, у которых есть товар в наличии. Новый бренд и
-        переименование — в «Настройки → Справочники»: название у товаров меняется вместе с ним.
+        Лента «Проверенные бренды» в Mini App показывает включённые бренды, у которых есть товар в наличии.
+        Переименование — в «Настройки → Справочники»: название у товаров меняется вместе с ним.
       </p>
+      {remove.isError && <p className="alert alert-error">{errorText(remove.error)}</p>}
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (
@@ -106,9 +121,24 @@ export function Brands() {
                   </td>
                   <td>{b.sort_order}</td>
                   <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setEditing(b.id)}>
-                      Изменить
-                    </button>
+                    <div className="banner-actions">
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEditing(b.id)}>
+                        Изменить
+                      </button>
+                      {can('catalog.delete') && (
+                        <button
+                          className="btn btn-danger btn-sm"
+                          disabled={remove.isPending}
+                          onClick={() =>
+                            window.confirm(
+                              `Удалить бренд «${b.name_ru}»? Он исчезнет из ленты брендов, акций и баннеров. Отменить нельзя.`,
+                            ) && remove.mutate(b.id)
+                          }
+                        >
+                          Удалить
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -116,8 +146,50 @@ export function Brands() {
           </table>
         </div>
       )}
+      {adding && <NewBrand onClose={() => setAdding(false)} onCreated={(id) => { setAdding(false); setEditing(id); }} />}
       {brand && q.data && <BrandEditor key={brand.id} brand={brand} logoSize={q.data.logo.width} onClose={() => setEditing(null)} />}
     </>
+  );
+}
+
+/** A new brand goes into the same dictionary as «Настройки → Справочники»; then its card opens for logo and texts. */
+function NewBrand({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const client = useQueryClient();
+  const [f, setF] = useState({ name_ru: '', name_uz: '' });
+  const create = useMutation({
+    mutationFn: () =>
+      api<{ id: string }>('/staff/dictionaries/brands', { method: 'POST', body: { name_ru: f.name_ru.trim(), name_uz: f.name_uz.trim() || null } }),
+    onSuccess: async (row) => {
+      await client.invalidateQueries({ queryKey: ['brands'] });
+      await client.invalidateQueries({ queryKey: dictionaryKey('brands') });
+      onCreated(row.id);
+    },
+  });
+  return (
+    <Modal title="Новый бренд" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (f.name_ru.trim()) create.mutate();
+        }}
+      >
+        <Field label="Название (RU)">
+          <input autoFocus required value={f.name_ru} onChange={(e) => setF({ ...f, name_ru: e.target.value })} placeholder="NOW Foods" />
+        </Field>
+        <Field label="Название (UZ)" hint="Можно оставить пустым — будет как по-русски">
+          <input value={f.name_uz} onChange={(e) => setF({ ...f, name_uz: e.target.value })} />
+        </Field>
+        {create.isError && <p className="alert alert-error">{errorText(create.error)}</p>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Отмена
+          </button>
+          <button type="submit" className="btn" disabled={create.isPending || !f.name_ru.trim()}>
+            Добавить
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

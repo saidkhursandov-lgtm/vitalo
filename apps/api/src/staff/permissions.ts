@@ -38,6 +38,7 @@ export const PERMISSIONS = {
   'costs.view': [], // cost price and purchase price: GET /staff/products/:id, receipt cost_uzs
   'dashboard.revenue': ['manager'], // revenue, average check and revenue per product on the dashboard
   'settings.dictionaries': [], // add / rename / archive brands, manufacturers, countries, forms
+  'catalog.delete': [], // D-54: «Удалить» a product or a brand (erases it; with history — archived and hidden) — admin only
   'yandex.price.view': ['manager', 'marketer'], // Yandex Market price and its sync status (not warehouse)
   'yandex.price.sync': ['manager'], // «Отметить синхронизированной»
   'purchases.view': ['manager'], // Stage 2A: list and cards of purchases (quantities only)

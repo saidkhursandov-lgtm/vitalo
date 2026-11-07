@@ -215,6 +215,18 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     },
   });
 
+  // D-54 «Удалить»: erased completely, or — if the product has orders, purchases or stock — archived and hidden
+  const remove = useMutation({
+    mutationFn: () => api<{ result: 'deleted' | 'archived' }>(`/staff/products/${product!.id}`, { method: 'DELETE' }),
+    onSuccess: (r) => {
+      void client.invalidateQueries({ queryKey: ['products'] });
+      if (r.result === 'archived') {
+        window.alert('У товара есть история (заказы, закупки или остатки), поэтому его нельзя стереть совсем — история заказов сломается. Товар убран из магазина отовсюду и лежит в архиве.');
+      }
+      navigate('/products', { replace: true });
+    },
+  });
+
   const set = (k: string, v: string) => {
     setF({ ...f, [k]: v });
     setSaved(false);
@@ -257,6 +269,20 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             В архив
           </button>
         )}
+        {can('catalog.delete') && product && (
+          <button
+            type="button"
+            className="btn btn-danger"
+            disabled={remove.isPending}
+            onClick={() =>
+              window.confirm(
+                'Удалить товар? Он исчезнет из магазина, корзин, избранного, акций и баннеров. Если по товару были заказы или закупки, он уйдёт в архив, а история сохранится. Отменить нельзя.',
+              ) && remove.mutate()
+            }
+          >
+            {remove.isPending ? 'Удаление…' : 'Удалить'}
+          </button>
+        )}
         {(editable || (contentOnly && product)) && (
           <button type="submit" className="btn" disabled={save.isPending}>
             {save.isPending ? 'Сохранение…' : 'Сохранить'}
@@ -265,10 +291,10 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       </PageHead>
       {!editable && !contentOnly && <div className="alert alert-info">Только просмотр: менять товары может администратор.</div>}
       {contentOnly && <div className="alert alert-info">Вы можете менять названия, краткое описание, слова для поиска, категории и фото. Цены, состав и остальное меняет администратор.</div>}
-      {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине. Удалять товары нельзя — только архивировать.</div>}
+      {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине.</div>}
       {product?.admin_note ? <div className="alert alert-warn">Комментарий: {product.admin_note as string}</div> : null}
       {saved && <div className="alert alert-ok">Сохранено</div>}
-      <ErrorBox error={save.error ?? archive.error ?? markSynced.error} />
+      <ErrorBox error={save.error ?? archive.error ?? remove.error ?? markSynced.error} />
       {askSync && (
         <Modal title="Цена на Яндекс Маркете" onClose={() => setAskSync(false)}>
           <p>

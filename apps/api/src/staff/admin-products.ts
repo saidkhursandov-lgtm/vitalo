@@ -373,7 +373,7 @@ export class AdminProductsService {
     return this.get(id);
   }
 
-  /** Includes archiving (status = archived). Products are never deleted (DB trigger forbids it too). */
+  /** Includes archiving (status = archived). Deleting is a separate action — remove() (D-54). */
   async update(staffId: string | null, id: string, dto: ProductPatch) {
     await this.write(async (tx) => {
       const before = await tx.products.findUnique({ where: { id }, include: { categories: true } });
@@ -456,6 +456,56 @@ export class AdminProductsService {
     });
     for (const file of imageFiles(media)) await this.storage.remove(file);
     return this.get(id);
+  }
+
+  /**
+   * D-54 «Удалить»: removes the product from everywhere the shop shows it (carts, favourites, waiting list, promotions,
+   * «С этим берут», home blocks, banners). A product with history (orders, purchases, units, receiving, stock moves or
+   * stock on hand) cannot be erased without breaking that history — it is archived instead. Any other product is
+   * erased completely, photos included. The DB trigger lets the DELETE through only with `vitalo.allow_delete = on`.
+   */
+  async remove(staffId: string, id: string): Promise<{ result: 'deleted' | 'archived'; history: string[] }> {
+    const { result, history, files } = await this.prisma.$transaction(async (tx) => {
+      const p = await tx.products.findUnique({ where: { id }, include: { inventory: true } });
+      if (!p) throw new NotFoundException('Product not found');
+      const counts = {
+        orders: await tx.order_items.count({ where: { product_id: id } }),
+        purchases: await tx.purchase_lines.count({ where: { product_id: id } }),
+        units: await tx.physical_units.count({ where: { product_id: id } }),
+        yandex_orders: await tx.marketplace_order_lines.count({ where: { product_id: id } }),
+        receiving: await tx.receiving_session_lines.count({ where: { product_id: id } }),
+        stock_moves: await tx.inventory_movements.count({ where: { product_id: id } }),
+        stock: p.inventory.reduce((s, i) => s + i.actual_qty + i.reserved_qty, 0),
+      };
+      const history = Object.entries(counts).filter(([, n]) => n > 0).map(([k]) => k);
+      // Gone from every shop-facing place, whatever happens next.
+      await tx.cart_items.deleteMany({ where: { product_id: id } });
+      await tx.favorites.deleteMany({ where: { product_id: id } });
+      await tx.product_waitlist.deleteMany({ where: { product_id: id } });
+      await tx.promotion_targets.deleteMany({ where: { product_id: id } });
+      await tx.product_relations.deleteMany({ where: { OR: [{ product_id: id }, { related_product_id: id }] } });
+      await tx.content_block_items.deleteMany({ where: { product_id: id } });
+      await tx.home_banners.updateMany({ where: { link_type: 'product', link_value: id }, data: { link_type: null, link_value: null } });
+      if (history.length) {
+        await tx.products.update({ where: { id }, data: { status: 'archived' } });
+        await this.audit.log({ staffId, action: 'product.delete_archived', entityType: 'product', entityId: id, before: { ...p, inventory: undefined }, after: { status: 'archived', history: counts } }, tx);
+        return { result: 'archived' as const, history, files: [] as string[] };
+      }
+      const media = await tx.product_media.findMany({ where: { product_id: id } });
+      await tx.$executeRaw`SELECT set_config('vitalo.allow_delete', 'on', true)`;
+      await tx.product_categories.deleteMany({ where: { product_id: id } });
+      await tx.product_media.deleteMany({ where: { product_id: id } });
+      await tx.product_substances.deleteMany({ where: { product_id: id } });
+      await tx.product_sku_aliases.deleteMany({ where: { product_id: id } });
+      await tx.inventory_batches.deleteMany({ where: { product_id: id } });
+      await tx.inventory.deleteMany({ where: { product_id: id } });
+      await tx.products.delete({ where: { id } });
+      await tx.$executeRaw`SELECT set_config('vitalo.allow_delete', 'off', true)`;
+      await this.audit.log({ staffId, action: 'product.deleted', entityType: 'product', entityId: id, before: { ...p, inventory: undefined } }, tx);
+      return { result: 'deleted' as const, history, files: media.flatMap((m) => imageFiles(m)) };
+    });
+    for (const file of files) await this.storage.remove(file).catch(() => undefined);
+    return { result, history };
   }
 
   /** «Отметить синхронизированной»: the Yandex price is already the same on Yandex Market. */
@@ -634,6 +684,13 @@ export class AdminProductsController {
   @RequirePermission('products.edit')
   async archive(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
     return forViewer(me.staff.role, await this.products.update(me.staff.id, id, { status: 'archived' }));
+  }
+
+  /** D-54 «Удалить»: erases the product, or archives and hides it when it has history. Admin only. */
+  @Delete(':id')
+  @RequirePermission('catalog.delete')
+  async remove(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.products.remove(me.staff.id, id);
   }
 
   @Post(':id/photos')
