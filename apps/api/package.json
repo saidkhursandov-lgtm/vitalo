@@ -33,7 +33,8 @@
     "compat:knowledge": "ts-node scripts/compat-knowledge.ts",
     "catalog:export": "ts-node scripts/catalog-export.ts",
     "catalog:check": "ts-node scripts/catalog-check.ts",
-    "catalog:load": "ts-node scripts/catalog-load.ts"
+    "catalog:load": "ts-node scripts/catalog-load.ts",
+    "catalog:for-server": "ts-node scripts/catalog-for-server.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
