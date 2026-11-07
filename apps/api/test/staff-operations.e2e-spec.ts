@@ -465,17 +465,20 @@ describe('Admin panel operations (e2e)', () => {
       expect(inv.every((i: { action: string }) => i.action.startsWith('inventory.'))).toBe(true);
     });
 
-    it('dashboard: revenue, orders, average check, statuses, top products, low stock', async () => {
+    it('dashboard: revenue by the same rule as «Аналитика» (D-55), orders, average check, statuses, top products, low stock', async () => {
       const { body } = await as(t.manager).get('/staff/dashboard?days=30').expect(200);
-      const paid = await prisma.orders.aggregate({
-        where: { status: { in: ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'] }, paid_at: { gte: new Date(Date.now() - 30 * 86_400_000) } },
-        _sum: { total_uzs: true },
-        _count: { _all: true },
-      });
-      expect(body.revenue_uzs).toBe(Number(paid._sum.total_uzs));
-      expect(body.paid_orders).toBe(paid._count._all);
-      expect(body.average_check_uzs).toBe(Math.round(Number(paid._sum.total_uzs) / paid._count._all));
-      expect(body.orders_created).toBeGreaterThanOrEqual(body.paid_orders);
+      // one revenue rule: delivered orders of both channels, goods only, returns subtracted — the same as «Аналитика»
+      const an = (await as(t.admin).get(`/staff/finance/analytics?from=${body.from}&to=${body.to}`).expect(200)).body;
+      expect(body.sales.revenue_uzs).toBe(an.sales.revenue);
+      expect(body.sales.orders).toBe(an.sales.orders);
+      expect(body.sales.average_check_uzs).toBe(body.sales.orders ? Math.round(an.sales.revenue / an.sales.orders) : 0);
+      expect(body.sales.channels.vitalo.revenue_uzs + body.sales.channels.yandex.revenue_uzs).toBe(body.sales.revenue_uzs);
+      expect(body.sales.by_day).toHaveLength(30);
+      expect(body.sales.by_day.reduce((s: number, d: { vitalo_revenue_uzs: number; yandex_revenue_uzs: number }) => s + d.vitalo_revenue_uzs + d.yandex_revenue_uzs, 0)).toBe(body.sales.revenue_uzs);
+      expect(body.sales.by_day.at(-1).day).toBe(body.to);
+      expect(body).not.toHaveProperty('margin'); // the cost of jars is for the admin only
+      expect(body).not.toHaveProperty('ai_spend');
+      expect(body.attention).toMatchObject({ awaiting_confirmation: expect.any(Number), yandex_to_ship: expect.any(Number), ai_red: expect.any(Number) });
       expect(body.statuses.delivered).toBeGreaterThanOrEqual(1);
       expect(body.top_products.length).toBeGreaterThan(0);
       expect(body.low_stock.map((p: { sku: string }) => p.sku)).toContain('VTL-ZINC-25');

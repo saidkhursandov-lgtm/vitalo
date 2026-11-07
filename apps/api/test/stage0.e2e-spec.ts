@@ -98,14 +98,23 @@ describe('Stage 0: permissions, payment check reminder, reservation time (e2e)',
       const dash = async (r: Role) => (await http().get('/api/staff/dashboard?days=30').set(bearer(tokens[r])).expect(200)).body;
       for (const r of ['admin', 'manager'] as Role[]) {
         const d = await dash(r);
-        expect(typeof d.revenue_uzs).toBe('number');
-        expect(typeof d.average_check_uzs).toBe('number');
+        expect(typeof d.sales.revenue_uzs).toBe('number');
+        expect(typeof d.sales.average_check_uzs).toBe('number');
       }
       const m = await dash('marketer');
-      expect(m).not.toHaveProperty('revenue_uzs');
-      expect(m).not.toHaveProperty('average_check_uzs');
+      expect(m.sales).not.toHaveProperty('revenue_uzs');
+      expect(m.sales).not.toHaveProperty('average_check_uzs');
+      expect(m.sales.channels.vitalo).not.toHaveProperty('revenue_uzs');
+      for (const d of m.sales.by_day) expect(d).not.toHaveProperty('vitalo_revenue_uzs');
       for (const t of m.top_products) expect(t).not.toHaveProperty('revenue_uzs');
-      expect(m).toHaveProperty('paid_orders');
+      expect(m.sales).toHaveProperty('orders');
+      // генплан, этап 2: margin and the AI spend — admin only
+      expect(await dash('admin')).toMatchObject({ margin: expect.any(Object), ai_spend: { month_usd: expect.any(Number), budget_usd: expect.any(Number) } });
+      for (const r of ['manager', 'marketer'] as Role[]) {
+        const d = await dash(r);
+        expect(d).not.toHaveProperty('margin');
+        expect(d).not.toHaveProperty('ai_spend');
+      }
       await http().get('/api/staff/dashboard/funnel?period=7').set(bearer(tokens.marketer)).expect(200);
     });
   });

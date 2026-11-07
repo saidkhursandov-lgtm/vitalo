@@ -44,6 +44,9 @@
   --skin-orange: #ff6600;    /* 11.11 badge: dark text on it (6.0:1) */
   --skin-orange-text: #c2410c; /* 11.11 price on white (5.2:1): plain orange is too light for text */
   --skin-teal: #0f766e;      /* «Акция» badge, white text 5.5:1 (#0D9488 is only 3.7:1) */
+  /* генплан, этап 2: dashboard chart — Mini App navy, Yandex a lighter navy (3:1 on white for graphics) */
+  --chart-vitalo: var(--primary);
+  --chart-yandex: #5b7fb8;
   /* old names kept for existing screens */
   --accent: var(--primary);
   --accent-text: #ffffff;
@@ -153,6 +156,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 16px; margin-bottom: 16px; }
 .kpi { min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
 .kpi-value { font-size: clamp(18px, 5vw, 24px); font-weight: 700; margin: 4px 0; }
+.kpi-warn { border-color: var(--warn); background: var(--warn-soft); }
+.attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.attention-list li { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.attention-list a { display: inline-flex; align-items: center; gap: 4px; }
+.attention-count { flex: none; min-width: 36px; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-weight: 700; text-align: center; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-bottom: 8px; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; }
+.swatch-vitalo, .sales-chart .bar-vitalo { background: var(--chart-vitalo); fill: var(--chart-vitalo); }
+.swatch-yandex, .sales-chart .bar-yandex { background: var(--chart-yandex); fill: var(--chart-yandex); }
+.sales-chart { display: block; width: 100%; height: auto; max-height: 240px; }
+.sales-chart .chart-axis { stroke: var(--border-strong); }
+.sales-chart .chart-label { fill: var(--muted); font-size: 11px; }
 
 .alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; }
 .alert-error { background: var(--bad-soft); color: var(--bad); }
