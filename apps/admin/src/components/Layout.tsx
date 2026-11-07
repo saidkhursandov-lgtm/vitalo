@@ -1,22 +1,37 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/auth';
 import { ROLE } from '../lib/format';
-import { navFor } from '../lib/nav';
-import { CloseIcon, MenuIcon } from './Icons';
+import { activeItem, groupsFor, type NavGroup, type NavItem } from '../lib/nav';
+import { CloseIcon, MenuIcon, NextIcon } from './Icons';
 import { Logo } from './Logo';
 
 /**
  * Admin frame. The menu scrolls on its own (low screens, admin inside Telegram), and on narrow screens
- * (≤ 900 px) it is a panel that slides in from the left by the «Меню» button.
+ * (≤ 900 px) it is a panel that slides in from the left by the «Меню» button. Генплан, этап 2: 7 groups that fold;
+ * the group of the open section is unfolded.
  */
 export function Layout() {
   const { staff, permissions, logout } = useSession();
   const [open, setOpen] = useState(false);
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const groups = groupsFor(permissions);
+  const current = activeItem(groups.flatMap((g) => g.items), pathname, search);
+  const currentGroup = groups.find((g) => current && g.items.includes(current))?.id;
+  const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set(currentGroup ? [currentGroup] : []));
 
-  // Going to another section closes the panel on a phone.
-  useEffect(() => setOpen(false), [pathname]);
+  // Going to another section closes the panel on a phone and unfolds that section's group.
+  useEffect(() => {
+    setOpen(false);
+    if (currentGroup) setUnfolded((u) => (u.has(currentGroup) ? u : new Set(u).add(currentGroup)));
+  }, [pathname, search, currentGroup]);
+  const toggle = (id: string) =>
+    setUnfolded((u) => {
+      const next = new Set(u);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   useEffect(() => {
     if (!open) return;
@@ -54,11 +69,13 @@ export function Layout() {
           </button>
         </div>
         <nav aria-label="Разделы админки">
-          {navFor(permissions).map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.to === '/'}>
-              {n.label}
-            </NavLink>
-          ))}
+          {groups.map((g) =>
+            g.items.length === 1 && g.items[0].label === g.label ? (
+              <Item key={g.id} item={g.items[0]} active={g.items[0] === current} />
+            ) : (
+              <Group key={g.id} group={g} current={current} open={unfolded.has(g.id)} onToggle={() => toggle(g.id)} />
+            ),
+          )}
         </nav>
         <div className="me">
           <div className="me-name">{staff.name}</div>
@@ -71,6 +88,34 @@ export function Layout() {
       <main className="main">
         <Outlet />
       </main>
+    </div>
+  );
+}
+
+function Item({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link to={item.to} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined}>
+      {item.label}
+    </Link>
+  );
+}
+
+function Group({ group, current, open, onToggle }: { group: NavGroup; current?: NavItem; open: boolean; onToggle: () => void }) {
+  const id = `nav-group-${group.id}`;
+  const hasCurrent = !!current && group.items.includes(current);
+  return (
+    <div className={hasCurrent ? 'nav-group has-current' : 'nav-group'}>
+      <button type="button" className="nav-group-head" aria-expanded={open} aria-controls={id} onClick={onToggle}>
+        <NextIcon size={16} className="nav-group-chevron" aria-hidden />
+        {group.label}
+      </button>
+      {open && (
+        <div id={id} className="nav-group-items">
+          {group.items.map((i) => (
+            <Item key={i.to} item={i} active={i === current} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

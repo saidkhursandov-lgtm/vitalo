@@ -117,6 +117,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .sidebar nav a { display: flex; align-items: center; min-height: 40px; color: var(--text); padding: 0 12px; border-radius: 10px; font-weight: 500; }
 .sidebar nav a:hover { background: var(--neutral-soft); text-decoration: none; }
 .sidebar nav a.active { background: var(--primary-soft); color: var(--primary-text); font-weight: 600; box-shadow: inset 3px 0 var(--primary); }
+/* Генплан, этап 2: menu groups that fold */
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-group-head { display: flex; align-items: center; gap: 6px; min-height: 40px; width: 100%; padding: 0 8px; margin-top: 4px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.nav-group-head:hover { background: var(--neutral-soft); }
+.nav-group-chevron { flex: none; transition: transform 0.15s; }
+.nav-group-head[aria-expanded="true"] .nav-group-chevron { transform: rotate(90deg); }
+.nav-group.has-current .nav-group-head { color: var(--primary-text); }
+.nav-group-items { display: flex; flex-direction: column; gap: 2px; padding-left: 14px; }
+.sidebar nav .nav-group-items a { min-height: 36px; font-size: 0.95em; }
+@media (prefers-reduced-motion: reduce) { .nav-group-chevron { transition: none; } }
 .me { border-top: 1px solid var(--border); padding: 12px 10px 0; }
 .me-name { color: var(--text); font-weight: 600; }
 .me .muted { color: var(--sidebar-text); }
@@ -193,7 +203,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (pointer: coarse) {
   .btn, .btn-sm { min-height: 44px; }
   .btn-icon { width: 44px; }
-  .sidebar nav a { min-height: 44px; }
+  .sidebar nav a, .sidebar nav .nav-group-items a, .nav-group-head { min-height: 44px; }
   input:not([type='checkbox']):not([type='radio']), select { min-height: 44px; }
   .check { min-height: 44px; }
 }

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StaffAuthProvider, type Permission } from './lib/auth';
 import { setToken } from './lib/api';
 import { navFor } from './lib/nav';
+import { MemoryRouter } from 'react-router-dom';
 import { Compat, type CompatRequestRow } from './pages/Compat';
 
 const row = (over: Partial<CompatRequestRow> = {}): CompatRequestRow => ({
@@ -60,7 +61,9 @@ function show() {
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <StaffAuthProvider>
-        <Compat />
+        <MemoryRouter>
+          <Compat />
+        </MemoryRouter>
       </StaffAuthProvider>
     </QueryClientProvider>,
   );
@@ -68,8 +71,8 @@ function show() {
 
 describe('3.4 Совместимость', () => {
   it('in the menu for the manager (view) and the specialist; not for warehouse', () => {
-    expect(navFor(['compat.view']).map((n) => n.label)).toEqual(['Совместимость']);
-    expect(navFor(['orders.view', 'inventory.view']).map((n) => n.label)).not.toContain('Совместимость');
+    expect(navFor(['compat.view']).map((n) => n.label)).toEqual(['Вопросы о совместимости', 'База знаний AI']); // генплан, этап 2
+    expect(navFor(['orders.view', 'inventory.view']).map((n) => n.label)).not.toContain('Вопросы о совместимости');
   });
 
   it('a manager sees the request but not the comment, and cannot answer', async () => {

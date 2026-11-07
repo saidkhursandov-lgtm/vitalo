@@ -44,6 +44,7 @@ describe('admin menu (low screens and phones)', () => {
     expect(shell.classList.contains('nav-open')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Открыть меню' }));
     expect(shell.classList.contains('nav-open')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Система' })); // generalplan stage 2: groups fold
     fireEvent.click(screen.getByRole('link', { name: 'Журнал аудита' }));
     expect(shell.classList.contains('nav-open')).toBe(false);
     expect(screen.getByText('Журнал')).toBeTruthy();
@@ -58,5 +59,28 @@ describe('admin menu (low screens and phones)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Открыть меню' }));
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть меню' }));
     expect(shell.classList.contains('nav-open')).toBe(false);
+  });
+});
+
+describe('menu groups (генплан, этап 2)', () => {
+  it('a group folds and unfolds; the group of the open page is unfolded', () => {
+    render(
+      <MemoryRouter initialEntries={['/audit']}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/audit" element={<p>Журнал</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    const system = screen.getByRole('button', { name: 'Система' });
+    expect(system.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Журнал аудита' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.queryByRole('link', { name: 'Заказы' })).toBeNull(); // «Продажи» folded
+    fireEvent.click(screen.getByRole('button', { name: 'Продажи' }));
+    expect(screen.getByRole('link', { name: 'Заказы' })).toBeTruthy();
+    fireEvent.click(system);
+    expect(screen.queryByRole('link', { name: 'Журнал аудита' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Дашборд' })).toBeTruthy(); // a group of one is a plain link
   });
 });

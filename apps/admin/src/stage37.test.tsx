@@ -9,7 +9,7 @@ const item: ItemCheck = { product_id: 'p1', sku: 'A001', name: 'Магний B6'
 
 describe('3.7 Акции', () => {
   it('«Акции» for admin, marketer, manager (view); 3.2 promo messages are now «Рассылки»', () => {
-    expect(navFor(['promo.view', 'promo.send']).map((n) => n.label)).toEqual(['Акции', 'Рассылки', 'Промокоды']);
+    expect(navFor(['promo.view', 'promo.send']).map((n) => n.label)).toEqual(['Акции', 'Промокоды', 'Рассылки']); // генплан, этап 2: «Маркетинг»
   });
 
   it('skins and states have labels', () => {

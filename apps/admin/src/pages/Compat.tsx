@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Badge,
   ErrorBox,
@@ -84,6 +85,8 @@ const TABS: [Tab, string][] = [
   ["substances", "Вещества"],
   ["products", "Товары и вещества"],
 ];
+/** Tabs of «База знаний AI» (menu → Каталог); the rest are questions from customers (menu → Продажи). */
+export const KNOWLEDGE_TABS: Tab[] = ["rules", "substances", "products"];
 
 /**
  * Админка → Совместимость (3.4, D-40). Requests from the cart (2+ products); admins and employees marked «специалист»
@@ -91,13 +94,17 @@ const TABS: [Tab, string][] = [
  */
 export function Compat() {
   const { can } = useSession();
-  const [tab, setTab] = useState<Tab>("pending");
+  const [params, setParams] = useSearchParams();
+  // Генплан, этап 2: one page, two menu items — questions from customers (Продажи) and the AI knowledge (Каталог)
+  const tab = (TABS.find(([t]) => t === params.get("tab"))?.[0] ?? "pending") as Tab;
+  const setTab = (t: Tab) => setParams(t === "pending" ? {} : { tab: t }, { replace: true });
+  const knowledge = KNOWLEDGE_TABS.includes(tab);
   const answer = can("compat.answer");
   return (
     <>
-      <PageHead title="Совместимость">
+      <PageHead title={knowledge ? "База знаний VITALO AI" : "Вопросы о совместимости"}>
         <div className="segmented">
-          {TABS.map(([t, label]) => (
+          {TABS.filter(([t]) => KNOWLEDGE_TABS.includes(t) === knowledge).map(([t, label]) => (
             <button
               key={t}
               className={tab === t ? "is-on" : ""}

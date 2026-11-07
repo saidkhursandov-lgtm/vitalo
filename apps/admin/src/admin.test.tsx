@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ApiError, errorText, qs } from './lib/api';
 import type { Permission } from './lib/auth';
 import { dateTime, money } from './lib/format';
-import { homeFor, navFor } from './lib/nav';
+import { activeItem, groupsFor, homeFor, NAV_GROUPS, navFor } from './lib/nav';
 import { TestBadge } from './components/OrderFinance';
 import { monthRange } from './pages/Analytics';
 import { monthName } from './pages/Finance';
@@ -20,15 +20,39 @@ afterEach(cleanup);
 /** Same lists as apps/api/src/staff/permissions.ts permissionsOf(role). */
 const PERMS: Record<string, Permission[]> = {
   warehouse: ['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision'],
-  marketer: ['dashboard.view', 'products.view', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send'],
+  marketer: ['dashboard.view', 'products.view', 'products.content', 'marketing.content', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send'],
   manager: ['dashboard.view', 'orders.view', 'orders.payment', 'orders.fulfil', 'orders.deliver', 'orders.cancel', 'orders.edit', 'products.view', 'inventory.view', 'customers.view', 'customers.block', 'dashboard.revenue', 'yandex.price.view', 'yandex.price.sync', 'purchases.view', 'receiving.perform', 'units.view', 'products.label', 'yandex.orders.view', 'promo.view', 'compat.view'],
 };
+
+describe('menu in 7 groups (генплан, этап 2)', () => {
+  const all = NAV_GROUPS.flatMap((g) => g.items);
+  const at = (path: string) => activeItem(all, path.split('?')[0], path.includes('?') ? `?${path.split('?')[1]}` : '')?.label;
+
+  it('the groups and their order', () => {
+    expect(NAV_GROUPS.map((g) => g.label)).toEqual(['Дашборд', 'Продажи', 'Каталог', 'Закупки и склад', 'Маркетинг', 'Финансы и аналитика', 'Система']);
+    expect(new Set(all.map((i) => i.label)).size).toBe(all.length);
+  });
+
+  it('the open page and tab light up one item', () => {
+    expect(at('/')).toBe('Дашборд');
+    expect(at('/orders/123')).toBe('Заказы');
+    expect(at('/yandex-orders/5')).toBe('Заказы Яндекса');
+    expect(at('/inventory')).toBe('Остатки');
+    expect(at('/inventory?tab=units')).toBe('Банки');
+    expect(at('/settings')).toBe('Оплата');
+    expect(at('/settings?tab=dicts')).toBe('Справочники');
+    expect(at('/compat?tab=substances')).toBe('База знаний AI');
+    expect(at('/compat?tab=answered')).toBe('Вопросы о совместимости');
+    expect(at('/finance?tab=tax')).toBe('Налог');
+  });
+});
 
 describe('menu by role', () => {
   const labels = (role: string) => navFor(PERMS[role]).map((n) => n.label);
 
   it('warehouse: orders, Yandex orders, products, stock — no settings, customers, audit', () => {
-    expect(labels('warehouse')).toEqual(['Заказы', 'Заказы Яндекса', 'Товары', 'Склад']);
+    expect(labels('warehouse')).toEqual(['Заказы', 'Заказы Яндекса', 'Товары', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений']);
+    expect(groupsFor(PERMS.warehouse).map((g) => g.label)).toEqual(['Продажи', 'Каталог', 'Закупки и склад']);
     expect(homeFor(PERMS.warehouse)).toBe('/orders');
   });
 
@@ -38,14 +62,14 @@ describe('menu by role', () => {
     for (const role of ['warehouse', 'marketer', 'manager']) expect(labels(role)).not.toContain('Бренды');
   });
 
-  it('marketer: dashboard, products, «Акции» (3.7), «Рассылки» (3.2) and «Промокоды» (3.3)', () => {
-    expect(labels('marketer')).toEqual(['Дашборд', 'Товары', 'Акции', 'Рассылки', 'Промокоды']);
+  it('marketer: dashboard, products, «Витрина», «Акции» (3.7), «Промокоды» (3.3) and «Рассылки» (3.2)', () => {
+    expect(labels('marketer')).toEqual(['Дашборд', 'Товары', 'Витрина', 'Акции', 'Промокоды', 'Рассылки']);
     for (const role of ['warehouse', 'manager']) expect(labels(role)).not.toContain('Рассылки');
     expect(labels('warehouse')).not.toContain('Акции');
   });
 
   it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {
-    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Товары', 'Склад', 'Закупки', 'Клиенты', 'Лист ожидания', 'Акции', 'Промокоды', 'Совместимость']);
+    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Клиенты', 'Лист ожидания', 'Вопросы о совместимости', 'Товары', 'База знаний AI', 'Закупки', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений', 'Акции', 'Промокоды']);
   });
 });
 
@@ -215,7 +239,7 @@ describe('stage 3: money is for the admin only', () => {
       expect(navFor(PERMS[role]).map((n) => n.label)).not.toEqual(expect.arrayContaining(['Аналитика']));
       expect(navFor(PERMS[role]).map((n) => n.label)).not.toEqual(expect.arrayContaining(['Финансы']));
     }
-    expect(navFor(['finance.manage']).map((n) => n.to)).toEqual(['/analytics', '/finance']);
+    expect(navFor(['finance.manage']).map((n) => n.to)).toEqual(['/analytics', '/finance', '/finance?tab=tax', '/finance?tab=payroll']);
   });
 
   it('periods and month names', () => {
