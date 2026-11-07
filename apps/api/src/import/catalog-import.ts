@@ -1,3 +1,4 @@
+import { withDefaultPaymeCodes } from '../payments/payme/payme-config';
 /**
  * The single catalog table (VITALO_каталог_единая_таблица.xlsx, sheet «Товары») -> products. npm run import:catalog.
  *
@@ -576,7 +577,7 @@ export async function applyCatalogImport(prisma: PrismaService, audit: AuditServ
             data[DICTIONARY_COLUMNS[kind].text] = row.name_ru; // the Mini App reads the text
           }
           if (p.action === 'create') {
-            const created = await tx.products.create({ data: { ...(data as Prisma.productsUncheckedCreateInput), id: p.productId } });
+            const created = await tx.products.create({ data: { ...(withDefaultPaymeCodes(data) as Prisma.productsUncheckedCreateInput), id: p.productId } });
             if (p.categoryIds?.length) await tx.product_categories.createMany({ data: p.categoryIds.map((c) => ({ product_id: created.id, category_id: c })) });
             await audit.log({ staffId: null, action: 'product.created', entityType: 'product', entityId: created.id, after: { ...(auditJson(created) as object), category_ids: p.categoryIds, source: SOURCE } }, tx);
             result.created.push(p.sku);

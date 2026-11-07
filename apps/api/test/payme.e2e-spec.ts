@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { ReservationExpiryService } from '../src/orders/reservation-expiry.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { archiveTestProducts, bearer, createTestApp, createTestProduct, loginCustomer, loginStaff, seededAddresses, stockOf } from './helpers';
+import { PRODUCT_DEFAULT_IKPU, PRODUCT_DEFAULT_PACKAGE_CODE } from '../src/payments/payme/payme-config';
+import { archiveTestProducts, bearer, createTestApp, createTestProduct, loginCustomer, loginStaff, seededAddresses, stockOf, TEST_BRAND } from './helpers';
 
 const ADMIN_TG = 222_222_221;
 /** Fake values for this suite only (never real keys). */
@@ -387,5 +388,16 @@ describe('Payme Merchant API (e2e)', () => {
     expect(t).toMatchObject({ id, time, amount, account, state: 1, perform_time: 0, cancel_time: 0, reason: null, transaction: expect.any(String) });
     const none = await rpc('GetStatement', { from: 1, to: 2 });
     expect(none.result!.transactions).toEqual([]);
+  });
+  it('07.11: a new product gets the shop ИКПУ and package code; its own ИКПУ is kept', async () => {
+    const make = async (extra: Record<string, unknown>) => {
+      const sku = `E2E-IKPU-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const res = await request(app.getHttpServer()).post('/api/staff/products').set(bearer(admin))
+        .send({ sku, name_ru: `Товар ${sku}`, brand: TEST_BRAND, manufacturer: 'Test', price_uzs: 10000, ...extra }).expect(201);
+      return prisma.products.findUniqueOrThrow({ where: { id: res.body.id } });
+    };
+    expect(await make({})).toMatchObject({ ikpu_code: PRODUCT_DEFAULT_IKPU, package_code: PRODUCT_DEFAULT_PACKAGE_CODE });
+    expect(await make({ ikpu_code: '', package_code: '' })).toMatchObject({ ikpu_code: '02106999028000000', package_code: '1490779' });
+    expect(await make({ ikpu_code: IKPU, package_code: PACKAGE })).toMatchObject({ ikpu_code: IKPU, package_code: PACKAGE });
   });
 });

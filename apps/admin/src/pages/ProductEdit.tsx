@@ -50,6 +50,10 @@ const TEXTS = [
   ['intake_memo', 'Памятка приёма (покупатель увидит с релиза 3)', 3],
 ] as const;
 
+/** 07.11: the shop's one ИКПУ and package code for Payme — the same as PRODUCT_DEFAULT_* in apps/api payme-config.ts */
+const PRODUCT_DEFAULT_IKPU = '02106999028000000';
+const PRODUCT_DEFAULT_PACKAGE_CODE = '1490779';
+
 const PLAIN = [
   'sku',
   'name_ru',
@@ -109,6 +113,11 @@ function toForm(p?: AdminProduct): Form {
   f.old_price_uzs = p?.old_price_uzs == null ? '' : String(p.old_price_uzs);
   f.cost_uzs = p?.cost_uzs == null ? '' : String(p.cost_uzs);
   f.min_stock = p ? String(p.min_stock) : '0';
+  if (!p) {
+    // 07.11: a new product gets the shop's one ИКПУ and package code for Payme (the server does the same when empty)
+    f.ikpu_code = PRODUCT_DEFAULT_IKPU;
+    f.package_code = PRODUCT_DEFAULT_PACKAGE_CODE;
+  }
   for (const [, text] of DICTS) {
     f[text] = (p?.[text] as string | null) ?? '';
     f[`${text}_id`] = (p?.[`${text}_id`] as string | null) ?? '';

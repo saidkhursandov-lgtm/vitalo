@@ -1,3 +1,4 @@
+import { withDefaultPaymeCodes } from '../payments/payme/payme-config';
 import {
   BadRequestException,
   Body,
@@ -344,7 +345,7 @@ export class AdminProductsService {
       const { category_ids, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, null, data as Record<string, unknown>);
-      const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, data as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
+      const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, withDefaultPaymeCodes(data) as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
       if (category_ids?.length) await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: p.id, category_id: c })) });
       await this.audit.log({ staffId, action: 'product.created', entityType: 'product', entityId: p.id, after: { ...p, category_ids } }, tx);
       return p.id;

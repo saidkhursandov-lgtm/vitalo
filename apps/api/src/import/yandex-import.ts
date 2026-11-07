@@ -1,3 +1,4 @@
+import { withDefaultPaymeCodes } from '../payments/payme/payme-config';
 /**
  * Stage 1.5: Yandex Market table (VITALO_Yandex_данные_v4.xlsx, sheet «Яндекс Маркет»).
  *
@@ -362,7 +363,7 @@ export async function applyYandexImport(prisma: PrismaService, audit: AuditServi
           if (p.action === 'create' || data[DICTIONARY_COLUMNS[kind].text] !== undefined) data[DICTIONARY_COLUMNS[kind].text] = row.name_ru;
         }
         if (p.action === 'create') {
-          const created = await tx.products.create({ data: data as Prisma.productsUncheckedCreateInput });
+          const created = await tx.products.create({ data: withDefaultPaymeCodes(data) as Prisma.productsUncheckedCreateInput });
           await audit.log({ staffId: null, action: 'product.created', entityType: 'product', entityId: created.id, after: { ...auditJson(created) as object, source: 'import:yandex' } }, tx);
           result.created.push(p.sku);
         } else {

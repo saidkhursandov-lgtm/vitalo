@@ -16,6 +16,19 @@ export interface PaymeConfig {
   vatPercent: number;
 }
 
+/**
+ * 07.11.2026: one ИКПУ and package code for every product (the owner set them for all 23 products on 06.11). A new
+ * product — from the admin, the Yandex import or the catalog file — gets them when it comes without its own ИКПУ, so
+ * Payme is available for it at once. Change both here if the tax office gives other codes.
+ */
+export const PRODUCT_DEFAULT_IKPU = '02106999028000000';
+export const PRODUCT_DEFAULT_PACKAGE_CODE = '1490779';
+export function withDefaultPaymeCodes<T extends object>(data: T): T {
+  const d = data as { ikpu_code?: unknown; package_code?: unknown };
+  if (d.ikpu_code) return data;
+  return { ...data, ikpu_code: PRODUCT_DEFAULT_IKPU, package_code: d.package_code || PRODUCT_DEFAULT_PACKAGE_CODE };
+}
+
 export const PAYME_CHECKOUT_LIVE = 'https://checkout.paycom.uz';
 /** Payme docs («Песочница»): «URL отправки чека в песочницу: https://test.paycom.uz» (checkout.test.paycom.uz answers «Поставщик не найден»). */
 export const PAYME_CHECKOUT_TEST = 'https://test.paycom.uz';
