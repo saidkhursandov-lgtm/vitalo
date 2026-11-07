@@ -64,6 +64,8 @@ const PLAIN = [
   'halal_vege_source',
   'halal_vege',
   'admin_note',
+  'ikpu_code',
+  'package_code',
 ] as const;
 /** 2.3: numbers of the card; course days = pack / per day. */
 const INTS = ['pack_count', 'servings_per_day', 'market_advantage_percent'] as const;
@@ -361,6 +363,25 @@ function ProductForm({ product }: { product?: AdminProduct }) {
           )}
         </section>
       </div>
+
+      <section className="card">
+        <div className="section-head">
+          <h2>Чек для Payme</h2>
+          {product && (product.ikpu_code && product.package_code ? <Badge tone="ok">Заполнено</Badge> : <Badge tone="warn">Без кодов Payme недоступен</Badge>)}
+        </div>
+        <p className="muted small">
+          Payme отправляет чек в налоговую, поэтому у товара должны быть ИКПУ и код упаковки (каталог tasnif.soliq.uz). Если в заказе
+          есть товар без них, покупатель не сможет выбрать Payme — останутся другие способы оплаты.
+        </p>
+        <div className="form-grid">
+          <Field label="ИКПУ (MXIK)" hint="Ровно 17 цифр">
+            {input('ikpu_code', { inputMode: 'numeric', maxLength: 17, pattern: '\\d{17}', placeholder: '03004001001000000' })}
+          </Field>
+          <Field label="Код упаковки" hint="Из карточки ИКПУ на tasnif.soliq.uz, только цифры">
+            {input('package_code', { inputMode: 'numeric', maxLength: 20, pattern: '\\d{1,20}' })}
+          </Field>
+        </div>
+      </section>
 
       {yandexView && (
         <section className="card">

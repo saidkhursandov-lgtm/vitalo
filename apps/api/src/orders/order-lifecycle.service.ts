@@ -172,11 +172,19 @@ export class OrderLifecycleService {
    * (nothing was written off for them yet). The order becomes
    * Cancelled and a refund task is created (refunds are manual, Master TZ §10). Payment status stays
    * payment_success: the money was received and is returned outside the system.
+   * Payme: the payment system itself cancelled the payment (CancelTransaction after PerformTransaction) — staffId is
+   * null (the history says «system»), the customer sees opts.shownReason and the task note is opts.refundNote.
    */
-  async cancelPaid(tx: Tx, order: LockedOrder, staffId: string, reason: string): Promise<void> {
+  async cancelPaid(
+    tx: Tx,
+    order: LockedOrder,
+    staffId: string | null,
+    reason: string,
+    opts: { refundNote?: string; shownReason?: string } = {},
+  ): Promise<void> {
     assertTransition(order.status, 'cancelled');
     await this.units.releaseOnCancel(tx, order, staffId, reason);
-    await this.stock.release(tx, order.id, staffId);
+    await this.stock.release(tx, order.id, staffId ?? undefined);
     await this.stock.returnDeducted(tx, order.id, staffId);
     const full = await tx.orders.update({
       where: { id: order.id },
@@ -189,12 +197,15 @@ export class OrderLifecycleService {
       data: {
         type: 'refund',
         order_id: order.id,
-        note: cod
-          ? `Заказ ${order.order_number} с оплатой при получении отменён после подтверждения. Если клиент уже отдал курьеру ${Number(full.total_uzs)} сум — вернуть, если нет — просто закройте задачу. Причина: ${reason}`
-          : `Вернуть клиенту ${Number(full.total_uzs)} сум: оплаченный заказ ${order.order_number} отменён. Причина: ${reason}`,
+        note:
+          opts.refundNote ??
+          (cod
+            ? `Заказ ${order.order_number} с оплатой при получении отменён после подтверждения. Если клиент уже отдал курьеру ${Number(full.total_uzs)} сум — вернуть, если нет — просто закройте задачу. Причина: ${reason}`
+            : `Вернуть клиенту ${Number(full.total_uzs)} сум: оплаченный заказ ${order.order_number} отменён. Причина: ${reason}`),
       },
     });
-    await this.addHistory(tx, order.id, order.status, 'cancelled', { type: 'staff', id: staffId }, reason);
+    const actor: Actor = staffId ? { type: 'staff', id: staffId } : { type: 'system', id: null };
+    await this.addHistory(tx, order.id, order.status, 'cancelled', actor, reason, new Date(), opts.shownReason);
   }
 
   /**
@@ -202,7 +213,7 @@ export class OrderLifecycleService {
    * queued (same transaction). Shown reason: staff text as written; automatic expiry as a localized
    * phrase; none when the customer cancelled themselves.
    */
-  async addHistory(tx: Tx, orderId: string, from: OrderStatus | null, to: OrderStatus, actor: Actor, reason?: string, at = new Date()) {
+  async addHistory(tx: Tx, orderId: string, from: OrderStatus | null, to: OrderStatus, actor: Actor, reason?: string, at = new Date(), shown?: string) {
     await tx.order_status_history.create({
       data: {
         order_id: orderId,
@@ -215,7 +226,7 @@ export class OrderLifecycleService {
       },
     });
     await this.settlePromo(tx, orderId, to);
-    const shownReason = actor.type === 'staff' ? reason : actor.type === 'system' ? EXPIRED_REASON_CODE : null;
+    const shownReason = shown ?? (actor.type === 'staff' ? reason : actor.type === 'system' ? EXPIRED_REASON_CODE : null);
     await this.notifications.orderStatusChanged(tx, orderId, to, shownReason);
   }
 

@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { money } from '../../lib/format';
 
 type Provider = 'payme' | 'click' | 'uzum';
-type Mode = 'hidden' | 'soon' | 'live';
+type Mode = 'hidden' | 'soon' | 'test' | 'live';
 type Modes = Record<Provider, Mode>;
 
 interface Options {
@@ -25,6 +25,7 @@ const PROVIDERS: [Provider, string][] = [
 const MODES: [Mode, string][] = [
   ['hidden', 'Скрыта'],
   ['soon', 'Скоро'],
+  ['test', 'Тест (сотрудники)'],
   ['live', 'Работает'],
 ];
 
@@ -32,7 +33,7 @@ const MODES: [Mode, string][] = [
 function liveBlocker(s: Options['online_status'][Provider]): string | null {
   if (s.can_go_live) return null;
   const missing = [!s.keys_present && 'ключей в файле .env на сервере', !s.module_ready && 'модуля подключения (его добавит программист)'].filter(Boolean);
-  return `«Работает» пока нельзя: нет ${missing.join(' и ')}.`;
+  return `«Тест» и «Работает» пока нельзя: нет ${missing.join(' и ')}.`;
 }
 
 /**
@@ -96,7 +97,7 @@ export function CheckoutOptions() {
 
       <h2 style={{ marginTop: 20 }}>Онлайн-оплата: Payme, Click, Uzum</h2>
       <p className="muted small">
-        «Скрыта» — клиент её не видит. «Скоро» — логотип при оформлении; нажатие объясняет, что оплата скоро заработает, и считается в «Аналитика → Воронка». «Работает» — настоящая оплата, только когда есть ключи и модуль подключения.
+        «Скрыта» — клиент её не видит. «Скоро» — логотип при оформлении; нажатие объясняет, что оплата скоро заработает, и считается в «Аналитика → Воронка». «Тест (сотрудники)» — настоящая оплата только для сотрудников (их Telegram есть в «Сотрудниках»), покупатели видят «Скоро»: так проверяют оплату на боевом сервере. «Работает» — настоящая оплата для всех. «Тест» и «Работает» — только когда есть ключи и модуль подключения.
       </p>
       {PROVIDERS.map(([p, name]) => {
         const blocker = liveBlocker(status[p]);
@@ -111,8 +112,8 @@ export function CheckoutOptions() {
                   role="radio"
                   aria-checked={modes[p] === m}
                   className={modes[p] === m ? 'is-on' : ''}
-                  disabled={m === 'live' && !!blocker && modes[p] !== 'live'}
-                  title={m === 'live' && blocker ? blocker : undefined}
+                  disabled={(m === 'live' || m === 'test') && !!blocker && modes[p] !== m}
+                  title={(m === 'live' || m === 'test') && blocker ? blocker : undefined}
                   onClick={() => (setModes({ ...modes, [p]: m }), setSaved(false))}
                 >
                   {label}

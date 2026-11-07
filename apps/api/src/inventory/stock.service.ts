@@ -105,7 +105,7 @@ export class StockService {
    * A paid order is cancelled by staff: units already written off go back to stock
    * (return_to_stock movements). Call under the order row lock; repeated calls return nothing more.
    */
-  async returnDeducted(tx: Prisma.TransactionClient, orderId: string, staffId: string): Promise<void> {
+  async returnDeducted(tx: Prisma.TransactionClient, orderId: string, staffId: string | null): Promise<void> {
     const rows = await tx.$queryRaw<{ warehouse_id: string; product_id: string; qty: bigint }[]>`
       SELECT warehouse_id, product_id,
              SUM(CASE WHEN movement_type = 'deduct' THEN qty ELSE -qty END) AS qty

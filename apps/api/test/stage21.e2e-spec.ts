@@ -72,7 +72,9 @@ describe('Stage 2.1 (e2e)', () => {
       const opts = (await get()).body;
       expect(opts.online).toEqual({ payme: 'soon', click: 'soon', uzum: 'soon' });
       expect(opts.show_online_soon).toBe(true);
-      expect(opts.online_status.payme).toEqual({ keys_present: expect.any(Boolean), module_ready: false, can_go_live: false });
+      // Payme's module is connected, but the tests have no keys (test-env.ts); Click has neither
+      expect(opts.online_status.payme).toEqual({ keys_present: false, module_ready: true, can_go_live: false });
+      expect(opts.online_status.click).toEqual({ keys_present: false, module_ready: false, can_go_live: false });
       const token = await newCustomer();
       const shop = (await http().get('/api/catalog/texts').set(bearer(token)).expect(200)).body;
       expect(shop.checkout.online).toEqual({ payme: 'soon', click: 'soon', uzum: 'soon' });
@@ -84,6 +86,8 @@ describe('Stage 2.1 (e2e)', () => {
 
       const live = await put({ ...base, online: { payme: 'live', click: 'hidden', uzum: 'soon' } }).expect(400);
       expect(live.body).toMatchObject({ code: 'ONLINE_PROVIDER_NOT_CONNECTED', provider: 'payme' });
+      // «Тест (сотрудники)» takes real payments too: the same keys are needed
+      expect((await put({ ...base, online: { payme: 'test', click: 'hidden', uzum: 'soon' } }).expect(400)).body).toMatchObject({ code: 'ONLINE_PROVIDER_NOT_CONNECTED', provider: 'payme' });
       expect(live.body.message).toContain('Payme нельзя включить');
       await put({ ...base, online: { payme: 'maybe', click: 'hidden', uzum: 'soon' } }).expect(400);
 

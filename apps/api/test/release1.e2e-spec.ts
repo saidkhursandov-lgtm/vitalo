@@ -65,7 +65,7 @@ describe('Release 1 (e2e)', () => {
       const token = await newCustomer();
       const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
       const view = (await preview(token, buyNow(p.id, 1)).expect(200)).body;
-      expect(view.payment_options).toEqual({ cod: true, cod_unavailable: null });
+      expect(view.payment_options).toEqual({ cod: true, cod_unavailable: null, payme: false, payme_unavailable: 'off' });
       expect(view.can_place).toBe(true);
 
       const order = (await place(token, buyNow(p.id, 1)).expect(201)).body;
@@ -78,7 +78,7 @@ describe('Release 1 (e2e)', () => {
       const token = await newCustomer();
       const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
       const view = (await preview(token, buyNow(p.id, 1, addr.samarkand)).expect(200)).body;
-      expect(view.payment_options).toEqual({ cod: false, cod_unavailable: 'region' });
+      expect(view.payment_options).toEqual({ cod: false, cod_unavailable: 'region', payme: false, payme_unavailable: 'off' });
       expect(view.can_place).toBe(false); // the chosen method (cod) is blocked
 
       const res = await place(token, buyNow(p.id, 1, addr.samarkand)).expect(422);
@@ -89,7 +89,7 @@ describe('Release 1 (e2e)', () => {
       const token = await newCustomer();
       const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
       const view = (await preview(token, buyNow(p.id, 1, oblast)).expect(200)).body;
-      expect(view.payment_options).toEqual({ cod: false, cod_unavailable: 'region' });
+      expect(view.payment_options).toEqual({ cod: false, cod_unavailable: 'region', payme: false, payme_unavailable: 'off' });
       const res = await place(token, buyNow(p.id, 1, oblast)).expect(422);
       expect(res.body).toMatchObject({ code: 'COD_UNAVAILABLE', reason: 'region' });
       // the order was not created: the whole transaction (with the stock reserve) is rolled back
@@ -120,7 +120,7 @@ describe('Release 1 (e2e)', () => {
       await setOptions({ ...defaults, cod_max_total_uzs: 119_999 });
       const view = (await preview(token, buyNow(p.id, 1)).expect(200)).body;
       expect(view.totals.total_uzs).toBe(120_000);
-      expect(view.payment_options).toEqual({ cod: false, cod_unavailable: 'limit' });
+      expect(view.payment_options).toEqual({ cod: false, cod_unavailable: 'limit', payme: false, payme_unavailable: 'off' });
       expect((await place(token, buyNow(p.id, 1)).expect(422)).body).toMatchObject({ code: 'COD_UNAVAILABLE', reason: 'limit' });
 
       await setOptions({ ...defaults, cod_max_total_uzs: 120_000 });

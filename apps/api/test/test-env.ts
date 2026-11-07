@@ -25,6 +25,12 @@ export const TEST_ENV = {
   // suite sets fake keys itself and replaces fetch.
   YANDEX_MAPS_JS_API_KEY: '',
   YANDEX_GEOCODER_API_KEY: '',
-  UPLOAD_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
+  // Payme: never the keys from apps/api/.env; the Payme suite sets fake ones itself.
+  PAYME_MERCHANT_ID: '',
+  PAYME_KEY: '',
+  PAYME_TEST_MODE: 'true',
+  PAYME_DELIVERY_IKPU: '',
+  PAYME_DELIVERY_PACKAGE_CODE: '',
+  UPLOAD_DIR:require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
   RECEIPTS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-receipts'),
 };

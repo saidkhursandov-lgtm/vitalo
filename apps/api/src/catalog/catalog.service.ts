@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { onlineModes } from '../payments/online/online-providers';
+import { customerModes, onlineModes } from '../payments/online/online-providers';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CampaignsService } from '../promo/campaigns.service';
@@ -88,7 +88,7 @@ export class CatalogService {
   /** Checkout switches for the Mini App: the online modes are always filled in (2.1); show_online_soon mirrors them. */
   private async checkoutForApp() {
     const saved = await this.settings.getOrDefault('checkout_options');
-    const online = onlineModes(saved);
+    const online = customerModes(onlineModes(saved)); // «Тест» = «Скоро» for customers; staff see Payme in the preview
     return { cod_max_total_uzs: saved.cod_max_total_uzs, first_order_free_delivery: saved.first_order_free_delivery, online, show_online_soon: Object.values(online).includes('soon') };
   }
 

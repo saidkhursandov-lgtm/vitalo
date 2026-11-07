@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { track } from '../lib/analytics';
 import { shownStatus, statusKey, useI18n } from '../lib/i18n';
 import { useActiveOrder, useShopTexts } from '../lib/queries';
-import { daysText } from '../lib/shop';
+import { daysText, payPath } from '../lib/shop';
 import { orderNo } from '../lib/format';
 import type { IntakeGuide } from '../lib/types';
 import { ChevronIcon, DoctorIcon, STATUS_ICONS } from './Icons';
@@ -49,7 +49,7 @@ export function ActiveOrderBar() {
         </span>
       </Link>
       {o.can_pay && (
-        <Link to={`/orders/${o.id}/pay`} className="btn btn-block active-order-pay" onClick={() => track('active_order_click', { order_id: o.id, action: 'pay' })}>
+        <Link to={payPath(o.id, o.payment_method)} className="btn btn-block active-order-pay" onClick={() => track('active_order_click', { order_id: o.id, action: 'pay' })}>
           {t('activeOrder.pay')}
         </Link>
       )}

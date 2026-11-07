@@ -25,7 +25,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { manifestOrDefault } from '../settings/home-content';
 import { BankTransferDetails, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService } from '../settings/settings.service';
 import { OnlinePaymentsService } from '../payments/online/online-payments.service';
-import { ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
+import { customerModes, ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
 import { MapsService } from '../maps/maps.service';
 import { AuditService } from './audit.service';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
@@ -138,12 +138,18 @@ export class ShopContactsDto {
 
 export class TariffPatch extends PartialType(TariffDto) {}
 
-/** Stage 0.3: how long an unpaid order holds its reservation (card / bank transfer), minutes. */
+/**
+ * Reservation time that can be edited, per method: the longest value, minutes. Card / bank transfer: up to a day;
+ * Payme: up to 3 days (its own checks of test orders take time; usually 30 minutes).
+ */
+export const TIMEOUT_MAX_MINUTES: Record<string, number> = { bank_transfer: 1440, card_transfer: 1440, payme: 4320 };
+
+/** Stage 0.3: how long an unpaid order holds its reservation (card / bank transfer, Payme), minutes. */
 export class PaymentTimeoutDto {
-  @ApiProperty({ example: 720, minimum: 30, maximum: 1440, description: 'Срок резерва неоплаченного заказа, минут (30–1440)' })
+  @ApiProperty({ example: 720, minimum: 30, maximum: 4320, description: 'Срок резерва неоплаченного заказа, минут (30–1440, Payme — до 4320)' })
   @IsInt()
   @Min(30)
-  @Max(1440)
+  @Max(4320)
   timeout_minutes!: number;
 }
 
@@ -350,13 +356,14 @@ export class AdminSettingsService {
     return this.shopContacts();
   }
 
-  /** Stage 0.3: reservation time of the manual payment methods (card / bank transfer). */
-  paymentTimeouts() {
-    return this.prisma.payment_methods.findMany({
-      where: { code: { in: [...MANUAL_PAYMENT_METHODS] } },
+  /** Stage 0.3: reservation time of the manual payment methods (card / bank transfer) and Payme, with the longest value. */
+  async paymentTimeouts() {
+    const rows = await this.prisma.payment_methods.findMany({
+      where: { code: { in: Object.keys(TIMEOUT_MAX_MINUTES) } },
       select: { code: true, name_ru: true, status: true, timeout_minutes: true },
       orderBy: { code: 'asc' },
     });
+    return rows.map((m) => ({ ...m, max_minutes: TIMEOUT_MAX_MINUTES[m.code] }));
   }
 
   /**
@@ -364,9 +371,14 @@ export class AdminSettingsService {
    * Must not be shorter than the customer's payment reminder (it comes N hours before the cancellation).
    */
   async setPaymentTimeout(staffId: string, code: string, dto: PaymentTimeoutDto) {
-    if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(code)) throw new NotFoundException('Unknown payment method');
+    const max = TIMEOUT_MAX_MINUTES[code];
+    if (!max) throw new NotFoundException('Unknown payment method');
+    if (dto.timeout_minutes > max) {
+      throw new BadRequestException({ code: 'TIMEOUT_TOO_LONG', max_minutes: max, message: `The reservation can last at most ${max} minutes` });
+    }
     const reminderHours = Number(await this.settings.getOrDefault('payment_reminder_hours'));
-    if (dto.timeout_minutes < reminderHours * 60) {
+    // Payme is paid at once on its page (usually 30 minutes): the reminder rule is only for the transfers
+    if ((MANUAL_PAYMENT_METHODS as readonly string[]).includes(code) && dto.timeout_minutes < reminderHours * 60) {
       throw new BadRequestException({
         code: 'TIMEOUT_SHORTER_THAN_REMINDER',
         message: `The reservation must last at least ${reminderHours * 60} minutes: the payment reminder is sent ${reminderHours} h before the cancellation`,
@@ -480,7 +492,7 @@ export class AdminSettingsService {
   async checkoutOptions() {
     const saved = await this.settings.getOrDefault('checkout_options');
     const online = onlineModes(saved);
-    return { ...saved, online, show_online_soon: Object.values(online).includes('soon'), online_status: this.online.providersStatus() };
+    return { ...saved, online, show_online_soon: Object.values(customerModes(online)).includes('soon'), online_status: this.online.providersStatus() };
   }
 
   async setCheckoutOptions(staffId: string, dto: CheckoutOptionsDto) {
@@ -489,7 +501,7 @@ export class AdminSettingsService {
     this.online.assertModesAllowed(online);
     const value = {
       cod_max_total_uzs: dto.cod_max_total_uzs ?? null,
-      show_online_soon: Object.values(online).includes('soon'),
+      show_online_soon: Object.values(customerModes(online)).includes('soon'),
       first_order_free_delivery: dto.first_order_free_delivery,
       online,
     };

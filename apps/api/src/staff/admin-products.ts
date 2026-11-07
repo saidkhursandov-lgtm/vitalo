@@ -87,6 +87,8 @@ const TEXT_FIELDS = [
   'intake_memo_ru',
   'intake_memo_uz',
   'admin_note',
+  'ikpu_code',
+  'package_code',
 ] as const;
 
 export class ProductInput {
@@ -142,6 +144,12 @@ export class ProductInput {
   @ApiPropertyOptional({ description: 'Памятка приёма (покупателю — с релиза 3)' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) intake_memo_ru?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) intake_memo_uz?: string | null;
   @ApiPropertyOptional({ description: 'Комментарий сотрудникам' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(1000) admin_note?: string | null;
+
+  // Payme: the fiscal receipt (tasnif.soliq.uz). Without both codes the product cannot be paid through Payme.
+  @ApiPropertyOptional({ nullable: true, description: 'ИКПУ (MXIK) — 17 цифр', example: '03004001001000000' })
+  @IsOptional() @Transform(textOrNull) @Matches(/^\d{17}$/, { message: 'ikpu_code: ИКПУ — ровно 17 цифр' }) ikpu_code?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Код упаковки из каталога ИКПУ (цифры)', example: '1501226' })
+  @IsOptional() @Transform(textOrNull) @Matches(/^\d{1,20}$/, { message: 'package_code: код упаковки — только цифры' }) package_code?: string | null;
 
   // Stage 1.1: dictionary values. Their names are copied into brand / manufacturer / country / form.
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() brand_id?: string | null;
