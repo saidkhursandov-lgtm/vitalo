@@ -4,6 +4,7 @@
  */
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -87,6 +88,7 @@ export const SearchIcon = make(Search);
 export const SearchEmptyIcon = make(SearchX);
 export const BackIcon = make(ChevronLeft);
 export const ChevronIcon = make(ChevronRight);
+export const ChevronDownIcon = make(ChevronDown);
 export const FilterIcon = make(SlidersHorizontal);
 export const TrashIcon = make(Trash2);
 export const CopyIcon = make(Copy);
