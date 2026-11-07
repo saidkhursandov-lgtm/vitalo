@@ -87,11 +87,33 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .logo-img-lg { height: 44px; max-width: 240px; }
 
 /* ---------- shell ---------- */
-.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
-.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; background: var(--sidebar); color: var(--sidebar-text); padding: 20px 12px; border-right: 1px solid var(--border); }
-.brand { display: flex; align-items: flex-end; gap: 8px; padding: 0 10px 20px; }
+.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; min-height: 100dvh; }
+/* The sidebar is exactly one screen high; only the list of sections scrolls (low screens, Telegram window). */
+.sidebar { position: sticky; top: 0; height: 100vh; height: 100dvh; display: flex; flex-direction: column; background: var(--sidebar); color: var(--sidebar-text); padding: 20px 12px 0; border-right: 1px solid var(--border); }
+.brand { display: flex; align-items: flex-end; gap: 8px; padding: 0 10px 16px; flex: none; }
 .brand span:not(.logo) { font-size: 12px; color: var(--sidebar-text); }
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px 8px; }
+.sidebar .me { flex: none; padding-bottom: calc(12px + env(safe-area-inset-bottom)); background: var(--sidebar); }
+.shell .topbar, .shell .sidebar-backdrop, .sidebar .sidebar-close { display: none; }
+/* Low screens: tighter header so more sections fit. */
+@media (max-height: 720px) {
+  .sidebar { padding-top: 12px; }
+  .brand { padding-bottom: 10px; }
+}
+/* Narrow screens (phone, Telegram): the menu is a panel that slides in by the «Меню» button. */
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  .shell .topbar { display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 30; min-height: 56px; padding: 6px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .topbar .topbar-menu { min-height: 44px; gap: 6px; padding: 0 10px; margin-left: -10px; font-weight: 600; color: var(--primary); }
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50; width: min(300px, 85vw); transform: translateX(-100%); visibility: hidden; transition: transform 0.2s ease, visibility 0.2s; box-shadow: none; }
+  .nav-open .sidebar { transform: none; visibility: visible; box-shadow: 0 0 24px rgba(15, 23, 42, 0.2); }
+  .sidebar-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(15, 23, 42, 0.4); }
+  .shell.nav-open .sidebar-backdrop { display: block; }
+  .sidebar .sidebar-close { display: inline-flex; margin-left: auto; width: 44px; min-height: 44px; }
+  .brand { align-items: center; }
+  .shell .main { padding: 16px 16px 48px; }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
 .sidebar nav a { display: flex; align-items: center; min-height: 40px; color: var(--text); padding: 0 12px; border-radius: 10px; font-weight: 500; }
 .sidebar nav a:hover { background: var(--neutral-soft); text-decoration: none; }
 .sidebar nav a.active { background: var(--primary-soft); color: var(--primary-text); font-weight: 600; box-shadow: inset 3px 0 var(--primary); }
