@@ -206,6 +206,7 @@ export const STATUS_LABELS: Record<Lang, Record<string, string>> = {
     in_transit: '🚚 В пути',
     delivered: '✅ Доставлен',
     cancelled: '⚪ Отменён',
+    return: '↩️ Возврат',
   },
   uz: {
     new: '🕓 Tasdiqlash kutilmoqda',
@@ -218,6 +219,7 @@ export const STATUS_LABELS: Record<Lang, Record<string, string>> = {
     in_transit: '🚚 Yo‘lda',
     delivered: '✅ Yetkazildi',
     cancelled: '⚪ Bekor qilindi',
+    return: '↩️ Qaytarish',
   },
 };
 

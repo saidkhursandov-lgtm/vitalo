@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { errorText } from '../lib/api';
-import { ORDER_STATUS, PAYMENT_STATUS } from '../lib/format';
+import { orderStatusLabel, PAYMENT_STATUS } from '../lib/format';
 import { CloseIcon, NextIcon, PrevIcon } from './Icons';
 
 /** Skeleton rows instead of a spinner. */
@@ -48,9 +48,9 @@ const STATUS_TONE: Record<string, 'neutral' | 'ok' | 'warn' | 'bad' | 'info'> = 
 };
 
 /** Order status pill: coloured, with a dot (same colours as in the Mini App). */
-export const OrderStatus = ({ status }: { status: string }) => (
+export const OrderStatus = ({ status, cod = false }: { status: string; cod?: boolean }) => (
   <Badge tone={STATUS_TONE[status]} dot>
-    {ORDER_STATUS[status] ?? status}
+    {orderStatusLabel(status, cod)}
   </Badge>
 );
 

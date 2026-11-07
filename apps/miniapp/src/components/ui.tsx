@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
 import { discountPercent, money, shortNameOf, tileLine } from '../lib/format';
-import { errorText, shownStatus, statusKey, useI18n } from '../lib/i18n';
+import { errorText, shownStatus, orderStatusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, ShopCampaign } from '../lib/types';
 import { SaleBadge, SalePrice } from './Campaign';
@@ -168,13 +168,11 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 export function StatusPill({ status, reported = false, large = false, cod = false }: { status: OrderStatus; reported?: boolean; large?: boolean; cod?: boolean }) {
   const { t } = useI18n();
   const shown = shownStatus(status, reported);
-  // «Оплата при получении»: a new order waits for the manager, not for a payment
-  const waitsForManager = cod && status === 'new';
   const I = STATUS_ICONS[shown];
   return (
     <span className={`status status-${shown}${large ? ' status-lg' : ''}`}>
       {large && I ? <I width={18} height={18} /> : <span className="status-dot" aria-hidden />}
-      {t(waitsForManager ? 'status.codWaiting' : statusKey(status, reported))}
+      {t(orderStatusKey(status, { reported, cod }))}
     </span>
   );
 }

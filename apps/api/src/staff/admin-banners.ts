@@ -189,7 +189,8 @@ export class AdminBannersService {
 @ApiTags('staff: settings')
 @ApiBearerAuth()
 @UseGuards(StaffGuard)
-@RequirePermission('settings.manage')
+// D-53 (D-22): the marketer changes home banners without the admin
+@RequirePermission('marketing.content')
 @Controller('staff/settings/banners')
 export class AdminBannersController {
   constructor(private readonly banners: AdminBannersService) {}

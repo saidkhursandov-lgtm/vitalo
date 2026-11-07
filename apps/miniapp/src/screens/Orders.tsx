@@ -4,7 +4,7 @@ import { ChevronIcon, OrdersIcon, STATUS_ICONS } from '../components/Icons';
 import { EmptyState, ErrorState, Loading, StatusPill } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, nameOf, orderNo, prettyPhone } from '../lib/format';
-import { errorText, statusKey, useI18n } from '../lib/i18n';
+import { errorText, orderStatusKey, useI18n } from '../lib/i18n';
 import { useOrder, useOrders, useShopTexts } from '../lib/queries';
 import { daysText, payPath } from '../lib/shop';
 import { haptic } from '../lib/telegram';
@@ -94,7 +94,7 @@ export function OrderDetail() {
   const reported = !!o.payment?.customer_reported_paid_at;
   const cod = o.payment?.method === 'cod';
   // «Оплата при получении»: «Ожидает подтверждения» instead of «Ожидает оплаты» (status card and history)
-  const stateLabel = (s: Order['status']) => (cod && (s === 'new' || s === 'awaiting_payment') ? t('status.codWaiting') : t(statusKey(s)));
+  const stateLabel = (s: Order['status']) => t(orderStatusKey(s, { cod }));
   const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
 
   async function onCancel() {

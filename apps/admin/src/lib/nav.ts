@@ -19,6 +19,8 @@ export const NAV: NavItem[] = [
   { to: '/customers', label: 'Клиенты', permission: 'customers.view' },
   { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
   // 3.7: sales with their own prices and skins — admin, marketer (change), manager (view only)
+  // D-53 (D-22): home banners, manifest, home texts and cart upsell — admin and marketer
+  { to: '/storefront', label: 'Витрина', permission: 'marketing.content' },
   { to: '/campaigns', label: 'Акции', permission: 'promo.view' },
   // 3.2: promo messages to customers with «Получать акции и новости» — admin and marketer (3.7: renamed from «Акции»)
   { to: '/promo', label: 'Рассылки', permission: 'promo.send' },

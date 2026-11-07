@@ -23,6 +23,11 @@ export const PERMISSIONS = {
   'orders.edit': ['manager'],
   'products.view': ['manager', 'warehouse', 'marketer'],
   'products.edit': [],
+  // D-53: names, short names and descriptions, search words, categories and photos — not prices, costs, SKU, status,
+  // label facts (composition, Halal) or the doctor's verdict
+  'products.content': ['marketer'],
+  // D-53 (D-22): home banners, home texts, manifest, «Как заказать», cart upsell and bonus teaser
+  'marketing.content': ['marketer'],
   'inventory.view': ['manager', 'warehouse'],
   'inventory.edit': ['warehouse'],
   'customers.view': ['manager'],

@@ -48,7 +48,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'edit an order', method: 'patch', path: () => `/api/staff/orders/${orderId}`, body: {}, allowed: ['admin', 'manager'] },
     { label: 'list products', method: 'get', path: () => '/api/staff/products', allowed: ['admin', 'manager', 'warehouse', 'marketer'] },
     { label: 'create a product', method: 'post', path: () => '/api/staff/products', body: {}, allowed: ['admin'] },
-    { label: 'edit a product', method: 'patch', path: () => `/api/staff/products/${productId}`, body: { price_uzs: -1 }, allowed: ['admin'] },
+    { label: 'edit a product', method: 'patch', path: () => `/api/staff/products/${productId}`, body: { price_uzs: -1 }, allowed: ['admin', 'marketer'] }, // D-53: marketer passes the role check; price is refused below (CONTENT_ONLY)
     { label: 'see dictionary values', method: 'get', path: () => '/api/staff/dictionaries/brands', allowed: ['admin', 'manager', 'warehouse', 'marketer'] },
     { label: 'add a dictionary value', method: 'post', path: () => '/api/staff/dictionaries/brands', body: {}, allowed: ['admin'] },
     { label: 'rename a dictionary value', method: 'patch', path: () => `/api/staff/dictionaries/brands/${MISSING}`, body: {}, allowed: ['admin'] },
@@ -61,7 +61,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'preview purchase costs', method: 'post', path: () => '/api/staff/purchases/cost-preview', body: {}, allowed: ['admin'] },
     { label: 'see suppliers', method: 'get', path: () => '/api/staff/dictionaries/suppliers', allowed: ['admin', 'manager'] },
     { label: 'archive a product', method: 'post', path: () => `/api/staff/products/${MISSING}/archive`, allowed: ['admin'] },
-    { label: 'upload a product photo', method: 'post', path: () => `/api/staff/products/${productId}/photos`, allowed: ['admin'] },
+    { label: 'upload a product photo', method: 'post', path: () => `/api/staff/products/${productId}/photos`, allowed: ['admin', 'marketer'] }, // D-53
     { label: 'see stock', method: 'get', path: () => '/api/staff/inventory', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'see stock movements', method: 'get', path: () => '/api/staff/inventory/movements', allowed: ['admin', 'manager', 'warehouse'] },
     { label: 'receive stock', method: 'post', path: () => '/api/staff/inventory/receipt', body: {}, allowed: ['admin', 'warehouse'] },
@@ -187,9 +187,27 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     expect([await prisma.marketplace_external_orders.count(), await prisma.marketplace_orders.count({ where: { source: 'yandex_api' } })]).toEqual(before);
   });
 
+  it('D-53: marketer changes product texts and the storefront, not prices or shop settings', async () => {
+    const as = (r: Role) => ({ patch: (p: string, b: object) => request(app.getHttpServer()).patch(p).set(bearer(tokens[r])).send(b), get: (p: string) => request(app.getHttpServer()).get(p).set(bearer(tokens[r])) });
+    const before = await prisma.products.findUniqueOrThrow({ where: { id: productId } });
+    const refused = await as('marketer').patch(`/api/staff/products/${productId}`, { price_uzs: Number(before.price_uzs) + 1000 }).expect(403);
+    expect(refused.body.code ?? refused.body.message?.code).toBeDefined();
+    await as('marketer').patch(`/api/staff/products/${productId}`, { short_name_ru: 'Тест короткое', search_keywords: 'тест' }).expect(200);
+    const after = await prisma.products.findUniqueOrThrow({ where: { id: productId } });
+    expect(after.short_name_ru).toBe('Тест короткое');
+    expect(after.price_uzs).toBe(before.price_uzs);
+    await as('marketer').get('/api/staff/settings/banners').expect(200);
+    await as('marketer').get('/api/staff/settings/home').expect(200);
+    await as('marketer').get('/api/staff/settings/cart-upsell').expect(200);
+    await as('marketer').get('/api/staff/settings/texts').expect(403);
+    await as('marketer').get('/api/staff/settings/payment-methods').expect(403);
+    await as('manager').get('/api/staff/settings/banners').expect(403);
+    await as('manager').patch(`/api/staff/products/${productId}`, { short_name_ru: 'x' }).expect(403);
+  });
+
   it('GET /staff/auth/me lists exactly the permissions of the role', async () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
-    expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send']);
+    expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'products.content', 'marketing.content', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send']);
     expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'orders.waybill', 'orders.units', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
     expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
     expect((await me('manager')).permissions).toContain('dashboard.revenue');

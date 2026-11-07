@@ -787,41 +787,49 @@ export class AdminSettingsController {
   }
 
   @Get('home')
+  @RequirePermission('marketing.content')
   home() {
     return this.settings.homeContent();
   }
 
   @Put('home')
+  @RequirePermission('marketing.content')
   setHome(@CurrentStaff() me: StaffContext, @Body() dto: HomeContentDto) {
     return this.settings.setHomeContent(me.staff.id, dto);
   }
 
   @Get('manifest')
+  @RequirePermission('marketing.content')
   manifest() {
     return this.settings.manifest();
   }
 
   @Put('manifest')
+  @RequirePermission('marketing.content')
   setManifest(@CurrentStaff() me: StaffContext, @Body() dto: ManifestDto) {
     return this.settings.setManifest(me.staff.id, dto);
   }
 
   @Get('bonus-teaser')
+  @RequirePermission('marketing.content')
   bonusTeaser() {
     return this.settings.bonusTeaser();
   }
 
   @Put('bonus-teaser')
+  @RequirePermission('marketing.content')
   setBonusTeaser(@CurrentStaff() me: StaffContext, @Body() dto: BonusTeaserDto) {
     return this.settings.setBonusTeaser(me.staff.id, dto);
   }
 
   @Get('cart-upsell')
+  @RequirePermission('marketing.content')
   cartUpsell() {
     return this.settings.cartUpsell();
   }
 
   @Put('cart-upsell')
+  @RequirePermission('marketing.content')
   setCartUpsell(@CurrentStaff() me: StaffContext, @Body() dto: CartUpsellDto) {
     return this.settings.setCartUpsell(me.staff.id, dto);
   }

@@ -21,6 +21,7 @@ import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, M
 import { PageQuery } from '../catalog/catalog.dto';
 import { DeliveryService } from '../delivery/delivery.service';
 import { OrderLifecycleService } from '../orders/order-lifecycle.service';
+import { CONFIRMED_STATUSES } from '../orders/order-state';
 import { OrderUnitsService } from '../orders/order-units.service';
 import { orderViewInclude, toOrderView } from '../orders/order-view';
 import { normalizeUzPhone } from '../orders/orders.dto';
@@ -253,7 +254,8 @@ export class AdminOrdersService {
         edit: can(role, 'orders.edit') && EDITABLE_STATUSES.includes(order.status),
         locked: !EDITABLE_STATUSES.includes(order.status) && order.status !== 'cancelled',
         units: can(role, 'orders.units') && (order.status === 'paid' || order.status === 'picking'),
-        print_label: order.payment_status === 'payment_success' && ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'].includes(order.status),
+        // D-53: a confirmed cash-on-delivery order is printed too (its payment waits for the courier)
+        print_label: CONFIRMED_STATUSES.includes(order.status),
         waybill: can(role, 'orders.waybill') && order.status !== 'cancelled',
         return_order: can(role, 'orders.units') && ['handed_to_delivery', 'in_transit', 'delivered'].includes(order.status),
       },
@@ -287,6 +289,8 @@ export class AdminOrdersService {
       if (to === 'handed_to_delivery') await this.units.handOver(tx, order, staff.staff.id);
       if (to === 'delivered') await this.units.deliver(tx, order, staff.staff.id);
       await tx.orders.update({ where: { id }, data: { status: to, ...(to === 'delivered' && { delivered_at: new Date() }) } });
+      // D-53: cash on delivery — the courier handed over the money, the payment is successful only now
+      if (to === 'delivered') await this.lifecycle.markCodCollected(tx, id);
       await this.lifecycle.addHistory(tx, id, order.status, to, { type: 'staff', id: staff.staff.id }, comment);
       await this.audit.log(
         { staffId: staff.staff.id, action: 'order.status_changed', entityType: 'order', entityId: id, before: { status: order.status }, after: { status: to, comment } },

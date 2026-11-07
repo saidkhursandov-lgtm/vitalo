@@ -67,7 +67,8 @@ export class OrderLabelService {
   private async printable(id: string) {
     const order = await this.prisma.orders.findUnique({ where: { id }, select: { id: true, status: true, payment_status: true } });
     if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Заказ не найден' });
-    if (order.payment_status !== 'payment_success' || !PRINTABLE.includes(order.status)) {
+    // D-53: a confirmed cash-on-delivery order (payment waits for the courier) is printed like a paid one
+    if (!PRINTABLE.includes(order.status)) {
       throw new ConflictException({ code: 'LABEL_NOT_AVAILABLE', message: 'Наклейка печатается только для оплаченного и не отменённого заказа' });
     }
     return order;

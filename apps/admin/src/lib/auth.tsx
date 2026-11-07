@@ -14,6 +14,8 @@ export type Permission =
   | 'orders.edit'
   | 'products.view'
   | 'products.edit'
+  | 'products.content'
+  | 'marketing.content'
   | 'inventory.view'
   | 'inventory.edit'
   | 'customers.view'

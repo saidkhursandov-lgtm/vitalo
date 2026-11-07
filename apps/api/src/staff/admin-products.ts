@@ -230,6 +230,26 @@ export function forViewer<T extends object>(role: StaffRole, product: T): Partia
 }
 
 /** Writing finance fields needs costs.view too (products.edit alone is not enough). */
+/** D-53: what an employee with «products.content» only (marketer) may change in a product. */
+export const CONTENT_FIELDS = [
+  'name_ru',
+  'name_uz',
+  'short_name_ru',
+  'short_name_uz',
+  'short_description_ru',
+  'short_description_uz',
+  'search_keywords',
+  'category_ids',
+] as const;
+
+function assertContentOnly(role: StaffRole, dto: object) {
+  if (can(role, 'products.edit')) return;
+  const other = Object.keys(dto).filter((k) => (dto as Record<string, unknown>)[k] !== undefined && !(CONTENT_FIELDS as readonly string[]).includes(k));
+  if (other.length) {
+    throw new ForbiddenException({ code: 'CONTENT_ONLY', message: `Role ${role} may change only names, descriptions, search words and categories; not: ${other.join(', ')}` });
+  }
+}
+
 function assertCostWrite(role: StaffRole, dto: object) {
   const sent = COST_FIELDS.filter((k) => (dto as Record<string, unknown>)[k] !== undefined);
   if (sent.length && !can(role, 'costs.view')) {
@@ -589,8 +609,9 @@ export class AdminProductsController {
   }
 
   @Patch(':id')
-  @RequirePermission('products.edit')
+  @RequirePermission('products.edit', 'products.content')
   async update(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ProductPatch) {
+    assertContentOnly(me.staff.role, dto);
     assertCostWrite(me.staff.role, dto);
     return forViewer(me.staff.role, await this.products.update(me.staff.id, id, dto));
   }
@@ -616,7 +637,7 @@ export class AdminProductsController {
   }
 
   @Post(':id/photos')
-  @RequirePermission('products.edit')
+  @RequirePermission('products.edit', 'products.content')
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1 } }))
@@ -626,13 +647,13 @@ export class AdminProductsController {
 
   @Post(':id/photos/:mediaId/main')
   @HttpCode(200)
-  @RequirePermission('products.edit')
+  @RequirePermission('products.edit', 'products.content')
   async setMain(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
     return forViewer(me.staff.role, await this.products.setMainPhoto(me.staff.id, id, mediaId));
   }
 
   @Delete(':id/photos/:mediaId')
-  @RequirePermission('products.edit')
+  @RequirePermission('products.edit', 'products.content')
   async removePhoto(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Param('mediaId', new ParseUUIDPipe()) mediaId: string) {
     return forViewer(me.staff.role, await this.products.removePhoto(me.staff.id, id, mediaId));
   }

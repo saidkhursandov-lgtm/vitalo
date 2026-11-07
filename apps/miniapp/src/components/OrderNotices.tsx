@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { track } from '../lib/analytics';
-import { shownStatus, statusKey, useI18n } from '../lib/i18n';
+import { shownStatus, orderStatusKey, useI18n } from '../lib/i18n';
 import { useActiveOrder, useShopTexts } from '../lib/queries';
 import { daysText, payPath } from '../lib/shop';
 import { orderNo } from '../lib/format';
@@ -20,7 +20,7 @@ export function ActiveOrderBar() {
   const o = active.data?.order;
   if (!o) return null;
   const cod = o.payment_method === 'cod';
-  const status = cod && o.status === 'new' ? t('status.codWaiting') : t(statusKey(o.status, o.payment_reported));
+  const status = t(orderStatusKey(o.status, { reported: o.payment_reported, cod }));
   const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
   const I = STATUS_ICONS[shownStatus(o.status, o.payment_reported)];
   const more = active.data?.more ?? 0;

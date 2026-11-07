@@ -278,5 +278,42 @@ describe('Release 1 (e2e)', () => {
       expect((await prisma.orders.findUniqueOrThrow({ where: { id: o.id } })).status).not.toBe('cancelled');
       expect((await prisma.orders.findUniqueOrThrow({ where: { id: codOrder.id } })).status).toBe('new');
     });
+
+    it('D-53: a confirmed cod order is not paid until «Доставлен»; a second confirm changes nothing', async () => {
+      const token = await newCustomer();
+      const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
+      const o = (await place(token, buyNow(p.id, 1)).expect(201)).body;
+      const stock = async () => (await prisma.inventory.findFirstOrThrow({ where: { product_id: p.id } })).actual_qty;
+      await http().post(`/api/staff/orders/${o.id}/confirm-payment`).set(bearer(manager)).send({}).expect(200);
+      const afterConfirm = await stock();
+      let row = await prisma.orders.findUniqueOrThrow({ where: { id: o.id }, include: { payments: true } });
+      expect(row).toMatchObject({ status: 'paid', payment_status: 'payment_pending', paid_at: null });
+      expect(row.payments[0].status).toBe('payment_pending');
+      // the label can be printed for a confirmed cod order
+      const card = (await http().get(`/api/staff/orders/${o.id}`).set(bearer(manager)).expect(200)).body;
+      expect(card.actions.print_label).toBe(true);
+      await http().post(`/api/staff/orders/${o.id}/confirm-payment`).set(bearer(manager)).send({}).expect(200);
+      expect(await stock()).toBe(afterConfirm);
+      for (const status of ['picking', 'handed_to_delivery', 'in_transit']) {
+        await http().post(`/api/staff/orders/${o.id}/status`).set(bearer(manager)).send({ status }).expect(200);
+      }
+      expect((await prisma.orders.findUniqueOrThrow({ where: { id: o.id } })).payment_status).toBe('payment_pending');
+      await http().post(`/api/staff/orders/${o.id}/status`).set(bearer(manager)).send({ status: 'delivered' }).expect(200);
+      row = await prisma.orders.findUniqueOrThrow({ where: { id: o.id }, include: { payments: true } });
+      expect(row.payment_status).toBe('payment_success');
+      expect(row.paid_at).not.toBeNull();
+      expect(row.payments[0].status).toBe('payment_success');
+    });
+
+    it('D-53: cancelling a confirmed cod order cancels its payment (no money was taken)', async () => {
+      const token = await newCustomer();
+      const p = await createTestProduct(prisma, { price: 100_000, stock: 10 });
+      const o = (await place(token, buyNow(p.id, 1)).expect(201)).body;
+      await http().post(`/api/staff/orders/${o.id}/confirm-payment`).set(bearer(manager)).send({}).expect(200);
+      await http().post(`/api/staff/orders/${o.id}/cancel`).set(bearer(manager)).send({ reason: 'Клиент передумал' }).expect(200);
+      const row = await prisma.orders.findUniqueOrThrow({ where: { id: o.id }, include: { payments: true } });
+      expect(row).toMatchObject({ status: 'cancelled', payment_status: 'payment_cancelled' });
+      expect(row.payments[0].status).toBe('payment_cancelled');
+    });
   });
 });

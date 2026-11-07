@@ -4,7 +4,7 @@ import { StockService } from '../inventory/stock.service';
 import { COD_METHOD, CONFIRMABLE_PAYMENT_METHODS } from '../settings/settings.service';
 import { EXPIRED_REASON_CODE } from '../notifications/notification-templates';
 import { NotificationsService } from '../notifications/notifications.service';
-import { assertTransition, CUSTOMER_CANCELLABLE } from './order-state';
+import { assertTransition, CONFIRMED_STATUSES, CUSTOMER_CANCELLABLE } from './order-state';
 import { OrderUnitsService } from './order-units.service';
 
 type Tx = Prisma.TransactionClient;
@@ -82,7 +82,9 @@ export class OrderLifecycleService {
    * courier); the order becomes «Оплачен» («Подтверждён» for the customer) and goes to the warehouse like a transfer.
    */
   async confirmBankTransfer(tx: Tx, order: LockedOrder, staffId: string, comment?: string): Promise<'paid' | 'already_paid'> {
-    if (order.payment_status === 'payment_success') return 'already_paid';
+    // D-53: a confirmed cash-on-delivery order is «Оплачен» by status but its payment waits for the courier — the status
+    // (not only payment_success) says it was already confirmed, so a second click never deducts stock twice.
+    if (order.payment_status === 'payment_success' || CONFIRMED_STATUSES.includes(order.status)) return 'already_paid';
     if (order.status === 'cancelled') {
       throw new ConflictException({ code: 'ORDER_CANCELLED', message: 'Order is cancelled; its reservation was released' });
     }
@@ -97,8 +99,11 @@ export class OrderLifecycleService {
 
     const now = new Date();
     await this.stock.deduct(tx, order.id, staffId, await this.units.trackedProductIds(tx, order.id));
-    await tx.payments.update({ where: { id: payment.id }, data: { status: 'payment_success', paid_at: now } });
-    await tx.payment_attempts.updateMany({ where: { payment_id: payment.id, status: 'pending' }, data: { status: 'success' } });
+    // D-53: cash on delivery — the manager confirms the order, the money comes with the courier (markCodCollected)
+    if (!cod) {
+      await tx.payments.update({ where: { id: payment.id }, data: { status: 'payment_success', paid_at: now } });
+      await tx.payment_attempts.updateMany({ where: { payment_id: payment.id, status: 'pending' }, data: { status: 'success' } });
+    }
 
     const confirmation = payment.manual[0];
     if (confirmation) {
@@ -115,7 +120,7 @@ export class OrderLifecycleService {
 
     await tx.orders.update({
       where: { id: order.id },
-      data: { status: 'paid', payment_status: 'payment_success', paid_at: now, reserved_until: null },
+      data: cod ? { status: 'paid', reserved_until: null } : { status: 'paid', payment_status: 'payment_success', paid_at: now, reserved_until: null },
     });
     await tx.manager_tasks.updateMany({
       where: { order_id: order.id, type: 'bank_transfer_check', status: { not: 'done' } },
@@ -130,10 +135,24 @@ export class OrderLifecycleService {
         entity_type: 'order',
         entity_id: order.id,
         before_json: { status: order.status, payment_status: order.payment_status },
-        after_json: { status: 'paid', payment_status: 'payment_success', comment: comment ?? null, units_reserved: units.reserved, units_shortage: units.shortage },
+        after_json: { status: 'paid', payment_status: cod ? 'payment_pending' : 'payment_success', comment: comment ?? null, units_reserved: units.reserved, units_shortage: units.shortage },
       },
     });
     return 'paid';
+  }
+
+  /**
+   * D-53: «Доставлен» for a cash-on-delivery order — the courier took the money, so only now the payment is
+   * successful and the order counts in revenue by paid_at. Other orders and old COD orders confirmed before D-53
+   * (already payment_success) are left as they are.
+   */
+  async markCodCollected(tx: Tx, orderId: string, at = new Date()): Promise<boolean> {
+    const pending = await tx.payments.findFirst({ where: { order_id: orderId, status: 'payment_pending', method: { code: COD_METHOD } } });
+    if (!pending) return false;
+    await tx.payments.update({ where: { id: pending.id }, data: { status: 'payment_success', paid_at: at } });
+    await tx.payment_attempts.updateMany({ where: { payment_id: pending.id, status: 'pending' }, data: { status: 'success' } });
+    await tx.orders.update({ where: { id: orderId }, data: { payment_status: 'payment_success', paid_at: at } });
+    return true;
   }
 
   /**
@@ -193,6 +212,11 @@ export class OrderLifecycleService {
     });
     // Cash on delivery: the courier takes the money, so usually there is nothing to return.
     const cod = full.payments.some((p) => p.method.code === COD_METHOD);
+    // D-53: cash not collected yet (confirmed, not delivered) — the payment simply did not happen
+    if (cod && full.payment_status === 'payment_pending') {
+      await tx.payments.updateMany({ where: { order_id: order.id, status: 'payment_pending' }, data: { status: 'payment_cancelled' } });
+      await tx.orders.update({ where: { id: order.id }, data: { payment_status: 'payment_cancelled' } });
+    }
     await tx.manager_tasks.create({
       data: {
         type: 'refund',

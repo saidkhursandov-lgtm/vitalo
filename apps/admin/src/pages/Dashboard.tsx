@@ -50,8 +50,8 @@ export function Dashboard() {
       ) : (
         <>
           <div className="kpis">
-            {revenue && <Kpi label="Выручка" value={money(q.data.revenue_uzs ?? 0)} hint="оплаченные заказы за период" />}
-            <Kpi label="Оплачено заказов" value={String(q.data.paid_orders)} />
+            {revenue && <Kpi label="Выручка" value={money(q.data.revenue_uzs ?? 0)} hint="полученные деньги за период" />}
+            <Kpi label="Оплачено заказов" value={String(q.data.paid_orders)} hint="при получении — после доставки" />
             <Kpi label="Создано заказов" value={String(q.data.orders_created)} />
             {revenue && <Kpi label="Средний чек" value={money(q.data.average_check_uzs ?? 0)} />}
           </div>

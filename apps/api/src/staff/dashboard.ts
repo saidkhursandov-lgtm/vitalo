@@ -38,7 +38,8 @@ export class DashboardService {
   async get(days: number, withRevenue = true) {
     const from = new Date(Date.now() - days * 86_400_000);
     // Stage 3: test orders are in no summary
-    const paidInPeriod = { is_test: false, status: { in: PAID_STATUSES }, paid_at: { gte: from } };
+    // D-53: only money really received — cash on delivery counts from «Доставлен» (its paid_at is set then)
+    const paidInPeriod = { is_test: false, status: { in: PAID_STATUSES }, payment_status: 'payment_success' as const, paid_at: { gte: from } };
 
     const [revenue, created, byStatus, top, lowStock] = await Promise.all([
       this.prisma.orders.aggregate({ where: paidInPeriod, _sum: { total_uzs: true }, _count: { _all: true } }),

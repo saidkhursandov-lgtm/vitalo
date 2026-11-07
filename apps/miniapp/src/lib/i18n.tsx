@@ -40,6 +40,7 @@ const ru = {
   'pay.soonSheet': 'Оплата через {system} скоро заработает. Сейчас можно оплатить переводом на карту или при получении (Ташкент)',
   'pay.soonOk': 'Понятно',
   'status.codWaiting': 'Ожидает подтверждения',
+  'status.codConfirmed': 'Подтверждён',
   'checkout.confirmCod': 'Подтвердить заказ • {sum}',
   'checkout.backToCart': 'Вернуться в корзину',
   'orders.codWaiting': 'Менеджер позвонит вам и подтвердит заказ. Оплата — курьеру при получении.',
@@ -541,6 +542,7 @@ const uz: Record<MessageKey, string> = {
   'pay.soonSheet': '{system} orqali to‘lov tez orada ishga tushadi. Hozir kartaga o‘tkazma yoki qabul qilganda (Toshkent) to‘lash mumkin',
   'pay.soonOk': 'Tushunarli',
   'status.codWaiting': 'Tasdiqlash kutilmoqda',
+  'status.codConfirmed': 'Tasdiqlandi',
   'checkout.confirmCod': 'Buyurtmani tasdiqlash • {sum}',
   'checkout.backToCart': 'Savatga qaytish',
   'orders.codWaiting': 'Menejer sizga qo‘ng‘iroq qilib buyurtmani tasdiqlaydi. To‘lov — kuryerga qabul qilganda.',
@@ -1019,6 +1021,16 @@ export const shownStatus = (s: OrderStatus, paymentReported = false): OrderStatu
   paymentReported && (s === 'awaiting_payment' || s === 'new') ? 'checking' : s;
 
 export const statusKey = (s: OrderStatus, paymentReported = false) => `status.${shownStatus(s, paymentReported)}` as MessageKey;
+
+/**
+ * The one status text of an order for the customer (D-53): «Оплата при получении» waits for the manager
+ * («Ожидает подтверждения»), then is «Подтверждён» until it goes to the warehouse — never «Оплачен».
+ */
+export const orderStatusKey = (s: OrderStatus, opts: { reported?: boolean; cod?: boolean } = {}): MessageKey => {
+  if (opts.cod && (s === 'new' || s === 'awaiting_payment')) return 'status.codWaiting';
+  if (opts.cod && s === 'paid') return 'status.codConfirmed';
+  return statusKey(s, opts.reported);
+};
 
 interface I18n {
   lang: Lang;

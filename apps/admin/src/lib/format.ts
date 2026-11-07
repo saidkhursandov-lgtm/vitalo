@@ -29,11 +29,11 @@ export function prettyPhone(phone: string): string {
 }
 
 export const ORDER_STATUS: Record<string, string> = {
-  new: 'Новый',
+  new: 'Ожидает подтверждения',
   awaiting_payment: 'Ожидает оплаты',
   paid: 'Оплачен',
-  picking: 'Сборка',
-  handed_to_delivery: 'Передан в доставку',
+  picking: 'Собирается',
+  handed_to_delivery: 'Передан курьеру',
   in_transit: 'В пути',
   delivered: 'Доставлен',
   cancelled: 'Отменён',
@@ -222,3 +222,12 @@ export const YANDEX_STATUS: Record<string, [string, 'neutral' | 'ok' | 'warn' | 
 
 /** «2027-12-31» -> «31.12.2027» (expiry dates are typed and shown like this). */
 export const ruDate = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '—');
+
+/**
+ * D-53: one status text per Mini App order, the same words as in the Mini App and the bot. «Оплата при получении»
+ * confirmed by the manager is «Подтверждён», not «Оплачен»: the courier takes the money at delivery.
+ */
+export function orderStatusLabel(status: string, cod = false): string {
+  if (cod && status === 'paid') return 'Подтверждён';
+  return ORDER_STATUS[status] ?? status;
+}

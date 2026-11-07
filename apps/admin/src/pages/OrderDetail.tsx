@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
-import { dateTime, money, ORDER_STATUS, PAYMENT_METHOD, prettyPhone, yandexMapsLink } from '../lib/format';
+import { dateTime, money, ORDER_STATUS, orderStatusLabel, PAYMENT_METHOD, prettyPhone, yandexMapsLink } from '../lib/format';
 import { CheckIcon, ForwardIcon } from '../components/Icons';
 import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly';
 import { OrderFinance, TestBadge } from '../components/OrderFinance';
@@ -105,7 +105,7 @@ export function OrderDetail() {
       <PageHead
         title={
           <>
-            Заказ {o.order_number} <OrderStatus status={o.status} /> <PaymentStatus status={o.payment_status} /> <TestBadge show={o.is_test} />
+            Заказ {o.order_number} <OrderStatus status={o.status} cod={o.payment?.method === 'cod'} /> <PaymentStatus status={o.payment_status} /> <TestBadge show={o.is_test} />
           </>
         }
       >
@@ -293,7 +293,7 @@ export function OrderDetail() {
           <ol className="timeline">
             {o.history.map((h, i) => (
               <li key={i}>
-                <strong>{ORDER_STATUS[h.to_status] ?? h.to_status}</strong> <span className="muted small">{dateTime(h.created_at)} · {ACTOR[h.changed_by_type]}</span>
+                <strong>{orderStatusLabel(h.to_status, o.payment?.method === 'cod')}</strong> <span className="muted small">{dateTime(h.created_at)} · {ACTOR[h.changed_by_type]}</span>
                 {h.reason && <div className="small">{h.reason}</div>}
               </li>
             ))}
@@ -432,7 +432,8 @@ function ConfirmPayment({ order, onDone, onClose }: ModalProps) {
 
 function CancelOrder({ order, onDone, onClose }: ModalProps) {
   const [reason, setReason] = useState('');
-  const paid = order.payment_status === 'payment_success';
+  // D-53: a confirmed cash-on-delivery order already holds stock like a paid one
+  const paid = order.payment_status === 'payment_success' || !['new', 'awaiting_payment'].includes(order.status);
   const m = useMutation({
     mutationFn: () => api<AdminOrder>(`/staff/orders/${order.id}/cancel`, { method: 'POST', body: { reason } }),
     onSuccess: onDone,
@@ -440,7 +441,9 @@ function CancelOrder({ order, onDone, onClose }: ModalProps) {
   return (
     <Modal title={`Отменить заказ ${order.order_number}`} onClose={onClose}>
       <p>
-        {paid
+        {paid && order.payment_status === 'payment_pending'
+          ? 'Заказ подтверждён (оплата при получении): товар вернётся на склад. Деньги курьеру ещё не отдавали — возвращать нечего.'
+          : paid
           ? 'Заказ оплачен: товар вернётся на склад, будет создана задача «вернуть деньги клиенту» (возврат делается вручную).'
           : 'Резерв товара будет снят, товар снова станет доступен.'}
       </p>

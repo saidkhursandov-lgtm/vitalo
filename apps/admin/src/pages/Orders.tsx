@@ -157,7 +157,7 @@ export function Orders() {
                     </div>
                   </td>
                   <td>
-                    <OrderStatus status={o.status} />
+                    <OrderStatus status={o.status} cod={o.payment_method === 'cod'} />
                     {o.units_attention && (
                       <div title={o.units_attention}>
                         <Badge tone="bad">Нужно внимание склада</Badge>
@@ -166,7 +166,8 @@ export function Orders() {
                   </td>
                   <td>
                     <PaymentStatus status={o.payment_status} />
-                    {o.payment_method === 'cod' && o.payment_status === 'payment_pending' && <div className="small text-warn">При получении — позвоните и подтвердите</div>}
+                    {o.payment_method === 'cod' && o.payment_status === 'payment_pending' && (o.status === 'new' || o.status === 'awaiting_payment') && <div className="small text-warn">При получении — позвоните и подтвердите</div>}
+                    {o.payment_method === 'cod' && o.payment_status === 'payment_pending' && !['new', 'awaiting_payment', 'cancelled'].includes(o.status) && <div className="small muted">Деньги — курьеру при доставке</div>}
                     {o.customer_reported_paid && o.payment_status === 'payment_pending' && <div className="small text-warn">Клиент: «Я оплатил»</div>}
                   </td>
                   <td className="num">{money(o.total_uzs)}</td>

@@ -50,6 +50,9 @@ const TEXTS = [
   ['intake_memo', 'Памятка приёма (покупатель увидит с релиза 3)', 3],
 ] as const;
 
+/** D-53: what a marketer (products.content) may change — the same list as CONTENT_FIELDS in apps/api admin-products.ts */
+const CONTENT_FIELDS: string[] = ['name_ru', 'name_uz', 'short_name_ru', 'short_name_uz', 'short_description_ru', 'short_description_uz', 'search_keywords', 'category_ids'];
+
 /** 07.11: the shop's one ИКПУ and package code for Payme — the same as PRODUCT_DEFAULT_* in apps/api payme-config.ts */
 const PRODUCT_DEFAULT_IKPU = '02106999028000000';
 const PRODUCT_DEFAULT_PACKAGE_CODE = '1490779';
@@ -140,6 +143,9 @@ export function ProductEdit() {
 function ProductForm({ product }: { product?: AdminProduct }) {
   const { can } = useSession();
   const editable = can('products.edit');
+  // D-53: a marketer changes names, descriptions, search words, categories and photos only
+  const contentOnly = !editable && can('products.content');
+  const canEdit = (k: string) => editable || (contentOnly && CONTENT_FIELDS.includes(k));
   const navigate = useNavigate();
   const client = useQueryClient();
   const categories = useQuery({ queryKey: ['categories', 'all'], queryFn: () => api<{ need: CategoryNode[]; product_type: CategoryNode[] }>('/catalog/categories?include_empty=true') });
@@ -154,6 +160,11 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const save = useMutation({
     /** alreadyChanged: answer to «Вы уже изменили цену в Яндекс Маркете?» (only when the Yandex price changes) */
     mutationFn: (alreadyChanged?: boolean) => {
+      if (contentOnly) {
+        const only: Record<string, unknown> = { category_ids: [...cats] };
+        for (const k of CONTENT_FIELDS) if (k !== 'category_ids') only[k] = f[k].trim() || (k === 'name_ru' ? f[k] : null);
+        return api<AdminProduct>(`/staff/products/${product!.id}`, { method: 'PATCH', body: only });
+      }
       const body: Record<string, unknown> = { status: f.status, category_ids: [...cats] };
       for (const k of PLAIN) body[k] = f[k].trim();
       body.halal_vege = f.halal_vege || null;
@@ -222,7 +233,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     save.mutate(alreadyChanged);
   };
   const input = (k: string, props: Record<string, unknown> = {}) => (
-    <input value={f[k]} disabled={!editable} onChange={(e) => set(k, e.target.value)} {...props} />
+    <input value={f[k]} disabled={!canEdit(k)} onChange={(e) => set(k, e.target.value)} {...props} />
   );
 
   const pack = toInt(f.pack_count);
@@ -246,13 +257,14 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             В архив
           </button>
         )}
-        {editable && (
+        {(editable || (contentOnly && product)) && (
           <button type="submit" className="btn" disabled={save.isPending}>
             {save.isPending ? 'Сохранение…' : 'Сохранить'}
           </button>
         )}
       </PageHead>
-      {!editable && <div className="alert alert-info">Только просмотр: менять товары может администратор.</div>}
+      {!editable && !contentOnly && <div className="alert alert-info">Только просмотр: менять товары может администратор.</div>}
+      {contentOnly && <div className="alert alert-info">Вы можете менять названия, краткое описание, слова для поиска, категории и фото. Цены, состав и остальное меняет администратор.</div>}
       {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине. Удалять товары нельзя — только архивировать.</div>}
       {product?.admin_note ? <div className="alert alert-warn">Комментарий: {product.admin_note as string}</div> : null}
       {saved && <div className="alert alert-ok">Сохранено</div>}
@@ -435,7 +447,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
                   <input
                     type="checkbox"
                     checked={cats.has(n.id)}
-                    disabled={!editable}
+                    disabled={!canEdit('category_ids')}
                     onChange={() => {
                       const next = new Set(cats);
                       if (next.has(n.id)) next.delete(n.id);
@@ -457,7 +469,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
                     type="radio"
                     name="product_type"
                     checked={cats.has(n.id)}
-                    disabled={!editable}
+                    disabled={!canEdit('category_ids')}
                     onChange={() => {
                       const types = new Set(categories.data.product_type.map((c) => c.id));
                       setCats(new Set([...cats].filter((id) => !types.has(id)).concat(n.id)));
@@ -535,7 +547,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         </div>
         {TEXTS.map(([k, label, rows]) => (
           <Field key={`${k}_${lang}`} label={`${label} (${lang.toUpperCase()})`}>
-            <textarea rows={rows} value={f[`${k}_${lang}`]} disabled={!editable} onChange={(e) => set(`${k}_${lang}`, e.target.value)} />
+            <textarea rows={rows} value={f[`${k}_${lang}`]} disabled={!canEdit(`${k}_${lang}`)} onChange={(e) => set(`${k}_${lang}`, e.target.value)} />
           </Field>
         ))}
       </section>
@@ -544,7 +556,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     {/* Own forms and buttons: outside the product form, so their submit never saves the whole product too. */}
     {product && <LabelCard product={product} />}
     {product && <SkuAliases productId={product.id} sku={product.sku} />}
-    {product ? <Photos product={product} editable={editable} /> : <p className="muted">Фото можно добавить после первого сохранения.</p>}
+    {product ? <Photos product={product} editable={editable || contentOnly} /> : <p className="muted">Фото можно добавить после первого сохранения.</p>}
     </>
   );
 }

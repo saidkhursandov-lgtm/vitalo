@@ -131,7 +131,12 @@ describe('cash on delivery order status', () => {
     cleanup();
     expect(wrap('ru', <StatusPill status="new" />).container.textContent).toBe('Ожидает оплаты');
     cleanup();
-    expect(wrap('ru', <StatusPill status="paid" cod />).container.textContent).toBe('Оплачен');
+    // D-53: confirmed by the manager — «Подтверждён», never «Оплачен» (the courier takes the money)
+    expect(wrap('ru', <StatusPill status="paid" cod />).container.textContent).toBe('Подтверждён');
+    cleanup();
+    expect(wrap('ru', <StatusPill status="paid" />).container.textContent).toBe('Оплачен');
+    cleanup();
+    expect(wrap('uz', <StatusPill status="paid" cod />).container.textContent).toBe('Tasdiqlandi');
     cleanup();
     // Uzbek: the same rule
     expect(wrap('uz', <StatusPill status="new" cod />).container.textContent).toBe('Tasdiqlash kutilmoqda');

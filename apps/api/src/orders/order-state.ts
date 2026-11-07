@@ -18,6 +18,12 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   return: [],
 };
 
+/**
+ * Paid or confirmed by the manager and going to the customer (D-53: a cash-on-delivery order is here with its payment
+ * still pending — the money comes with the courier).
+ */
+export const CONFIRMED_STATUSES: readonly OrderStatus[] = ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'];
+
 /** A customer may cancel on their own only while the order is unpaid. */
 export const CUSTOMER_CANCELLABLE: readonly OrderStatus[] = ['new', 'awaiting_payment'];
 

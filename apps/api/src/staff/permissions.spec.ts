@@ -26,8 +26,8 @@ describe('staff permissions', () => {
     expect(can('manager', 'products.edit')).toBe(false);
   });
 
-  it('marketer: read-only catalog and dashboard, without revenue; promo codes (3.3)', () => {
-    expect(permissionsOf('marketer')).toEqual(['dashboard.view', 'products.view', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send']);
+  it('marketer: dashboard without revenue; product texts and photos, storefront (D-53); promo codes (3.3)', () => {
+    expect(permissionsOf('marketer')).toEqual(['dashboard.view', 'products.view', 'products.content', 'marketing.content', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send']);
   });
 
   it('stage 1: Yandex price seen by admin, manager, marketer (not warehouse); synced by admin and manager', () => {
