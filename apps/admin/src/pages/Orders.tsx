@@ -5,6 +5,9 @@ import { Badge, ErrorBox, Loading, OrderStatus, PageHead, Pagination, PaymentSta
 import { api, qs } from '../lib/api';
 import { dateTime, money, ORDER_STATUS, PAYMENT_STATUS, prettyPhone } from '../lib/format';
 import { TestBadge } from '../components/OrderFinance';
+import { ChannelTabs } from '../components/ChannelTabs';
+import { useSession } from '../lib/auth';
+import { AllOrders } from './AllOrders';
 
 interface OrderRow {
   id: string;
@@ -33,8 +36,19 @@ interface Page<T> {
 
 const FILTER_KEYS = ['q', 'status', 'payment_status', 'date_from', 'date_to', 'awaiting_confirmation', 'hide_test', 'units_attention', 'page'] as const;
 
-/** Orders list; filters are kept in the URL so a filtered view can be shared or bookmarked. */
+/** Filters only the Mini App list has: a link with any of them (e.g. from the dashboard) opens that list. */
+const VITALO_ONLY = ['status', 'payment_status', 'date_from', 'date_to', 'awaiting_confirmation', 'units_attention'] as const;
+
+/** «Заказы» (генплан, этап 2): both channels in one list; «Mini App» (?channel=vitalo) — the Mini App list with its filters. */
 export function Orders() {
+  const [params] = useSearchParams();
+  const { can } = useSession();
+  const vitalo = params.get('channel') === 'vitalo' || VITALO_ONLY.some((k) => params.get(k)) || !can('yandex.orders.view');
+  return vitalo ? <VitaloOrders /> : <AllOrders />;
+}
+
+/** Mini App orders; filters are kept in the URL so a filtered view can be shared or bookmarked. */
+function VitaloOrders() {
   const [params, setParams] = useSearchParams();
   const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ''])) as Record<(typeof FILTER_KEYS)[number], string>;
   const [text, setText] = useState(filters.q);
@@ -42,6 +56,7 @@ export function Orders() {
 
   const set = (patch: Partial<typeof filters>) => {
     const next = new URLSearchParams(params);
+    next.set('channel', 'vitalo'); // stay in the Mini App list when its filters are cleared
     for (const [k, v] of Object.entries({ page: '', ...patch })) {
       if (v) next.set(k, v);
       else next.delete(k);
@@ -62,7 +77,9 @@ export function Orders() {
 
   return (
     <>
-      <PageHead title="Заказы" />
+      <PageHead title="Заказы Mini App">
+        <ChannelTabs current="vitalo" />
+      </PageHead>
       <div className="filters">
         <input placeholder="Номер, имя или телефон" value={text} onChange={(e) => setText(e.target.value)} />
         <select value={filters.status} onChange={(e) => set({ status: e.target.value })} aria-label="Статус">

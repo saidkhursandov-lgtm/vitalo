@@ -8,6 +8,7 @@ import { useSession } from '../lib/auth';
 import { AUDIT_ACTION, dateTime, money, ruDate, UNIT_STATUS, YANDEX_STATUS } from '../lib/format';
 import { ProductPicker } from './Purchases';
 import { OrderFinance, TestBadge } from '../components/OrderFinance';
+import { ChannelTabs } from '../components/ChannelTabs';
 
 /**
  * Stage 2C «Заказы Яндекса»: warehouse and admin work with the orders, the manager only views them (no buttons). Units are reserved by FEFO when the order is created; at
@@ -110,6 +111,7 @@ export function YandexOrders() {
   return (
     <>
       <PageHead title="Заказы Яндекса">
+        <ChannelTabs current="yandex" />
         {can('yandex.orders') && (
           <Link className="btn" to="/yandex-orders/new">
             Новый заказ

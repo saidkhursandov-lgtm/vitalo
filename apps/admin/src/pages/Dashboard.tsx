@@ -224,7 +224,7 @@ function Attention({ a, can }: { a: DashboardData['attention']; can: (p: Permiss
   const rows: { n: number; text: string; to: string; perm: Permission }[] = [
     { n: a.awaiting_confirmation, text: 'заказов ждут подтверждения или проверки оплаты', to: '/orders?awaiting_confirmation=true', perm: 'orders.view' },
     { n: a.units_attention, text: 'оплаченных заказов ждут банки (внимание склада)', to: '/orders?units_attention=true', perm: 'orders.view' },
-    { n: a.yandex_to_ship, text: 'заказов Яндекса отгрузить сегодня или уже просрочены', to: '/yandex-orders', perm: 'yandex.orders.view' },
+    { n: a.yandex_to_ship, text: 'заказов Яндекса отгрузить сегодня или уже просрочены', to: '/orders?ship_today=true', perm: 'yandex.orders.view' },
     { n: a.ai_red, text: 'красных ответов VITALO AI не проверены', to: '/compat?tab=ai', perm: 'compat.view' },
     { n: a.compat_pending, text: 'вопросов о совместимости без ответа', to: '/compat', perm: 'compat.view' },
     { n: a.expiring_units, text: 'банок со сроком годности меньше 90 дней', to: '/analytics', perm: 'finance.manage' },

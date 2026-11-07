@@ -7,6 +7,8 @@ export interface NavItem {
   permission: Permission;
   /** Other tabs of the same page that also belong to this item. */
   also?: string[];
+  /** Other pages that belong to this item (e.g. the Yandex list and cards under «Заказы»). */
+  paths?: string[];
 }
 
 export interface NavGroup {
@@ -25,8 +27,8 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'sales',
     label: 'Продажи',
     items: [
-      { to: '/orders', label: 'Заказы', permission: 'orders.view' },
-      { to: '/yandex-orders', label: 'Заказы Яндекса', permission: 'yandex.orders.view' },
+      // both channels in one list; Mini App and Yandex — a switch above the list (генплан, этап 2)
+      { to: '/orders', label: 'Заказы', permission: 'orders.view', paths: ['/yandex-orders'] },
       { to: '/customers', label: 'Клиенты', permission: 'customers.view' },
       { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
       // 3.4: questions from the cart — admin and «специалист» answer, manager only looks
@@ -124,12 +126,11 @@ const split = (to: string) => {
  */
 export function activeItem(items: NavItem[], pathname: string, search: string): NavItem | undefined {
   const tab = new URLSearchParams(search).get('tab');
-  const onPage = items.filter((i) => {
-    const { path } = split(i.to);
-    return path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`);
-  });
-  // the longest path wins: /yandex-orders/1 belongs to «Заказы Яндекса», not to anything shorter
-  const longest = Math.max(0, ...onPage.map((i) => split(i.to).path.length));
-  const same = onPage.filter((i) => split(i.to).path.length === longest);
+  const under = (path: string) => (path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`));
+  const matched = (i: NavItem) => [split(i.to).path, ...(i.paths ?? [])].filter(under).reduce((a, p) => Math.max(a, p.length), -1);
+  const onPage = items.filter((i) => matched(i) >= 0);
+  // the longest matching path wins: /yandex-orders/1 belongs to «Заказы» through its extra path
+  const longest = Math.max(0, ...onPage.map(matched));
+  const same = onPage.filter((i) => matched(i) === longest);
   return same.find((i) => tab !== null && (split(i.to).tab === tab || !!i.also?.includes(tab))) ?? same.find((i) => split(i.to).tab === null) ?? same[0];
 }

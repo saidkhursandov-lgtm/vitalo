@@ -36,7 +36,7 @@ describe('menu in 7 groups (генплан, этап 2)', () => {
   it('the open page and tab light up one item', () => {
     expect(at('/')).toBe('Дашборд');
     expect(at('/orders/123')).toBe('Заказы');
-    expect(at('/yandex-orders/5')).toBe('Заказы Яндекса');
+    expect(at('/yandex-orders/5')).toBe('Заказы'); // генплан, этап 2: one «Заказы» for both channels
     expect(at('/inventory')).toBe('Остатки');
     expect(at('/inventory?tab=units')).toBe('Банки');
     expect(at('/settings')).toBe('Оплата');
@@ -51,7 +51,7 @@ describe('menu by role', () => {
   const labels = (role: string) => navFor(PERMS[role]).map((n) => n.label);
 
   it('warehouse: orders, Yandex orders, products, stock — no settings, customers, audit', () => {
-    expect(labels('warehouse')).toEqual(['Заказы', 'Заказы Яндекса', 'Товары', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений']);
+    expect(labels('warehouse')).toEqual(['Заказы', 'Товары', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений']);
     expect(groupsFor(PERMS.warehouse).map((g) => g.label)).toEqual(['Продажи', 'Каталог', 'Закупки и склад']);
     expect(homeFor(PERMS.warehouse)).toBe('/orders');
   });
@@ -69,7 +69,7 @@ describe('menu by role', () => {
   });
 
   it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {
-    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Заказы Яндекса', 'Клиенты', 'Лист ожидания', 'Вопросы о совместимости', 'Товары', 'База знаний AI', 'Закупки', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений', 'Акции', 'Промокоды']);
+    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Клиенты', 'Лист ожидания', 'Вопросы о совместимости', 'Товары', 'База знаний AI', 'Закупки', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений', 'Акции', 'Промокоды']);
   });
 });
 

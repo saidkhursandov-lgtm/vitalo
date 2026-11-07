@@ -27,6 +27,7 @@ import { AI_MODEL, AnthropicModel } from '../compat/ai-client';
 import { AdminSettingsController, AdminSettingsService, AuditController, StaffUsersController } from './admin-settings';
 import { AuditService } from './audit.service';
 import { DashboardController, DashboardService } from './dashboard';
+import { AllOrdersController, AllOrdersService } from './admin-all-orders';
 import { StaffAuthService, StaffGuard } from './staff-auth';
 import { StaffAuthController } from './staff.controllers';
 import { AnalyticsModule } from '../analytics/analytics.module';
@@ -56,6 +57,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminBannersController,
     AdminBrandsController,
     DashboardController,
+    AllOrdersController,
     AdminOrdersController,
     OrderLabelController,
     PrintOrderLabelController,
@@ -99,6 +101,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     StaffGuard,
     AuditService,
     DashboardService,
+    AllOrdersService,
     AdminOrdersService,
     OrderLabelService,
     AdminProductsService,
