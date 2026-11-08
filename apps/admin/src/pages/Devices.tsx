@@ -76,7 +76,7 @@ export function Devices() {
                   <tr key={s.id}>
                     <td>
                       {s.device_name} {s.current && <Badge tone="ok">Это устройство</Badge>}
-                      <div className="muted small">{KIND[s.kind]}</div>
+                      {KIND[s.kind] !== s.device_name && <div className="muted small">{KIND[s.kind]}</div>}
                     </td>
                     <td>{dateTime(s.created_at)}</td>
                     <td>{dateTime(s.last_seen_at)}</td>
