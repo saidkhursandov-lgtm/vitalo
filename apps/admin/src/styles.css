@@ -516,3 +516,21 @@ textarea { resize: vertical; }
 .backup-codes code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; letter-spacing: 0.04em; color: var(--text); }
 @media (max-width: 480px) { .backup-codes { columns: 1; } }
 .me-actions .btn-ghost { margin-top: 0; }
+
+/* Генплан, этап 5, iherb-2-prices (D-57): «iHerb и цены» */
+.iherb-howto { margin: 0 0 12px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.iherb-form { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.iherb-form textarea { width: 100%; min-width: 0; font-family: inherit; }
+.iherb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.link-button { background: none; border: 0; padding: 0; min-height: 32px; color: var(--primary-text); cursor: pointer; text-align: left; font: inherit; }
+.link-button:hover { text-decoration: underline; }
+.price-chart-box { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+.sales-chart.price-chart { max-height: 280px; }
+.swatch-iherb { background: var(--chart-yandex); }
+.swatch-cost { background: var(--muted); }
+.price-chart .line-vitalo { fill: none; stroke: var(--chart-vitalo); stroke-width: 2; }
+.price-chart .line-iherb { fill: none; stroke: var(--chart-yandex); stroke-width: 1.5; }
+.price-chart .line-cost { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.price-chart .dot-iherb { fill: var(--chart-yandex); }
+.price-chart .dot-empty { fill: var(--panel); stroke: var(--chart-yandex); stroke-width: 1.5; }
+.price-chart .dot-vitalo { fill: var(--chart-vitalo); }

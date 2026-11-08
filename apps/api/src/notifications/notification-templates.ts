@@ -33,6 +33,7 @@ export type TemplateName =
   | 'staff.waitlist_new'
   | 'staff.compat_request'
   | 'staff.ai_red'
+  | 'staff.iherb_upload_due'
   | 'compat.answered'
   | 'order.payment_reminder'
   | 'order.cod_confirmed'
@@ -356,6 +357,11 @@ Kutmoqda: ${p.count ?? 0}`,
   'waitlist.back_in_stock': {
     ru: (p: TemplatePayload) => `${p.product ?? ''} снова в наличии`,
     uz: (p: TemplatePayload) => `${p.product ?? ''} yana sotuvda`,
+  },
+  // D-57: 09:00 / 15:00 / 21:00 — nobody uploaded the iHerb wishlist yet (admins, Russian; switched on in «iHerb и цены»).
+  'staff.iherb_upload_due': {
+    ru: (p: TemplatePayload) => `Пора загрузить вишлист iHerb: товаров со ссылкой iHerb — ${p.count ?? 0}. Сохраните страницу вишлиста и загрузите её в «iHerb и цены».`,
+    uz: (p: TemplatePayload) => `iHerb istaklar roʻyxatini yuklash vaqti: ${p.count ?? 0} ta mahsulot.`,
   },
   // Stage 3: only admins get these (money). order_number is not used.
   'staff.finance_before_due': {

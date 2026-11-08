@@ -29,6 +29,7 @@ export type Permission =
   | 'settings.dictionaries'
   | 'catalog.delete'
   | 'units.start_tracking'
+  | 'iherb.prices'
   | 'yandex.price.view'
   | 'yandex.price.sync'
   | 'purchases.view'

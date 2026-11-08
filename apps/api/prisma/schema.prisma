@@ -470,6 +470,8 @@ model staff_users {
   reviewed_receipts     payment_receipts[]
   compat_answered       compat_requests[]
   compat_saved          compat_answers[]
+  iherb_uploads         iherb_uploads[]
+  price_changes         price_changes[]
 }
 
 model staff_sessions {
@@ -676,6 +678,8 @@ model products {
   block_items             content_block_items[]
   waitlist                product_waitlist[]
   substances              product_substances[]
+  iherb_snapshots         iherb_price_snapshots[]
+  price_changes           price_changes[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -977,6 +981,75 @@ model payroll_payments {
 }
 
 /// A reminder was sent (kind + day): never twice, also after a restart.
+/// Генплан, этап 5, iherb-2-prices (D-57): one upload of the iHerb wishlist (pasted page or saved file).
+model iherb_uploads {
+  id             String                  @id @default(uuid()) @db.Uuid
+  staff_user_id  String?                 @db.Uuid
+  source         String                  @default("wishlist")
+  items_total    Int                     @default(0)
+  items_matched  Int                     @default(0)
+  prices_changed Int                     @default(0)
+  created_at     DateTime                @default(now())
+  staff          staff_users?            @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
+  snapshots      iherb_price_snapshots[]
+  price_changes  price_changes[]
+
+  @@index([created_at])
+}
+
+/// PriceHistory: an iHerb price at one moment; product_id is null while no VITALO product has this iHerb number.
+model iherb_price_snapshots {
+  id               String        @id @default(uuid()) @db.Uuid
+  upload_id        String        @db.Uuid
+  product_id       String?       @db.Uuid
+  iherb_product_id String
+  title            String?
+  price_uzs        BigInt
+  list_price_uzs   BigInt?
+  in_stock         Boolean       @default(true)
+  bestseller       Boolean       @default(false)
+  weight_kg        Decimal?      @db.Decimal(8, 3)
+  source           String        @default("wishlist")
+  taken_at         DateTime      @default(now())
+  upload           iherb_uploads @relation(fields: [upload_id], references: [id], onDelete: Restrict)
+  product          products?     @relation(fields: [product_id], references: [id], onDelete: SetNull)
+
+  @@index([iherb_product_id, taken_at], map: "iherb_price_snapshots_iherb_taken_idx")
+  @@index([product_id, taken_at], map: "iherb_price_snapshots_product_taken_idx")
+  @@index([upload_id], map: "iherb_price_snapshots_upload_idx")
+}
+
+/// Auto price log (D-57): applied | skipped (skip_reason: in_stock_freeze | iherb_out_of_stock | no_change).
+model price_changes {
+  id              String         @id @default(uuid()) @db.Uuid
+  product_id      String         @db.Uuid
+  upload_id       String?        @db.Uuid
+  staff_user_id   String?        @db.Uuid
+  reason          String         @default("iherb_auto")
+  status          String
+  skip_reason     String?
+  old_price_uzs   BigInt
+  new_price_uzs   BigInt
+  iherb_price_uzs BigInt?
+  markup_percent  Int?
+  floor_applied   Boolean        @default(false)
+  big_jump        Boolean        @default(false)
+  yandex_check    Boolean        @default(false)
+  created_at      DateTime       @default(now())
+  product         products       @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  upload          iherb_uploads? @relation(fields: [upload_id], references: [id], onDelete: SetNull)
+  staff           staff_users?   @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
+
+  @@index([product_id, created_at], map: "price_changes_product_created_idx")
+  @@index([created_at], map: "price_changes_created_idx")
+}
+
+/// A 09/15/21 reminder slot that was already sent.
+model iherb_reminders {
+  slot       DateTime @id
+  created_at DateTime @default(now())
+}
+
 model finance_reminders {
   id      String   @id @default(uuid()) @db.Uuid
   kind    String // before_due | due_day

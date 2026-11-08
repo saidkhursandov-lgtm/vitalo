@@ -57,6 +57,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/inventory?tab=reconcile', label: 'Сверка', permission: 'units.view' },
       { to: '/inventory?tab=movements', label: 'История движений', permission: 'inventory.view' },
       { to: '/settings?tab=print', label: 'Печать этикеток', permission: 'settings.manage' },
+      // D-57: iHerb wishlist prices, history and auto price — admin only (margins)
+      { to: '/iherb', label: 'iHerb и цены', permission: 'iherb.prices' },
     ],
   },
   {

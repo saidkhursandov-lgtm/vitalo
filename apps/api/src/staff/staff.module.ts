@@ -43,6 +43,7 @@ import { YandexSyncController, YandexWebhookController } from '../marketplace/ya
 import { FinanceController, OrderFinanceService } from '../finance/finance.controller';
 import { FinanceRemindersService } from '../finance/finance-reminders.service';
 import { FinanceService } from '../finance/finance.service';
+import { IherbPricesController, IherbPricesService } from '../iherb/iherb-prices';
 import { OrderLabelController, OrderLabelService, PrintOrderLabelController } from './order-label';
 
 /**
@@ -95,6 +96,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AiController,
     AdminAiController,
     AdminKnowledgeController,
+    IherbPricesController,
   ],
   providers: [
     AdminBannersService,
@@ -124,6 +126,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     FinanceService,
     OrderFinanceService,
     FinanceRemindersService,
+    IherbPricesService,
     // real fetch and pauses; e2e tests override it with a fake fed by fixtures (never a real request to Yandex)
     { provide: YANDEX_CLIENT_OPTIONS, useValue: {} },
     AdminSettingsService,
