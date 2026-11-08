@@ -1,6 +1,6 @@
 import { SkuAliases } from './SkuAliases';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DictionarySelect, type DictionaryKind } from '../components/DictionarySelect';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
@@ -73,6 +73,8 @@ const PLAIN = [
   'admin_note',
   'ikpu_code',
   'package_code',
+  'iherb_url',
+  'match_form',
 ] as const;
 /** 2.3: numbers of the card; course days = pack / per day. */
 const INTS = ['pack_count', 'servings_per_day', 'market_advantage_percent'] as const;
@@ -102,6 +104,24 @@ const YANDEX_COSTS = [
   ['yandex_payment_fee_percent', 'Платёжный сбор Яндекса, %'],
   ['yandex_logistics_uzs', 'Логистика Яндекса за заказ, сум'],
 ] as const;
+/** Генплан, этап 5 (D-57): «1-в-1» match — the same lists as DOSE_UNITS / DOSE_PER in apps/api iherb-fields.ts */
+const DOSE_UNITS: [string, string][] = [
+  ['', '—'],
+  ['mg', 'мг'],
+  ['mcg', 'мкг'],
+  ['iu', 'МЕ'],
+  ['g', 'г'],
+  ['ml', 'мл'],
+  ['cfu_bn', 'млрд КОЕ'],
+];
+const DOSE_PER: [string, string][] = [
+  ['', '—'],
+  ['capsule', 'на 1 капсулу'],
+  ['tablet', 'на 1 таблетку'],
+  ['softgel', 'на 1 мягкую капсулу'],
+  ['serving', 'на 1 порцию'],
+  ['drop', 'на 1 каплю'],
+];
 /** "18,5" / "18.5" / "" -> number / null */
 const toNum = (v: string): number | null => (v.trim() === '' ? null : Number(v.replace(/\s/g, '').replace(',', '.')));
 type Form = Record<string, string> & { status: string };
@@ -127,6 +147,15 @@ function toForm(p?: AdminProduct): Form {
   }
   f.yandex_price_uzs = p?.yandex_price_uzs == null ? '' : String(p.yandex_price_uzs);
   for (const [k] of YANDEX_COSTS) f[k] = p?.[k] == null ? '' : String(p[k]);
+  // D-57: iHerb and the «1-в-1» match
+  f.dose_amount = p?.dose_amount == null ? '' : String(p.dose_amount);
+  f.dose_unit = (p?.dose_unit as string | null) ?? '';
+  f.dose_per = (p?.dose_per as string | null) ?? '';
+  f.cross_border_eligible = p?.cross_border_eligible ? '1' : '';
+  f.auto_pricing_enabled = p?.auto_pricing_enabled ? '1' : '';
+  f.markup_percent = p?.markup_percent == null ? '80' : String(p.markup_percent);
+  f.price_round_to = p?.price_round_to == null ? '1000' : String(p.price_round_to);
+  f.stock_price_mode = (p?.stock_price_mode as string | undefined) ?? 'freeze';
   return f;
 }
 
@@ -179,6 +208,17 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         if (alreadyChanged !== undefined) body.yandex_price_already_changed = alreadyChanged;
       }
       if (costsView) for (const [k] of YANDEX_COSTS) body[k] = k === 'yandex_logistics_uzs' ? (toInt(f[k]) ?? null) : toNum(f[k]);
+      // D-57: iHerb; the auto pricing settings are admin only (the server refuses them from other roles)
+      body.dose_amount = toNum(f.dose_amount);
+      body.dose_unit = f.dose_unit || null;
+      body.dose_per = f.dose_per || null;
+      body.cross_border_eligible = f.cross_border_eligible === '1';
+      if (costsView) {
+        body.auto_pricing_enabled = f.auto_pricing_enabled === '1';
+        body.markup_percent = toInt(f.markup_percent) ?? 80;
+        body.price_round_to = toInt(f.price_round_to) ?? 1000;
+        body.stock_price_mode = f.stock_price_mode;
+      }
       for (const [k] of TEXTS) for (const l of ['ru', 'uz']) body[`${k}_${l}`] = f[`${k}_${l}`];
       body.price_uzs = toInt(f.price_uzs);
       body.old_price_uzs = toInt(f.old_price_uzs) ?? null;
@@ -430,6 +470,8 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         </div>
       </section>
 
+      <IherbCard f={f} set={set} input={input} editable={editable} costsView={costsView} price={toInt(f.price_uzs)} />
+
       {yandexView && (
         <section className="card">
           <div className="section-head">
@@ -591,6 +633,104 @@ function ProductForm({ product }: { product?: AdminProduct }) {
  * Stage 2B: short composition RU / UZ (admin and manager); unit tracking is shown only. The Physical ID label 58×40
  * does not print it: the field stays for the 75×120 template (a future courier-bag label).
  */
+/**
+ * Генплан, этап 5 (D-57, docs/plans/IHERB_PLAN.md): the iHerb link, «Под заказ из США», auto pricing (admin only) and
+ * the «1-в-1» match fields (brand + chemical form + dose + pack count). Prices from iHerb come in the next branch.
+ */
+function IherbCard({
+  f,
+  set,
+  input,
+  editable,
+  costsView,
+  price,
+}: {
+  f: Form;
+  set: (k: string, v: string) => void;
+  input: (k: string, props?: Record<string, unknown>) => ReactNode;
+  editable: boolean;
+  costsView: boolean;
+  price: number | undefined;
+}) {
+  const markup = toInt(f.markup_percent) ?? 80;
+  const round = Math.max(1, toInt(f.price_round_to) ?? 1000);
+  const example = 100_000;
+  const exampleOut = Math.ceil((example * (1 + markup / 100)) / round) * round;
+  return (
+    <section className="card">
+      <div className="section-head">
+        <h2>iHerb и сверка «1-в-1»</h2>
+        {f.iherb_url ? <Badge tone="info">iHerb</Badge> : null}
+      </div>
+      <div className="form-grid">
+        <Field label="Ссылка на товар iHerb" hint="Страница товара, например https://uz.iherb.com/pr/…/12345">
+          {input('iherb_url', { type: 'url', maxLength: 500, placeholder: 'https://uz.iherb.com/pr/…' })}
+        </Field>
+        <label className="check">
+          <input type="checkbox" checked={f.cross_border_eligible === '1'} disabled={!editable} onChange={(e) => set('cross_border_eligible', e.target.checked ? '1' : '')} />
+          <span>
+            «Под заказ из США», когда на складе ноль
+            <span className="muted small"> — покупатели увидят после ответа юриста и включения функции</span>
+          </span>
+        </label>
+      </div>
+      {costsView && (
+        <>
+          <h3>Автоцена (видно только администратору)</h3>
+          <div className="form-grid">
+            <label className="check">
+              <input type="checkbox" checked={f.auto_pricing_enabled === '1'} disabled={!editable} onChange={(e) => set('auto_pricing_enabled', e.target.checked ? '1' : '')} />
+              <span>Цена = цена iHerb + наценка (заработает, когда появятся цены iHerb)</span>
+            </label>
+            <Field label="Наценка, %" hint={`Пример: iHerb 100 000 сум → ${exampleOut.toLocaleString('ru-RU')} сум`}>
+              {input('markup_percent', { inputMode: 'numeric' })}
+            </Field>
+            <Field label="Округлять вверх до, сум" hint="1000 — до тысячи">
+              {input('price_round_to', { inputMode: 'numeric' })}
+            </Field>
+            <Field label="Если товар есть на складе" hint="Цена всё равно не опустится ниже себестоимости с минимальной маржой">
+              <select value={f.stock_price_mode} disabled={!editable} onChange={(e) => set('stock_price_mode', e.target.value)}>
+                <option value="freeze">Цену не менять</option>
+                <option value="dynamic">Менять вместе с iHerb</option>
+              </select>
+            </Field>
+          </div>
+          {price !== undefined && <p className="muted small">Сейчас цена VITALO: {price.toLocaleString('ru-RU')} сум.</p>}
+        </>
+      )}
+      <h3>Сверка с конкурентами</h3>
+      <p className="muted small">
+        Цена конкурента сравнивается, только если совпадают все четыре: бренд, химическая форма, доза и количество в банке
+        (бренд и количество — в разделах выше).
+      </p>
+      <div className="form-grid">
+        <Field label="Химическая форма" hint="Например: бисглицинат, цитрат, D3 холекальциферол">
+          {input('match_form', { maxLength: 80 })}
+        </Field>
+        <Field label="Доза">{input('dose_amount', { inputMode: 'decimal', placeholder: 'например 25' })}</Field>
+        <Field label="Единица">
+          <select value={f.dose_unit} disabled={!editable} onChange={(e) => set('dose_unit', e.target.value)}>
+            {DOSE_UNITS.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="На что">
+          <select value={f.dose_per} disabled={!editable} onChange={(e) => set('dose_per', e.target.value)}>
+            {DOSE_PER.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+    </section>
+  );
+}
+
 function LabelCard({ product }: { product: AdminProduct }) {
   const { can } = useSession();
   const editable = can('products.label');

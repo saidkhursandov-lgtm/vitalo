@@ -45,6 +45,7 @@ import { randomUUID } from 'crypto';
 import { memoryStorage } from 'multer';
 import { PageQuery } from '../catalog/catalog.dto';
 import { HALAL_VEGE, type HalalVege } from '../catalog/product.mapper';
+import { DOSE_PER, DOSE_UNITS, normalizeMatchForm, parseIherbUrl, STOCK_PRICE_MODES, type DosePer, type DoseUnit } from '../iherb/iherb-fields';
 import { DICTIONARY_COLUMNS, DICTIONARY_KINDS, matchKey } from '../dictionaries/dictionary-names';
 import { dictionaryTable } from './admin-dictionaries';
 import { PrismaService } from '../prisma/prisma.service';
@@ -152,6 +153,23 @@ export class ProductInput {
   @ApiPropertyOptional({ nullable: true, description: 'Код упаковки из каталога ИКПУ (цифры)', example: '1501226' })
   @IsOptional() @Transform(textOrNull) @Matches(/^\d{1,20}$/, { message: 'package_code: код упаковки — только цифры' }) package_code?: string | null;
 
+  // Генплан, этап 5 (D-57): iHerb. The link is checked and its product number taken on the server.
+  @ApiPropertyOptional({ nullable: true, description: 'Ссылка на товар iHerb (uz.iherb.com/pr/…/12345)' })
+  @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(500) iherb_url?: string | null;
+  @ApiPropertyOptional({ description: '«Под заказ из США», когда на складе ноль (включается после ответа юриста)' }) @IsOptional() @IsBoolean() cross_border_eligible?: boolean;
+  @ApiPropertyOptional({ description: 'Автоцена: цена iHerb × (1 + наценка %) — только администратор' }) @IsOptional() @IsBoolean() auto_pricing_enabled?: boolean;
+  @ApiPropertyOptional({ description: 'Наценка к цене iHerb, % (по умолчанию 80) — только администратор' }) @IsOptional() @IsInt() @Min(0) @Max(1000) markup_percent?: number;
+  @ApiPropertyOptional({ description: 'Округлять автоцену вверх до, сум — только администратор' }) @IsOptional() @IsInt() @Min(1) @Max(100000) price_round_to?: number;
+  @ApiPropertyOptional({ enum: STOCK_PRICE_MODES, description: 'Товар на складе: freeze — цена не двигается, dynamic — двигается (не ниже себестоимости + маржа)' })
+  @IsOptional() @IsIn([...STOCK_PRICE_MODES]) stock_price_mode?: (typeof STOCK_PRICE_MODES)[number];
+  // «1-в-1» match: brand + match_form + dose per capsule/serving + pack_count
+  @ApiPropertyOptional({ nullable: true, description: 'Доза действующего вещества, напр. 25 (мг)' })
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 3, allowNaN: false, allowInfinity: false }) @Min(0) @Max(100000000) dose_amount?: number | null;
+  @ApiPropertyOptional({ nullable: true, enum: DOSE_UNITS }) @IsOptional() @IsIn([...DOSE_UNITS, null]) dose_unit?: DoseUnit | null;
+  @ApiPropertyOptional({ nullable: true, enum: DOSE_PER, description: 'Доза на капсулу / таблетку / порцию …' }) @IsOptional() @IsIn([...DOSE_PER, null]) dose_per?: DosePer | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Химическая форма для сверки, напр. «бисглицинат»' })
+  @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(80) match_form?: string | null;
+
   // Stage 1.1: dictionary values. Their names are copied into brand / manufacturer / country / form.
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() brand_id?: string | null;
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() manufacturer_id?: string | null;
@@ -217,7 +235,17 @@ const productInclude = {
 type ProductRow = Prisma.productsGetPayload<{ include: typeof productInclude }>;
 
 /** Finance of a product: purchase cost (stage 0) and Yandex commission, payment fee, logistics (stage 1). Admin only. */
-export const COST_FIELDS = ['cost_uzs', 'yandex_commission_percent', 'yandex_payment_fee_percent', 'yandex_logistics_uzs'] as const;
+export const COST_FIELDS = [
+  'cost_uzs',
+  'yandex_commission_percent',
+  'yandex_payment_fee_percent',
+  'yandex_logistics_uzs',
+  // D-57: iHerb auto pricing shows the margin — admin only, like the purchase cost
+  'auto_pricing_enabled',
+  'markup_percent',
+  'price_round_to',
+  'stock_price_mode',
+] as const;
 /** Yandex price and its sync status: admin, manager, marketer (not warehouse). */
 export const YANDEX_PRICE_FIELDS = ['yandex_price_uzs', 'yandex_price_sync_needed', 'yandex_price_sync_changed_at'] as const;
 
@@ -271,6 +299,7 @@ function toAdminProduct(p: ProductRow) {
     yandex_commission_percent,
     yandex_payment_fee_percent,
     yandex_logistics_uzs,
+    dose_amount,
     ...rest
   } = p;
   return {
@@ -282,6 +311,7 @@ function toAdminProduct(p: ProductRow) {
     yandex_commission_percent: num(yandex_commission_percent),
     yandex_payment_fee_percent: num(yandex_payment_fee_percent),
     yandex_logistics_uzs: num(yandex_logistics_uzs),
+    dose_amount: num(dose_amount),
     category_ids: categories.map((c) => c.category_id),
     media: media.map((m) => ({ id: m.id, url: m.url, is_main: m.is_main, type: m.media_type, title: m.title })),
     stock: inventory.map((i) => ({
@@ -605,6 +635,17 @@ export class AdminProductsService {
     }
     for (const k of TEXT_FIELDS) if (d[k] === '') data[k] = null;
     delete data.yandex_price_already_changed;
+    // D-57: the iHerb link is checked here; its product number ties the price snapshots to the product
+    if (d.iherb_url !== undefined) {
+      if (d.iherb_url === null) data.iherb_product_id = null;
+      else {
+        const link = parseIherbUrl(String(d.iherb_url));
+        if (!link) throw new BadRequestException({ code: 'BAD_IHERB_URL', message: 'Ссылка iHerb должна вести на страницу товара, например https://uz.iherb.com/pr/…/12345' });
+        data.iherb_url = link.url;
+        data.iherb_product_id = link.productId;
+      }
+    }
+    if (typeof d.match_form === 'string') data.match_form = normalizeMatchForm(d.match_form);
     return data;
   }
 
@@ -623,6 +664,9 @@ export class AdminProductsService {
       return await this.prisma.$transaction(fn);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        if (String(e.meta?.target ?? '').includes('iherb_product_id')) {
+          throw new ConflictException({ code: 'IHERB_TAKEN', message: 'Эта ссылка iHerb уже указана у другого товара' });
+        }
         throw new ConflictException({ code: 'SKU_TAKEN', message: 'A product with this SKU already exists' });
       }
       throw e;

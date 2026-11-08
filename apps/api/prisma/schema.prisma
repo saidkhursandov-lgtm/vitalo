@@ -638,6 +638,20 @@ model products {
   ikpu_code    String?
   package_code String?
 
+  // Генплан, этап 5 (D-57, docs/plans/IHERB_PLAN.md): iHerb. markup / auto pricing / rounding / stock mode — admin only.
+  iherb_url             String?
+  iherb_product_id      String?  @unique // the number at the end of the iHerb link, e.g. 103250
+  cross_border_eligible Boolean  @default(false) // «Под заказ из США» when nothing is in stock (switched on after the lawyer)
+  auto_pricing_enabled  Boolean  @default(false)
+  markup_percent        Int      @default(80)
+  price_round_to        Int      @default(1000) // round the auto price up to this many sum
+  stock_price_mode      String   @default("freeze") // freeze | dynamic: what auto pricing does while the product is in stock
+  // «1-в-1» match with competitors: brand + match_form + dose per capsule/serving + pack_count
+  dose_amount           Decimal? @db.Decimal(12, 3)
+  dose_unit             String? // mg | mcg | iu | g | ml | cfu_bn
+  dose_per              String? // capsule | tablet | softgel | serving | drop
+  match_form            String? // normalized chemical form, e.g. «цитрат», «бисглицинат», «D3 холекальциферол»
+
   brand_entry        brands?        @relation(fields: [brand_id], references: [id])
   manufacturer_entry manufacturers? @relation(fields: [manufacturer_id], references: [id])
   country_entry      countries?     @relation(fields: [country_id], references: [id])
