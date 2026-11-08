@@ -42,6 +42,7 @@ import { requireIdempotencyKey, runIdempotent } from '../common/idempotency';
 import { StockService } from '../inventory/stock.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizePhysicalId } from '../receiving/physical-id';
+import { notTrackedReason, trackingStates } from '../receiving/unit-tracking';
 import { AuditService } from '../staff/audit.service';
 import { can } from '../staff/permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
@@ -341,10 +342,12 @@ export class YandexOrdersService {
       where: { id: { in: input.lines.map((l) => l.product_id) } },
       select: { id: true, sku: true, unit_tracking: true, yandex_price_uzs: true, yandex_commission_percent: true },
     });
+    const untracked = await trackingStates(tx, products.filter((p) => !p.unit_tracking).map((p) => p.id));
     const priced = input.lines.map((l) => {
       const p = products.find((x) => x.id === l.product_id);
       if (!p) throw new BadRequestException({ code: 'UNKNOWN_PRODUCT', message: 'Товар не найден' });
-      if (!p.unit_tracking) throw new ConflictException({ code: 'NOT_UNIT_TRACKED', message: `${p.sku}: товар не учитывается по банкам (Physical ID)` });
+      const st = untracked.find((s) => s.product_id === p.id);
+      if (st) throw new ConflictException({ code: 'NOT_UNIT_TRACKED', message: notTrackedReason(st) });
       // S2C-12: the Yandex price of the product card unless typed at creation
       const price = l.unit_price_uzs ?? (p.yandex_price_uzs === null ? null : Number(p.yandex_price_uzs));
       if (price === null) throw new BadRequestException({ code: 'PRICE_REQUIRED', message: `${p.sku}: в карточке нет цены Яндекса — укажите цену` });

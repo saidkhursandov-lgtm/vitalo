@@ -547,7 +547,7 @@ describe('Stage 2B: Physical ID, receiving, labels (e2e)', () => {
 
   it('product card: short label composition by admin and manager, not by warehouse; unit tracking is shown', async () => {
     const saved = (await as('manager').patch(`/staff/products/${p2.id}/label`, { label_composition_ru: ' Витамин D3 ', label_composition_uz: 'D3 vitamini' }).expect(200)).body;
-    expect(saved).toMatchObject({ label_composition_ru: 'Витамин D3', label_composition_uz: 'D3 vitamini', unit_tracking: false });
+    expect(saved).toMatchObject({ label_composition_ru: 'Витамин D3', label_composition_uz: 'D3 vitamini', unit_tracking: true }); // S2B-10: received by purchase with no old stock
     await as('admin').patch(`/staff/products/${p2.id}/label`, { label_composition_uz: '' }).expect(200);
     expect((await prisma.products.findUniqueOrThrow({ where: { id: p2.id } })).label_composition_uz).toBeNull();
     await as('warehouse').patch(`/staff/products/${p2.id}/label`, { label_composition_ru: 'x' }).expect(403);

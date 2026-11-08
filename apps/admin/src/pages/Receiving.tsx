@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { BackIcon } from '../components/Icons';
 import { REASONS, ReasonPicker } from '../components/Reason';
 import { Badge, ErrorBox, Field, Loading, Modal, Pagination } from '../components/ui';
-import { api, ApiError, newKey, qs } from '../lib/api';
+import { api, ApiError, errorText, newKey, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, ruDate, UNIT_EVENT, UNIT_STATUS } from '../lib/format';
 
@@ -44,6 +44,8 @@ interface Session {
   lines: { id: string; product: { sku: string; name_ru: string }; qty: number; discrepancy_qty: number | null }[];
   units: Unit[];
   summary: { units: number; printed: number; discrepancy_qty: number };
+  /** completed, but these products did not switch to unit tracking (S2B-10): Yandex orders refuse them */
+  not_unit_tracked?: { product_id: string; sku: string; reason: string }[];
   created?: string[];
   warnings?: string[];
   replayed?: boolean;
@@ -339,6 +341,12 @@ function SessionScreen({ id, onExit }: { id: string; onExit: () => void }) {
           </button>
         </div>
       )}
+      {s.status === 'COMPLETED' &&
+        s.not_unit_tracked?.map((t) => (
+          <div key={t.product_id} className="alert alert-warn">
+            {t.reason}. Пока товар не на учёте по банкам, заказы Яндекса по нему не создаются.
+          </div>
+        ))}
       {s.status === 'CANCELLED' && <div className="alert alert-info">Приёмка отменена: её единицы получили статус «Отменена».</div>}
 
       {s.status === 'OPEN' && s.type === 'PURCHASE' && (
@@ -929,18 +937,31 @@ interface ReconcileRow {
   difference: number;
   sold_by_orders: number;
   explained: boolean;
-  state: 'ok' | 'legacy_orders' | 'unexplained';
+  state: 'ok' | 'legacy_orders' | 'unexplained' | 'not_tracked';
 }
 
 export function Reconcile() {
+  const { can } = useSession();
+  const client = useQueryClient();
   const q = useQuery({ queryKey: ['units-reconcile'], queryFn: () => api<{ hint: string; items: ReconcileRow[] }>('/staff/units/reconcile') });
+  const [fixError, setFixError] = useState<string | null>(null);
+  // S2B-10: products that got units by a purchase before the rule (OZN-A019) — switched on here, with the same check
+  const start = useMutation({
+    mutationFn: (productId: string) => api(`/staff/units/start-tracking/${productId}`, { method: 'POST' }),
+    onSuccess: () => {
+      setFixError(null);
+      void client.invalidateQueries({ queryKey: ['units-reconcile'] });
+    },
+    onError: (e) => setFixError(errorText(e)),
+  });
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const bad = q.data.items.filter((r) => !r.explained).length;
   return (
     <>
       <div className="alert alert-info">{q.data.hint}</div>
-      {bad > 0 && <div className="alert alert-error">Не объясняется: {bad} — проверьте эти товары (красные строки).</div>}
+      {bad > 0 && <div className="alert alert-error">Требуют проверки: {bad} — красные строки («не объясняется» или «не на учёте по банкам»).</div>}
+      {fixError && <div className="alert alert-error">{fixError}</div>}
       {!q.data.items.length ? (
         <p className="muted">Товаров с учётом по единицам пока нет: они появятся после завершения начального остатка.</p>
       ) : (
@@ -978,6 +999,21 @@ export function Reconcile() {
                       <Badge tone="ok">сходится</Badge>
                     ) : r.state === 'legacy_orders' ? (
                       <Badge tone="info">старые заказы без банок</Badge>
+                    ) : r.state === 'not_tracked' ? (
+                      <>
+                        <Badge tone="bad">не на учёте по банкам</Badge>
+                        {r.units_in_stock !== r.actual_qty ? (
+                          <div className="muted small">остаток не равен числу банок — нужен начальный остаток (пересчёт)</div>
+                        ) : can('units.start_tracking') ? (
+                          <div>
+                            <button className="btn btn-sm" style={{ marginTop: 6 }} disabled={start.isPending} onClick={() => start.mutate(r.product_id)}>
+                              Включить учёт по банкам
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="muted small">остаток равен числу банок — учёт включает администратор</div>
+                        )}
+                      </>
                     ) : (
                       <Badge tone="bad">не объясняется</Badge>
                     )}

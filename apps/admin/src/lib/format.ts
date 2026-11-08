@@ -160,6 +160,8 @@ export const AUDIT_ACTION: Record<string, string> = {
   'receiving.cancelled': 'Приёмка отменена',
   'receiving.opening_imported': 'Загружен начальный остаток (единицы)',
   'inventory.unit_tracking_override': 'Операция в обход учёта по единицам',
+  'product.unit_tracking_started': 'Товар переведён на учёт по банкам (приёмка по закупке)',
+  'product.unit_tracking_fix': 'Учёт по банкам включён вручную (исправление данных)',
 };
 
 /** D-09: the shop shows a crossed-out price and a percent only up to this discount. */

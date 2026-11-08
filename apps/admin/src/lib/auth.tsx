@@ -28,6 +28,7 @@ export type Permission =
   | 'dashboard.revenue'
   | 'settings.dictionaries'
   | 'catalog.delete'
+  | 'units.start_tracking'
   | 'yandex.price.view'
   | 'yandex.price.sync'
   | 'purchases.view'

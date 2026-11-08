@@ -28,7 +28,9 @@ import { can, type Permission } from '../staff/permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
 import { normalizePhysicalId } from './physical-id';
 import { PrintScope, printTicketKey, PrintTicketError, signPrintTicket, TICKET_MAX_UNITS, TICKET_TTL_SECONDS, verifyPrintTicket } from './print-ticket';
+import { AuditService } from '../staff/audit.service';
 import { RECONCILE_HINT, reconcileUnits } from './reconcile';
+import { canStartTracking, notTrackedReason, trackingStates } from './unit-tracking';
 import { labelView, unitInclude, unitView } from './units';
 
 const PAGE_SIZE = 50;
@@ -65,6 +67,7 @@ export class AdminUnitsService {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   async list(q: UnitsQuery, full: boolean) {
@@ -197,6 +200,27 @@ export class AdminUnitsService {
   async reconcile() {
     return { hint: RECONCILE_HINT, items: await reconcileUnits(this.prisma) };
   }
+
+  /**
+   * S2B-10: «Включить учёт по банкам» in «Сверка» for a product whose units came by a purchase before S2B-10 (OZN-A019).
+   * The same check as at the end of a receiving: stock = units on the shelf, no open opening balance. Replaces the
+   * manual SQL of 25.10.2026. Only the flag changes; units, stock and reserves are not touched.
+   */
+  async startTracking(staffId: string, productId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM products WHERE id = ${productId}::uuid FOR UPDATE`;
+      const [st] = await trackingStates(tx, [productId]);
+      if (!st) throw new NotFoundException({ code: 'UNKNOWN_PRODUCT', message: 'Товар не найден' });
+      if (st.unit_tracking) return { sku: st.sku, unit_tracking: true, changed: false };
+      if (!canStartTracking(st)) throw new ConflictException({ code: 'CANNOT_START_TRACKING', message: notTrackedReason(st) });
+      await tx.products.update({ where: { id: productId }, data: { unit_tracking: true } });
+      await this.audit.log(
+        { staffId, action: 'product.unit_tracking_fix', entityType: 'product', entityId: productId, before: { unit_tracking: false }, after: { unit_tracking: true, actual_qty: st.actual, units_on_shelf: st.on_shelf } },
+        tx,
+      );
+      return { sku: st.sku, unit_tracking: true, changed: true };
+    });
+  }
 }
 
 const fullFor = (role: StaffRole) => can(role, 'purchases.view_costs');
@@ -231,6 +255,14 @@ export class AdminUnitsController {
   @RequirePermission('units.view')
   reconcile() {
     return this.units.reconcile();
+  }
+
+  /** S2B-10: switch a product to unit tracking when its stock equals its units — admin only. */
+  @Post('start-tracking/:productId')
+  @HttpCode(200)
+  @RequirePermission('units.start_tracking')
+  startTracking(@CurrentStaff() me: StaffContext, @Param('productId', new ParseUUIDPipe()) productId: string) {
+    return this.units.startTracking(me.staff.id, productId);
   }
 
   @Post('labels')
