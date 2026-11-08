@@ -14,6 +14,7 @@ import { Storefront } from './pages/Storefront';
 import { Campaigns } from './pages/Campaigns';
 import { Compat } from './pages/Compat';
 import { Dashboard } from './pages/Dashboard';
+import { Devices } from './pages/Devices';
 import { Finance } from './pages/Finance';
 import { Inventory } from './pages/Inventory';
 import { OrderDetail } from './pages/OrderDetail';
@@ -69,6 +70,7 @@ export function App() {
         <Route path="finance" element={<Guard perm="finance.manage"><Finance /></Guard>} />
         <Route path="settings" element={<Guard perm="settings.manage"><Settings /></Guard>} />
         <Route path="audit" element={<Guard perm="audit.view"><Audit /></Guard>} />
+        <Route path="devices" element={<Devices />} />
         <Route path="*" element={<NoAccess />} />
       </Route>
     </Routes>

@@ -447,6 +447,9 @@ model staff_users {
   updated_at       DateTime    @updatedAt
 
   sessions              staff_sessions[]
+  devices               staff_devices[]
+  login_requests        staff_login_requests[]
+  backup_codes          staff_backup_codes[]
   audit_logs            audit_logs[]
   order_edits           order_edit_log[]
   movements             inventory_movements[]
@@ -475,6 +478,57 @@ model staff_sessions {
   token_hash    String      @unique
   created_at    DateTime    @default(now())
   expires_at    DateTime
+  revoked_at    DateTime?
+  /// Генплан, этап 3: telegram (inside the bot) | web (Telegram Login Widget at admin.vitalo.uz) | backup (owner's code)
+  kind          String      @default("telegram")
+  /// the confirmed browser the web session belongs to
+  device_id     String?     @db.Uuid
+  device_name   String?
+  ip            String?
+  last_seen_at  DateTime?
+  staff_user    staff_users @relation(fields: [staff_user_id], references: [id])
+
+  @@index([staff_user_id])
+}
+
+/// Генплан, этап 3: a browser the employee confirmed in the bot; its random token is in an HttpOnly cookie
+model staff_devices {
+  id            String      @id @default(uuid()) @db.Uuid
+  staff_user_id String      @db.Uuid
+  token_hash    String      @unique
+  name          String
+  created_at    DateTime    @default(now())
+  last_seen_at  DateTime?
+  revoked_at    DateTime?
+  staff_user    staff_users @relation(fields: [staff_user_id], references: [id])
+
+  @@index([staff_user_id])
+}
+
+/// Генплан, этап 3: «Вход с нового устройства — Подтвердить / Это не я» in the bot. status: pending | approved | denied
+model staff_login_requests {
+  id                String      @id @default(uuid()) @db.Uuid
+  staff_user_id     String      @db.Uuid
+  poll_hash         String
+  device_name       String
+  ip                String?
+  status            String      @default("pending")
+  created_at        DateTime    @default(now())
+  expires_at        DateTime
+  decided_at        DateTime?
+  session_issued_at DateTime?
+  staff_user        staff_users @relation(fields: [staff_user_id], references: [id])
+
+  @@index([staff_user_id])
+}
+
+/// Генплан, этап 3: the owner's one-time emergency codes (only hashes)
+model staff_backup_codes {
+  id            String      @id @default(uuid()) @db.Uuid
+  staff_user_id String      @db.Uuid
+  code_hash     String      @unique
+  created_at    DateTime    @default(now())
+  used_at       DateTime?
   revoked_at    DateTime?
   staff_user    staff_users @relation(fields: [staff_user_id], references: [id])
 

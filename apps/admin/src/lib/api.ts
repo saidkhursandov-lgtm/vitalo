@@ -1,4 +1,8 @@
-/** fetch wrapper for /api (proxied to localhost:3000 by Vite in dev). Staff token lives in sessionStorage. */
+/**
+ * fetch wrapper for /api (proxied to localhost:3000 by Vite in dev). Inside Telegram the staff token lives in
+ * sessionStorage (Bearer); in an ordinary browser (admin.vitalo.uz, D-56) the session is an HttpOnly cookie the page
+ * never sees. Every request carries `x-vitalo-admin: 1`: the API refuses cookie changes without it (CSRF).
+ */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 const TOKEN_KEY = 'vitalo.staff.token';
 
@@ -44,6 +48,7 @@ export async function api<T>(
   const res = await fetch(`${BASE}${path}`, {
     method: init.method ?? 'GET',
     headers: {
+      'x-vitalo-admin': '1',
       ...(init.body !== undefined && { 'content-type': 'application/json' }),
       ...(auth && { authorization: `Bearer ${auth}` }),
       ...init.headers,
@@ -53,7 +58,7 @@ export async function api<T>(
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (res.status === 401 && auth) {
+    if (res.status === 401 && !init.anonymous) {
       setToken(null);
       onUnauthorized?.();
     }
@@ -130,6 +135,14 @@ const ERRORS: Record<string, string> = {
   NOTHING_TO_PRINT: 'Выберите единицы или приёмку',
   TOO_MANY_UNITS: 'Слишком много единиц сразу — печатайте всю приёмку кнопкой «Напечатать этикетки»',
   PRINT_TICKET_EXPIRED: 'Ссылка на печать устарела (действует 15 минут) — нажмите «Напечатать этикетки» в админке ещё раз',
+  BOT_UNREACHABLE: 'Бот не смог отправить подтверждение. Откройте бота VITALO в Telegram, нажмите «Старт» и войдите снова.',
+  BOT_NOT_CONFIGURED: 'Вход через Telegram не настроен на сервере',
+  BAD_TELEGRAM_LOGIN: 'Telegram не подтвердил вход. Попробуйте ещё раз.',
+  NOT_STAFF: 'Этот Telegram-аккаунт не сотрудник VITALO или заблокирован',
+  BAD_CODE: 'Код не подходит или уже использован',
+  TOO_MANY_ATTEMPTS: 'Слишком много попыток входа. Попробуйте через 15 минут.',
+  ALREADY_USED: 'Этот вход уже выполнен — обновите страницу',
+  CSRF: 'Обновите страницу и попробуйте ещё раз',
   PRINT_TICKET_INVALID: 'Ссылка на печать недействительна (или вы вышли из админки) — откройте печать из админки заново',
 };
 

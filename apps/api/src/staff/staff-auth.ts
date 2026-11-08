@@ -25,6 +25,29 @@ interface StaffRequest extends Request {
   staffAuth?: StaffContext;
 }
 
+/** Admin-panel session cookie in an ordinary browser (генплан, этап 3, D-56). */
+export const SESSION_COOKIE = 'vitalo_staff';
+export const DEVICE_COOKIE = 'vitalo_staff_device';
+/** Header every cookie-authenticated change must carry: a page on another site cannot add it without CORS. */
+export const CSRF_HEADER = 'x-vitalo-admin';
+
+/** Reads one cookie from the Cookie header (no cookie-parser in this app). */
+export function readCookie(req: Request, name: string): string | null {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(i + 1).trim()) || null;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+const SEEN_EVERY_MS = 5 * 60_000;
+
 /** Staff login: same Telegram initData as customers, then the Telegram id must be an active staff_users row. */
 @Injectable()
 export class StaffAuthService {
@@ -43,7 +66,7 @@ export class StaffAuthService {
     const ttlHours = Number(this.config.get('STAFF_SESSION_TTL_HOURS') ?? 12);
     const expiresAt = new Date(Date.now() + ttlHours * 3600_000);
     await this.prisma.staff_sessions.create({
-      data: { staff_user_id: staff.id, token_hash: hashSessionToken(token), expires_at: expiresAt },
+      data: { staff_user_id: staff.id, token_hash: hashSessionToken(token), expires_at: expiresAt, kind: 'telegram', device_name: 'Telegram', last_seen_at: new Date() },
     });
     return { token, expires_at: expiresAt.toISOString(), staff: { id: staff.id, name: staff.name, role: staff.role, is_specialist: staff.is_specialist } };
   }
@@ -68,6 +91,10 @@ export class StaffAuthService {
     });
     // A blocked employee loses access immediately, whatever sessions they still hold (TZ §23).
     if (!session || session.revoked_at || session.expires_at <= new Date() || session.staff_user.status !== 'active') return null;
+    // «Мои устройства» shows when a session was last used; written at most once per 5 minutes.
+    if (!session.last_seen_at || Date.now() - session.last_seen_at.getTime() > SEEN_EVERY_MS) {
+      await this.prisma.staff_sessions.update({ where: { id: session.id }, data: { last_seen_at: new Date() } }).catch(() => undefined);
+    }
     return { sessionId: session.id, staff: session.staff_user };
   }
 }
@@ -85,8 +112,16 @@ export class StaffGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<StaffRequest>();
-    const [scheme, token] = (req.headers.authorization ?? '').split(' ');
-    if (scheme !== 'Bearer' || !token) throw new UnauthorizedException();
+    const [scheme, bearer] = (req.headers.authorization ?? '').split(' ');
+    let token = scheme === 'Bearer' && bearer ? bearer : null;
+    if (!token) {
+      // Browser version (admin.vitalo.uz): HttpOnly cookie; changes need the admin header (CSRF protection).
+      token = readCookie(req, SESSION_COOKIE);
+      if (token && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.header(CSRF_HEADER) !== '1') {
+        throw new ForbiddenException({ code: 'CSRF', message: 'Missing admin header' });
+      }
+    }
+    if (!token) throw new UnauthorizedException();
 
     const auth = await this.auth.findActiveSession(token);
     if (!auth) throw new UnauthorizedException();

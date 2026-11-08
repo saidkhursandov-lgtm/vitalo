@@ -91,6 +91,8 @@ export interface VitaloApi {
   rejectReceipt(staffTelegramId: number, receiptId: string, reason: { code?: string; text?: string }): Promise<ReceiptDecision>;
   /** 3.4: the specialist's answer — code c | s | k (Совместимы / Разнести / Консультация), optional own text. */
   compatAnswer(staffTelegramId: number, requestId: string, code: string, text?: string): Promise<CompatAnswer>;
+  /** Генплан, этап 3: «Подтвердить» / «Это не я» on a login to the admin panel from a new browser. */
+  staffLoginDecision(staffTelegramId: number, requestId: string, approve: boolean): Promise<{ result: string }>;
 }
 
 /** Calls /api/internal/bot/* with the shared secret header. */
@@ -113,6 +115,9 @@ export class HttpVitaloApi implements VitaloApi {
     this.post<ReceiptDecision>(`/internal/bot/receipts/${receiptId}/reject`, { telegram_id: String(staffId), ...reason });
   compatAnswer = (staffId: number, requestId: string, code: string, text?: string) =>
     this.post<CompatAnswer>(`/internal/bot/compat/${requestId}/answer`, { telegram_id: String(staffId), verdict: code, ...(text !== undefined && { text }) });
+
+  staffLoginDecision = (staffId: number, requestId: string, approve: boolean) =>
+    this.post<{ result: string }>(`/internal/bot/staff-login/${requestId}/decision`, { telegram_id: String(staffId), approve });
 
   async sendReceipt(id: number, orderId: string | null, file: ReceiptFile): Promise<ReceiptSaved> {
     const form = new FormData();

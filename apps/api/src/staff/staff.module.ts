@@ -30,6 +30,7 @@ import { DashboardController, DashboardService } from './dashboard';
 import { AllOrdersController, AllOrdersService } from './admin-all-orders';
 import { StaffAuthService, StaffGuard } from './staff-auth';
 import { StaffAuthController } from './staff.controllers';
+import { BotStaffLoginController, CsrfHeaderGuard, StaffDevicesController, StaffWebAuthController, StaffWebAuthService } from './staff-web-auth';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { AdminReceivingController, AdminReceivingService } from '../receiving/admin-receiving';
@@ -54,6 +55,9 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
   imports: [AuthModule, OrdersModule, DeliveryModule, LegalModule, AnalyticsModule, InventoryModule, OnlinePaymentsModule, PromoModule, MapsModule],
   controllers: [
     StaffAuthController,
+    StaffWebAuthController,
+    StaffDevicesController,
+    BotStaffLoginController,
     AdminBannersController,
     AdminBrandsController,
     DashboardController,
@@ -98,6 +102,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminPromoCodesService,
     AdminCampaignsService,
     StaffAuthService,
+    StaffWebAuthService,
+    CsrfHeaderGuard,
     StaffGuard,
     AuditService,
     DashboardService,

@@ -41,6 +41,7 @@ function setup(opts: { user?: Partial<UserSummary> | 'down'; staff?: StaffInfo; 
     rejectReceipt: async () => {
       throw new Error('not used here');
     },
+    staffLoginDecision: async () => ({ result: 'approved' }),
     compatAnswer: async () => {
       throw new Error('not used here');
     },

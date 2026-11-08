@@ -1,8 +1,10 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { TelegramLoginDto } from '../auth/auth.controller';
 import { permissionsOf } from './permissions';
 import { CurrentStaff, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
+import { clearAuthCookies } from './staff-web-auth';
 
 @ApiTags('staff: auth')
 @Controller('staff/auth')
@@ -29,7 +31,8 @@ export class StaffAuthController {
   @HttpCode(204)
   @ApiBearerAuth()
   @UseGuards(StaffGuard)
-  async logout(@CurrentStaff() me: StaffContext) {
+  async logout(@CurrentStaff() me: StaffContext, @Res({ passthrough: true }) res: Response) {
     await this.auth.logout(me.sessionId);
+    clearAuthCookies(res); // the browser stays «confirmed»: next login needs only Telegram
   }
 }

@@ -80,9 +80,14 @@ export function Layout() {
         <div className="me">
           <div className="me-name">{staff.name}</div>
           <div className="muted small">{ROLE[staff.role]}</div>
-          <button className="btn btn-sm btn-ghost" onClick={() => void logout()}>
-            Выйти
-          </button>
+          <div className="me-actions">
+            <Link to="/devices" className="btn btn-sm btn-ghost" aria-current={pathname === '/devices' ? 'page' : undefined}>
+              Мои устройства
+            </Link>
+            <button className="btn btn-sm btn-ghost" onClick={() => void logout()}>
+              Выйти
+            </button>
+          </div>
         </div>
       </aside>
       <main className="main">

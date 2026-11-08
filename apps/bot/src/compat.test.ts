@@ -28,6 +28,7 @@ function setup(answer: (code: string, text?: string) => Promise<CompatAnswer> = 
     confirmReceipt: unused,
     rejectReceipt: unused,
     compatAnswer: async (id, requestId, code, text) => (asked.push([id, requestId, code, text]), answer(code, text)),
+    staffLoginDecision: unused,
   };
   const bot = createBot({
     token: '1:TEST',

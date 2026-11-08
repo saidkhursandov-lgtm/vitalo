@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { DevLogin } from '../pages/DevLogin';
-import { api, ApiError, errorText, hasToken, setToken, setUnauthorizedHandler } from './api';
+import { WebLogin } from '../pages/WebLogin';
+import { api, ApiError, errorText, setToken, setUnauthorizedHandler } from './api';
 import { Logo } from '../components/Logo';
 
 export type Permission =
@@ -74,16 +75,21 @@ export function useSession(): Session {
   return s;
 }
 
-type State = { status: 'loading' } | { status: 'ready'; me: Me } | { status: 'dev-login' } | { status: 'outside' } | { status: 'error'; message: string };
+type State = { status: 'loading' } | { status: 'ready'; me: Me } | { status: 'dev-login' } | { status: 'web-login' } | { status: 'error'; message: string };
 
 const telegramInitData = () => window.Telegram?.WebApp?.initData || '';
 
 /** Dev login only on this computer, never through a public tunnel. */
 export const isLocalDevHost = (hostname = window.location.hostname) => ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
 
+/** Without a session: the browser login page (D-56); on this computer in dev mode — the test employees. */
+const signedOut = (): State => ({ status: import.meta.env.DEV && isLocalDevHost() ? 'dev-login' : 'web-login' });
+
 /**
- * Staff sign-in: Telegram initData of the same bot (validated on the server) + the Telegram id must be an
- * active employee in staff_users. In a normal browser in dev mode a test employee can be chosen.
+ * Staff sign-in. Inside Telegram: initData of the same bot (validated on the server) + the Telegram id must be an
+ * active employee in staff_users. In an ordinary browser (admin.vitalo.uz, генплан этап 3, D-56): the HttpOnly
+ * cookie session, else the login page (Telegram Login Widget + confirmation in the bot). In dev mode on this
+ * computer a test employee can be chosen.
  */
 export function StaffAuthProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient();
@@ -103,16 +109,15 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     try {
       const initData = telegramInitData();
       if (initData) return await signIn(initData);
-      if (hasToken()) {
-        try {
-          const me = await api<Me>('/staff/auth/me');
-          ready.current = true;
-          return setState({ status: 'ready', me });
-        } catch (e) {
-          if (!(e instanceof ApiError && e.status === 401)) throw e;
-        }
+      // a Telegram token from this tab, or the browser's cookie session
+      try {
+        const me = await api<Me>('/staff/auth/me');
+        ready.current = true;
+        return setState({ status: 'ready', me });
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 401)) throw e;
       }
-      setState({ status: import.meta.env.DEV && isLocalDevHost() ? 'dev-login' : 'outside' });
+      setState(signedOut());
     } catch (e) {
       setState({ status: 'error', message: errorText(e) });
     }
@@ -132,8 +137,14 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     client.clear();
     ready.current = false;
-    setState({ status: import.meta.env.DEV && isLocalDevHost() ? 'dev-login' : 'outside' });
+    setState(signedOut());
   }, [client]);
+
+  const webSignedIn = useCallback((me: Me) => {
+    setToken(null);
+    ready.current = true;
+    setState({ status: 'ready', me });
+  }, []);
 
   if (state.status === 'ready') {
     const value: Session = { ...state.me, can: (p) => state.me.permissions.includes(p), logout };
@@ -141,13 +152,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   }
   // `import.meta.env.DEV &&` lets the production build drop DevLogin entirely.
   if (import.meta.env.DEV && state.status === 'dev-login') return <DevLogin onLogin={signIn} />;
-  if (state.status === 'outside')
-    return (
-      <div className="center-screen">
-        <Logo size="lg" />
-        <p className="muted">Откройте админ-панель через Telegram-бота VITALO.</p>
-      </div>
-    );
+  if (state.status === 'web-login') return <WebLogin onLogin={webSignedIn} />;
   if (state.status === 'error')
     return (
       <div className="center-screen">

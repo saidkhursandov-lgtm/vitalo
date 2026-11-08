@@ -507,3 +507,12 @@ textarea { resize: vertical; }
 .meter > span { display: block; height: 100%; background: var(--primary); }
 .meter > span.is-warn { background: var(--warn); }
 .meter > span.is-bad { background: var(--bad); }
+
+/* Генплан, этап 3 (D-56): browser login, «Мои устройства» */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.tg-login { min-height: 48px; display: flex; justify-content: center; margin: 12px 0; }
+.me-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.backup-codes { columns: 2; column-gap: 32px; margin: 12px 0; padding-left: 24px; font-size: 15px; line-height: 1.9; }
+.backup-codes code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; letter-spacing: 0.04em; color: var(--text); }
+@media (max-width: 480px) { .backup-codes { columns: 1; } }
+.me-actions .btn-ghost { margin-top: 0; }

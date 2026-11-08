@@ -41,6 +41,7 @@ function setup(over: Partial<VitaloApi> = {}) {
     confirmReceipt: async (id, receiptId) => (note('confirmReceipt', id, receiptId), { result: 'confirmed', order_number: saved.order_number }),
     rejectReceipt: async (id, receiptId, reason) => (note('rejectReceipt', id, receiptId, reason), { result: 'rejected', order_number: saved.order_number, reason: 'Сумма не совпадает' } as ReceiptDecision),
     compatAnswer: async () => ({ result: 'closed' }),
+    staffLoginDecision: async () => ({ result: 'approved' }),
     ...over,
   };
   const bot = createBot({
