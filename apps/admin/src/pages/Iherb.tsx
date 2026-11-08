@@ -248,7 +248,7 @@ function PreviewTable({ rows }: { rows: PreviewRow[] }) {
           {rows.map((r) => (
             <tr key={r.iherb_product_id} className={r.change_pct != null && Math.abs(r.change_pct) >= SUSPICIOUS_PCT ? 'row-warn' : undefined}>
               <td>
-                <div>{r.title ?? `№ ${r.iherb_product_id}`}</div>
+                {r.title && <div>{r.title}</div>}
                 <div className="muted small">
                   № {r.iherb_product_id}
                   {!r.in_stock && ' · нет в наличии'}
