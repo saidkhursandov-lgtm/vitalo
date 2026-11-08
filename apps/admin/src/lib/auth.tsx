@@ -30,6 +30,7 @@ export type Permission =
   | 'catalog.delete'
   | 'units.start_tracking'
   | 'iherb.prices'
+  | 'competitors.manage'
   | 'yandex.price.view'
   | 'yandex.price.sync'
   | 'purchases.view'

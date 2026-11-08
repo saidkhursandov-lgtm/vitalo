@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, ErrorBox, Loading, PageHead } from '../components/ui';
+import { Competitors, CostBars, PLATFORM_LABELS } from '../components/Competitors';
 import { api, errorText } from '../lib/api';
 import { dateTime, money } from '../lib/format';
 
@@ -50,6 +51,9 @@ interface IherbProduct {
   stock_price_mode: string;
   available: number;
   cost_uzs: number | null;
+  /** the lowest «1-в-1» competitor price of the last 60 days */
+  market_min_uzs: number | null;
+  competitors_count: number;
   last_snapshot: { price_uzs: number; in_stock: boolean; bestseller: boolean; taken_at: string } | null;
   last_change: { old_price_uzs: number; new_price_uzs: number; big_jump: boolean; floor_applied: boolean; yandex_check: boolean; created_at: string } | null;
 }
@@ -58,6 +62,8 @@ interface History {
   product: { id: string; sku: string; name_ru: string; price_uzs: number; cost_uzs: number | null; markup_percent: number };
   snapshots: { taken_at: string; price_uzs: number; list_price_uzs: number | null; in_stock: boolean; bestseller: boolean }[];
   changes: { created_at: string; old_price_uzs: number; new_price_uzs: number; iherb_price_uzs: number | null; big_jump: boolean; floor_applied: boolean; yandex_check: boolean }[];
+  competitors?: { observed_on: string; platform: string; seller: string | null; price_uzs: number }[];
+  competitors_latest?: { observed_on: string; platform: string; seller: string | null; price_uzs: number }[];
 }
 
 interface Upload {
@@ -322,6 +328,7 @@ function ProductsCard() {
                 <th>Товар</th>
                 <th className="num">iHerb</th>
                 <th className="num">VITALO</th>
+                <th className="num">Рынок «1-в-1»</th>
                 <th className="num">Маржа к себестоимости</th>
                 <th>Автоцена</th>
                 <th>Последнее изменение</th>
@@ -366,6 +373,18 @@ function ProductRow({ p, open, onToggle }: { p: IherbProduct; open: boolean; onT
           )}
         </td>
         <td className="num">{money(p.price_uzs)}</td>
+        <td className="num">
+          {p.market_min_uzs == null ? (
+            <span className="muted">—</span>
+          ) : (
+            <>
+              от {money(p.market_min_uzs)}
+              <div className={p.market_min_uzs < p.price_uzs ? 'small text-warn' : 'muted small'}>
+                {p.market_min_uzs < p.price_uzs ? 'дешевле нашей' : 'не дешевле нашей'} · цен {p.competitors_count}
+              </div>
+            </>
+          )}
+        </td>
         <td className="num">{margin == null ? <span className="muted">нет себестоимости</span> : `${margin}%`}</td>
         <td>
           {p.auto_pricing_enabled ? (
@@ -391,8 +410,9 @@ function ProductRow({ p, open, onToggle }: { p: IherbProduct; open: boolean; onT
       </tr>
       {open && (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={7}>
             <PriceChart productId={p.id} />
+            <Competitors productId={p.id} />
             <p className="small">
               <Link to={`/products/${p.id}`}>Открыть карточку товара</Link>
               {p.iherb_url && (
@@ -425,7 +445,17 @@ function PriceChart({ productId }: { productId: string }) {
           </button>
         ))}
       </div>
-      {q.isPending ? <Loading /> : q.isError ? <ErrorBox error={q.error} /> : <Chart h={q.data} days={days} />}
+      {q.isPending ? (
+        <Loading />
+      ) : q.isError ? (
+        <ErrorBox error={q.error} />
+      ) : (
+        <>
+          <Chart h={q.data} days={days} />
+          <h3>Закупка, наша цена и конкуренты</h3>
+          <CostBars d={{ cost_uzs: q.data.product.cost_uzs, price_uzs: q.data.product.price_uzs, competitors: q.data.competitors_latest ?? [] }} />
+        </>
+      )}
     </div>
   );
 }
@@ -437,13 +467,14 @@ export function Chart({ h, days }: { h: History; days: number }) {
   const PAD_L = 8;
   const now = Date.now();
   const from = now - days * 86400_000;
-  if (!h.snapshots.length && !h.changes.length) return <p className="muted">За этот период загрузок не было.</p>;
+  const market = h.competitors ?? [];
+  if (!h.snapshots.length && !h.changes.length && !market.length) return <p className="muted">За этот период загрузок не было.</p>;
   // VITALO price over time: before the first change in the period — its old price, then each new price
   const ours: { t: number; v: number }[] = [];
   ours.push({ t: from, v: h.changes.length ? h.changes[0].old_price_uzs : h.product.price_uzs });
   for (const c of h.changes) ours.push({ t: new Date(c.created_at).getTime(), v: c.new_price_uzs });
   ours.push({ t: now, v: h.product.price_uzs });
-  const values = [...h.snapshots.map((s) => s.price_uzs), ...ours.map((o) => o.v), ...(h.product.cost_uzs ? [h.product.cost_uzs] : [])];
+  const values = [...h.snapshots.map((s) => s.price_uzs), ...ours.map((o) => o.v), ...market.map((m) => m.price_uzs), ...(h.product.cost_uzs ? [h.product.cost_uzs] : [])];
   const max = Math.max(...values) * 1.08;
   const min = Math.max(0, Math.min(...values) * 0.85);
   const x = (t: number) => PAD_L + ((t - from) / (now - from)) * (W - PAD_L * 2);
@@ -461,6 +492,11 @@ export function Chart({ h, days }: { h: History; days: number }) {
         <span>
           <i className="swatch swatch-vitalo" /> VITALO
         </span>
+        {market.length > 0 && (
+          <span>
+            <i className="swatch swatch-market" /> конкуренты «1-в-1»
+          </span>
+        )}
         {h.product.cost_uzs != null && (
           <span>
             <i className="swatch swatch-cost" /> себестоимость {money(h.product.cost_uzs)}
@@ -489,6 +525,14 @@ export function Chart({ h, days }: { h: History; days: number }) {
               {dateTime(c.created_at)}: VITALO {money(c.old_price_uzs)} → {money(c.new_price_uzs)}
             </title>
           </circle>
+        ))}
+        {market.map((m, i) => (
+          <rect key={`m${i}`} x={x(new Date(`${m.observed_on}T12:00:00Z`).getTime()) - 3} y={y(m.price_uzs) - 3} width={6} height={6} className="dot-market">
+            <title>
+              {m.observed_on.split('-').reverse().join('.')}: {PLATFORM_LABELS[m.platform] ?? m.platform}
+              {m.seller ? `, ${m.seller}` : ''} — {money(m.price_uzs)}
+            </title>
+          </rect>
         ))}
         {ticks.map((t) => (
           <text key={t} x={Math.min(W - 20, Math.max(20, x(t)))} y={H + 14} textAnchor="middle" className="chart-label">

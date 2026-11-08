@@ -6,6 +6,7 @@ import { DictionarySelect, type DictionaryKind } from '../components/DictionaryS
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
+import { Competitors } from '../components/Competitors';
 import { dateTime, discountAboveLimit, MAX_SHOWN_DISCOUNT, PRODUCT_STATUS } from '../lib/format';
 import { BackIcon } from '../components/Icons';
 
@@ -623,6 +624,8 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     </form>
     {/* Own forms and buttons: outside the product form, so their submit never saves the whole product too. */}
     {product && <LabelCard product={product} />}
+    {/* D-57 узел 4: competitor prices with the «1-в-1» match — admin only */}
+    {product && can('competitors.manage') && <Competitors productId={product.id} />}
     {product && <SkuAliases productId={product.id} sku={product.sku} />}
     {product ? <Photos product={product} editable={editable || contentOnly} /> : <p className="muted">Фото можно добавить после первого сохранения.</p>}
     </>

@@ -47,6 +47,8 @@
   /* генплан, этап 2: dashboard chart — Mini App navy, Yandex a lighter navy (3:1 on white for graphics) */
   --chart-vitalo: var(--primary);
   --chart-yandex: #5b7fb8;
+  --chart-market: #64748b;   /* D-57: competitor prices (slate, not orange: bars are big fills) */
+  --chart-margin: #7c93b8;   /* D-57: margin bar (navy tint; green is for statuses only, D-19) */
   /* old names kept for existing screens */
   --accent: var(--primary);
   --accent-text: #ffffff;
@@ -534,3 +536,18 @@ textarea { resize: vertical; }
 .price-chart .dot-iherb { fill: var(--chart-yandex); }
 .price-chart .dot-empty { fill: var(--panel); stroke: var(--chart-yandex); stroke-width: 1.5; }
 .price-chart .dot-vitalo { fill: var(--chart-vitalo); }
+
+/* Генплан, этап 5, iherb-4-competitors (D-57): competitor prices and the bars */
+.competitor-form { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.swatch-market { background: var(--chart-market); }
+.price-chart .dot-market { fill: var(--chart-market); }
+.cost-bars { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 12px; }
+.cost-bar-row { display: grid; grid-template-columns: minmax(90px, 200px) 1fr auto; gap: 8px; align-items: center; }
+.cost-bar-label { overflow-wrap: anywhere; }
+.cost-bar-track { height: 14px; background: var(--neutral-soft); border-radius: 4px; overflow: hidden; }
+.cost-bar { display: block; height: 100%; border-radius: 4px; }
+.cost-bar.bar-cost { background: var(--muted); }
+.cost-bar.bar-vitalo { background: var(--chart-vitalo); }
+.cost-bar.bar-margin { background: var(--chart-margin); }
+.cost-bar.bar-market { background: var(--chart-market); }
+.cost-bar-value { white-space: nowrap; text-align: right; min-width: 90px; }

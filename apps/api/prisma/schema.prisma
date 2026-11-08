@@ -472,6 +472,7 @@ model staff_users {
   compat_saved          compat_answers[]
   iherb_uploads         iherb_uploads[]
   price_changes         price_changes[]
+  competitor_prices     competitor_prices[]
 }
 
 model staff_sessions {
@@ -680,6 +681,7 @@ model products {
   substances              product_substances[]
   iherb_snapshots         iherb_price_snapshots[]
   price_changes           price_changes[]
+  competitor_prices       competitor_prices[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -1042,6 +1044,34 @@ model price_changes {
 
   @@index([product_id, created_at], map: "price_changes_product_created_idx")
   @@index([created_at], map: "price_changes_created_idx")
+}
+
+/// Генплан, этап 5, iherb-4-competitors (D-57): a competitor price with the strict «1-в-1» match (brand, form, dose, pack).
+model competitor_prices {
+  id               String       @id @default(uuid()) @db.Uuid
+  product_id       String       @db.Uuid
+  platform         String // uzum | yandex_market | pharmacy | social | other
+  seller           String?
+  title            String?
+  url              String?
+  price_uzs        BigInt
+  observed_on      DateTime     @db.Date
+  brand            String?
+  match_form       String?
+  dose_amount      Decimal?     @db.Decimal(12, 3)
+  dose_unit        String?
+  dose_per         String?
+  pack_count       Int?
+  match_status     String // match | mismatch | incomplete
+  mismatch_reasons Json         @default("[]")
+  source           String       @default("manual") // manual | ai
+  staff_user_id    String?      @db.Uuid
+  hidden_at        DateTime?
+  created_at       DateTime     @default(now())
+  product          products     @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  staff            staff_users? @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
+
+  @@index([product_id, observed_on], map: "competitor_prices_product_observed_idx")
 }
 
 /// A 09/15/21 reminder slot that was already sent.

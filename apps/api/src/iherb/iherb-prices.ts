@@ -11,6 +11,7 @@ import { purchaseCosts } from '../promo/purchase-costs';
 import { SettingsService } from '../settings/settings.service';
 import { AuditService } from '../staff/audit.service';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
+import { latestPerPlatform, matchedCompetitors } from './competitors';
 import { autoPrice, SKIP_LABELS, type AutoPriceResult } from './auto-price';
 import { parseWishlist, type WishlistItem } from './wishlist-parser';
 
@@ -27,6 +28,8 @@ const SETTINGS_DEFAULT: IherbSettings = { reminders: false };
 /** Tashkent hours of the three daily snapshots (D-57). */
 export const SNAPSHOT_HOURS = [9, 15, 21] as const;
 const TASHKENT_MS = 5 * 3600_000;
+/** The market minimum in the list counts competitor prices seen in the last 60 days. */
+const MARKET_DAYS = 60;
 
 /**
  * The reminder slot `now` belongs to: the last 09:00 / 15:00 / 21:00 Tashkent not more than 2 hours ago (UTC Date), or null.
@@ -237,12 +240,14 @@ export class IherbPricesService {
       },
     });
     const ids = list.map((p) => p.iherb_product_id!);
-    const [lasts, changes, costs] = await Promise.all([
+    const [lasts, changes, costs, market] = await Promise.all([
       this.prisma.iherb_price_snapshots.findMany({ where: { iherb_product_id: { in: ids } }, orderBy: [{ iherb_product_id: 'asc' }, { taken_at: 'desc' }], distinct: ['iherb_product_id'] }),
       this.prisma.price_changes.findMany({ where: { product_id: { in: list.map((p) => p.id) } }, orderBy: [{ product_id: 'asc' }, { created_at: 'desc' }], distinct: ['product_id'] }),
       purchaseCosts(this.prisma, list.map((p) => p.id)),
+      matchedCompetitors(this.prisma, list.map((p) => p.id), MARKET_DAYS),
     ]);
     return list.map(({ inventory, ...p }) => {
+      const comp = market.get(p.id) ?? [];
       const s = lasts.find((l) => l.iherb_product_id === p.iherb_product_id);
       const c = changes.find((x) => x.product_id === p.id);
       return {
@@ -250,6 +255,9 @@ export class IherbPricesService {
         price_uzs: Number(p.price_uzs),
         available: inventory.reduce((n, v) => n + v.actual_qty - v.reserved_qty, 0),
         cost_uzs: costs.get(p.id) ?? null,
+        // D-57 узел 4: the lowest «1-в-1» competitor price of the last 60 days, and how many prices there are
+        market_min_uzs: comp.length ? Math.min(...comp.map((c) => c.price_uzs)) : null,
+        competitors_count: comp.length,
         last_snapshot: s ? { price_uzs: Number(s.price_uzs), in_stock: s.in_stock, bestseller: s.bestseller, taken_at: s.taken_at } : null,
         last_change: c ? { old_price_uzs: Number(c.old_price_uzs), new_price_uzs: Number(c.new_price_uzs), big_jump: c.big_jump, floor_applied: c.floor_applied, yandex_check: c.yandex_check, created_at: c.created_at } : null,
       };
@@ -261,14 +269,19 @@ export class IherbPricesService {
     const p = await this.prisma.products.findUnique({ where: { id: productId }, select: { id: true, sku: true, name_ru: true, price_uzs: true, iherb_product_id: true, markup_percent: true } });
     if (!p) throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND', message: 'Товар не найден' });
     const since = new Date(Date.now() - days * 86400_000);
-    const [snapshots, changes, costs] = await Promise.all([
+    const [snapshots, changes, costs, market] = await Promise.all([
       p.iherb_product_id
         ? this.prisma.iherb_price_snapshots.findMany({ where: { iherb_product_id: p.iherb_product_id, taken_at: { gte: since } }, orderBy: { taken_at: 'asc' }, take: 2000 })
         : [],
       this.prisma.price_changes.findMany({ where: { product_id: p.id, created_at: { gte: since } }, orderBy: { created_at: 'asc' }, take: 2000 }),
       purchaseCosts(this.prisma, [p.id]),
+      matchedCompetitors(this.prisma, [p.id], days),
     ]);
+    const comp = market.get(p.id) ?? [];
     return {
+      /** «1-в-1» competitor prices in the period (chart points) and the newest per platform (bars) */
+      competitors: comp.map((c) => ({ observed_on: c.observed_on, platform: c.platform, seller: c.seller, price_uzs: c.price_uzs })),
+      competitors_latest: latestPerPlatform(comp).map((c) => ({ observed_on: c.observed_on, platform: c.platform, seller: c.seller, price_uzs: c.price_uzs })),
       product: { ...p, price_uzs: Number(p.price_uzs), cost_uzs: costs.get(p.id) ?? null },
       snapshots: snapshots.map((s) => ({ taken_at: s.taken_at, price_uzs: Number(s.price_uzs), list_price_uzs: num(s.list_price_uzs), in_stock: s.in_stock, bestseller: s.bestseller })),
       changes: changes.map((c) => ({
