@@ -22,6 +22,7 @@ import { PromoController, PromoService } from '../notifications/notification-cen
 import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from './admin-receipts';
 import { BotSecretGuard } from '../bot-internal/bot-internal.module';
 import { AdminCompatController, BotCompatController, CompatController, CompatService } from '../compat/compat.service';
+import { AdminSupportController, SupportController, SupportService } from '../support/support';
 import { AdminKnowledgeController, KnowledgeService } from '../compat/knowledge.service';
 import { AdminAiController, AiController, AiService } from '../compat/ai.service';
 import { AI_MODEL, AnthropicModel } from '../compat/ai-client';
@@ -98,6 +99,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     CompatController,
     AdminCompatController,
     BotCompatController,
+    SupportController,
+    AdminSupportController,
     AiController,
     AdminAiController,
     AdminKnowledgeController,
@@ -144,6 +147,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     PromoService,
     ReceiptsService,
     CompatService,
+    SupportService,
     KnowledgeService,
     AiService,
     { provide: AI_MODEL, useClass: AnthropicModel },

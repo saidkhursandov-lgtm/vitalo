@@ -9,7 +9,7 @@ import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
 import { QuickAdd, useQuickNotify, WaitlistButton } from '../components/QuickAdd';
 import { BioIcon, CartIcon, ChevronIcon, DoctorIcon, LeafIcon, PlusIcon, ShieldIcon, SupportIcon, TestedIcon, type Icon } from '../components/Icons';
-import { useAskSpecialist } from '../components/Support';
+import { useSheets } from '../components/Sheets';
 import type { ProductCard } from '../lib/types';
 import { useUnderOrderDays, useUnderOrderText } from '../components/CrossBorder';
 import { tapHaptic } from '../lib/telegram';
@@ -121,7 +121,7 @@ export function Product() {
           <ClampText className="pre" text={verdict} />
         </section>
       )}
-      <AskSpecialist name={short} />
+      <AskSpecialist id={p.id} name={short} />
 
       {/* «Почему [бренд] отобран в VITALO» — its own navy card right before «О товаре»; no text, no card */}
       {brandWhy && (
@@ -280,11 +280,12 @@ function StandardStrip({ product: p }: { product: ProductCard }) {
  * 2.3 fixes: «Сомневаетесь, подойдёт ли вам препарат?» — a widget right under the verdict, the whole card is the button;
  * opens the support chat with the product's short name ready.
  */
-function AskSpecialist({ name }: { name: string }) {
+function AskSpecialist({ id, name }: { id: string; name: string }) {
   const { t } = useI18n();
-  const ask = useAskSpecialist();
+  const { openAsk } = useSheets();
+  // 6а-Д: the in-app sheet with this product attached (no jump to the Telegram chat)
   return (
-    <button type="button" className="ask-card" onClick={() => ask(t('card.askText', { name }))}>
+    <button type="button" className="ask-card" onClick={() => openAsk({ product: { id, name }, topic: 'medical', source: 'product' })}>
       <span className="ask-icon" aria-hidden>
         <SupportIcon width={20} height={20} />
       </span>

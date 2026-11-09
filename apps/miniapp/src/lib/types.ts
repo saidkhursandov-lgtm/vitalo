@@ -466,13 +466,13 @@ export interface IntakeGuide {
 
 /** 3.2: one entry of the notification centre (title and line already in the requested language). */
 /** 3.2: «Заказы», «Акции и бонусы», «Сервисные». */
-export type CentreTab = 'orders' | 'promo' | 'service';
+export type CentreTab = 'personal' | 'orders' | 'promo' | 'service';
 export type CentreCounts = { unread: number; tabs: Record<CentreTab, number> };
 /** One card per order (latest status, its steps, a note about the intake memo); other notices one card each. */
 export interface CentreItem {
   id: string;
   tab: CentreTab;
-  category: 'order' | 'waitlist' | 'promo' | 'compat';
+  category: 'order' | 'waitlist' | 'promo' | 'compat' | 'personal';
   template: string;
   title: string;
   body: string;
@@ -661,3 +661,17 @@ export interface AiState {
 
 /** 6а-В (D-62): the manual promo label of a product, chosen in the admin product card. */
 export type PromoLabel = 'eleven_eleven' | 'black_friday' | 'hit' | 'new';
+
+/** 6а-Д: «Спросить специалиста» — the topic chips. */
+export type SupportTopic = 'medical' | 'order' | 'promo' | 'tech';
+export interface SupportThread {
+  id: string;
+  topic: SupportTopic;
+  /** open — waits for the shop; answered — the shop replied last; closed */
+  status: 'open' | 'answered' | 'closed';
+  unread: number;
+  product: { id: string; name: string } | null;
+  last_message_at: string;
+  created_at: string;
+  messages: { id: string; author: 'customer' | 'staff'; text: string; created_at: string }[];
+}

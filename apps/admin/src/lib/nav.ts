@@ -33,6 +33,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
       // 3.4: questions from the cart — admin and «специалист» answer, manager only looks
       { to: '/compat', label: 'Вопросы о совместимости', permission: 'compat.view' },
+      // 6а-Д: questions from «Спросить специалиста» in the Mini App
+      { to: '/support', label: 'Обращения', permission: 'support.view' },
     ],
   },
   {

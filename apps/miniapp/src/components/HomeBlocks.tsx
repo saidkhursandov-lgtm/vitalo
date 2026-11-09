@@ -2,13 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { money } from '../lib/format';
 import { useI18n } from '../lib/i18n';
-import { openSupport } from '../lib/shop';
 import { track as trackEvent } from '../lib/analytics';
 import { CampaignSlideBody } from './Campaign';
 import type { HomeContent, Lang, LocalizedText, ShopBanner, ShopInfo } from '../lib/types';
 import { generalTerms } from './Delivery';
 import { BadgeIcon, StarIcon, SupportIcon, TRUST_ICONS } from './Icons';
-import { useSupportUrl } from './Support';
+import { useSheets } from './Sheets';
 
 const pick = (t: LocalizedText, lang: Lang) => (lang === 'uz' ? t.uz : t.ru);
 
@@ -171,12 +170,12 @@ export function HomeCarousel({
   );
 }
 
-/** «Поможем с выбором» — opens the support chat. */
+/** «Поможем с выбором» — 6а-Д: opens «Спросить специалиста» inside the Mini App. */
 export function HelpButton() {
   const { t } = useI18n();
-  const url = useSupportUrl();
+  const { openAsk } = useSheets();
   return (
-    <button type="button" className="btn btn-secondary btn-block help-btn" onClick={() => openSupport(url)}>
+    <button type="button" className="btn btn-secondary btn-block help-btn" onClick={() => openAsk({ topic: 'medical', source: 'home' })}>
       <SupportIcon width={20} height={20} /> {t('home.help')}
     </button>
   );

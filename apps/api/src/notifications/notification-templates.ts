@@ -35,6 +35,8 @@ export type TemplateName =
   | 'staff.ai_red'
   | 'staff.iherb_upload_due'
   | 'compat.answered'
+  | 'support.reply'
+  | 'staff.support_new'
   | 'order.payment_reminder'
   | 'order.cod_confirmed'
   | 'order.receipt_rejected'
@@ -77,7 +79,7 @@ export interface TemplatePayload {
   /** 2.4: product name for waiting-list messages */
   product?: string;
   /** 2.4: which page the button opens (text of the button); default: the order. 3.2: 'pay', 'link' */
-  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart';
+  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart' | 'support';
   /** 3.3: the order's promo code — one more line under the total */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   /** 3.7: «Акция 11.11: −X сум» lines of the order */
@@ -100,6 +102,10 @@ export interface TemplatePayload {
   comment?: string | null;
   verdict?: Verdict;
   answer?: string;
+  /** 6а-Д: «Спросить специалиста» — the conversation and its topic (medical | order | promo | tech) */
+  thread_id?: string;
+  topic?: string;
+  question?: string;
   /** 3.4: a template answer in both languages — the centre shows the one the customer reads now */
   answer_ru?: string;
   answer_uz?: string;
@@ -134,12 +140,15 @@ export const LINK_BUTTON: Record<Lang, string> = { ru: 'Открыть', uz: 'Oc
 export const CART_BUTTON: Record<Lang, string> = { ru: 'Открыть корзину', uz: 'Savatni ochish' };
 /** 3.2: second button under «Как принимать ваш заказ». */
 export const SUPPORT_BUTTON: Record<Lang, string> = { ru: 'Спросить специалиста', uz: 'Mutaxassisdan so‘rash' };
+/** 6а-Д: button under the shop's reply to a question. */
+export const REPLY_BUTTON: Record<Lang, string> = { ru: 'Открыть и ответить', uz: 'Ochish va javob berish' };
 
 export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang): string {
   if (kind === 'product') return OPEN_PRODUCT_BUTTON[lang];
   if (kind === 'pay') return PAY_BUTTON[lang];
   if (kind === 'link') return LINK_BUTTON[lang];
   if (kind === 'cart') return CART_BUTTON[lang];
+  if (kind === 'support') return REPLY_BUTTON[lang];
   return OPEN_BUTTON[lang];
 }
 
@@ -430,6 +439,25 @@ Kutmoqda: ${p.count ?? 0}`,
     uz: (p: TemplatePayload) =>
       `VITALO mutaxassisi moslik haqidagi soʻrovingizga javob berdi\n\n${p.verdict ? VERDICT_LABELS[p.verdict].uz : ''}\n${p.answer ?? ''}\n\nTibbiy maslahat hisoblanmaydi.`,
   },
+  // 6а-Д: the shop answered a question from «Спросить специалиста» (bot + «Личные» of the Mini App centre).
+  'support.reply': {
+    ru: (p: TemplatePayload) => `Специалист VITALO ответил на ваш вопрос
+
+${p.answer ?? ''}`,
+    uz: (p: TemplatePayload) => `VITALO mutaxassisi savolingizga javob berdi
+
+${p.answer ?? ''}`,
+  },
+  // 6а-Д: a new question (or a new message) from «Спросить специалиста» (admins and managers; medical — admins and specialists).
+  'staff.support_new': {
+    ru: (p: TemplatePayload) => `Новый вопрос покупателя: ${SUPPORT_TOPICS[(p.topic ?? 'tech') as SupportTopic]?.ru ?? p.topic}${p.product ? `
+Товар: ${p.product}` : ''}
+
+${p.question ?? ''}
+
+Админка → Обращения`,
+    uz: (p: TemplatePayload) => `Yangi savol: ${p.question ?? ''}`,
+  },
   // 2.4: the product a customer waited for is available again. order_number is not used.
   'waitlist.back_in_stock': {
     ru: (p: TemplatePayload) => `${p.product ?? ''} снова в наличии`,
@@ -464,7 +492,7 @@ export function renderNotification(template: string, payload: TemplatePayload): 
 }
 
 /** 3.2: sections of the Mini App notification centre. «bonus» is reserved for release 4 and not shown yet. */
-export const CENTRE_CATEGORIES = ['order', 'waitlist', 'promo', 'compat'] as const;
+export const CENTRE_CATEGORIES = ['order', 'waitlist', 'promo', 'compat', 'personal'] as const;
 export type CentreCategory = (typeof CENTRE_CATEGORIES)[number] | 'bonus';
 
 /** Short plain lines for the centre (no emoji: the Mini App draws SVG icons). */
@@ -499,6 +527,10 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
   }
   const line = isTemplate(template) ? CENTRE_LINES[template]?.[lang](payload) : undefined;
   if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
+  if (template === 'support.reply') {
+    const topic = SUPPORT_TOPICS[(payload.topic ?? 'tech') as SupportTopic]?.[lang] ?? '';
+    return { title: lang === 'uz' ? `Mutaxassis javobi · ${topic}` : `Ответ специалиста · ${topic}`, body: payload.answer ?? '' };
+  }
   if (template === 'compat.answered') {
     const label = payload.verdict ? VERDICT_LABELS[payload.verdict][lang] : '';
     return { title: lang === 'uz' ? 'Moslikni tekshirish' : 'Проверка совместимости', body: [label, (lang === 'uz' ? payload.answer_uz : payload.answer_ru) || payload.answer].filter(Boolean).join('. ') };
@@ -507,8 +539,9 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
 }
 
 /** 3.2 (after the owner's check): tabs of the centre. «promo» also holds bonuses (release 4); «service» — everything else. */
-export type CentreTab = 'orders' | 'promo' | 'service';
+export type CentreTab = 'personal' | 'orders' | 'promo' | 'service';
 export function centreTab(category: string | null): CentreTab {
+  if (category === 'personal') return 'personal'; // 6а-Д: replies of the specialist, personal codes and messages
   if (category === 'order' || category === 'compat') return 'orders'; // 3.4: «заказ / консультация»
   if (category === 'promo' || category === 'bonus') return 'promo';
   return 'service';
@@ -530,3 +563,13 @@ const CENTRE_STEPS: Partial<Record<TemplateName, Record<Lang, string>>> = {
 export function centreStep(template: string, lang: Lang): string | null {
   return isTemplate(template) ? (CENTRE_STEPS[template]?.[lang] ?? null) : null;
 }
+
+/** 6а-Д: topics of «Спросить специалиста» (chips in the Mini App, the admin list, the staff message). */
+export const SUPPORT_TOPIC_CODES = ['medical', 'order', 'promo', 'tech'] as const;
+export type SupportTopic = (typeof SUPPORT_TOPIC_CODES)[number];
+export const SUPPORT_TOPICS: Record<SupportTopic, Record<Lang, string>> = {
+  medical: { ru: 'Медицинский вопрос / Подбор', uz: 'Tibbiy savol / Tanlash' },
+  order: { ru: 'По заказу', uz: 'Buyurtma bo‘yicha' },
+  promo: { ru: 'Акции и промокоды', uz: 'Aksiyalar va promokodlar' },
+  tech: { ru: 'Технический вопрос', uz: 'Texnik savol' },
+};

@@ -70,6 +70,8 @@ export const PERMISSIONS = {
   'promo.view': ['manager', 'marketer'], // 3.3: «Промокоды» — the table and stats (D-39 Б: the manager only looks)
   'promo.manage': ['marketer'], // 3.3: create / change / switch off promo codes
   'compat.view': ['manager'], // 3.4: «Совместимость» — requests and answers, without the customer's comment (D-40)
+  'support.view': ['manager'], // 6а-Д: «Обращения» — questions from «Спросить специалиста» (medical ones: admins and specialists only, D-40)
+  'support.answer': ['manager'], // 6а-Д: reply to a question, close it
   'compat.answer': [], // 3.4: answer, saved combinations, templates; also any employee marked «специалист»
   'compat.rules.approve': [], // 3.8: approve a compatibility rule — VITALO AI sees approved rules only (D-45); admin only, not «специалист»
   'promo.send': ['marketer'], // 3.2: «Акции» — a promo to customers with «Получать акции и новости» (bot + Mini App centre) // Stage 2D: «Синхронизация Яндекса», «Проверить сейчас», «Требует внимания», «Закрыть как неактуальный»
@@ -78,7 +80,7 @@ export const PERMISSIONS = {
 export type Permission = keyof typeof PERMISSIONS;
 
 /** 3.4: what the «специалист» mark adds to any role (it may read the customer's comment — D-40). */
-export const SPECIALIST_PERMISSIONS: readonly Permission[] = ['compat.view', 'compat.answer'];
+export const SPECIALIST_PERMISSIONS: readonly Permission[] = ['compat.view', 'compat.answer', 'support.view', 'support.answer'];
 
 export function can(role: StaffRole, permission: Permission, specialist = false): boolean {
   return role === 'admin' || (PERMISSIONS[permission] as readonly StaffRole[]).includes(role) || (specialist && SPECIALIST_PERMISSIONS.includes(permission));

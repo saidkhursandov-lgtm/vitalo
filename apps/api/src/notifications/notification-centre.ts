@@ -100,9 +100,9 @@ export function buildCards(rows: notifications[], lang: Lang): CentreCard[] {
 
 /** Unread cards per tab; the bell shows the sum — one per order, not one per message. */
 function counts(cards: CentreCard[]) {
-  const tabs: Record<CentreTab, number> = { orders: 0, promo: 0, service: 0 };
+  const tabs: Record<CentreTab, number> = { personal: 0, orders: 0, promo: 0, service: 0 };
   for (const c of cards) if (!c.read) tabs[c.tab]++;
-  return { unread: tabs.orders + tabs.promo + tabs.service, tabs };
+  return { unread: tabs.personal + tabs.orders + tabs.promo + tabs.service, tabs };
 }
 
 @Injectable()
@@ -134,7 +134,7 @@ export class NotificationCentreService {
 
   async readAll(userId: string) {
     const res = await this.prisma.notifications.updateMany({ where: { ...centreWhere(userId, new Date()), read_at: null }, data: { read_at: new Date() } });
-    return { marked: res.count, unread: 0, tabs: { orders: 0, promo: 0, service: 0 } };
+    return { marked: res.count, unread: 0, tabs: { personal: 0, orders: 0, promo: 0, service: 0 } };
   }
 }
 

@@ -31,7 +31,7 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
  * 3.7: campaign_view (props.campaign_id, props.source = banner | link), campaign_banner_click (props.campaign_id),
  * campaign_add_to_cart (props.campaign_id, props.product_id, props.place = grid | product | campaign) — from the app.
  */
-export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove', 'compat_view', 'map_open', 'map_locate_me', 'map_confirm', 'map_district_auto', 'campaign_view', 'campaign_banner_click', 'campaign_add_to_cart'] as const;
+export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove', 'compat_view', 'map_open', 'map_locate_me', 'map_confirm', 'map_district_auto', 'campaign_view', 'campaign_banner_click', 'campaign_add_to_cart', 'support_ask_sent'] as const;
 export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent', 'compat_request', 'compat_instant_answer', 'compat_answered', 'ai_consent', 'compat_ai_request', 'compat_ai_cached', 'compat_ai_limit', 'compat_ai_fallback'] as const;
 export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;

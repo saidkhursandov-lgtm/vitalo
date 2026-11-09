@@ -3,7 +3,7 @@ import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
 import type { Lang } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
-import type { Address, AiState, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo } from './types';
+import type { Address, AiState, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo, SupportThread } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
 
@@ -341,3 +341,7 @@ export function useDeliveryCity(): [CityRef | null, (c: CityRef | null) => void]
   const city = chosen ?? (primary ? { region_id: primary.region.id, city_id: primary.city.id } : null);
   return [city, (c) => client.setQueryData(['delivery-city'], c)];
 }
+
+/** 6а-Д: the customer's questions to the specialist and one conversation. */
+export const useSupportThreads = () => useQuery({ queryKey: ['support'], queryFn: () => api<SupportThread[]>('/support/threads') });
+export const useSupportThread = (id: string) => useQuery({ queryKey: ['support', id], queryFn: () => api<SupportThread>(`/support/threads/${id}`) });

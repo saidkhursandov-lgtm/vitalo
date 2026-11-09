@@ -16,6 +16,7 @@ import { PromoCodes } from './pages/PromoCodes';
 import { Storefront } from './pages/Storefront';
 import { Campaigns } from './pages/Campaigns';
 import { Compat } from './pages/Compat';
+import { SupportList, SupportThread } from './pages/Support';
 import { Dashboard } from './pages/Dashboard';
 import { Devices } from './pages/Devices';
 import { Finance } from './pages/Finance';
@@ -72,6 +73,8 @@ export function App() {
         <Route path="storefront" element={<Guard perm="marketing.content"><Storefront /></Guard>} />
         <Route path="campaigns" element={<Guard perm="promo.view"><Campaigns /></Guard>} />
         <Route path="compat" element={<Guard perm="compat.view"><Compat /></Guard>} />
+        <Route path="support" element={<Guard perm="support.view"><SupportList /></Guard>} />
+        <Route path="support/:id" element={<Guard perm="support.view"><SupportThread /></Guard>} />
         <Route path="waitlist/:productId" element={<Guard perm="customers.view"><WaitlistProductPage /></Guard>} />
         <Route path="analytics" element={<Guard perm="finance.manage"><Analytics /></Guard>} />
         <Route path="finance" element={<Guard perm="finance.manage"><Finance /></Guard>} />

@@ -6,7 +6,7 @@ import { daysText, payPath } from '../lib/shop';
 import { orderNo } from '../lib/format';
 import type { IntakeGuide } from '../lib/types';
 import { ChevronIcon, DoctorIcon, STATUS_ICONS } from './Icons';
-import { useAskSpecialist } from './Support';
+import { useSheets } from './Sheets';
 import { dayMonth, useUsaStageLabel } from './CrossBorder';
 
 /**
@@ -63,9 +63,9 @@ export function ActiveOrderBar() {
 }
 
 /** 3.2: «Как принимать» in the order card — the same memo the bot sent after the payment; folded by default. */
-export function IntakeGuideBlock({ guide, orderNumber }: { guide: IntakeGuide; orderNumber: string }) {
+export function IntakeGuideBlock({ guide }: { guide: IntakeGuide; orderNumber?: string }) {
   const { t, lang } = useI18n();
-  const ask = useAskSpecialist();
+  const { openAsk } = useSheets();
   const lines = guide[lang].length ? guide[lang] : guide.ru;
   return (
     <details className="card intake-guide">
@@ -81,7 +81,7 @@ export function IntakeGuideBlock({ guide, orderNumber }: { guide: IntakeGuide; o
         ))}
       </ul>
       <p className="hint small">{guide.footer[lang]}</p>
-      <button type="button" className="btn btn-secondary btn-block" onClick={() => ask(t('intake.askText', { n: orderNumber }))}>
+      <button type="button" className="btn btn-secondary btn-block" onClick={() => openAsk({ topic: 'medical', source: 'intake' })}>
         <DoctorIcon width={20} height={20} /> {t('ask.button')}
       </button>
     </details>

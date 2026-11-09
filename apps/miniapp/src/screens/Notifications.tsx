@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { BellIcon, GiftIcon, InfoIcon, OrdersIcon, SupportIcon, type Icon } from '../components/Icons';
 import { EmptyState, ErrorState, Loading } from '../components/ui';
 import { track } from '../lib/analytics';
@@ -8,9 +8,9 @@ import { useI18n } from '../lib/i18n';
 import { useNotificationActions, useNotifications } from '../lib/queries';
 import type { CentreItem, CentreTab } from '../lib/types';
 
-const TABS: CentreTab[] = ['orders', 'promo', 'service'];
-const CATEGORY_ICONS: Record<CentreItem['category'], Icon> = { order: OrdersIcon, waitlist: BellIcon, promo: GiftIcon, compat: SupportIcon };
-const TAB_ICONS: Record<CentreTab, Icon> = { orders: OrdersIcon, promo: GiftIcon, service: InfoIcon };
+const TABS: CentreTab[] = ['personal', 'orders', 'promo', 'service'];
+const CATEGORY_ICONS: Record<CentreItem['category'], Icon> = { order: OrdersIcon, waitlist: BellIcon, promo: GiftIcon, compat: SupportIcon, personal: SupportIcon };
+const TAB_ICONS: Record<CentreTab, Icon> = { personal: SupportIcon, orders: OrdersIcon, promo: GiftIcon, service: InfoIcon };
 
 /**
  * 3.2: the notification centre in three tabs — «Заказы», «Акции и бонусы», «Сервисные» (снова в наличии и др.).
@@ -63,6 +63,12 @@ export function Notifications() {
               </button>
             ))}
           </div>
+          {/* 6а-Д: «Личные» — the specialist's replies; all questions are one tap away */}
+          {tab === 'personal' && (
+            <Link to="/support" className="link centre-support-link">
+              {t('support.listTitle')} ›
+            </Link>
+          )}
           {items.length === 0 ? (
             <EmptyState icon={TAB_ICONS[tab]} title={t('notifications.emptyTab')} />
           ) : (

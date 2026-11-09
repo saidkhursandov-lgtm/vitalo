@@ -24,7 +24,7 @@ beforeEach(() => {
   events = [];
   posts = [];
   active = { order: null, more: 0 };
-  centre = { unread: 0, tabs: { orders: 0, promo: 0, service: 0 }, items: [] };
+  centre = { unread: 0, tabs: { personal: 0, orders: 0, promo: 0, service: 0 }, items: [] };
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     const json = (b: unknown) => new Response(JSON.stringify(b));
     if (url.includes('/analytics/events')) {
@@ -33,7 +33,7 @@ beforeEach(() => {
     }
     if (init.method === 'POST') posts.push(url);
     if (url.includes('/orders/active')) return json(active);
-    if (url.includes('/notifications/read-all')) return json({ marked: centre.unread, unread: 0, tabs: { orders: 0, promo: 0, service: 0 } });
+    if (url.includes('/notifications/read-all')) return json({ marked: centre.unread, unread: 0, tabs: { personal: 0, orders: 0, promo: 0, service: 0 } });
     if (url.match(/\/notifications\/[^/]+\/read/)) return json({ unread: Math.max(0, centre.unread - 1), tabs: centre.tabs });
     if (url.includes('/notifications')) return json(centre);
     if (url.includes('/catalog/texts')) return json({ support_url: 'https://t.me/VITALO_support', delivery_days_label: { ru: 'рабочих дней', uz: 'ish kuni' } });
@@ -116,7 +116,7 @@ describe('3.2 notification centre', () => {
   it('opens on the first tab with unread; one order card with its steps and the memo note; a tap marks it read and opens the order', async () => {
     centre = {
       unread: 1,
-      tabs: { orders: 1, promo: 0, service: 0 },
+      tabs: { personal: 0, orders: 1, promo: 0, service: 0 },
       items: [
         card({ id: 'n2', read: false, steps: ['Принят', 'Оплачен'], has_guide: true }),
         card({ id: 'n1', tab: 'service', category: 'waitlist', template: 'waitlist.back_in_stock', title: 'Омега-3', body: 'Снова в наличии', path: '/product/p1', created_at: '2026-10-31T10:00:00Z' }),
@@ -124,7 +124,7 @@ describe('3.2 notification centre', () => {
     };
     const { container } = show('ru', <Notifications />);
     expect(await screen.findByText('Оплата подтверждена')).toBeTruthy();
-    expect([...container.querySelectorAll('[role=tab]')].map((e) => e.textContent)).toEqual(['Заказы1', 'Акции и бонусы', 'Сервисные']);
+    expect([...container.querySelectorAll('[role=tab]')].map((e) => e.textContent)).toEqual(['Личные', 'Заказы1', 'Акции и бонусы', 'Сервисные']);
     expect(screen.getByRole('tab', { name: /Заказы/ }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Принят → Оплачен')).toBeTruthy();
     expect(screen.getByText('Памятка по приёму — в заказе')).toBeTruthy();
@@ -138,7 +138,7 @@ describe('3.2 notification centre', () => {
   });
 
   it('switching tabs; an empty tab says so', async () => {
-    centre = { unread: 0, tabs: { orders: 0, promo: 0, service: 0 }, items: [card({ tab: 'service', category: 'waitlist', template: 'waitlist.back_in_stock', title: 'Омега-3', body: 'Снова в наличии' })] };
+    centre = { unread: 0, tabs: { personal: 0, orders: 0, promo: 0, service: 0 }, items: [card({ tab: 'service', category: 'waitlist', template: 'waitlist.back_in_stock', title: 'Омега-3', body: 'Снова в наличии' })] };
     show('uz', <Notifications />);
     expect(await screen.findByText('Bu yerda hozircha bo‘sh')).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Xizmat' }));
@@ -148,7 +148,7 @@ describe('3.2 notification centre', () => {
   });
 
   it('«Прочитать все» only with unread ones; reports notification_read_all', async () => {
-    centre = { unread: 3, tabs: { orders: 0, promo: 3, service: 0 }, items: [card({ tab: 'promo', category: 'promo', template: 'promo.message', title: 'Акция', body: '−15%', path: null, read: false })] };
+    centre = { unread: 3, tabs: { personal: 0, orders: 0, promo: 3, service: 0 }, items: [card({ tab: 'promo', category: 'promo', template: 'promo.message', title: 'Акция', body: '−15%', path: null, read: false })] };
     show('uz', <Notifications />);
     expect(await screen.findByText('−15%')).toBeTruthy();
     fireEvent.click(screen.getByText('Hammasini o‘qish'));

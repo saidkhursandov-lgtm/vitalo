@@ -112,6 +112,7 @@ export const PhoneIcon = make(Phone);
 export const ReceiptIcon = make(ReceiptText);
 export const CardPayIcon = make(CreditCard);
 export const CashIcon = make(Banknote);
+export const PillIcon = make(Pill);
 export const BadgeIcon = make(BadgeCheck);
 export const StarIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
   <Star strokeWidth={STROKE} aria-hidden fill={filled ? 'currentColor' : 'none'} {...p} />

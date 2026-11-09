@@ -110,13 +110,13 @@ describe('Stage 3.2 notifications (e2e)', () => {
   it('centre: one card per order with its steps, tabs, unread per tab, read one, read all; only own rows; RU/UZ', async () => {
     const c = await customer();
     const other = await customer();
-    const zero = { orders: 0, promo: 0, service: 0 };
+    const zero = { personal: 0, orders: 0, promo: 0, service: 0 };
     const { order } = await placeOrder(c.token);
     await http().post(`/api/staff/orders/${order.id}/confirm-payment`).set(bearer(manager)).send({}).expect(200);
 
     // two messages about the order (accepted, paid) = one card, the bell counts 1
     let list = (await http().get('/api/notifications?lang=uz').set(bearer(c.token)).expect(200)).body;
-    expect(list).toMatchObject({ unread: 1, tabs: { orders: 1, promo: 0, service: 0 } });
+    expect(list).toMatchObject({ unread: 1, tabs: { personal: 0, orders: 1, promo: 0, service: 0 } });
     expect(list.items).toHaveLength(1);
     expect(list.items[0]).toMatchObject({
       tab: 'orders', category: 'order', template: 'order.paid', title: `№${order.order_number} buyurtma`, body: 'To‘lov tasdiqlandi',
@@ -126,13 +126,13 @@ describe('Stage 3.2 notifications (e2e)', () => {
     const promo = { user_id: c.user.id, chat_id: BigInt(c.telegram), payload: { order_number: '', lang: 'ru', title_ru: 'Акция', text_ru: 'Текст' }, template: 'promo.message', kind: 'marketing', category: 'promo', status: 'sent' };
     await prisma.notifications.create({ data: promo });
     list = (await http().get('/api/notifications').set(bearer(c.token)).expect(200)).body;
-    expect(list).toMatchObject({ unread: 2, tabs: { orders: 1, promo: 1, service: 0 } });
+    expect(list).toMatchObject({ unread: 2, tabs: { personal: 0, orders: 1, promo: 1, service: 0 } });
     expect(list.items.map((i: { tab: string }) => i.tab)).toEqual(['promo', 'orders']);
     const card = list.items[1];
 
     // opening the card marks every message of the order read
     await http().post(`/api/notifications/${card.id}/read`).set(bearer(other.token)).expect(404);
-    expect((await http().post(`/api/notifications/${card.id}/read`).set(bearer(c.token)).expect(200)).body).toEqual({ unread: 1, tabs: { orders: 0, promo: 1, service: 0 } });
+    expect((await http().post(`/api/notifications/${card.id}/read`).set(bearer(c.token)).expect(200)).body).toEqual({ unread: 1, tabs: { personal: 0, orders: 0, promo: 1, service: 0 } });
     expect(await prisma.notifications.count({ where: { order_id: order.id, read_at: null } })).toBe(0);
 
     // a new status: the same card goes up and is unread again
@@ -141,7 +141,7 @@ describe('Stage 3.2 notifications (e2e)', () => {
     expect(list.items[0]).toMatchObject({ tab: 'orders', template: 'order.picking', steps: ['Принят', 'Оплачен', 'Собирается'], read: false });
     expect(list.items).toHaveLength(2);
 
-    expect((await http().get('/api/notifications/unread').set(bearer(c.token)).expect(200)).body).toEqual({ unread: 2, tabs: { orders: 1, promo: 1, service: 0 } });
+    expect((await http().get('/api/notifications/unread').set(bearer(c.token)).expect(200)).body).toEqual({ unread: 2, tabs: { personal: 0, orders: 1, promo: 1, service: 0 } });
     expect((await http().post('/api/notifications/read-all').set(bearer(c.token)).expect(200)).body).toEqual({ marked: 2, unread: 0, tabs: zero });
     expect((await http().get('/api/notifications').set(bearer(other.token)).expect(200)).body).toEqual({ unread: 0, tabs: zero, items: [] });
   });
@@ -154,7 +154,7 @@ describe('Stage 3.2 notifications (e2e)', () => {
       data: { user_id: c.user.id, chat_id: BigInt(c.telegram), payload: { order_number: '', lang: 'ru', product: 'Омега-3' }, template: 'waitlist.back_in_stock', kind: 'transactional', category: 'waitlist', status: 'sent' },
     });
     const list = (await http().get('/api/notifications').set(bearer(c.token)).expect(200)).body;
-    expect(list.tabs).toEqual({ orders: 1, promo: 0, service: 1 });
+    expect(list.tabs).toEqual({ personal: 0, orders: 1, promo: 0, service: 1 });
     const card = list.items.find((i: { tab: string }) => i.tab === 'orders');
     expect(card).toMatchObject({ template: 'order.paid', body: 'Оплата подтверждена', steps: ['Принят', 'Оплачен'], has_guide: true });
   });

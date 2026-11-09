@@ -591,3 +591,9 @@ textarea { resize: vertical; }
 /* D-61: supplier tabs of «Товары» / «Бренды» and «Где берём» in the product card */
 .supplier-tabs { margin-bottom: 12px; }
 .supply-list { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 12px; }
+
+/* 6а-Д: «Обращения» — the conversation */
+.support-chat { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 12px 0; padding: 0; }
+.support-msg { max-width: 760px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); }
+.support-msg.is-staff { align-self: flex-end; background: var(--primary-soft); }
+.support-msg p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }

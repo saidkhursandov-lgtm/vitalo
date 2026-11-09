@@ -4,16 +4,18 @@ import { useI18n } from '../lib/i18n';
 import { useShopTexts } from '../lib/queries';
 import type { LocalizedText } from '../lib/types';
 import { AcceptIcon, ChevronIcon, CloseIcon, LockIcon, RejectIcon, ShieldIcon, SparkIcon, SupportIcon } from './Icons';
-import { useAskSpecialist } from './Support';
+import { AskSheet, type AskOptions } from './AskSheet';
 
 type ManifestSource = 'home' | 'ai_sheet';
 
 interface Sheets {
   openManifest: (source: ManifestSource) => void;
   openAi: () => void;
+  /** 6а-Д: «Спросить специалиста» inside the Mini App */
+  openAsk: (options?: AskOptions) => void;
 }
 
-const Ctx = createContext<Sheets>({ openManifest: () => undefined, openAi: () => undefined });
+const Ctx = createContext<Sheets>({ openManifest: () => undefined, openAi: () => undefined, openAsk: () => undefined });
 export const useSheets = () => useContext(Ctx);
 
 /**
@@ -21,7 +23,8 @@ export const useSheets = () => useContext(Ctx);
  * «Подбор» sheet of the centre menu button. One at a time: opening the manifest from «Подбор» replaces it.
  */
 export function SheetsProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState<'manifest' | 'ai' | null>(null);
+  const [open, setOpen] = useState<'manifest' | 'ai' | 'ask' | null>(null);
+  const [ask, setAsk] = useState<AskOptions>({});
   const openManifest = useCallback((source: ManifestSource) => {
     track('manifest_open', { source });
     setOpen('manifest');
@@ -30,13 +33,18 @@ export function SheetsProvider({ children }: { children: ReactNode }) {
     track('ai_tab_click');
     setOpen('ai');
   }, []);
-  const value = useMemo(() => ({ openManifest, openAi }), [openManifest, openAi]);
+  const openAsk = useCallback((options: AskOptions = {}) => {
+    setAsk(options);
+    setOpen('ask');
+  }, []);
+  const value = useMemo(() => ({ openManifest, openAi, openAsk }), [openManifest, openAi, openAsk]);
   const close = () => setOpen(null);
   return (
     <Ctx.Provider value={value}>
       {children}
       {open === 'manifest' && <ManifestSheet onClose={close} />}
       {open === 'ai' && <AiSheet onClose={close} onManifest={() => openManifest('ai_sheet')} />}
+      {open === 'ask' && <AskSheet options={ask} onClose={close} />}
     </Ctx.Provider>
   );
 }
@@ -61,9 +69,9 @@ function SheetFrame({ label, onClose, className = '', children }: { label: strin
 
 function AskButton({ className = 'btn btn-block' }: { className?: string }) {
   const { t } = useI18n();
-  const ask = useAskSpecialist();
+  const { openAsk } = useSheets();
   return (
-    <button type="button" className={className} onClick={() => ask(t('ask.text'))}>
+    <button type="button" className={className} onClick={() => openAsk({ topic: 'medical', source: 'sheet' })}>
       <SupportIcon width={20} height={20} />
       <span>{t('ask.button')}</span>
     </button>

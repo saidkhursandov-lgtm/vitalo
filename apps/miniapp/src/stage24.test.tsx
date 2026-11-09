@@ -193,27 +193,15 @@ describe('2.4: the centre «VITALO AI» (3.8, was «AI-подбор»)', () => {
   });
 });
 
-describe('2.4: «Спросить специалиста»', () => {
-  it('in Telegram: the text is copied and the hint shown first, the chat with ?text= opens a moment later', async () => {
+describe('2.4 / 6а-Д: «Спросить специалиста»', () => {
+  it('opens the in-app sheet with topic chips — no jump to the Telegram chat (RU / UZ)', async () => {
     tg.on = true;
     show('ru', <ManifestEntry />);
     fireEvent.click(await screen.findByRole('button', { name: /Как VITALO/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Спросить специалиста' }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Здравствуйте! Помогите, пожалуйста, подобрать витамины…');
-    expect(await screen.findByText('Текст скопирован — если его нет в чате, вставьте')).toBeTruthy();
-    expect(tg.opened).toEqual([]);
+    const sheet = await screen.findByRole('dialog', { name: 'Спросить специалиста' });
+    expect(within(sheet).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Медицинский вопрос / Подбор', 'По заказу', 'Акции и промокоды', 'Технический вопрос']);
     await act(() => vi.advanceTimersByTimeAsync(ASK_OPEN_DELAY_MS + 10));
-    expect(tg.opened).toHaveLength(1);
-    expect(tg.opened[0]).toMatch(/^https:\/\/t\.me\/VITALO_support\?text=/);
-    expect(decodeURIComponent(tg.opened[0].split('text=')[1])).toBe('Здравствуйте! Помогите, пожалуйста, подобрать витамины…');
-  });
-
-  it('in a browser the chat opens at once (a delayed window.open would be blocked)', async () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
-    show('uz', <ManifestEntry />);
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO qoʻshimchalarni/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Mutaxassisdan soʻrash' }));
-    expect(open).toHaveBeenCalledTimes(1);
-    expect(String(open.mock.calls[0][0])).toContain('text=');
+    expect(tg.opened).toEqual([]);
   });
 });

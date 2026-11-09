@@ -363,6 +363,7 @@ model users {
   waitlist          product_waitlist[]
   payment_receipts  payment_receipts[]
   compat_requests   compat_requests[]
+  support_threads   support_threads[]
 
   @@index([status])
 }
@@ -478,6 +479,7 @@ model staff_users {
   cross_border_events   cross_border_events[]
   admin_ai_memory       admin_business_memory[]
   admin_ai_requests     admin_ai_requests[]
+  support_messages      support_messages[]
 }
 
 model staff_sessions {
@@ -694,6 +696,7 @@ model products {
   price_changes           price_changes[]
   competitor_prices       competitor_prices[]
   admin_ai_memory         admin_business_memory[]
+  support_threads         support_threads[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -2473,4 +2476,42 @@ model cross_border_events {
   staff staff_users?          @relation(fields: [created_by], references: [id])
 
   @@index([order_id, created_at])
+}
+
+/// 6а-Д (D-62): «Спросить специалиста» in the Mini App — one question of a customer and its conversation.
+/// The text may hold health data (topic medical): only admins and specialists see medical threads (D-40).
+model support_threads {
+  id              String             @id @default(uuid()) @db.Uuid
+  user_id         String             @db.Uuid
+  /// medical | order | promo | tech
+  topic           String
+  /// the product the question came from (the product card attaches it by itself)
+  product_id      String?            @db.Uuid
+  /// open (waits for the shop) | answered (the shop replied last) | closed
+  status          String             @default("open")
+  lang            String             @default("ru")
+  /// shop replies the customer has not opened yet
+  customer_unread Int                @default(0)
+  last_message_at DateTime           @default(now())
+  created_at      DateTime           @default(now())
+  user            users              @relation(fields: [user_id], references: [id])
+  product         products?          @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  messages        support_messages[]
+
+  @@index([user_id])
+  @@index([status, last_message_at])
+}
+
+model support_messages {
+  id            String          @id @default(uuid()) @db.Uuid
+  thread_id     String          @db.Uuid
+  /// customer | staff
+  author        String
+  staff_user_id String?         @db.Uuid
+  text          String
+  created_at    DateTime        @default(now())
+  thread        support_threads @relation(fields: [thread_id], references: [id])
+  staff         staff_users?    @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
+
+  @@index([thread_id, created_at])
 }
