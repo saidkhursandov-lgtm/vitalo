@@ -54,6 +54,8 @@ export type FeedKind = (typeof FEED_KINDS)[number];
 
 const str = { type: ['string', 'null'] };
 const int = { type: ['integer', 'null'] };
+/** One of the values or null (the API wants anyOf here: an enum may not sit under a type list). */
+const oneOrNull = (values: readonly string[]) => ({ anyOf: [{ type: 'string', enum: [...values] }, { type: 'null' }] });
 
 /** What the model returns for a pasted text: one row per fact. */
 export const FEED_SCHEMA: Record<string, unknown> = {
@@ -70,7 +72,7 @@ export const FEED_SCHEMA: Record<string, unknown> = {
         properties: {
           kind: { type: 'string', enum: [...FEED_KINDS] },
           sku: str,
-          platform: { type: ['string', 'null'], enum: [...PLATFORMS, null] },
+          platform: oneOrNull(PLATFORMS),
           seller: str,
           title: str,
           url: str,
@@ -79,8 +81,8 @@ export const FEED_SCHEMA: Record<string, unknown> = {
           brand: str,
           match_form: str,
           dose_amount: { type: ['number', 'null'] },
-          dose_unit: { type: ['string', 'null'], enum: [...DOSE_UNITS, null] },
-          dose_per: { type: ['string', 'null'], enum: [...DOSE_PER, null] },
+          dose_unit: oneOrNull(DOSE_UNITS),
+          dose_per: oneOrNull(DOSE_PER),
           pack_count: int,
           orders_count: int,
           bestseller_rank: int,

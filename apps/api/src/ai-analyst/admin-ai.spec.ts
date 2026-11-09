@@ -1,4 +1,4 @@
-import { adminCostUsd, checkFeedRows, mergeAdminAiSettings, type FeedProduct } from './admin-ai';
+import { adminCostUsd, checkFeedRows, FEED_SCHEMA, mergeAdminAiSettings, type FeedProduct } from './admin-ai';
 
 const ours: FeedProduct = { id: 'p1', sku: 'VTL-H001', name_ru: 'Магний', brand: 'NOW Foods', match_form: 'бисглицинат', dose_amount: 200, dose_unit: 'mg', dose_per: 'capsule', pack_count: 90 };
 const row = (o: Record<string, unknown>) => ({
@@ -74,6 +74,20 @@ describe('AI analyst: checking what the model read (D-57, узел 5)', () => {
   it('garbage from the model does not break anything', () => {
     expect(checkFeedRows(null, [ours], today)).toEqual({ rows: [], unclear: [] });
     expect(checkFeedRows({ rows: 'x', unclear: [1, 'ok'] }, [ours], today)).toEqual({ rows: [], unclear: ['ok'] });
+  });
+});
+
+describe('AI analyst: the answer schema', () => {
+  it('an enum never sits under a type list (the API answers 400 «Enum value does not match declared type»)', () => {
+    const bad: string[] = [];
+    const walk = (node: unknown, path: string) => {
+      if (!node || typeof node !== 'object') return;
+      const o = node as Record<string, unknown>;
+      if (Array.isArray(o.enum) && Array.isArray(o.type)) bad.push(path);
+      for (const [k, v] of Object.entries(o)) walk(v, `${path}.${k}`);
+    };
+    walk(FEED_SCHEMA, 'schema');
+    expect(bad).toEqual([]);
   });
 });
 

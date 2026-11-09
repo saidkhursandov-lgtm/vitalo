@@ -81,7 +81,7 @@ interface ChatItem {
 
 interface RequestLog {
   month: { requests: number; cost_usd: number };
-  items: { id: string; created_at: string; scenario: string; model: string; question: string | null; input_tokens: number; output_tokens: number; cache_read_tokens: number; cost_usd: number; outcome: string; error_code: string | null; staff_name: string | null }[];
+  items: { id: string; created_at: string; scenario: string; model: string; question: string | null; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_usd: number; outcome: string; error_code: string | null; staff_name: string | null }[];
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -261,12 +261,14 @@ function FeedCard() {
           <p className="muted small">Разбор стоил {usd(preview.cost_usd)}. Отметьте строки, которые нужно сохранить.</p>
           {preview.unclear.length > 0 && (
             <div className="alert alert-warn">
-              <strong>Не понял:</strong>
-              <ul>
-                {preview.unclear.map((u) => (
-                  <li key={u}>{u}</li>
-                ))}
-              </ul>
+              <div>
+                <strong>Не понял:</strong>
+                <ul>
+                  {preview.unclear.map((u) => (
+                    <li key={u}>{u}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
           {!preview.rows.length ? (
@@ -394,7 +396,7 @@ function ChatCard() {
           {history.data.map((h) => (
             <div key={h.id} className="ai-chat-pair">
               <div className="ai-chat-q">{h.question}</div>
-              <div className="ai-chat-a">{h.answer || <span className="muted">Нет ответа ({h.outcome})</span>}</div>
+              <div className="ai-chat-a">{h.answer ? <AnswerText text={h.answer} /> : <span className="muted">Нет ответа ({h.outcome})</span>}</div>
               <div className="muted small">
                 {dateTime(h.created_at)} · {usd(h.cost_usd)}
               </div>
@@ -415,6 +417,17 @@ function ChatCard() {
       </form>
       {ask.isError && <ErrorBox error={ask.error} />}
     </section>
+  );
+}
+
+/** The answer as plain text with **bold** — no HTML from the model is ever rendered. */
+export function AnswerText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\*\*[^*\n]+\*\*)/g).map((part, i) =>
+        part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : <span key={i}>{part}</span>,
+      )}
+    </>
   );
 }
 
@@ -574,8 +587,9 @@ function RequestsCard() {
                   {dateTime(r.created_at)} · {r.scenario === 'chat' ? 'чат' : 'загрузка'} · {usd(r.cost_usd)}
                   {r.outcome !== 'ok' && <Badge tone="warn">{r.error_code ?? r.outcome}</Badge>}
                   <div className="muted small">
-                    {r.model} · токены: {r.input_tokens + r.cache_read_tokens} → {r.output_tokens}
+                    {r.model} · токены: {r.input_tokens + r.cache_read_tokens + r.cache_write_tokens} → {r.output_tokens}
                     {r.cache_read_tokens > 0 && ` (из кеша ${r.cache_read_tokens})`}
+                    {r.cache_write_tokens > 0 && ` (в кеш ${r.cache_write_tokens})`}
                   </div>
                 </li>
               ))}

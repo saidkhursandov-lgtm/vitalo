@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SignalChips, SignalList } from './components/PurchaseSignals';
 import { groupsFor } from './lib/nav';
-import { AiAnalyst } from './pages/AiAnalyst';
+import { AiAnalyst, AnswerText } from './pages/AiAnalyst';
 
 const status = { settings: { enabled: true, model: 'claude-opus-5-5', monthly_budget_usd: 20 }, key_set: false, spent_month_usd: 1.5, models: [{ id: 'claude-opus-5-5', input: 4, output: 20 }] };
 const base = { platform: 'other', title: null, observed_on: '2026-11-09', brand: 'NOW Foods', match_form: 'бисглицинат', dose_amount: 200, dose_unit: 'mg', dose_per: 'capsule', pack_count: 90, orders_count: null, bestseller_rank: null, note: null };
@@ -71,6 +71,13 @@ describe('«AI-аналитик» (D-57, узел 5)', () => {
     await waitFor(() => expect(saved).not.toBeNull());
     expect((saved as { indexes: number[] }).indexes.sort()).toEqual([0, 1, 2]);
     await screen.findByText(/Сохранено: цен конкурентов 1, фактов в память 1/);
+  });
+
+  it('chat answer: **bold** becomes bold, HTML stays text', () => {
+    const { container } = render(<AnswerText text={'**Сейчас** ничего. <b>x</b>'} />);
+    expect(container.querySelector('strong')?.textContent).toBe('Сейчас');
+    expect(container.querySelector('b')).toBeNull();
+    expect(container.textContent).toBe('Сейчас ничего. <b>x</b>');
   });
 
   it('purchase signals: chips with titles and full sentences, no emoji', () => {
