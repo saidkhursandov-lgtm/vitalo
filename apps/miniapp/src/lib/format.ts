@@ -1,10 +1,13 @@
 import type { Lang, Named, ShortNamed } from './types';
 
-const NBSP = ' ';
+export const NBSP = ' ';
 
 /** 89000 -> "89 000 сум" / "89 000 so‘m" (UZS has no fractional part). */
+/** «2 330» — thousands split by a no-break space (6а-Б: also the tile's price per day). */
+export const digits = (amount: number): string => String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
+
 export function money(amount: number, lang: Lang): string {
-  const n = String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
+  const n = digits(amount);
   return `${n}${NBSP}${lang === 'uz' ? 'so‘m' : 'сум'}`;
 }
 

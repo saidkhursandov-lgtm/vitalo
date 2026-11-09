@@ -6,11 +6,14 @@ import { CampaignsService } from '../promo/campaigns.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { manifestOrDefault } from '../settings/home-content';
 import { SettingsService, supportLink } from '../settings/settings.service';
+import { underOrderOf, SUPPLIER_TERMS_SELECT } from '../orders/cross-border';
 import { buildCategoryTrees, CategoryTrees, collectDescendantIds, pruneEmpty } from './category-tree';
 import { ListProductsQuery, ProductSort, SearchQuery } from './catalog.dto';
 import { availableQty, cardInclude, listInclude, ProductListItem, toProductCard, toProductListItem } from './product.mapper';
 
 export const PAGE_SIZE = 24;
+/** 6а-Б: how many cards a home strip shows */
+export const HOME_STRIP = 10;
 
 /** pg_trgm word_similarity threshold for the `<%` operator: lower = more typo-tolerant, noisier. */
 const SEARCH_SIMILARITY = 0.45;
@@ -141,10 +144,21 @@ export class CatalogService {
     const brands = await this.prisma.brands.findMany({
       where: { status: 'active', show_in_showcase: true, slug: { not: null } },
       orderBy: [{ sort_order: 'asc' }, { name_ru: 'asc' }],
-      include: { products: { where: { status: 'active' }, select: { inventory: { select: { actual_qty: true, reserved_qty: true } } } } },
+      include: {
+        products: {
+          where: { status: 'active' },
+          select: {
+            status: true,
+            inventory: { select: { actual_qty: true, reserved_qty: true } },
+            on_zero_supplier: { select: SUPPLIER_TERMS_SELECT },
+            iherb_snapshots: { orderBy: { taken_at: 'desc' }, take: 1, select: { in_stock: true } },
+          },
+        },
+      },
     });
+    // 6а-Б: a brand whose products can be ordered «Под заказ из США» (stock zero) is shown too
     return brands
-      .map((b) => ({ b, inStock: b.products.filter((p) => availableQty(p.inventory) > 0).length }))
+      .map((b) => ({ b, inStock: b.products.filter((p) => availableQty(p.inventory) > 0 || underOrderOf(p)).length }))
       .filter(({ inStock }) => inStock > 0)
       .map(({ b }) => toBrandCard(b, b.products.length));
   }
@@ -222,6 +236,30 @@ export class CatalogService {
     }
     // 3.7: a product in a running sale is shown at its sale price (the sort stays by the regular price)
     return toPage(await this.campaigns.decorate(rows.map(toProductListItem)), totalIn + totalOut, q.page);
+  }
+
+  /**
+   * 6а-Б (D-62): the two product strips of the home page in one answer.
+   * «Популярное» — hits on the Tashkent shelf (stock > 0) by sales; «Новинки» — the newest products that can be bought
+   * now: in stock or «под заказ» (from the USA / a supplier), without the ones already in «Популярное».
+   */
+  async home(): Promise<{ popular: ProductListItem[]; fresh: ProductListItem[] }> {
+    const { where, inStock } = await this.filterWhere({} as ListProductsQuery);
+    const popularRows = await this.prisma.products.findMany({ where: { AND: [where, inStock] }, orderBy: ORDER_BY[ProductSort.popular], take: HOME_STRIP, include: listInclude });
+    const shown = new Set(popularRows.map((p) => p.id));
+    const underOrder: Prisma.productsWhereInput = { on_zero_supplier: { status: 'active', kind: { in: ['local', 'foreign'] } } };
+    const freshRows = (
+      await this.prisma.products.findMany({
+        where: { AND: [where, { id: { notIn: [...shown] } }, { OR: [inStock, underOrder] }] },
+        orderBy: ORDER_BY[ProductSort.new],
+        take: HOME_STRIP * 3, // an iHerb product «нет в наличии» is dropped below, so take a few more
+        include: listInclude,
+      })
+    )
+      .filter((p) => availableQty(p.inventory) > 0 || underOrderOf(p))
+      .slice(0, HOME_STRIP);
+    const [popular, fresh] = await Promise.all([this.campaigns.decorate(popularRows.map(toProductListItem)), this.campaigns.decorate(freshRows.map(toProductListItem))]);
+    return { popular, fresh };
   }
 
   async getProduct(id: string) {

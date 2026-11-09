@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FloatingCart } from './components/FloatingCart';
 import { DoctorBadge, LangSwitch } from './components/HeaderParts';
-import { HomeCarousel, TrustChips } from './components/HomeBlocks';
+import { HomeCarousel } from './components/HomeBlocks';
 import { StatusPill } from './components/ui';
 import * as analytics from './lib/analytics';
 import { I18nProvider, translate } from './lib/i18n';
@@ -106,10 +106,6 @@ describe('home (release 1, item 3)', () => {
     expect(wrap('ru', <HomeCarousel firstOrderFree={false} freeFromUzs={null} />).container.querySelectorAll('.hero-slide')).toHaveLength(1);
   });
 
-  it('2.1: two trust markers under the search (no «Ташкент 1–3 дня»)', () => {
-    const { container } = wrap('ru', <TrustChips />);
-    expect(Array.from(container.querySelectorAll('.chip')).map((c) => c.textContent)).toEqual(['Экспертный подбор', 'Оригинальная продукция']); // 2.1: not the same words as the banner
-  });
 });
 
 describe('cash on delivery texts', () => {

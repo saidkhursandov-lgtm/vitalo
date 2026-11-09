@@ -199,7 +199,7 @@ export function Product() {
 }
 
 /**
- * Always on screen (F2, 2.3 fixes): a small price line on top, then one row of 48 px buttons — «В корзину» (filled, ~60%)
+ * Always on screen (F2, 2.3 fixes; 6а-Б: one storey — the price is in the page, no second price line here): one row of 48 px buttons — «В корзину» (filled, ~60%)
  * and «Купить сейчас» (outlined, ~40%); once the product is in the cart: «− n +» and «Перейти в корзину · сумма».
  */
 function BuyPanel({ product: p }: { product: ProductCard }) {
@@ -213,9 +213,6 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
 
   return (
     <div className="buy-panel" role="region" aria-label={t('product.addToCart')}>
-      <div className="buy-panel-top">
-        <Price price={p.price_uzs} old={p.old_price_uzs} campaign={p.campaign} />
-      </div>
       <div className="buy-panel-main">
         {soldOut ? (
           <WaitlistButton productId={p.id} variant="panel" />

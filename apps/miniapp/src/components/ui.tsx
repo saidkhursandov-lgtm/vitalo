@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
-import { discountPercent, money, shortNameOf, tileLine } from '../lib/format';
+import { digits, discountPercent, money, shortNameOf, tileLine, NBSP } from '../lib/format';
 import { errorText, shownStatus, orderStatusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, ShopCampaign } from '../lib/types';
@@ -9,6 +9,7 @@ import { useUnderOrderText } from './CrossBorder';
 import { SaleBadge, SalePrice } from './Campaign';
 import { Picture } from './Picture';
 import { QuickAdd } from './QuickAdd';
+import { useQuickCart } from '../lib/quick-cart';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
 
 // ---------------------------------------------------------------- loading skeletons (no spinners)
@@ -222,36 +223,53 @@ export function FavoriteButton({ productId, className = '' }: { productId: strin
 }
 
 /**
- * 2.4 patch: «На 45 дн. · 2 770 сум/день» — the same in RU and UZ, no substance form (it is on the product page).
- * No course days (or under 7): the line stays empty, so all cards of a row are equal. When the two parts do not fit
- * one line on a narrow phone, the price per day moves to the second line (the line has room for two).
+ * 6а-Б: «На 30 дн. · 3 260 сум/день» always on ONE line. On a narrow card the line drops «На» first, then the word «сум»
+ * (container queries in styles.css), so it never wraps; no course days (or under 7) — an empty line of the same height.
  */
 function TileMeta({ product }: { product: ProductListItem }) {
-  const { t, lang } = useI18n();
+  const { lang } = useI18n();
   const line = tileLine(product.price_uzs, product.course_days);
+  if (!line) return <div className="tile-meta">{' '}</div>;
+  const perDay = digits(line.perDay);
+  const uz = lang === 'uz';
   return (
     <div className="tile-meta">
-      {line ? (
-        <>
-          {/* the dot stays with the days when the line wraps on a narrow card */}
-          <span>
-            {t('card.tileDays', { n: line.days })}
-            <span aria-hidden>{' ·'}</span>
-          </span>
-          <span>{t('card.tilePerDay', { price: money(line.perDay, lang) })}</span>
-        </>
-      ) : (
-        ' '
-      )}
+      {!uz && <span className="tile-meta-on">На{NBSP}</span>}
+      {line.days}
+      {NBSP}
+      {uz ? 'kun' : 'дн.'}
+      {' · '}
+      {perDay}
+      <span className="tile-meta-unit">{NBSP}{uz ? 'so‘m' : 'сум'}</span>/{uz ? 'kun' : 'день'}
     </div>
   );
 }
+
+/** 6а-Б: «125 000 сум» on a card — the number never cuts; on a narrow card «сум» gets smaller, then hides (styles.css). */
+function TilePrice({ amount }: { amount: number }) {
+  const { lang } = useI18n();
+  return (
+    <>
+      {digits(amount)}
+      <span className="tile-price-unit">
+        {NBSP}
+        {lang === 'uz' ? 'so‘m' : 'сум'}
+      </span>
+    </>
+  );
+}
+
+const noNotice = () => undefined;
 
 export function ProductTile({ product }: { product: ProductListItem }) {
   const { t, lang } = useI18n();
   const uo = useUnderOrderText();
   const sale = product.campaign ?? null;
   const pct = sale ? null : discountPercent(product.price_uzs, product.old_price_uzs ?? null);
+  // 6а-Б: the old price crossed out over the price (a sale or a Market old price); the slot is kept empty otherwise
+  const old = sale ? sale.list_price_uzs : pct && product.in_stock ? product.old_price_uzs : null;
+  // in the cart the «− 1 +» takes the whole row (the price comes back when the product leaves the cart)
+  const { qty } = useQuickCart(product.id, noNotice);
   return (
     <Link to={`/product/${product.id}`} className={`tile ${product.in_stock || product.cross_border ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
       <div className="tile-img">
@@ -267,11 +285,15 @@ export function ProductTile({ product }: { product: ProductListItem }) {
         {/* 2.3: the short name, exactly 2 lines, whole words; the full one stays in search */}
         <div className="tile-name">{shortNameOf(product, lang)}</div>
         <TileMeta product={product} />
-        {/* price on its own line, the button row under it: the same in every card, so prices and [+] line up */}
-        <div className="tile-foot">
-          {/* 3.7: the regular price crossed out over the sale price; the row of cards keeps its prices on one level */}
-          {sale && <s className="tile-price-old">{money(sale.list_price_uzs, lang)}</s>}
-          <div className={`tile-price${sale ? ` sale-text-${sale.skin}` : ''}`}>{money(product.price_uzs, lang)}</div>
+        {/* 6а-Б: the price on the left (the old one over it), [+] / the bell on the right — one row of a fixed height,
+            so in a row of cards the prices and the buttons are on one level */}
+        <div className={`tile-foot${qty > 0 ? ' is-in-cart' : ''}`}>
+          <div className="tile-prices">
+            <s className="tile-price-old">{old ? <TilePrice amount={old} /> : ''}</s>
+            <div className={`tile-price${sale ? ` sale-text-${sale.skin}` : ''}`}>
+              <TilePrice amount={product.price_uzs} />
+            </div>
+          </div>
           <div className="tile-action">
             <QuickAdd productId={product.id} inStock={product.in_stock || !!product.cross_border} campaignId={sale?.id} />
           </div>

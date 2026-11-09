@@ -736,20 +736,16 @@ button.list-row { width: 100%; border: 0; border-bottom: 1px solid var(--border)
 .badge.is-bump { animation: badge-bump 0.45s ease-out; }
 @keyframes badge-bump { 0% { transform: scale(1); } 35% { transform: scale(1.35); } 100% { transform: scale(1); } }
 
-/* Product page: no bottom navigation, the buy panel is the fixed bottom (4 + 22 + 4 + 48 + 8 = 86 px + safe area). */
-.app.has-buy-panel .page.product { padding-bottom: calc(86px + var(--safe-b) + 20px); }
-.app.has-buy-panel .toast { bottom: calc(86px + var(--safe-b) + 12px); }
+/* Product page: no bottom navigation, the buy panel is the fixed bottom (6а-Б, one storey: 8 + 48 + 8 = 64 px + safe area). */
+.app.has-buy-panel .page.product { padding-bottom: calc(64px + var(--safe-b) + 20px); }
+.app.has-buy-panel .toast { bottom: calc(64px + var(--safe-b) + 12px); }
 .buy-panel {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  padding: 4px 12px calc(8px + var(--safe-b)); background: var(--surface); border-top: 1px solid var(--border);
+  padding: 8px 12px calc(8px + var(--safe-b)); background: var(--surface); border-top: 1px solid var(--border);
   box-shadow: 0 -2px 10px rgb(30 41 59 / 0.06);
 }
 .buy-panel > div { max-width: 696px; margin: 0 auto; }
-/* the price once, small, above the buttons (the big one is in the page) */
-.buy-panel-top { display: flex; align-items: center; height: 22px; }
-.buy-panel-top .price { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
-.buy-panel-top .price-now { font-size: 15px; }
-.buy-panel-main { display: flex; gap: 8px; height: 48px; margin-top: 4px; }
+.buy-panel-main { display: flex; gap: 8px; height: 48px; }
 .buy-panel-main .btn { min-height: 48px; height: 48px; margin: 0; white-space: nowrap; }
 /* «В корзину» filled ~55–60%, «Купить сейчас» outlined ~40–45%: «Hozir sotib olish» needs 45% to stay one line at 320 px */
 .buy-panel-main .buy-add { flex: 11 1 0; min-width: 0; gap: 6px; padding: 0 8px; }
@@ -826,9 +822,6 @@ a.hero-slide { color: var(--on-primary); text-decoration: none; }
 .hero-dots span.is-on { opacity: 1; width: 14px; }
 
 /* two quiet markers (icon + text, no pill); on the narrowest screens they wrap instead of being cut */
-.trust-chips { flex-wrap: wrap; gap: 4px 14px; margin: 0 0 14px; padding: 0 2px; }
-.trust-chips .chip-static { min-height: 22px; padding: 0; background: none; font-size: 12.5px; }
-.trust-chips .chip-static svg { color: var(--primary); }
 .back-to-cart { display: inline-flex; align-items: center; min-height: var(--tap); margin: -8px 0 0; font-size: 14px; }
 .chip-static {
   min-height: 30px; padding: 0 10px; gap: 5px; font-size: 12.5px; font-weight: 600; cursor: default;
@@ -937,7 +930,6 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 .sale-price-md .sale-price-now { font-size: 16px; }
 .sale-price-lg .sale-price-now { font-size: 26px; line-height: 1.2; }
 .sale-price-md .sale-price-old { font-size: 12px; }
-.buy-panel-top .sale-price { flex-direction: row; align-items: baseline; gap: 8px; }
 .sale-row .sale-amount { color: var(--text); font-weight: 600; }
 .sale-hint { margin: 2px 0 4px; }
 /* home slide and the sale page head: navy by default (orange is never a big fill, D-19) */
@@ -961,14 +953,26 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 @media (max-width: 360px) { .tile-body { padding: 10px 10px 10px; } .tile-name { font-size: 12.5px; } }
 /* 2.4 patch: «На 45 дн. · 2 770 сум/день»; on narrow cards the price per day wraps as a whole to the second line,
    so the line always has room for two and every card of a row keeps the same height */
+/* 6а-Б: one line; a narrow card drops «На», then «сум» (the card body is a size container) */
+.tile-body { container-type: inline-size; }
 .tile-meta {
-  display: flex; flex-wrap: wrap; column-gap: 0.3em; height: 2.6em; font-size: 12px; line-height: 1.3; color: var(--meta);
-  margin-bottom: 4px; overflow: hidden;
+  height: 1.3em; font-size: 12px; line-height: 1.3; color: var(--meta); margin-bottom: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.tile-meta > span { white-space: nowrap; }
-.tile-foot { display: flex; flex-direction: column; margin-top: auto; }
+@container (max-width: 168px) { .tile-meta-on { display: none; } }
+@container (max-width: 138px) { .tile-meta-unit { display: none; } }
+@container (max-width: 122px) { .tile-meta { font-size: 11px; } }
+/* 6а-Б: price (old over it) on the left, [+] on the right, one 44 px row */
+.tile-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 4px; height: var(--tap); margin-top: auto; }
+.tile-prices { display: flex; flex-direction: column; min-width: 0; padding-bottom: 2px; }
+.tile-foot.is-in-cart .tile-prices { display: none; }
+.tile-price-unit { font-size: 0.8em; font-weight: 600; }
+@container (max-width: 150px) { .tile-price { font-size: 14px; } .tile-price-unit { font-size: 11px; } }
+@container (max-width: 128px) { .tile-price-unit { display: none; } }
+.tile-foot.is-in-cart .tile-action { flex: 1; }
+.tile-foot.is-in-cart .tile-action .qty-control { width: 100%; animation: none; }
 .tile-price { font-size: 15px; line-height: 22px; height: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-.tile-action { display: flex; align-items: center; justify-content: flex-end; height: var(--tap); margin: 2px 0 -4px; }
+.tile-action { flex: none; display: flex; align-items: center; justify-content: flex-end; height: var(--tap); margin: 0 -4px 0 0; }
 .tile-discount {
   position: absolute; left: 8px; top: 8px; padding: 2px 6px; border-radius: 6px;
   background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700;

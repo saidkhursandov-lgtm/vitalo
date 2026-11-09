@@ -2,22 +2,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { SearchIcon } from '../components/Icons';
 import { ErrorState, Loading, ProductStrip } from '../components/ui';
 import { useI18n } from '../lib/i18n';
-import { useBanners, useCategories, useFreeShipping, useProducts, useShopTexts } from '../lib/queries';
-import { HelpButton, HomeCarousel, HowToOrder, TrustChips } from '../components/HomeBlocks';
+import { useBanners, useCategories, useFreeShipping, useHomeStrips, useShopTexts } from '../lib/queries';
+import { HelpButton, HomeCarousel, HowToOrder } from '../components/HomeBlocks';
 import { BrandStrip, CategoryLink } from '../components/CatalogLayers';
 import { ManifestEntry } from '../components/Sheets';
 import { ActiveOrderBar } from '../components/OrderNotices';
 
 /**
- * Home (Flow §3, ТЗ 2.1 and 2.2): search, two trust markers, the navy banner, needs, then «Популярное» already on the
+ * Home (Flow §3, ТЗ 2.1 and 2.2; 6а-Б: no trust line under the search): search, the navy banner, needs, then «Популярное» already on the
  * first screen, «Как VITALO отбирает добавки» (2.4), product types, «Проверенные бренды», new arrivals.
  */
 export function Home() {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const categories = useCategories();
-  const popular = useProducts({ sort: 'popular', in_stock: true });
-  const fresh = useProducts({ sort: 'new', in_stock: true });
+  // 6а-Б: «Популярное» — in stock in Tashkent; «Новинки» — newest, «под заказ» included, without repeats
+  const strips = useHomeStrips();
   const shop = useShopTexts();
   const freeShipping = useFreeShipping();
   const banners = useBanners(lang);
@@ -32,7 +32,6 @@ export function Home() {
       {/* 3.2: the newest unfinished order right under the search */}
       <ActiveOrderBar />
 
-      <TrustChips />
       <HomeCarousel firstOrderFree={freeShipping.data?.first_order_free ?? false} freeFromUzs={freeShipping.data?.from_uzs ?? null} banners={banners.data} />
 
       {categories.isPending ? (
@@ -54,10 +53,10 @@ export function Home() {
 
       <ProductStrip
         title={t('home.popular')}
-        products={popular.data?.pages[0].items.slice(0, 10) ?? []}
+        products={strips.data?.popular ?? []}
         more={<Link to="/catalog/products?sort=popular" className="link">{t('home.all')}</Link>}
       />
-      {popular.isPending && <Loading variant="strip" />}
+      {strips.isPending && <Loading variant="strip" />}
       {/* 2.4: «Как VITALO отбирает добавки» right under «Популярное» */}
       <ManifestEntry />
 
@@ -81,7 +80,7 @@ export function Home() {
 
       <ProductStrip
         title={t('home.new')}
-        products={fresh.data?.pages[0].items.slice(0, 10) ?? []}
+        products={strips.data?.fresh ?? []}
         more={<Link to="/catalog/products?sort=new" className="link">{t('home.all')}</Link>}
       />
 

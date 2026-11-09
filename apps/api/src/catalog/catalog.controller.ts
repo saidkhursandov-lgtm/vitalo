@@ -35,6 +35,12 @@ export class CatalogController {
     return this.catalog.listForms();
   }
 
+  /** 6а-Б: «Популярное» (in stock) and «Новинки» (in stock or «под заказ», no repeats) for the home page. */
+  @Get('home')
+  home() {
+    return this.catalog.home();
+  }
+
   @Get('products')
   products(@Query() q: ListProductsQuery) {
     return this.catalog.listProducts(q);

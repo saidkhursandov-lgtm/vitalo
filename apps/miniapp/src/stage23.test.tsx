@@ -94,12 +94,33 @@ describe('2.3 fixes: helpers', () => {
 });
 
 describe('2.3 fixes: mini-card', () => {
-  it('fixed places: name, one meta line (kept even when empty), price, then the button row', () => {
+  it('fixed places: name, one meta line (kept even when empty), then price and [+] in one row (6а-Б)', () => {
     const { container } = show('ru', <ProductTile product={{ ...PRODUCT, substance_form_ru: null, course_days: null }} />);
     const body = container.querySelector('.tile-body')!;
     expect([...body.children].map((e) => e.className)).toEqual(['tile-brand', 'tile-name', 'tile-meta', 'tile-foot']);
-    expect(container.querySelector('.tile-foot')!.children[0].className).toBe('tile-price');
+    // the price block on the left (an empty old-price slot over the price), the button on the right
+    expect([...container.querySelector('.tile-foot')!.children].map((e) => e.className)).toEqual(['tile-prices', 'tile-action']);
+    expect([...container.querySelector('.tile-prices')!.children].map((e) => e.className)).toEqual(['tile-price-old', 'tile-price']);
     expect(container.querySelector('.tile-action .quick-round')).not.toBeNull();
+  });
+
+  it('6а-Б: «На 30 дн. · 3 260 сум/день» is one line; «На» and «сум» are separate so a narrow card can drop them', () => {
+    const ru = show('ru', <ProductTile product={{ ...PRODUCT, price_uzs: 98_000, course_days: 30 }} />);
+    const meta = ru.container.querySelector('.tile-meta')!;
+    expect(meta.textContent!.replace(/ /g, ' ')).toBe('На 30 дн. · 3 260 сум/день');
+    expect(meta.querySelector('.tile-meta-on')).not.toBeNull();
+    expect(meta.querySelector('.tile-meta-unit')).not.toBeNull();
+    ru.unmount();
+    const uz = show('uz', <ProductTile product={{ ...PRODUCT, price_uzs: 98_000, course_days: 30 }} />);
+    expect(uz.container.querySelector('.tile-meta')!.textContent!.replace(/ /g, ' ')).toBe('30 kun · 3 260 so‘m/kun');
+  });
+
+  it('6а-Б: after [+] the compact «− 1 +» takes the row', async () => {
+    const { container } = show('ru', <ProductTile product={PRODUCT} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'В корзину' }));
+    expect(await screen.findByRole('button', { name: 'Больше' })).toBeTruthy();
+    expect(container.querySelector('.tile-foot')!.classList.contains('is-in-cart')).toBe(true);
+    expect(container.querySelector('.tile-action .qty-control')).not.toBeNull();
   });
 
   it('at the maximum «+» stays tappable and says «Максимум в наличии» instead of adding; no extra line under the card', async () => {
@@ -138,7 +159,7 @@ describe('2.3 fixes: product card', () => {
     expect(screen.getByText('Хватит на 50 дней • 1 960 сум/день')).toBeTruthy();
   });
 
-  it('no brand text — no brand card; the buy panel: «В корзину» and «Купить сейчас» as two buttons, the price once', async () => {
+  it('no brand text — no brand card; the buy panel: «В корзину» and «Купить сейчас» in one storey, no price line (6а-Б)', async () => {
     PRODUCT.brand_why_ru = null;
     PRODUCT.brand_why_uz = null;
     const { container } = show('uz', <Product />, '/product/p1');
@@ -146,7 +167,8 @@ describe('2.3 fixes: product card', () => {
     expect(container.querySelector('.why-brand')).toBeNull();
     const panel = container.querySelector('.buy-panel')!;
     expect([...panel.querySelectorAll('.buy-panel-main button')].map((b) => b.textContent)).toEqual(['Savatga', 'Hozir sotib olish']);
-    expect(panel.querySelectorAll('.price-now')).toHaveLength(1);
+    expect(panel.querySelectorAll('.price-now, .sale-price')).toHaveLength(0);
+    expect(panel.querySelector('.buy-panel-top')).toBeNull();
     expect(screen.getByText('Bu preparat sizga mos kelishiga ikkilanyapsizmi?')).toBeTruthy();
   });
 });

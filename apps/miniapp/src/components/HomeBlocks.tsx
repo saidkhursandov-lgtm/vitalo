@@ -7,7 +7,7 @@ import { track as trackEvent } from '../lib/analytics';
 import { CampaignSlideBody } from './Campaign';
 import type { HomeContent, Lang, LocalizedText, ShopBanner, ShopInfo } from '../lib/types';
 import { generalTerms } from './Delivery';
-import { BadgeIcon, DoctorIcon, ShieldIcon, StarIcon, SupportIcon, TRUST_ICONS } from './Icons';
+import { BadgeIcon, StarIcon, SupportIcon, TRUST_ICONS } from './Icons';
 import { useSupportUrl } from './Support';
 
 const pick = (t: LocalizedText, lang: Lang) => (lang === 'uz' ? t.uz : t.ru);
@@ -168,25 +168,6 @@ export function HomeCarousel({
         </div>
       )}
     </section>
-  );
-}
-
-/** Two trust markers under the search field (ТЗ 2.1): they wrap instead of running off the screen edge. */
-export function TrustChips() {
-  const { t } = useI18n();
-  const chips = [
-    { key: 'doctor', Icon: DoctorIcon, text: t('home.chip.doctor') },
-    { key: 'original', Icon: ShieldIcon, text: t('home.chip.original') },
-  ];
-  return (
-    <div className="chips trust-chips">
-      {chips.map(({ key, Icon, text }) => (
-        <span key={key} className="chip chip-static">
-          <Icon width={16} height={16} />
-          {text}
-        </span>
-      ))}
-    </div>
   );
 }
 

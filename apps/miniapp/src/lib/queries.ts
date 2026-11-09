@@ -29,6 +29,9 @@ const nextPage = <T,>(last: Page<T>) => (last.page < last.total_pages ? last.pag
 export const useCategories = () => useQuery({ queryKey: ['categories'], queryFn: () => api<CategoryTrees>('/catalog/categories'), staleTime: 300_000 });
 export const useBrands = () => useQuery({ queryKey: ['brands'], queryFn: () => api<{ brand: string }[]>('/catalog/brands'), staleTime: 300_000 });
 /** 2.2: «Проверенные бренды» — only brands with products in stock (the server decides). */
+/** 6а-Б: «Популярное» and «Новинки» of the home page (one request, no product twice). */
+export const useHomeStrips = () =>
+  useQuery({ queryKey: ['home', 'strips'], queryFn: () => api<{ popular: ProductListItem[]; fresh: ProductListItem[] }>('/catalog/home'), staleTime: 60_000 });
 export const useBrandShowcase = () => useQuery({ queryKey: ['brands', 'showcase'], queryFn: () => api<BrandCard[]>('/catalog/brands/showcase'), staleTime: 300_000 });
 export const useBrandPage = (slug: string) =>
   useQuery({ queryKey: ['brands', 'page', slug], queryFn: () => api<BrandPage>(`/catalog/brands/${encodeURIComponent(slug)}`), staleTime: 300_000 });
