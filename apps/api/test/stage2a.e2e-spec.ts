@@ -59,7 +59,12 @@ describe('Stage 2A: purchases (e2e)', () => {
     const list = (await as('admin').get('/staff/dictionaries/suppliers').expect(200)).body;
     expect(list.find((s: { id: string }) => s.id === supplier.id)).toMatchObject({ name_ru: `Glorious Health Nutrition ${RUN}`, note: 'Ташкент', products: 0 });
     await as('manager').get('/staff/dictionaries/ozon_accounts').expect(200);
-    for (const r of ['warehouse', 'marketer'] as Role[]) await as(r).get('/staff/dictionaries/suppliers').expect(403);
+    // D-61: the names are seen by everyone who sees products (the supplier tabs); the notes only with purchases
+    for (const r of ['warehouse', 'marketer'] as Role[]) {
+      const seen = (await as(r).get('/staff/dictionaries/suppliers').expect(200)).body;
+      expect(seen.find((s: { id: string }) => s.id === supplier.id)).toMatchObject({ name_ru: `Glorious Health Nutrition ${RUN}`, note: null });
+      await as(r).get('/staff/dictionaries/ozon_accounts').expect(403);
+    }
     await as('manager').post('/staff/dictionaries/suppliers', { name_ru: 'X' }).expect(403);
 
     const old = (await as('admin').post('/staff/dictionaries/ozon_accounts', { name_ru: `Старый ${RUN}` }).expect(201)).body;

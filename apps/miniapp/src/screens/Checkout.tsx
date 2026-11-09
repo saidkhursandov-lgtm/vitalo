@@ -28,7 +28,7 @@ import type { OnlineProvider } from '../lib/types';
  */
 const ONLINE: OnlineProvider[] = ['payme', 'click', 'uzum'];
 import { QuoteTerm } from '../components/Delivery';
-import { UsaWindowNotice } from '../components/CrossBorder';
+import { UsaWindowNotice, useUnderOrderText } from '../components/CrossBorder';
 
 interface Form {
   name: string;
@@ -52,6 +52,7 @@ interface Form {
  */
 export function Checkout() {
   const { t, lang } = useI18n();
+  const uo = useUnderOrderText();
   const user = useUser();
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -383,7 +384,9 @@ export function Checkout() {
             </span>
           </label>
         )}
-        {codOption?.cod_unavailable === 'cross_border' && <p className="hint small">{t('usa.codOff')}</p>}
+        {codOption?.cod_unavailable === 'cross_border' && (
+          <p className="hint small">{uo('codOff', { kind: 'foreign', from_ru: preview.data?.cross_border?.from_ru, from_uz: preview.data?.cross_border?.from_uz })}</p>
+        )}
         <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : method === 'payme' ? 'pay.paymeHint' : 'checkout.bankTransferHint')}</p>
       </section>
 

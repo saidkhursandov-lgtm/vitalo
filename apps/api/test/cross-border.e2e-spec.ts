@@ -15,7 +15,7 @@ const inDays = (days: number) => {
   return { dmy: `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`, iso: d };
 };
 
-describe('D-60: «Под заказ из США» and its tracking (e2e)', () => {
+describe('D-60/D-61: «под заказ» (iHerb из США, a local supplier) and its tracking (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let stock: StockService;
@@ -23,18 +23,22 @@ describe('D-60: «Под заказ из США» and its tracking (e2e)', () =>
   let addr: Awaited<ReturnType<typeof seededAddresses>>;
   let tg = 986_000_000 + (Date.now() % 100_000) * 10;
   const tokens = {} as Record<Role, string>;
+  const sup = {} as Record<'iherb' | 'ozon' | 'local', { id: string }>;
   const http = () => request(app.getHttpServer());
   const as = (r: Role) => ({
     get: (p: string) => http().get(`/api${p}`).set(bearer(tokens[r])),
     post: (p: string, body: object = {}) => http().post(`/api${p}`).set(bearer(tokens[r])).set('Idempotency-Key', randomUUID()).send(body),
     put: (p: string, body: object = {}) => http().put(`/api${p}`).set(bearer(tokens[r])).send(body),
+    patch: (p: string, body: object = {}) => http().patch(`/api${p}`).set(bearer(tokens[r])).send(body),
   });
 
-  /** A product with nothing in Tashkent, switched on for «Под заказ из США». */
-  async function usa(opts: { eligible?: boolean; stock?: number; price?: number } = {}) {
-    const p = await createTestProduct(prisma, { price: opts.price ?? 200_000, stock: opts.stock ?? 0, name: `Из США ${RUN}` });
-    return prisma.products.update({ where: { id: p.id }, data: { cross_border_eligible: opts.eligible ?? true } });
+  /** A product with nothing in Tashkent, bought from `from` and — eligible — «под заказ» there when the stock is zero. */
+  async function underOrder(from: 'iherb' | 'local', opts: { eligible?: boolean; stock?: number; price?: number } = {}) {
+    const p = await createTestProduct(prisma, { price: opts.price ?? 200_000, stock: opts.stock ?? 0, name: `Под заказ ${from} ${RUN}` });
+    await prisma.product_suppliers.create({ data: { product_id: p.id, supplier_id: sup[from].id } });
+    return prisma.products.update({ where: { id: p.id }, data: { on_zero_supplier_id: opts.eligible === false ? null : sup[from].id } });
   }
+  const usa = (opts: { eligible?: boolean; stock?: number; price?: number } = {}) => underOrder('iherb', opts);
   const checkout = (extra: object) => ({ recipient_name: 'Клиент Тест', recipient_phone: '+998901112233', ...addr.tashkent, address_text: 'ул. Тестовая, 1', payment_method: 'bank_transfer', ...extra });
   async function placeOrder(lines: { product_id: string; qty: number }[], method = 'bank_transfer') {
     const customer = await loginCustomer(app, ++tg);
@@ -63,7 +67,12 @@ describe('D-60: «Под заказ из США» and its tracking (e2e)', () =>
     cb = app.get(CrossBorderService);
     addr = await seededAddresses(prisma);
     for (const r of Object.keys(STAFF_TG) as Role[]) tokens[r] = await loginStaff(app, STAFF_TG[r]);
-    await prisma.settings.deleteMany({ where: { key: 'cross_border' } }); // the defaults: 7–14 days, guarantee 21
+    // the migration made them: Ozon (stock only), iHerb (from abroad, «из США»), Glorious Healthy Nutrition (local)
+    sup.iherb = await prisma.suppliers.findUniqueOrThrow({ where: { code: 'iherb' } });
+    sup.ozon = await prisma.suppliers.findUniqueOrThrow({ where: { code: 'ozon' } });
+    sup.local = await prisma.suppliers.findFirstOrThrow({ where: { kind: 'local', name: { startsWith: 'Glorious' } } });
+    // the default terms: from abroad 7–14 days, guarantee 21; local 1–2 days, guarantee 7
+    await prisma.suppliers.updateMany({ where: { id: { in: [sup.iherb.id, sup.local.id] } }, data: { days_min: null, days_max: null, guarantee_days: null, status: 'active' } });
   });
   afterAll(async () => {
     await archiveTestProducts(prisma);
@@ -96,21 +105,90 @@ describe('D-60: «Под заказ из США» and its tracking (e2e)', () =>
     expect((await http().get(`/api/catalog/products/${p.id}`).expect(200)).body.cross_border).toBe(true);
   });
 
-  it('iHerb SKUs (VTL-H001…, VTL-GH001…) go «из США» without the card checkbox; other SKUs do not', async () => {
+  it('a new product: VTL-H… → iHerb «под заказ», VTL-GH… → iHerb + Glorious, OZN-… → Ozon; the card changes it', async () => {
     const n = String(Date.now()).slice(-7);
-    const sku = async (s: string) => {
-      const p = await usa({ eligible: false });
-      return prisma.products.update({ where: { id: p.id }, data: { sku: s } });
-    };
-    const h = await sku(`VTL-H${n}`);
-    const gh = await sku(`VTL-GH${n}`);
-    const other = await sku(`VTL-HAIR${n}`);
-    for (const p of [h, gh]) expect((await http().get(`/api/catalog/products/${p.id}`).expect(200)).body).toMatchObject({ cross_border: true, available_qty: 99 });
-    expect((await http().get(`/api/catalog/products/${other.id}`).expect(200)).body.cross_border).toBe(false);
-    // the cart and the order use the same rule (SQL)
+    const brand = (await as('admin').post('/staff/dictionaries/brands', { name_ru: `E2E Поставщики ${n}` }).expect(201)).body;
+    const create = async (sku: string) =>
+      (await as('admin').post('/staff/products', { sku, name_ru: `Поставщики ${sku}`, brand: brand.name_ru, brand_id: brand.id, manufacturer: 'Test', price_uzs: 100_000 }).expect(201)).body;
+    const h = await create(`VTL-H${n}`);
+    const gh = await create(`VTL-GH${n}`);
+    const oz = await create(`OZN-${n}`);
+    const other = await create(`VTL-HAIR${n}`);
+    expect(h).toMatchObject({ supplier_ids: [sup.iherb.id], on_zero_supplier_id: sup.iherb.id });
+    expect(new Set(gh.supplier_ids)).toEqual(new Set([sup.iherb.id, sup.local.id]));
+    expect(gh.on_zero_supplier_id).toBe(sup.iherb.id);
+    expect(oz).toMatchObject({ supplier_ids: [sup.ozon.id], on_zero_supplier_id: null });
+    expect(other).toMatchObject({ supplier_ids: [], on_zero_supplier_id: null });
+
+    // «Если на складе ноль»: only one of the product's suppliers, and not Ozon
+    expect((await as('admin').patch(`/staff/products/${oz.id}`, { on_zero_supplier_id: sup.iherb.id }).expect(400)).body.code).toBe('ON_ZERO_NOT_SUPPLIER');
+    expect((await as('admin').patch(`/staff/products/${oz.id}`, { on_zero_supplier_id: sup.ozon.id }).expect(400)).body.code).toBe('ON_ZERO_NOT_ORDERABLE');
+    // the owner picks the local supplier for GH: «под заказ • 1–2 дня»
+    expect((await as('admin').patch(`/staff/products/${gh.id}`, { on_zero_supplier_id: sup.local.id }).expect(200)).body.on_zero_supplier_id).toBe(sup.local.id);
+    // removing the supplier from «Где берём» also removes it from «под заказ»
+    expect((await as('admin').patch(`/staff/products/${h.id}`, { supplier_ids: [sup.ozon.id] }).expect(200)).body).toMatchObject({ supplier_ids: [sup.ozon.id], on_zero_supplier_id: null });
+
+    // the supplier tabs of the products and the brands
+    const list = (await as('admin').get(`/staff/products?q=${n}&supplier_id=${sup.local.id}`).expect(200)).body;
+    expect(list.items.map((i: { sku: string }) => i.sku)).toEqual([`VTL-GH${n}`]);
+    expect(list.items[0].suppliers.map((s: { name: string }) => s.name).sort()).toEqual(['Glorious Healthy Nutrition', 'iHerb'].sort());
+    expect((await as('admin').get(`/staff/products?q=${n}&supplier_id=none`).expect(200)).body.items.map((i: { sku: string }) => i.sku)).toEqual([`VTL-HAIR${n}`]);
+    const brands = (await as('admin').get(`/staff/dictionaries/brands?supplier_id=${sup.local.id}`).expect(200)).body;
+    expect(brands.find((b: { id: string }) => b.id === brand.id)?.products).toBe(1); // only VTL-GH… is bought from Glorious
+  });
+
+  it('local supplier «под заказ»: 1–2 days, payment on delivery allowed, short stages, no «отправлена»; one supplier per delivery', async () => {
+    const p = await underOrder('local');
+    const card = (await http().get(`/api/catalog/products/${p.id}`).expect(200)).body;
+    expect(card).toMatchObject({ in_stock: false, cross_border: true, available_qty: 99, cross_border_terms: { kind: 'local', days_min: 1, days_max: 2, guarantee_days: 7, from_ru: null } });
     const customer = await loginCustomer(app, ++tg);
-    const cart = (await http().post('/api/cart/items').set(bearer(customer)).send({ product_id: gh.id, qty: 2 }).expect(201)).body;
-    expect(cart.items[0]).toMatchObject({ qty: 2, cross_border: true });
+    await http().post('/api/cart/items').set(bearer(customer)).send({ product_id: p.id, qty: 1 }).expect(201);
+    const preview = (await http().post('/api/orders/preview').set(bearer(customer)).send(checkout({ source: 'cart' })).expect(200)).body;
+    expect(preview.payment_options.cod_unavailable).not.toBe('cross_border');
+    expect(preview.cross_border).toMatchObject({ expected_from: inDays(1).iso, expected_to: inDays(2).iso, guarantee_days: 7, foreign: false });
+
+    const o = await placeOrder([{ product_id: p.id, qty: 2 }], 'cod');
+    expect(o.res.status).toBe(201);
+    expect((await itemOf(o.id, p.id)).supplier_id).toBe(sup.local.id);
+    await pay(o.id); // the manager confirms a cash-on-delivery order
+    const confirmed = await messages(o.id, 'order.cod_confirmed');
+    expect(confirmed[0].payload).toMatchObject({ cb_kind: 'local' });
+    expect(await messages(o.id, 'order.cb_paid')).toHaveLength(0);
+    let view = await mine(o);
+    expect(view.cross_border).toMatchObject({ stage: 'paid', kind: 'local' });
+    expect(view.cross_border.steps.map((s: { stage: string }) => s.stage)).toEqual(['paid', 'ordered', 'in_stock']);
+    expect(view.cross_border.steps[0].at).not.toBeNull();
+    expect(view.cross_border_cancel).toMatchObject({ allowed: true, reason: 'not_ordered', guarantee_date: inDays(7).iso });
+
+    const item = await itemOf(o.id, p.id);
+    const waiting = (await as('manager').get('/staff/cross-border/waiting').expect(200)).body;
+    expect(waiting.find((w: { item_id: string }) => w.item_id === item.id)).toMatchObject({ cod: true, supplier: { id: sup.local.id, kind: 'local' } });
+    // a line from iHerb cannot go into the same delivery
+    const u = await placeOrder([{ product_id: (await usa()).id, qty: 1 }]);
+    await pay(u.id);
+    const usaItem = (await prisma.order_items.findFirstOrThrow({ where: { order_id: u.id } })).id;
+    expect((await as('manager').post('/staff/cross-border/batches', { item_ids: [item.id, usaItem] }).expect(409)).body.code).toBe('MIXED_SUPPLIERS');
+    const batch = (await as('manager').post('/staff/cross-border/batches', { item_ids: [item.id] }).expect(201)).body;
+    expect((await as('manager').post(`/staff/cross-border/batches/${batch.id}/items`, { item_ids: [usaItem] }).expect(409)).body.code).toBe('MIXED_SUPPLIERS');
+    expect((await as('manager').post(`/staff/cross-border/batches/${batch.id}/stage`, { stage: 'shipped' }).expect(409)).body.code).toBe('LOCAL_BATCH');
+    expect((await as('manager').get('/staff/cross-border/batches').expect(200)).body.find((b: { id: string }) => b.id === batch.id).supplier).toMatchObject({ id: sup.local.id, kind: 'local' });
+    view = await mine(o);
+    expect(view.cross_border.stage).toBe('ordered');
+    expect((await messages(o.id, 'order.cb_stage'))[0].payload).toMatchObject({ stage: 'ordered', cb_kind: 'local' });
+
+    const purchase = await receiveByPurchase(p.id, 2);
+    await as('manager').put(`/staff/cross-border/batches/${batch.id}/purchase`, { purchase_id: purchase.id }).expect(200);
+    expect((await mine(o)).cross_border.stage).toBe('in_stock');
+    await as('warehouse').post(`/staff/orders/${o.id}/status`, { status: 'picking' }).expect(200);
+  });
+
+  it('local, payment on delivery: the customer cancels before the order → cancelled; the usual cash-on-delivery task', async () => {
+    const p = await underOrder('local');
+    const o = await placeOrder([{ product_id: p.id, qty: 1 }], 'cod');
+    await pay(o.id);
+    await http().post(`/api/orders/${o.id}/cancel`).set(bearer(o.customer)).send({}).expect(200);
+    expect((await prisma.orders.findUniqueOrThrow({ where: { id: o.id } })).status).toBe('cancelled');
+    expect((await prisma.manager_tasks.findFirstOrThrow({ where: { order_id: o.id, type: 'refund' } })).note).toContain('с оплатой при получении');
   });
 
   it('the whole path: order → paid («заказываем в США») → parcel → stages → moved date → receiving gives the jars → picking', async () => {
@@ -210,13 +288,21 @@ describe('D-60: «Под заказ из США» and its tracking (e2e)', () =>
     expect(await prisma.inventory.findFirstOrThrow({ where: { product_id: p.id } })).toMatchObject({ actual_qty: 0, reserved_qty: 0 }); // written off: the order is paid
   });
 
-  it('settings: only the admin changes them; the window follows', async () => {
-    await as('manager').put('/staff/cross-border/settings', { days_min: 10 }).expect(403);
-    expect((await as('admin').put('/staff/cross-border/settings', { days_min: 10, days_max: 20, guarantee_days: 30 }).expect(200)).body).toEqual({ days_min: 10, days_max: 20, guarantee_days: 30 });
+  it('the terms live with each supplier: only the admin changes them; the window follows; the longest supplier wins', async () => {
+    await as('manager').patch(`/staff/dictionaries/suppliers/${sup.iherb.id}`, { days_min: 10 }).expect(403);
+    expect((await as('admin').patch(`/staff/dictionaries/suppliers/${sup.iherb.id}`, { days_max: 5, days_min: 10 }).expect(400)).body.code).toBe('BAD_TERMS');
+    expect((await as('admin').patch(`/staff/dictionaries/suppliers/${sup.iherb.id}`, { kind: 'local' }).expect(400)).body.code).toBe('SUPPLIER_KIND_FIXED');
+    const saved = (await as('admin').patch(`/staff/dictionaries/suppliers/${sup.iherb.id}`, { days_min: 10, days_max: 20, guarantee_days: 30 }).expect(200)).body;
+    expect(saved).toMatchObject({ kind: 'foreign', from_ru: 'из США', days_min: 10, days_max: 20, guarantee_days: 30 });
     const p = await usa();
+    const l = await underOrder('local');
     const customer = await loginCustomer(app, ++tg);
+    await http().post('/api/cart/items').set(bearer(customer)).send({ product_id: l.id, qty: 1 }).expect(201);
     const cart = (await http().post('/api/cart/items').set(bearer(customer)).send({ product_id: p.id, qty: 1 }).expect(201)).body;
-    expect(cart.cross_border).toMatchObject({ expected_from: inDays(10).iso, expected_to: inDays(20).iso, guarantee_days: 30 });
-    await prisma.settings.deleteMany({ where: { key: 'cross_border' } });
+    expect(cart.cross_border).toMatchObject({ expected_from: inDays(10).iso, expected_to: inDays(20).iso, guarantee_days: 30, foreign: true, from_ru: 'из США' });
+    // a foreign line in the order: prepayment only
+    const preview = (await http().post('/api/orders/preview').set(bearer(customer)).send(checkout({ source: 'cart' })).expect(200)).body;
+    expect(preview.payment_options).toMatchObject({ cod: false, cod_unavailable: 'cross_border' });
+    await prisma.suppliers.update({ where: { id: sup.iherb.id }, data: { days_min: null, days_max: null, guarantee_days: null } });
   });
 });

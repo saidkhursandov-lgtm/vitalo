@@ -59,7 +59,9 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
     { label: 'edit a purchase', method: 'patch', path: () => `/api/staff/purchases/${MISSING}`, body: {}, allowed: ['admin'] },
     { label: 'cancel Ozon quantities', method: 'post', path: () => '/api/staff/purchases/cancel', body: {}, allowed: ['admin'] },
     { label: 'preview purchase costs', method: 'post', path: () => '/api/staff/purchases/cost-preview', body: {}, allowed: ['admin'] },
-    { label: 'see suppliers', method: 'get', path: () => '/api/staff/dictionaries/suppliers', allowed: ['admin', 'manager'] },
+    // D-61: supplier names are the tabs of «Товары» / «Бренды» — everyone who sees products; Ozon accounts stay with purchases
+    { label: 'see suppliers', method: 'get', path: () => '/api/staff/dictionaries/suppliers', allowed: ['admin', 'manager', 'warehouse', 'marketer'] },
+    { label: 'see Ozon accounts', method: 'get', path: () => '/api/staff/dictionaries/ozon_accounts', allowed: ['admin', 'manager'] },
     { label: 'archive a product', method: 'post', path: () => `/api/staff/products/${MISSING}/archive`, allowed: ['admin'] },
     { label: 'upload a product photo', method: 'post', path: () => `/api/staff/products/${productId}/photos`, allowed: ['admin', 'marketer'] }, // D-53
     { label: 'see stock', method: 'get', path: () => '/api/staff/inventory', allowed: ['admin', 'manager', 'warehouse'] },

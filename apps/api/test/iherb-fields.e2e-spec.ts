@@ -43,12 +43,11 @@ describe('iHerb fields of a product (e2e)', () => {
     const { body } = await http()
       .patch(`/api/staff/products/${p.id}`)
       .set(bearer(admin))
-      .send({ iherb_url: link(900000 + n), cross_border_eligible: true, auto_pricing_enabled: true, markup_percent: 75, price_round_to: 500, stock_price_mode: 'dynamic', dose_amount: 200.5, dose_unit: 'mg', dose_per: 'tablet', match_form: '  Бисглицинат ' })
+      .send({ iherb_url: link(900000 + n), auto_pricing_enabled: true, markup_percent: 75, price_round_to: 500, stock_price_mode: 'dynamic', dose_amount: 200.5, dose_unit: 'mg', dose_per: 'tablet', match_form: '  Бисглицинат ' })
       .expect(200);
     expect(body).toMatchObject({
       iherb_url: `https://uz.iherb.com/pr/now-foods-magnesium-bisglycinate-180-tablets/${900000 + n}`,
       iherb_product_id: String(900000 + n),
-      cross_border_eligible: true,
       auto_pricing_enabled: true,
       markup_percent: 75,
       price_round_to: 500,

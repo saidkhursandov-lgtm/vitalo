@@ -587,3 +587,7 @@ textarea { resize: vertical; }
 .cb-steps li::before { content: ''; position: absolute; left: -21px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); border: 2px solid var(--border-strong); box-sizing: border-box; }
 .cb-steps li.is-done { color: var(--text); }
 .cb-steps li.is-done::before { background: var(--primary); border-color: var(--primary); }
+
+/* D-61: supplier tabs of «Товары» / «Бренды» and «Где берём» in the product card */
+.supplier-tabs { margin-bottom: 12px; }
+.supply-list { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 12px; }

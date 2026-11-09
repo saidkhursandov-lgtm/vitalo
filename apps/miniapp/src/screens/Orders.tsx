@@ -36,7 +36,7 @@ export function OrderRow({ order }: { order: OrderListItem }) {
         {cb && (
           <div className="usa-row small">
             <PlaneIcon width={14} height={14} aria-hidden />
-            {usaStage(cb)}
+            {usaStage(cb, order.cross_border_from)}
           </div>
         )}
       </div>
@@ -108,7 +108,8 @@ export function OrderDetail() {
   const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
 
   async function onCancel() {
-    const ok = await confirm({ message: t(o.status === 'paid' ? 'usa.cancelConfirm' : 'orders.cancelConfirm', { n: o.order_number }), ok: t('orders.cancelYes'), cancel: t('orders.cancelNo'), danger: true });
+    // a paid «под заказ» order: «деньги вернём»; payment on delivery (a local supplier) — nothing was paid
+    const ok = await confirm({ message: t(o.status === 'paid' && !cod ? 'usa.cancelConfirm' : 'orders.cancelConfirm', { n: o.order_number }), ok: t('orders.cancelYes'), cancel: t('orders.cancelNo'), danger: true });
     if (ok) cancel.mutate();
   }
 

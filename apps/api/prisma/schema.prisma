@@ -649,7 +649,9 @@ model products {
   // Генплан, этап 5 (D-57, docs/plans/IHERB_PLAN.md): iHerb. markup / auto pricing / rounding / stock mode — admin only.
   iherb_url             String?
   iherb_product_id      String?  @unique // the number at the end of the iHerb link, e.g. 103250
-  cross_border_eligible Boolean  @default(false) // «Под заказ из США» when nothing is in stock (switched on after the lawyer)
+  cross_border_eligible Boolean  @default(false) // D-60, no longer read (D-61: on_zero_supplier_id decides)
+  /// D-61: «если на складе ноль — под заказ у этого поставщика»; null = «Нет в наличии»
+  on_zero_supplier_id   String?  @db.Uuid
   auto_pricing_enabled  Boolean  @default(false)
   markup_percent        Int      @default(80)
   price_round_to        Int      @default(1000) // round the auto price up to this many sum
@@ -685,6 +687,8 @@ model products {
   waitlist                product_waitlist[]
   substances              product_substances[]
   iherb_snapshots         iherb_price_snapshots[]
+  suppliers               product_suppliers[]
+  on_zero_supplier        suppliers?                @relation("on_zero_supplier", fields: [on_zero_supplier_id], references: [id])
   price_changes           price_changes[]
   competitor_prices       competitor_prices[]
   admin_ai_memory         admin_business_memory[]
@@ -752,15 +756,43 @@ model forms {
 
 // ───────────── PURCHASES (Stage 2A) ─────────────
 /// Suppliers (e.g. Glorious Health Nutrition). Unique name ignoring case and spaces; never deleted, only archived.
+/// D-61: kind ozon (bought on Ozon, sold from stock) | local | foreign (abroad: prepayment only, «Под заказ {from_ru}»).
+/// code: the suppliers the code knows (ozon, iherb). days_* and guarantee_days: the «под заказ» terms from the payment.
 model suppliers {
-  id         String               @id @default(uuid()) @db.Uuid
-  name       String
-  status     EntityStatus         @default(active)
-  note       String?
-  created_at DateTime             @default(now())
-  updated_at DateTime             @updatedAt
-  purchases  purchases[]
-  receiving  receiving_sessions[]
+  id             String                 @id @default(uuid()) @db.Uuid
+  name           String
+  status         EntityStatus           @default(active)
+  note           String?
+  code           String?                @unique
+  kind           String                 @default("local")
+  from_ru        String?
+  from_uz        String?
+  days_min       Int?
+  days_max       Int?
+  guarantee_days Int?
+  sort           Int                    @default(100)
+  created_at     DateTime               @default(now())
+  updated_at     DateTime               @updatedAt
+  purchases      purchases[]
+  receiving      receiving_sessions[]
+  products       product_suppliers[]
+  on_zero_for    products[]             @relation("on_zero_supplier")
+  order_items    order_items[]
+  batches        cross_border_batches[]
+}
+
+/// D-61: where a product is bought (several suppliers possible).
+model product_suppliers {
+  product_id   String   @db.Uuid
+  supplier_id  String   @db.Uuid
+  supplier_sku String?
+  created_at   DateTime @default(now())
+
+  product  products  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  supplier suppliers @relation(fields: [supplier_id], references: [id])
+
+  @@id([product_id, supplier_id])
+  @@index([supplier_id])
 }
 
 /// Ozon accounts the goods are bought from. Same rules as suppliers.
@@ -1635,6 +1667,9 @@ model order_items {
   /// D-60: the cross-border line got its jars in Tashkent (from the parcel or from the Tashkent stock)
   arrived_at            DateTime?
   cross_border_batch    cross_border_batches? @relation(fields: [cross_border_batch_id], references: [id])
+  /// D-61: the supplier of a «под заказ» line
+  supplier_id           String?               @db.Uuid
+  supplier              suppliers?            @relation(fields: [supplier_id], references: [id])
   order                 orders                @relation(fields: [order_id], references: [id])
   product               products              @relation(fields: [product_id], references: [id])
   return_items          return_items[]
@@ -2408,10 +2443,12 @@ model cross_border_batches {
   created_at    DateTime  @default(now())
   updated_at    DateTime  @default(now()) @updatedAt
 
-  purchase purchases?            @relation(fields: [purchase_id], references: [id])
-  staff    staff_users?          @relation(fields: [created_by], references: [id])
-  items    order_items[]
-  events   cross_border_events[]
+  supplier_id String?               @db.Uuid
+  purchase    purchases?            @relation(fields: [purchase_id], references: [id])
+  staff       staff_users?          @relation(fields: [created_by], references: [id])
+  supplier    suppliers?            @relation(fields: [supplier_id], references: [id])
+  items       order_items[]
+  events      cross_border_events[]
 
   @@index([stage, created_at])
 }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { BackIcon } from '../components/Icons';
 import { Badge, ErrorBox, Field, Loading, PageHead } from '../components/ui';
@@ -7,24 +7,37 @@ import { api, errorText, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, ORDER_STATUS, ruDate } from '../lib/format';
 
-/** D-60: «Посылки из США» — what customers paid for and is not ordered on iHerb yet, and the parcels on their way. */
+/**
+ * D-60/D-61: «Поставки под заказ» — what customers paid for (or, a local supplier with payment on delivery, the manager
+ * confirmed) and is not ordered from the supplier yet, and the deliveries on their way. One delivery — one supplier.
+ */
 
 type BatchStage = 'ordered' | 'shipped' | 'arrived_uz' | 'received';
 
 export const BATCH_STAGE: Record<BatchStage, [string, 'neutral' | 'ok' | 'warn' | 'bad' | 'info']> = {
-  ordered: ['Заказана в США', 'neutral'],
-  shipped: ['Отправлена из США', 'info'],
+  ordered: ['Заказана', 'neutral'],
+  shipped: ['Отправлена', 'info'],
   arrived_uz: ['Прибыла в Узбекистан', 'info'],
   received: ['Принята на склад', 'ok'],
 };
 /** The next manual stage of a parcel; «received» comes by itself after the receiving. */
 const NEXT_STAGE: Partial<Record<BatchStage, 'shipped' | 'arrived_uz'>> = { ordered: 'shipped', shipped: 'arrived_uz' };
 
+/** D-61: the supplier of a line or a delivery (older D-60 ones: iHerb) */
+interface SupplierRef {
+  id: string | null;
+  name: string;
+  kind: string;
+}
+
 interface WaitingLine {
   item_id: string;
   order_id: string;
   order_number: string;
   paid_at: string | null;
+  /** payment on delivery (a local supplier): confirmed by the manager, nothing paid yet */
+  cod: boolean;
+  supplier: SupplierRef;
   expected_to: string | null;
   product_id: string;
   sku: string;
@@ -37,6 +50,7 @@ interface BatchSummary {
   id: string;
   number: number;
   stage: BatchStage;
+  supplier: SupplierRef;
   note: string | null;
   ordered_at: string | null;
   shipped_at: string | null;
@@ -61,12 +75,6 @@ interface BatchDetail extends BatchSummary {
     qty: number;
     arrived_at: string | null;
   }[];
-}
-
-interface Settings {
-  days_min: number;
-  days_max: number;
-  guarantee_days: number;
 }
 
 interface PurchaseOption {
@@ -143,19 +151,24 @@ export function CrossBorder() {
     });
   const lines = waiting.data ?? [];
   const allPicked = lines.length > 0 && lines.every((l) => picked.has(l.item_id));
+  // one delivery — one supplier
+  const pickedSuppliers = new Set(lines.filter((l) => picked.has(l.item_id)).map((l) => l.supplier.id ?? 'legacy'));
+  const mixed = pickedSuppliers.size > 1;
 
   return (
     <>
-      <PageHead title="Посылки из США" />
+      <PageHead title="Поставки под заказ" />
       <p className="muted">
-        Здесь товары «Под заказ из США»: покупатель оплатил, а на складе в Ташкенте их не было. Закажите их на iHerb, отметьте строки и нажмите
-        «Создать посылку» — покупатели получат сообщение «Заказан в США». Дальше двигайте этап посылки; когда посылку примут на складе по
-        выбранной закупке, банки сами закрепятся за заказами, и заказы можно собирать.
+        Здесь товары «под заказ»: покупатель оплатил (у местного поставщика — или менеджер подтвердил заказ с оплатой при получении), а на
+        складе в Ташкенте их не было. Закажите их у поставщика, отметьте строки одного поставщика и нажмите «Создать поставку» — покупатели
+        получат сообщение «Заказан…». У зарубежной поставки двигайте этапы «Отправлена» и «Прибыла»; когда поставку примут на складе по
+        выбранной закупке, банки сами закрепятся за заказами, и заказы можно собирать. Сроки и гарантия — у каждого поставщика: «Настройки →
+        Справочники → Поставщики».
       </p>
 
       <section className="card flush">
         <div className="card-head">
-          <h2>Ждут заказа в США</h2>
+          <h2>Ждут заказа у поставщика</h2>
           {lines.length > 0 && <Badge tone="warn">{lines.length}</Badge>}
         </div>
         {waiting.isPending ? (
@@ -163,7 +176,7 @@ export function CrossBorder() {
         ) : waiting.isError ? (
           <ErrorBox error={waiting.error} onRetry={() => void waiting.refetch()} />
         ) : !lines.length ? (
-          <p className="muted cb-empty">Новых оплаченных заказов «из США» нет.</p>
+          <p className="muted cb-empty">Новых заказов «под заказ» нет.</p>
         ) : (
           <>
             <table className="table table-hover">
@@ -175,6 +188,7 @@ export function CrossBorder() {
                     </th>
                   )}
                   <th>Товар</th>
+                  <th>Поставщик</th>
                   <th className="num">Банок</th>
                   <th>Заказ</th>
                   <th>Оплачен</th>
@@ -204,11 +218,12 @@ export function CrossBorder() {
                         )}
                       </div>
                     </td>
+                    <td>{l.supplier.name}</td>
                     <td className="num">{l.qty}</td>
                     <td>
                       <Link to={`/orders/${l.order_id}`}>{l.order_number}</Link>
                     </td>
-                    <td>{dateTime(l.paid_at)}</td>
+                    <td>{l.cod ? <Badge tone="info">При получении</Badge> : dateTime(l.paid_at)}</td>
                     <td>{overdue(l.expected_to) ? <Badge tone="bad">{ruDate(l.expected_to)}</Badge> : ruDate(l.expected_to)}</td>
                     {manage && (
                       <td>
@@ -231,16 +246,17 @@ export function CrossBorder() {
             {manage && (
               <div className="cb-create">
                 <div className="form-grid">
-                  <Field label="Закупка, по которой примем посылку" hint="Можно выбрать позже, в посылке">
+                  <Field label="Закупка, по которой примем поставку" hint="Можно выбрать позже, в поставке">
                     <PurchaseSelect value={purchase} onChange={setPurchase} />
                   </Field>
                   <Field label="Заметка (видят только сотрудники)">
-                    <input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Например: заказ iHerb №…" />
+                    <input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Например: заказ у поставщика №…" />
                   </Field>
                 </div>
-                <button type="button" className="btn" disabled={!picked.size || create.isPending} onClick={() => create.mutate()}>
-                  {create.isPending ? 'Создаю…' : `Создать посылку (${picked.size})`}
+                <button type="button" className="btn" disabled={!picked.size || mixed || create.isPending} onClick={() => create.mutate()}>
+                  {create.isPending ? 'Создаю…' : `Создать поставку (${picked.size})`}
                 </button>
+                {mixed && <p className="text-warn">Отмечены строки разных поставщиков: в одной поставке — один поставщик.</p>}
                 {create.isError && <p className="text-bad">{errorText(create.error)}</p>}
               </div>
             )}
@@ -250,19 +266,20 @@ export function CrossBorder() {
 
       <section className="card flush">
         <div className="card-head">
-          <h2>Посылки</h2>
+          <h2>Поставки</h2>
         </div>
         {batches.isPending ? (
           <Loading />
         ) : batches.isError ? (
           <ErrorBox error={batches.error} onRetry={() => void batches.refetch()} />
         ) : !batches.data.length ? (
-          <p className="muted cb-empty">Посылок пока нет.</p>
+          <p className="muted cb-empty">Поставок пока нет.</p>
         ) : (
           <table className="table table-hover">
             <thead>
               <tr>
-                <th>Посылка</th>
+                <th>Поставка</th>
+                <th>Поставщик</th>
                 <th>Этап</th>
                 <th className="num">Заказов</th>
                 <th className="num">Банок на складе</th>
@@ -279,6 +296,7 @@ export function CrossBorder() {
                     </Link>
                     {b.note && <div className="muted small">{b.note}</div>}
                   </td>
+                  <td>{b.supplier.name}</td>
                   <td>
                     <Badge tone={BATCH_STAGE[b.stage][1]}>{BATCH_STAGE[b.stage][0]}</Badge>
                   </td>
@@ -295,61 +313,7 @@ export function CrossBorder() {
         )}
       </section>
 
-      <CrossBorderSettingsCard />
     </>
-  );
-}
-
-/** Сроки «из США» and the money-back guarantee: everyone sees them, only the admin changes them. */
-function CrossBorderSettingsCard() {
-  const { can } = useSession();
-  const edit = can('settings.manage');
-  const client = useQueryClient();
-  const q = useQuery({ queryKey: ['cross-border', 'settings'], queryFn: () => api<Settings>('/staff/cross-border/settings') });
-  const [form, setForm] = useState<Record<keyof Settings, string> | null>(null);
-  const save = useMutation({
-    mutationFn: (body: Settings) => api<Settings>('/staff/cross-border/settings', { method: 'PUT', body }),
-    onSuccess: (s) => {
-      client.setQueryData(['cross-border', 'settings'], s);
-      setForm(null);
-    },
-  });
-  if (q.isPending) return <Loading />;
-  if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
-  const s = q.data;
-  const f = form ?? { days_min: String(s.days_min), days_max: String(s.days_max), guarantee_days: String(s.guarantee_days) };
-  const set = (k: keyof Settings, v: string) => setForm({ ...f, [k]: v });
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    save.mutate({ days_min: Number(f.days_min), days_max: Number(f.days_max), guarantee_days: Number(f.guarantee_days) });
-  }
-  return (
-    <section className="card narrow">
-      <h2>Сроки и гарантия</h2>
-      <p className="muted">
-        Покупатель видит «Под заказ из США • {s.days_min}–{s.days_max} дней»; ожидаемая дата считается от оплаты. Если на {s.guarantee_days}-й день после
-        оплаты товара нет на складе, покупатель может сам отменить заказ — менеджеру придёт задача вернуть деньги.
-      </p>
-      {edit && (
-        <form onSubmit={submit}>
-          <div className="form-grid">
-            <Field label="Срок: с, дней">
-              <input type="number" min={1} max={90} value={f.days_min} onChange={(e) => set('days_min', e.target.value)} />
-            </Field>
-            <Field label="Срок: по, дней">
-              <input type="number" min={1} max={120} value={f.days_max} onChange={(e) => set('days_max', e.target.value)} />
-            </Field>
-            <Field label="Гарантия возврата, дней" hint="Не меньше срока «по»">
-              <input type="number" min={1} max={180} value={f.guarantee_days} onChange={(e) => set('guarantee_days', e.target.value)} />
-            </Field>
-          </div>
-          <button type="submit" className="btn" disabled={!form || save.isPending}>
-            {save.isPending ? 'Сохраняю…' : 'Сохранить'}
-          </button>
-          {save.isError && <p className="text-bad">{errorText(save.error)}</p>}
-        </form>
-      )}
-    </section>
   );
 }
 
@@ -386,13 +350,20 @@ export function CrossBorderBatch() {
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const b = q.data;
-  const next = NEXT_STAGE[b.stage];
-  const steps: [BatchStage, string | null][] = [
-    ['ordered', b.ordered_at],
-    ['shipped', b.shipped_at],
-    ['arrived_uz', b.arrived_uz_at],
-    ['received', b.received_at],
-  ];
+  // D-61: a local supplier — ordered, then received; nothing is shipped from abroad
+  const local = b.supplier.kind === 'local';
+  const next = local ? undefined : NEXT_STAGE[b.stage];
+  const steps: [BatchStage, string | null][] = local
+    ? [
+        ['ordered', b.ordered_at],
+        ['received', b.received_at],
+      ]
+    : [
+        ['ordered', b.ordered_at],
+        ['shipped', b.shipped_at],
+        ['arrived_uz', b.arrived_uz_at],
+        ['received', b.received_at],
+      ];
 
   return (
     <>
@@ -402,7 +373,7 @@ export function CrossBorderBatch() {
             <Link to="/cross-border" className="icon-btn" aria-label="Назад">
               <BackIcon />
             </Link>{' '}
-            Посылка № {b.number}
+            Поставка № {b.number} · {b.supplier.name}
           </>
         }
       >
@@ -431,9 +402,11 @@ export function CrossBorderBatch() {
               {BATCH_STAGE[next][0]}
             </button>
           )}
-          {b.stage === 'arrived_uz' && <p className="muted small">«Принята на склад» отметится само после приёмки по выбранной закупке.</p>}
+          {(b.stage === 'arrived_uz' || (local && b.stage !== 'received')) && (
+            <p className="muted small">«Принята на склад» отметится само после приёмки по выбранной закупке.</p>
+          )}
           {stage.isError && <p className="text-bad">{errorText(stage.error)}</p>}
-          <Field label="Закупка, по которой примем посылку">
+          <Field label="Закупка, по которой примем поставку">
             <PurchaseSelect value={b.purchase?.id ?? ''} disabled={!manage || purchase.isPending || b.stage === 'received'} onChange={(pid) => purchase.mutate(pid)} />
           </Field>
           {purchase.isError && <p className="text-bad">{errorText(purchase.error)}</p>}
@@ -442,7 +415,7 @@ export function CrossBorderBatch() {
         {manage && b.stage !== 'received' && (
           <section className="card">
             <h2>Сдвинуть дату</h2>
-            <p className="muted small">Новая дата и причина придут покупателям всех заказов этой посылки и будут видны в их заказе.</p>
+            <p className="muted small">Новая дата и причина придут покупателям всех заказов этой поставки и будут видны в их заказе.</p>
             <form
               onSubmit={(e) => {
                 e.preventDefault();

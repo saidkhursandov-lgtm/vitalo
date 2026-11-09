@@ -1,5 +1,5 @@
 import { renderNotification } from '../notifications/notification-templates';
-import { addDays, CROSS_BORDER_DEFAULTS, crossBorderOkRow, customerCancel, expectedWindow, isIherbSku, isOverdue, lineStage, mergeCrossBorderSettings, orderStage } from './cross-border';
+import { addDays, CROSS_BORDER_DEFAULTS, combineTerms, customerCancel, expectedWindow, isIherbSku, isOverdue, lineStage, mergeCrossBorderSettings, orderStage, supplierTerms, underOrderOf } from './cross-border';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 // 2026-11-09 10:00 Tashkent
@@ -9,12 +9,24 @@ describe('D-60: «Под заказ из США» rules', () => {
   it('iHerb SKUs: VTL-H001… and VTL-GH001… go «из США» by themselves; the checkbox works for the others', () => {
     expect(['VTL-H001', 'VTL-GH001', 'vtl-h12'].map(isIherbSku)).toEqual([true, true, true]);
     expect(['VTL-HAIR', 'VTL-G001', 'OZN-A1', 'VTL-MG', '', null].map(isIherbSku)).toEqual([false, false, false, false, false, false]);
-    const p = { sku: 'VTL-GH001', cross_border_eligible: false, status: 'active' };
-    expect(crossBorderOkRow(p)).toBe(true);
-    expect(crossBorderOkRow({ ...p, status: 'hidden' })).toBe(false);
-    expect(crossBorderOkRow({ ...p, iherb_snapshots: [{ in_stock: false }] })).toBe(false);
-    expect(crossBorderOkRow({ ...p, sku: 'VTL-MG' })).toBe(false);
-    expect(crossBorderOkRow({ ...p, sku: 'VTL-MG', cross_border_eligible: true })).toBe(true);
+  });
+
+  it('D-61: «под заказ» comes from the supplier chosen in the card; iHerb also needs iHerb to have it', () => {
+    const iherb = { id: 'i', name: 'iHerb', code: 'iherb', kind: 'foreign', status: 'active', from_ru: 'из США', from_uz: 'AQShdan', days_min: null, days_max: null, guarantee_days: null };
+    const ghn = { id: 'g', name: 'GHN', code: null, kind: 'local', status: 'active', from_ru: 'x', from_uz: 'x', days_min: null, days_max: null, guarantee_days: null };
+    const ozon = { ...ghn, id: 'o', code: 'ozon', kind: 'ozon' };
+    expect(underOrderOf({ status: 'active', on_zero_supplier: iherb })).toMatchObject({ kind: 'foreign', days_min: 7, days_max: 14, guarantee_days: 21, from_ru: 'из США' });
+    expect(underOrderOf({ status: 'active', on_zero_supplier: ghn })).toMatchObject({ kind: 'local', days_min: 1, days_max: 2, guarantee_days: 7, from_ru: null });
+    expect(underOrderOf({ status: 'active', on_zero_supplier: iherb, iherb_snapshots: [{ in_stock: false }] })).toBeNull();
+    expect(underOrderOf({ status: 'active', on_zero_supplier: ghn, iherb_snapshots: [{ in_stock: false }] })).not.toBeNull();
+    expect(underOrderOf({ status: 'hidden', on_zero_supplier: iherb })).toBeNull();
+    expect(underOrderOf({ status: 'active', on_zero_supplier: ozon })).toBeNull();
+    expect(underOrderOf({ status: 'active', on_zero_supplier: { ...ghn, status: 'archived' } })).toBeNull();
+    expect(underOrderOf({ status: 'active', on_zero_supplier: null })).toBeNull();
+    const both = combineTerms([supplierTerms(ghn)!, supplierTerms({ ...iherb, days_max: 20 })!]);
+    expect(both).toEqual({ days_min: 7, days_max: 20, guarantee_days: 21, foreign: true });
+    expect(combineTerms([supplierTerms(ghn)!])).toEqual({ days_min: 1, days_max: 2, guarantee_days: 7, foreign: false });
+    expect(combineTerms([])).toBeNull();
   });
 
   it('settings: defaults, wrong values fall back, max ≥ min and guarantee ≥ max', () => {

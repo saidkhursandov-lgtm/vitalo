@@ -9,6 +9,7 @@ import { useSession } from '../lib/auth';
 import { Competitors } from '../components/Competitors';
 import { dateTime, discountAboveLimit, MAX_SHOWN_DISCOUNT, PRODUCT_STATUS } from '../lib/format';
 import { BackIcon } from '../components/Icons';
+import { SUPPLIER_KIND_LABELS, supplierTerms, useSuppliers } from '../components/SupplierTabs';
 
 interface CategoryNode {
   id: string;
@@ -32,6 +33,9 @@ interface AdminProduct {
   yandex_payment_fee_percent?: number | null;
   yandex_logistics_uzs?: number | null;
   category_ids: string[];
+  /** D-61: «Где берём» and «Если на складе ноль — под заказ у …» */
+  supplier_ids: string[];
+  on_zero_supplier_id: string | null;
   media: { id: string; url: string; is_main: boolean; type: string }[];
   stock: { warehouse: { name: string }; actual_qty: number; reserved_qty: number; available_qty: number }[];
   // Stage 2B
@@ -152,7 +156,10 @@ function toForm(p?: AdminProduct): Form {
   f.dose_amount = p?.dose_amount == null ? '' : String(p.dose_amount);
   f.dose_unit = (p?.dose_unit as string | null) ?? '';
   f.dose_per = (p?.dose_per as string | null) ?? '';
-  f.cross_border_eligible = p?.cross_border_eligible ? '1' : '';
+  // D-61: comma-separated ids; a new product untouched here gets them from its SKU on the server (VTL-H… iHerb …)
+  f.supplier_ids = (p?.supplier_ids ?? []).join(',');
+  f.on_zero_supplier_id = p?.on_zero_supplier_id ?? '';
+  f.supply_touched = p ? '1' : '';
   f.auto_pricing_enabled = p?.auto_pricing_enabled ? '1' : '';
   f.markup_percent = p?.markup_percent == null ? '80' : String(p.markup_percent);
   f.price_round_to = p?.price_round_to == null ? '1000' : String(p.price_round_to);
@@ -213,7 +220,10 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       body.dose_amount = toNum(f.dose_amount);
       body.dose_unit = f.dose_unit || null;
       body.dose_per = f.dose_per || null;
-      body.cross_border_eligible = f.cross_border_eligible === '1';
+      if (f.supply_touched === '1') {
+        body.supplier_ids = f.supplier_ids ? f.supplier_ids.split(',') : [];
+        body.on_zero_supplier_id = f.on_zero_supplier_id || null;
+      }
       if (costsView) {
         body.auto_pricing_enabled = f.auto_pricing_enabled === '1';
         body.markup_percent = toInt(f.markup_percent) ?? 80;
@@ -269,7 +279,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   });
 
   const set = (k: string, v: string) => {
-    setF({ ...f, [k]: v });
+    setF((x) => ({ ...x, [k]: v })); // functional: several fields may change in one click (D-61 «Где берём»)
     setSaved(false);
   };
   /** The VITALO price is applied in the shop at once; only a changed Yandex price asks about Yandex Market. */
@@ -471,6 +481,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         </div>
       </section>
 
+      <SupplyCard f={f} set={set} editable={editable} isNew={!product} />
       <IherbCard f={f} set={set} input={input} editable={editable} costsView={costsView} price={toInt(f.price_uzs)} />
 
       {yandexView && (
@@ -637,7 +648,64 @@ function ProductForm({ product }: { product?: AdminProduct }) {
  * does not print it: the field stays for the 75×120 template (a future courier-bag label).
  */
 /**
- * Генплан, этап 5 (D-57, docs/plans/IHERB_PLAN.md): the iHerb link, «Под заказ из США», auto pricing (admin only) and
+ * D-61: «Где берём» — the product's suppliers (Ozon for the stock, iHerb, local ones) — and «Если на складе ноль»:
+ * «Нет в наличии» or «под заказ» from one of them (not Ozon) with that supplier's terms.
+ */
+function SupplyCard({ f, set, editable, isNew }: { f: Form; set: (k: string, v: string) => void; editable: boolean; isNew: boolean }) {
+  const q = useSuppliers();
+  const chosen = f.supplier_ids ? f.supplier_ids.split(',') : [];
+  const all = q.data ?? [];
+  const shown = all.filter((s) => s.status === 'active' || chosen.includes(s.id));
+  const orderable = all.filter((s) => chosen.includes(s.id) && s.kind !== 'ozon');
+  const touch = (k: string, v: string) => {
+    set('supply_touched', '1');
+    set(k, v);
+  };
+  const toggle = (id: string, on: boolean) => {
+    const next = on ? [...chosen, id] : chosen.filter((x) => x !== id);
+    touch('supplier_ids', next.join(','));
+    // a supplier taken off the list is no longer the «под заказ» one
+    if (!on && f.on_zero_supplier_id === id) set('on_zero_supplier_id', '');
+  };
+  const onZero = all.find((s) => s.id === f.on_zero_supplier_id);
+  return (
+    <section className="card">
+      <div className="section-head">
+        <h2>Где берём</h2>
+        {onZero ? <Badge tone="info">Ноль → под заказ: {onZero.name_ru}</Badge> : null}
+      </div>
+      {isNew && f.supply_touched !== '1' && (
+        <p className="muted small">Не отмечено — заполнится по артикулу: VTL-H… iHerb (под заказ из США), VTL-GH… iHerb и Glorious, OZN-… Ozon.</p>
+      )}
+      <div className="supply-list">
+        {shown.map((s) => (
+          <label key={s.id} className="check">
+            <input type="checkbox" checked={chosen.includes(s.id)} disabled={!editable} onChange={(e) => toggle(s.id, e.target.checked)} />
+            <span>
+              {s.name_ru} <span className="muted small">— {SUPPLIER_KIND_LABELS[s.kind]}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <Field
+        label="Если на складе ноль"
+        hint={onZero ? `Покупатель видит «Под заказ${onZero.from_ru ? ` ${onZero.from_ru}` : ''}»: ${supplierTerms(onZero)}${onZero.kind === 'foreign' ? ' Только предоплата.' : ' Можно оплатить при получении.'}` : 'Покупатель видит «Нет в наличии» и может встать в лист ожидания.'}
+      >
+        <select value={f.on_zero_supplier_id} disabled={!editable} onChange={(e) => touch('on_zero_supplier_id', e.target.value)}>
+          <option value="">Нет в наличии</option>
+          {orderable.map((s) => (
+            <option key={s.id} value={s.id}>
+              Под заказ: {s.name_ru}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </section>
+  );
+}
+
+/**
+ * Генплан, этап 5 (D-57, docs/plans/IHERB_PLAN.md): the iHerb link, auto pricing (admin only) and
  * the «1-в-1» match fields (brand + chemical form + dose + pack count). Prices from iHerb come in the next branch.
  */
 function IherbCard({
@@ -669,13 +737,6 @@ function IherbCard({
         <Field label="Ссылка на товар iHerb" hint="Страница товара, например https://uz.iherb.com/pr/…/12345">
           {input('iherb_url', { type: 'url', maxLength: 500, placeholder: 'https://uz.iherb.com/pr/…' })}
         </Field>
-        <label className="check">
-          <input type="checkbox" checked={f.cross_border_eligible === '1'} disabled={!editable} onChange={(e) => set('cross_border_eligible', e.target.checked ? '1' : '')} />
-          <span>
-            «Под заказ из США», когда на складе ноль
-            <span className="muted small"> — товары с артикулом VTL-H… и VTL-GH… (из iHerb) идут из США и без галочки</span>
-          </span>
-        </label>
       </div>
       {costsView && (
         <>

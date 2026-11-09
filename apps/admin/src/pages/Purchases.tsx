@@ -354,7 +354,9 @@ export function PurchaseNew() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const accounts = useDictionary('ozon_accounts');
-  const suppliers = useDictionary('suppliers');
+  // D-61: Ozon is bought with an Ozon account (source OZON), not as a supplier
+  const suppliersQ = useDictionary('suppliers');
+  const suppliers = { data: suppliersQ.data?.filter((s) => (s as { kind?: string }).kind !== 'ozon') };
   const [source, setSource] = useState<'OZON' | 'SUPPLIER'>('OZON');
   const [accountId, setAccountId] = useState('');
   const [supplierId, setSupplierId] = useState('');

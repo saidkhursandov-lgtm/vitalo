@@ -10,6 +10,7 @@ import { QuickAdd, useQuickNotify, WaitlistButton } from '../components/QuickAdd
 import { BioIcon, CartIcon, ChevronIcon, DoctorIcon, LeafIcon, PlusIcon, ShieldIcon, SupportIcon, TestedIcon, type Icon } from '../components/Icons';
 import { useAskSpecialist } from '../components/Support';
 import type { ProductCard } from '../lib/types';
+import { useUnderOrderDays, useUnderOrderText } from '../components/CrossBorder';
 import { tapHaptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
 import { Picture } from '../components/Picture';
@@ -29,6 +30,8 @@ const SECTIONS: [field: string, title: MessageKey][] = [
 export function Product() {
   const { id = '' } = useParams();
   const { t, lang } = useI18n();
+  const uo = useUnderOrderText();
+  const uoDays = useUnderOrderDays();
   const product = useProduct(id);
   const texts = useShopTexts();
   const [imageIdx, setImageIdx] = useState(0);
@@ -91,14 +94,14 @@ export function Product() {
         {p.in_stock ? (
           <div className="stock is-in">{t('product.inStock')}</div>
         ) : p.cross_border ? (
-          <div className="stock is-usa">{t('product.usaDays', { from: p.cross_border_terms?.days_min ?? 7, to: p.cross_border_terms?.days_max ?? 14 })}</div>
+          <div className="stock is-usa">{uoDays(p.cross_border_terms ?? p.under_order)}</div>
         ) : (
           <div className="stock is-out">{t('product.outOfStock')}</div>
         )}
       </div>
       {/* D-60: what «под заказ» means before the customer pays */}
       {p.cross_border && !p.in_stock && (
-        <div className="notice notice-info usa-note">{t('product.usaNote', { days: p.cross_border_terms?.guarantee_days ?? 21 })}</div>
+        <div className="notice notice-info usa-note">{uo('note', p.cross_border_terms ?? p.under_order, { days: (p.cross_border_terms ?? p.under_order)?.guarantee_days ?? 21 })}</div>
       )}
       {p.course_days ? (
         <p className="lasts">

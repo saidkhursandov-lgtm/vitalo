@@ -8,7 +8,8 @@ import {
   type AnyDictionaryKind,
   type DictionaryValue,
 } from '../../components/DictionarySelect';
-import { Badge, ErrorBox, Field, Loading, Modal } from '../../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, toInt } from '../../components/ui';
+import { SUPPLIER_DEFAULT_TERMS, SUPPLIER_KIND_LABELS, supplierTerms, type Supplier, type SupplierKind } from '../../components/SupplierTabs';
 import { api } from '../../lib/api';
 
 /**
@@ -77,7 +78,8 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
           <thead>
             <tr>
               <th>{purchase ? 'Название' : 'Название (RU)'}</th>
-              <th>{kind === 'suppliers' ? 'Заметка' : purchase ? '' : 'Название (UZ)'}</th>
+              <th>{kind === 'suppliers' ? 'Тип и срок под заказ' : purchase ? '' : 'Название (UZ)'}</th>
+              {kind === 'suppliers' && <th className="num">Товаров</th>}
               <th className="num">{purchase ? 'Закупок' : 'Товаров'}</th>
               <th>Статус</th>
               <th />
@@ -86,7 +88,7 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
           <tbody>
             {q.data.length === 0 && (
               <tr>
-                <td colSpan={5} className="muted">
+                <td colSpan={kind === 'suppliers' ? 6 : 5} className="muted">
                   Пока пусто
                 </td>
               </tr>
@@ -94,7 +96,10 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
             {q.data.map((v) => (
               <tr key={v.id}>
                 <td className="strong">{v.name_ru}</td>
-                <td>{kind === 'suppliers' ? (v.note ?? <span className="muted">—</span>) : purchase ? null : (v.name_uz ?? <span className="muted">—</span>)}</td>
+                <td>
+                  {kind === 'suppliers' ? <SupplierSummary s={v as Supplier} /> : purchase ? null : (v.name_uz ?? <span className="muted">—</span>)}
+                </td>
+                {kind === 'suppliers' && <td className="num">{(v as Supplier).product_count}</td>}
                 <td className="num">{v.products}</td>
                 <td>{v.status === 'active' ? <Badge tone="ok">Активно</Badge> : <Badge>В архиве</Badge>}</td>
                 <td className="num">
@@ -124,7 +129,120 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
   );
 }
 
+/** D-61: «Из-за рубежа · из США · 7–14 дн., гарантия 21 дн.» and the note. */
+function SupplierSummary({ s }: { s: Supplier }) {
+  const terms = supplierTerms(s);
+  return (
+    <>
+      <div>
+        {SUPPLIER_KIND_LABELS[s.kind] ?? s.kind}
+        {s.kind === 'foreign' && s.from_ru ? ` · «${s.from_ru}»` : ''}
+      </div>
+      {terms && <div className="muted small">Под заказ: {terms}</div>}
+      {s.note && <div className="muted small">{s.note}</div>}
+    </>
+  );
+}
+
 function RenameModal({ kind, value, onClose, onDone }: { kind: AnyDictionaryKind; value: DictionaryValue; onClose: () => void; onDone: () => void }) {
+  if (kind === 'suppliers') return <SupplierModal value={value as Supplier} onClose={onClose} onDone={onDone} />;
+  return <NameModal kind={kind} value={value} onClose={onClose} onDone={onDone} />;
+}
+
+/**
+ * D-61: a supplier — its kind (Ozon only for the stock; local or foreign — also «под заказ»), «из США» for the shop,
+ * the «под заказ» terms (empty — the defaults of its kind) and the place of its tab. Ozon and iHerb keep their kind.
+ */
+function SupplierModal({ value, onClose, onDone }: { value: Supplier; onClose: () => void; onDone: () => void }) {
+  const [name, setName] = useState(value.name_ru);
+  const [note, setNote] = useState(value.note ?? '');
+  const [kind, setKind] = useState<SupplierKind>(value.kind);
+  const [fromRu, setFromRu] = useState(value.from_ru ?? '');
+  const [fromUz, setFromUz] = useState(value.from_uz ?? '');
+  const num = (v: number | null) => (v == null ? '' : String(v));
+  const [min, setMin] = useState(num(value.days_min));
+  const [max, setMax] = useState(num(value.days_max));
+  const [guarantee, setGuarantee] = useState(num(value.guarantee_days));
+  const [sort, setSort] = useState(String(value.sort ?? 100));
+  const fixed = !!value.code; // Ozon, iHerb
+  const d = kind === 'ozon' ? null : SUPPLIER_DEFAULT_TERMS[kind];
+  const save = useMutation({
+    mutationFn: () =>
+      api(`/staff/dictionaries/suppliers/${value.id}`, {
+        method: 'PATCH',
+        body: {
+          name_ru: name,
+          note: note || null,
+          ...(!fixed && { kind }),
+          ...(kind === 'foreign' && { from_ru: fromRu || null, from_uz: fromUz || null }),
+          ...(kind !== 'ozon' && { days_min: toInt(min) ?? null, days_max: toInt(max) ?? null, guarantee_days: toInt(guarantee) ?? null }),
+          sort: toInt(sort) ?? 100,
+        },
+      }),
+    onSuccess: () => {
+      onDone();
+      onClose();
+    },
+  });
+  return (
+    <Modal title="Изменить поставщика" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <Field label="Название">
+          <input value={name} onChange={(e) => setName(e.target.value)} required />
+        </Field>
+        <Field label="Тип" hint={fixed ? 'У Ozon и iHerb тип не меняется' : 'Ozon — только на склад; местный и зарубежный — ещё и «под заказ», когда на складе ноль'}>
+          <select value={kind} disabled={fixed} onChange={(e) => setKind(e.target.value as SupplierKind)}>
+            {(Object.keys(SUPPLIER_KIND_LABELS) as SupplierKind[]).map((k) => (
+              <option key={k} value={k}>
+                {SUPPLIER_KIND_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {kind === 'foreign' && (
+          <div className="form-grid">
+            <Field label="Покупателю: «Под заказ …» (RU)" hint="Например: из США">
+              <input value={fromRu} maxLength={40} onChange={(e) => setFromRu(e.target.value)} />
+            </Field>
+            <Field label="(UZ)" hint="Например: AQShdan">
+              <input value={fromUz} maxLength={40} onChange={(e) => setFromUz(e.target.value)} />
+            </Field>
+          </div>
+        )}
+        {d && (
+          <div className="form-grid">
+            <Field label="Срок под заказ: от, дней" hint={`Пусто — ${d.days_min}`}>
+              <input inputMode="numeric" value={min} onChange={(e) => setMin(e.target.value)} />
+            </Field>
+            <Field label="до, дней" hint={`Пусто — ${d.days_max}`}>
+              <input inputMode="numeric" value={max} onChange={(e) => setMax(e.target.value)} />
+            </Field>
+            <Field label="Гарантия, дней" hint={`Нет товара к этому дню — покупатель может отменить. Пусто — ${d.guarantee_days}`}>
+              <input inputMode="numeric" value={guarantee} onChange={(e) => setGuarantee(e.target.value)} />
+            </Field>
+          </div>
+        )}
+        <Field label="Порядок вкладки" hint="Меньше — левее во вкладках «Товары» и «Бренды»">
+          <input inputMode="numeric" value={sort} onChange={(e) => setSort(e.target.value)} />
+        </Field>
+        <Field label="Заметка" hint="Контакты, условия — видно только в админке">
+          <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <ErrorBox error={save.error} />
+        <button className="btn" disabled={save.isPending || !name.trim()}>
+          Сохранить
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+function NameModal({ kind, value, onClose, onDone }: { kind: AnyDictionaryKind; value: DictionaryValue; onClose: () => void; onDone: () => void }) {
   const purchase = isPurchaseDictionary(kind);
   const [ru, setRu] = useState(value.name_ru);
   const [uz, setUz] = useState(value.name_uz ?? '');

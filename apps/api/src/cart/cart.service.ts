@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
 import { CampaignLine, PromoCodesService, PromoView } from '../promo/promo.service';
 import { SettingsService } from '../settings/settings.service';
-import { expectedWindow, isoDay, loadCrossBorderSettings } from '../orders/cross-border';
+import { underOrderMark, windowView, type SupplyTerms, type UnderOrderMark, type WindowView } from '../orders/cross-border';
 import { CartWarning, MAX_LINE_QTY, reconcileCartLine } from './cart-reconcile';
 import { rankUpsell, UPSELL_COUNT, UPSELL_MIN_COUNT, UPSELL_SPARE } from './upsell';
 
@@ -27,6 +27,8 @@ export interface CartLineView {
   available_qty: number;
   /** D-60: nothing in Tashkent — the line comes «Под заказ из США» (prepayment only, all delivered together) */
   cross_border: boolean;
+  /** D-61: «Из США» or «Под заказ» (null — from the Tashkent stock) */
+  under_order: UnderOrderMark | null;
   unit_price_uzs: number;
   line_total_uzs: number;
   /** 3.7: the regular price (= unit_price_uzs when the product is not in a running sale) and the sale */
@@ -49,7 +51,7 @@ export interface CartView {
   /** 3.3: the applied promo code (null — none or it stopped fitting, see warnings `promo_removed`). */
   promo: PromoView | null;
   /** D-60: the cart has lines from the USA — the promised delivery window counted from today (YYYY-MM-DD) */
-  cross_border: { expected_from: string; expected_to: string; guarantee_days: number } | null;
+  cross_border: WindowView | null;
 }
 
 @Injectable()
@@ -148,6 +150,7 @@ export class CartService {
         qty: r.qty,
         available_qty: available.get(item.product_id)?.qty ?? 0,
         cross_border: r.status === 'available' && !!available.get(item.product_id)?.cross_border,
+        under_order: r.status === 'available' ? underOrderMark(available.get(item.product_id)?.terms) : null,
         unit_price_uzs: r.unit_price_uzs,
         line_total_uzs: r.unit_price_uzs * r.qty,
         list_price_uzs: product.campaign?.list_price_uzs ?? r.unit_price_uzs,
@@ -175,15 +178,9 @@ export class CartService {
       can_checkout: sellable.length > 0,
       delivery: calc.delivery,
       promo: calc.promo,
-      cross_border: sellable.some((l) => l.cross_border) ? await this.crossBorderWindow() : null,
+      // D-60/D-61: «Ожидаемая доставка: 18–25 ноября» for «под заказ» lines, counted from today (the longest supplier)
+      cross_border: windowView(sellable.filter((l) => l.cross_border).map((l) => available.get(l.product_id)?.terms).filter((t): t is SupplyTerms => !!t)),
     };
-  }
-
-  /** D-60: «Ожидаемая доставка: 18–25 ноября» for a cart with lines from the USA, counted from today. */
-  private async crossBorderWindow() {
-    const s = await loadCrossBorderSettings(this.prisma);
-    const w = expectedWindow(new Date(), s);
-    return { expected_from: isoDay(w.expected_from)!, expected_to: isoDay(w.expected_to)!, guarantee_days: s.guarantee_days };
   }
 
   /**

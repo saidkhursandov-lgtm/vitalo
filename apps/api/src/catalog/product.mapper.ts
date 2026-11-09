@@ -1,20 +1,37 @@
 import { Prisma } from '@prisma/client';
-import { crossBorderOkRow } from '../orders/cross-border';
+import { SUPPLIER_TERMS_SELECT, underOrderOf, type SupplyTerms } from '../orders/cross-border';
 import { thumbSize } from '../storage/image-processing';
 
 /** D-60: the newest iHerb snapshot says whether «Под заказ из США» is possible now */
 const lastIherb = { orderBy: { taken_at: 'desc' }, take: 1, select: { in_stock: true } } satisfies Prisma.products$iherb_snapshotsArgs;
+/** D-61: «если на складе ноль — под заказ у …» with the supplier's terms */
+const onZero = { select: SUPPLIER_TERMS_SELECT } as const;
+
+/** D-61: what the shop shows about «под заказ»: «Под заказ из США • 7–14 дней» or «Под заказ • 1–2 дня». */
+export interface UnderOrderView {
+  kind: 'local' | 'foreign';
+  from_ru: string | null;
+  from_uz: string | null;
+  days_min: number;
+  days_max: number;
+  guarantee_days: number;
+}
+export const underOrderView = (t: SupplyTerms): UnderOrderView => ({
+  kind: t.kind, from_ru: t.from_ru, from_uz: t.from_uz, days_min: t.days_min, days_max: t.days_max, guarantee_days: t.guarantee_days,
+});
 
 export const listInclude = {
   media: { where: { media_type: 'image' }, orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }], take: 1 },
   inventory: { select: { actual_qty: true, reserved_qty: true } },
   iherb_snapshots: lastIherb,
+  on_zero_supplier: onZero,
 } satisfies Prisma.productsInclude;
 
 export const cardInclude = {
   media: { orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }] },
   inventory: { select: { actual_qty: true, reserved_qty: true } },
   iherb_snapshots: lastIherb,
+  on_zero_supplier: onZero,
   categories: { include: { category: true } },
   brand_entry: { select: { slug: true, name_ru: true, name_uz: true, why_vitalo_ru: true, why_vitalo_uz: true } },
   relations: {
@@ -59,8 +76,10 @@ export interface ProductListItem {
   image_url: string | null;
   image: ListImage | null;
   in_stock: boolean;
-  /** D-60: nothing in Tashkent, but it can be ordered «Под заказ из США» (prepayment only) */
+  /** D-60/D-61: nothing in Tashkent, but it can be ordered «под заказ» (from abroad — prepayment only) */
   cross_border: boolean;
+  /** D-61: the supplier's kind and terms when cross_border, else null */
+  under_order: UnderOrderView | null;
   /** 3.7: a running sale — price_uzs is then the sale price and old_price_uzs the regular one (CampaignsService.decorate) */
   campaign: ShopCampaign | null;
 }
@@ -121,9 +140,14 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     image_url: listImage(p.media.find((m) => m.media_type === 'image'))?.webp ?? null,
     image: listImage(p.media.find((m) => m.media_type === 'image')),
     in_stock: availableQty(p.inventory) > 0,
-    cross_border: availableQty(p.inventory) <= 0 && crossBorderOkRow(p),
+    ...underOrderFields(p),
     campaign: null,
   };
+}
+
+function underOrderFields(p: ProductForList): { cross_border: boolean; under_order: UnderOrderView | null } {
+  const t = availableQty(p.inventory) <= 0 ? underOrderOf(p) : null;
+  return { cross_border: !!t, under_order: t && underOrderView(t) };
 }
 
 export function toProductCard(p: ProductForCard) {
@@ -133,7 +157,7 @@ export function toProductCard(p: ProductForCard) {
   return {
     ...toProductListItem(p),
     // upper bound for the qty stepper; D-60: from the USA — up to the line maximum
-    available_qty: availableQty(p.inventory) <= 0 && crossBorderOkRow(p) ? 99 : Math.min(availableQty(p.inventory), 99),
+    available_qty: availableQty(p.inventory) <= 0 && underOrderOf(p) ? 99 : Math.min(availableQty(p.inventory), 99),
     /** 2.2: the brand page address (null = the brand is not in the dictionary) */
     brand_slug: p.brand_entry?.slug ?? null,
     // 2.3: «Почему [бренд] отобран в VITALO»

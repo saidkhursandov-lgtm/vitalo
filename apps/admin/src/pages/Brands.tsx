@@ -4,6 +4,7 @@ import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../comp
 import { api, errorText } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dictionaryKey } from '../components/DictionarySelect';
+import { SupplierTabs } from '../components/SupplierTabs';
 
 interface Brand {
   id: string;
@@ -50,7 +51,9 @@ function checkLogo(file: File, min: number): Promise<string[]> {
 
 /** Админка → Бренды (2.2): logo, address, country, «Почему [бренд] в VITALO», the showcase switch and order. */
 export function Brands() {
-  const q = useQuery({ queryKey: ['brands', 'admin'], queryFn: () => api<BrandList>('/staff/brands') });
+  // D-61: the supplier tab — brands with products bought there, only those products counted
+  const [supplier, setSupplier] = useState('');
+  const q = useQuery({ queryKey: ['brands', 'admin', supplier], queryFn: () => api<BrandList>(`/staff/brands${supplier ? `?supplier_id=${supplier}` : ''}`) });
   const [editing, setEditing] = useState<string | null>(null);
   const brand = q.data?.items.find((b) => b.id === editing);
   const [adding, setAdding] = useState(false);
@@ -73,6 +76,7 @@ export function Brands() {
         Лента «Проверенные бренды» в Mini App показывает включённые бренды, у которых есть товар в наличии.
         Переименование — в «Настройки → Справочники»: название у товаров меняется вместе с ним.
       </p>
+      <SupplierTabs value={supplier} onChange={setSupplier} />
       {remove.isError && <p className="alert alert-error">{errorText(remove.error)}</p>}
       {q.isPending ? (
         <Loading />

@@ -5,6 +5,7 @@ import { discountPercent, money, shortNameOf, tileLine } from '../lib/format';
 import { errorText, shownStatus, orderStatusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, ShopCampaign } from '../lib/types';
+import { useUnderOrderText } from './CrossBorder';
 import { SaleBadge, SalePrice } from './Campaign';
 import { Picture } from './Picture';
 import { QuickAdd } from './QuickAdd';
@@ -248,6 +249,7 @@ function TileMeta({ product }: { product: ProductListItem }) {
 
 export function ProductTile({ product }: { product: ProductListItem }) {
   const { t, lang } = useI18n();
+  const uo = useUnderOrderText();
   const sale = product.campaign ?? null;
   const pct = sale ? null : discountPercent(product.price_uzs, product.old_price_uzs ?? null);
   return (
@@ -258,7 +260,7 @@ export function ProductTile({ product }: { product: ProductListItem }) {
         {/* the discount lives on the photo, so the price is always one line; the old price is on the product page */}
         {pct && product.in_stock && <span className="tile-discount">−{pct}%</span>}
         {sale && <SaleBadge campaign={sale} className="tile-sale" />}
-        {!product.in_stock && (product.cross_border ? <span className="tile-usa">{t('product.usaShort')}</span> : <span className="tile-out">{t('product.outOfStock')}</span>)}
+        {!product.in_stock && (product.cross_border ? <span className="tile-usa">{uo('short', product.under_order)}</span> : <span className="tile-out">{t('product.outOfStock')}</span>)}
       </div>
       <div className="tile-body">
         <div className="tile-brand">{product.brand}</div>

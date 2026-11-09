@@ -24,7 +24,7 @@ export function ActiveOrderBar() {
   const cod = o.payment_method === 'cod';
   // D-60: a paid order waiting for the USA shows its stage and the last promised day
   const cb = o.status === 'paid' && o.cross_border_stage && o.cross_border_stage !== 'in_stock' ? o.cross_border_stage : null;
-  const status = cb ? usaStage(cb) : t(orderStatusKey(o.status, { reported: o.payment_reported, cod }));
+  const status = cb ? usaStage(cb, o.cross_border_from) : t(orderStatusKey(o.status, { reported: o.payment_reported, cod }));
   const term = cb ? null : daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
   const I = STATUS_ICONS[shownStatus(o.status, o.payment_reported)];
   const more = active.data?.more ?? 0;

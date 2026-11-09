@@ -47,6 +47,7 @@ import { PageQuery } from '../catalog/catalog.dto';
 import { HALAL_VEGE, type HalalVege } from '../catalog/product.mapper';
 import { DOSE_PER, DOSE_UNITS, normalizeMatchForm, parseIherbUrl, STOCK_PRICE_MODES, type DosePer, type DoseUnit } from '../iherb/iherb-fields';
 import { DICTIONARY_COLUMNS, DICTIONARY_KINDS, matchKey } from '../dictionaries/dictionary-names';
+import { isGloriousSku, isIherbSku } from '../orders/cross-border';
 import { dictionaryTable } from './admin-dictionaries';
 import { PrismaService } from '../prisma/prisma.service';
 import { FILE_STORAGE, type FileStorage } from '../storage/file-storage';
@@ -156,7 +157,11 @@ export class ProductInput {
   // Генплан, этап 5 (D-57): iHerb. The link is checked and its product number taken on the server.
   @ApiPropertyOptional({ nullable: true, description: 'Ссылка на товар iHerb (uz.iherb.com/pr/…/12345)' })
   @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(500) iherb_url?: string | null;
-  @ApiPropertyOptional({ description: '«Под заказ из США», когда на складе ноль. Товары с артикулом VTL-H… и VTL-GH… идут из США и без этой галочки' }) @IsOptional() @IsBoolean() cross_border_eligible?: boolean;
+  // D-61: where the product is bought and — nothing in Tashkent — from whom it goes «под заказ»
+  @ApiPropertyOptional({ type: [String], description: 'Где берём: поставщики товара (Ozon, iHerb, местные…)' })
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('all', { each: true }) supplier_ids?: string[];
+  @ApiPropertyOptional({ nullable: true, description: '«Если на складе ноль — под заказ у …»: один из поставщиков товара (не Ozon); null — «нет в наличии»' })
+  @IsOptional() @IsUUID() on_zero_supplier_id?: string | null;
   @ApiPropertyOptional({ description: 'Автоцена: цена iHerb × (1 + наценка %) — только администратор' }) @IsOptional() @IsBoolean() auto_pricing_enabled?: boolean;
   @ApiPropertyOptional({ description: 'Наценка к цене iHerb, % (по умолчанию 80) — только администратор' }) @IsOptional() @IsInt() @Min(0) @Max(1000) markup_percent?: number;
   @ApiPropertyOptional({ description: 'Округлять автоцену вверх до, сум — только администратор' }) @IsOptional() @IsInt() @Min(1) @Max(100000) price_round_to?: number;
@@ -216,6 +221,8 @@ export class StaffProductsQuery extends PageQuery {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   yandex_sync_needed?: boolean;
+  @ApiPropertyOptional({ description: 'D-61: вкладка поставщика (id) или none — товары без поставщика' })
+  @IsOptional() @Matches(/^(none|[0-9a-f-]{36})$/i) supplier_id?: string;
 }
 
 /** Real image type from the first bytes (the browser-provided mimetype can lie). */
@@ -230,6 +237,7 @@ const productInclude = {
   categories: { select: { category_id: true } },
   media: { orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }] },
   inventory: { include: { warehouse: { select: { id: true, name: true } } } },
+  suppliers: { select: { supplier_id: true } },
 } satisfies Prisma.productsInclude;
 
 type ProductRow = Prisma.productsGetPayload<{ include: typeof productInclude }>;
@@ -292,6 +300,7 @@ function toAdminProduct(p: ProductRow) {
     categories,
     media,
     inventory,
+    suppliers,
     price_uzs,
     old_price_uzs,
     cost_uzs,
@@ -313,6 +322,7 @@ function toAdminProduct(p: ProductRow) {
     yandex_logistics_uzs: num(yandex_logistics_uzs),
     dose_amount: num(dose_amount),
     category_ids: categories.map((c) => c.category_id),
+    supplier_ids: suppliers.map((s) => s.supplier_id),
     media: media.map((m) => ({ id: m.id, url: m.url, is_main: m.is_main, type: m.media_type, title: m.title })),
     stock: inventory.map((i) => ({
       warehouse: i.warehouse,
@@ -321,6 +331,22 @@ function toAdminProduct(p: ProductRow) {
       available_qty: i.actual_qty - i.reserved_qty,
     })),
   };
+}
+
+/**
+ * D-61: a new product without «Где берём» — by its SKU (the owner's rule): VTL-H… iHerb (под заказ из США), VTL-GH…
+ * iHerb and Glorious Healthy Nutrition, OZN-… Ozon.
+ */
+async function defaultSuppliers(tx: Prisma.TransactionClient, sku: string): Promise<{ supplier_ids?: string[]; on_zero_supplier_id?: string | null }> {
+  const all = await tx.suppliers.findMany({ where: { status: 'active' }, select: { id: true, code: true, name: true } });
+  const iherb = all.find((x) => x.code === 'iherb');
+  const ozon = all.find((x) => x.code === 'ozon');
+  const glorious = all.find((x) => /^glorious/i.test(x.name));
+  if (isIherbSku(sku) && iherb) {
+    return { supplier_ids: [iherb.id, ...(isGloriousSku(sku) && glorious ? [glorious.id] : [])], on_zero_supplier_id: iherb.id };
+  }
+  if (/^OZN-/i.test(sku) && ozon) return { supplier_ids: [ozon.id] };
+  return {};
 }
 
 @Injectable()
@@ -335,6 +361,7 @@ export class AdminProductsService {
     const where: Prisma.productsWhereInput = {
       ...(q.status && { status: q.status }),
       ...(q.yandex_sync_needed && { yandex_price_sync_needed: true }),
+      ...(q.supplier_id && { suppliers: q.supplier_id === 'none' ? { none: {} } : { some: { supplier_id: q.supplier_id } } }),
       ...(q.q && {
         OR: [
           { sku: { contains: q.q, mode: 'insensitive' } },
@@ -356,6 +383,8 @@ export class AdminProductsService {
         include: {
           inventory: true,
           media: { where: { is_main: true }, take: 1 },
+          suppliers: { select: { supplier: { select: { id: true, name: true } } } },
+          on_zero_supplier: { select: { id: true, name: true } },
           ...(q.q && { sku_aliases: { where: { alias_norm: { contains: q.q.trim().toUpperCase() } }, select: { alias: true }, take: 1 } }),
         },
       }),
@@ -374,6 +403,8 @@ export class AdminProductsService {
         available_qty: p.inventory.reduce((s, i) => s + i.actual_qty - i.reserved_qty, 0),
         yandex_price_uzs: num(p.yandex_price_uzs),
         yandex_price_sync_needed: p.yandex_price_sync_needed,
+        suppliers: p.suppliers.map((s) => s.supplier),
+        on_zero_supplier: p.on_zero_supplier,
         // found by an old code: «по старому SKU …» in the picker
         matched_alias: q.q && !p.sku.toUpperCase().includes(q.q.trim().toUpperCase()) ? ((p as { sku_aliases?: { alias: string }[] }).sku_aliases?.[0]?.alias ?? null) : null,
       })),
@@ -392,12 +423,14 @@ export class AdminProductsService {
 
   async create(staffId: string | null, dto: ProductInput) {
     const id = await this.write(async (tx) => {
-      const { category_ids, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, null, data as Record<string, unknown>);
       const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, withDefaultPaymeCodes(data) as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
       if (category_ids?.length) await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: p.id, category_id: c })) });
-      await this.audit.log({ staffId, action: 'product.created', entityType: 'product', entityId: p.id, after: { ...p, category_ids } }, tx);
+      const sup = supplier_ids === undefined && on_zero_supplier_id === undefined ? await defaultSuppliers(tx, p.sku) : { supplier_ids, on_zero_supplier_id };
+      const supplies = await this.setSuppliers(tx, p.id, sup.supplier_ids, sup.on_zero_supplier_id);
+      await this.audit.log({ staffId, action: 'product.created', entityType: 'product', entityId: p.id, after: { ...p, category_ids, ...supplies } }, tx);
       return p.id;
     });
     return this.get(id);
@@ -406,9 +439,9 @@ export class AdminProductsService {
   /** Includes archiving (status = archived). Deleting is a separate action — remove() (D-54). */
   async update(staffId: string | null, id: string, dto: ProductPatch) {
     await this.write(async (tx) => {
-      const before = await tx.products.findUnique({ where: { id }, include: { categories: true } });
+      const before = await tx.products.findUnique({ where: { id }, include: { categories: true, suppliers: { select: { supplier_id: true } } } });
       if (!before) throw new NotFoundException('Product not found');
-      const { category_ids, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, before, data as Record<string, unknown>);
       const after = await tx.products.update({ where: { id }, data: this.toData(this.applyYandexSync(before, data as Record<string, unknown>)) });
@@ -416,15 +449,16 @@ export class AdminProductsService {
         await tx.product_categories.deleteMany({ where: { product_id: id } });
         await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: id, category_id: c })) });
       }
-      const { categories, ...beforePlain } = before;
+      const supplies = await this.setSuppliers(tx, id, supplier_ids, on_zero_supplier_id);
+      const { categories, suppliers: beforeSuppliers, ...beforePlain } = before;
       await this.audit.log(
         {
           staffId,
           action: dto.status === 'archived' && before.status !== 'archived' ? 'product.archived' : 'product.updated',
           entityType: 'product',
           entityId: id,
-          before: { ...beforePlain, category_ids: categories.map((c) => c.category_id) },
-          after: { ...after, ...(category_ids && { category_ids }) },
+          before: { ...beforePlain, category_ids: categories.map((c) => c.category_id), supplier_ids: beforeSuppliers.map((s) => s.supplier_id) },
+          after: { ...after, ...(category_ids && { category_ids }), ...supplies },
         },
         tx,
       );
@@ -647,6 +681,38 @@ export class AdminProductsService {
     }
     if (typeof d.match_form === 'string') data.match_form = normalizeMatchForm(d.match_form);
     return data;
+  }
+
+  /**
+   * D-61: «Где берём» (the product's suppliers) and «Если на складе ноль — под заказ у …» (one of them, local or
+   * foreign — Ozon is bought for the stock only). undefined — unchanged. A supplier removed from the product is also
+   * no longer its «под заказ» one.
+   */
+  private async setSuppliers(tx: Prisma.TransactionClient, productId: string, supplierIds: string[] | undefined, onZero: string | null | undefined) {
+    if (supplierIds === undefined && onZero === undefined) return {};
+    if (supplierIds !== undefined) {
+      const ids = [...new Set(supplierIds)];
+      if (ids.length && (await tx.suppliers.count({ where: { id: { in: ids } } })) !== ids.length) {
+        throw new BadRequestException({ code: 'UNKNOWN_SUPPLIER', message: 'Unknown supplier id' });
+      }
+      await tx.product_suppliers.deleteMany({ where: { product_id: productId, supplier_id: { notIn: ids } } });
+      await tx.product_suppliers.createMany({ data: ids.map((s) => ({ product_id: productId, supplier_id: s })), skipDuplicates: true });
+    }
+    const linked = (await tx.product_suppliers.findMany({ where: { product_id: productId }, select: { supplier_id: true } })).map((s) => s.supplier_id);
+    const current = (await tx.products.findUniqueOrThrow({ where: { id: productId }, select: { on_zero_supplier_id: true } })).on_zero_supplier_id;
+    let next = onZero === undefined ? current : onZero;
+    if (next && !linked.includes(next)) {
+      if (onZero === undefined) next = null; // the supplier was removed from the product
+      else throw new BadRequestException({ code: 'ON_ZERO_NOT_SUPPLIER', message: '«Под заказ» — только у поставщика этого товара: отметьте его в «Где берём»' });
+    }
+    if (next) {
+      const s = await tx.suppliers.findUniqueOrThrow({ where: { id: next }, select: { kind: true } });
+      if (s.kind !== 'local' && s.kind !== 'foreign') {
+        throw new BadRequestException({ code: 'ON_ZERO_NOT_ORDERABLE', message: 'Под заказ — только у местного или зарубежного поставщика (Ozon — только на склад)' });
+      }
+    }
+    if (next !== current) await tx.products.update({ where: { id: productId }, data: { on_zero_supplier_id: next } });
+    return { supplier_ids: linked, on_zero_supplier_id: next };
   }
 
   private async assertCategories(tx: Prisma.TransactionClient, ids?: string[]) {

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { formLabel, money, shortNameOf } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { track } from '../lib/analytics';
-import type { CampaignLine, OnlineProvider, ShortNamed } from '../lib/types';
+import type { CampaignLine, OnlineProvider, ShortNamed, UnderOrderMark } from '../lib/types';
 import { CampaignRows } from './Campaign';
 import { UsaBadge } from './CrossBorder';
 
@@ -13,8 +13,9 @@ export interface OrderItemLine extends ShortNamed {
   line_total_uzs: number;
   image_url?: string | null;
   form?: string | null;
-  /** D-60: «Из США» */
+  /** D-60: «Из США»; D-61: or «Под заказ» (a local supplier) */
   cross_border?: boolean;
+  under_order?: UnderOrderMark | null;
 }
 
 /**
@@ -38,7 +39,7 @@ export function OrderItems({ items, note }: { items: OrderItemLine[]; note?: (it
               × {i.qty}
               {i.form && ` · ${formLabel(i.form, lang)}`}
             </span>
-            {i.cross_border && <UsaBadge />}
+            {i.cross_border && <UsaBadge mark={i.under_order} />}
             {note?.(i)}
           </div>
           <strong className="order-item-price">{money(i.line_total_uzs, lang)}</strong>

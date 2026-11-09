@@ -66,8 +66,10 @@ export interface ProductListItem extends Named {
   /** Thumbnail with JPEG fallback and size (null for products without photos). */
   image?: { webp: string; jpeg: string | null; width: number | null; height: number | null } | null;
   in_stock: boolean;
-  /** D-60: nothing in Tashkent, but it can be ordered «Под заказ из США» (prepayment only) */
+  /** D-60: nothing in Tashkent, but it can be ordered «под заказ» (from abroad — prepayment only) */
   cross_border?: boolean;
+  /** D-61: from whom and how long: «Под заказ из США • 7–14 дней» or «Под заказ • 1–2 дня» */
+  under_order?: UnderOrderTerms | null;
   /** 3.7: the product is in a running sale — price_uzs is the sale price, campaign.list_price_uzs the regular one */
   campaign?: ShopCampaign | null;
 }
@@ -133,8 +135,8 @@ export interface BrandPage extends BrandCard {
 }
 
 export interface ProductCard extends ProductListItem {
-  /** D-60: «Под заказ из США • 7–14 дней» and the money-back term (null: the product is in stock or not from the USA) */
-  cross_border_terms?: { days_min: number; days_max: number; guarantee_days: number } | null;
+  /** D-60/D-61: «Под заказ из США • 7–14 дней» / «Под заказ • 1–2 дня» and the guarantee (null: in stock or not «под заказ») */
+  cross_border_terms?: UnderOrderTerms | null;
   available_qty: number;
   /** 2.2: the brand page address; null — the brand has no page yet */
   brand_slug?: string | null;
@@ -314,6 +316,7 @@ export interface CartLine extends Named {
   available_qty: number;
   /** D-60: «Под заказ из США» */
   cross_border?: boolean;
+  under_order?: UnderOrderMark | null;
   unit_price_uzs: number;
   line_total_uzs: number;
   /** 3.7: the regular price (equals unit_price_uzs outside a sale) */
@@ -339,18 +342,36 @@ export interface Cart {
   cross_border?: CrossBorderWindow | null;
 }
 
-/** D-60: «Ожидаемая доставка: 18–25 ноября», YYYY-MM-DD */
+/** D-61: «из США» (foreign, from_ru / from_uz) or a local supplier; older answers without kind — from the USA. */
+export interface UnderOrderMark {
+  kind?: 'local' | 'foreign';
+  from_ru?: string | null;
+  from_uz?: string | null;
+}
+export interface UnderOrderTerms extends UnderOrderMark {
+  days_min: number;
+  days_max: number;
+  guarantee_days: number;
+}
+
+/** D-60: «Ожидаемая доставка: 18–25 ноября», YYYY-MM-DD; D-61: foreign — a line from abroad (prepayment only) */
 export interface CrossBorderWindow {
   expected_from: string;
   expected_to: string;
   guarantee_days: number;
+  foreign?: boolean;
+  from_ru?: string | null;
+  from_uz?: string | null;
 }
 
 export type CbStage = 'paid' | 'ordered' | 'shipped' | 'arrived_uz' | 'in_stock';
 
-/** D-60: the tracking of an order with lines from the USA. */
+/** D-60/D-61: the tracking of an order with «под заказ» lines (kind local — paid → ordered → in stock). */
 export interface CrossBorderTracking {
   stage: CbStage | null;
+  kind?: 'local' | 'foreign';
+  from_ru?: string | null;
+  from_uz?: string | null;
   lines_waiting: number;
   expected_from: string | null;
   expected_to: string | null;
@@ -412,7 +433,7 @@ export interface Order {
   recipient: { name: string; phone: string };
   delivery: { region: Named; city: Named; address_text: string; cost_uzs: number };
   customer_comment: string | null;
-  items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; list_price_uzs?: number; form?: string | null; image_url?: string | null; cross_border?: boolean })[];
+  items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; list_price_uzs?: number; form?: string | null; image_url?: string | null; cross_border?: boolean; under_order?: UnderOrderMark | null })[];
   totals: Totals;
   /** D-60: lines «Под заказ из США» — stages and the promised window (null: none) */
   cross_border?: CrossBorderTracking | null;
@@ -475,6 +496,7 @@ export interface ActiveOrder {
     delivery_eta: DeliveryEta | null;
     /** D-60: a paid order waiting for the USA — its stage and the last promised day */
     cross_border_stage?: CbStage | null;
+    cross_border_from?: UnderOrderMark | null;
     expected_to?: string | null;
   } | null;
   more: number;
@@ -491,10 +513,11 @@ export interface OrderListItem {
   payment_method?: string | null;
   /** D-60: a paid order waiting for the USA shows its stage instead of «Оплачен» */
   cross_border_stage?: CbStage | null;
+  cross_border_from?: UnderOrderMark | null;
 }
 
 export interface OrderPreview {
-  items: (ShortNamed & { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null; campaign?: { discount_pct: number } | null; cross_border?: boolean })[];
+  items: (ShortNamed & { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null; campaign?: { discount_pct: number } | null; cross_border?: boolean; under_order?: UnderOrderMark | null })[];
   /** D-60: lines from the USA — the promised window */
   cross_border?: CrossBorderWindow | null;
   skipped_unavailable: string[];

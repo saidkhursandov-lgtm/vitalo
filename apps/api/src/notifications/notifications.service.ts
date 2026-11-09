@@ -5,7 +5,8 @@ import { CUSTOMER_STATUS_TEMPLATES, type CentreCategory, type Lang, type Templat
 import { tashkentDateTime } from '../common/tashkent';
 import { SETTING_DEFAULTS, SETTING_KEYS, supportLink } from '../settings/settings.service';
 import { productTitle } from '../waitlist/waitlist';
-import { campaignsOf, promoOf } from '../orders/order-view';
+import { campaignsOf, cbPayloadOf, promoOf } from '../orders/order-view';
+import { SUPPLIER_TERMS_SELECT } from '../orders/cross-border';
 import { yandexMapsLink } from '../maps/maps-match';
 
 /** 3.2: «Как принимать ваш заказ» lines — one per product with a memo in the language (Russian as a fallback), no repeats. */
@@ -53,11 +54,16 @@ export class NotificationsService {
     if (status === 'paid' && cod) template = 'order.cod_confirmed';
     const lang = order.user.language;
     const payload: TemplatePayload = { order_number: order.order_number, total_uzs: Number(order.total_uzs), reason: reason ?? null, lang, open_path: `/orders/${order.id}`, promo: promoOf(order), campaigns: campaignsOf(order) };
-    // D-60: lines from the USA — «заказываем в США» with the promised window instead of «скоро начнём сборку»
-    if (status === 'paid' && !cod && (await db.order_items.count({ where: { order_id: orderId, source: 'cross_border' } }))) {
-      template = 'order.cb_paid';
-      payload.expected_from = order.expected_from?.toISOString().slice(0, 10) ?? null;
-      payload.expected_to = order.expected_to?.toISOString().slice(0, 10) ?? null;
+    // D-60/D-61: «под заказ» lines — «заказываем из США / у поставщика» with the promised window instead of «скоро
+    // начнём сборку»; payment on delivery (a local supplier) — the same line under «Заказ подтверждён»
+    if (status === 'paid') {
+      const items = await db.order_items.findMany({ where: { order_id: orderId }, select: { source: true, supplier: { select: SUPPLIER_TERMS_SELECT } } });
+      if (items.some((i) => i.source === 'cross_border')) {
+        if (!cod) template = 'order.cb_paid';
+        Object.assign(payload, cbPayloadOf({ items }));
+        payload.expected_from = order.expected_from?.toISOString().slice(0, 10) ?? null;
+        payload.expected_to = order.expected_to?.toISOString().slice(0, 10) ?? null;
+      }
     }
     if (status === 'awaiting_payment') {
       payload.open_path = `/orders/${order.id}/pay`;

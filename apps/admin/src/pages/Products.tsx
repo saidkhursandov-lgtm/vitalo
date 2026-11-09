@@ -5,6 +5,7 @@ import { Badge, ErrorBox, Loading, PageHead, Pagination } from '../components/ui
 import { api, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { money, PRODUCT_STATUS } from '../lib/format';
+import { SupplierTabs } from '../components/SupplierTabs';
 
 interface ProductRow {
   id: string;
@@ -20,6 +21,9 @@ interface ProductRow {
   /** absent for roles without yandex.price.view (warehouse) */
   yandex_price_uzs?: number | null;
   yandex_price_sync_needed?: boolean;
+  /** D-61: «Где берём» and the «под заказ» one */
+  suppliers: { id: string; name: string }[];
+  on_zero_supplier: { id: string; name: string } | null;
 }
 
 export function Products() {
@@ -30,12 +34,13 @@ export function Products() {
   const page = Number(params.get('page')) || 1;
   const yandex = can('yandex.price.view');
   const syncOnly = params.get('yandex_sync') === '1';
+  const supplier = params.get('supplier') ?? '';
   const client = useQueryClient();
   const q = useQuery({
     queryKey: ['products', params.toString()],
     queryFn: () =>
       api<{ items: ProductRow[]; total: number; total_pages: number }>(
-        `/staff/products${qs({ q: params.get('q'), status, page, yandex_sync_needed: syncOnly ? 'true' : undefined })}`,
+        `/staff/products${qs({ q: params.get('q'), status, page, yandex_sync_needed: syncOnly ? 'true' : undefined, supplier_id: supplier || undefined })}`,
       ),
   });
   const synced = useMutation({
@@ -59,6 +64,7 @@ export function Products() {
           </Link>
         )}
       </PageHead>
+      <SupplierTabs value={supplier} onChange={(v) => set('supplier', v)} />
       <form
         className="filters"
         onSubmit={(e) => {
@@ -95,6 +101,7 @@ export function Products() {
                 <th />
                 <th>Товар</th>
                 <th>Бренд</th>
+                <th>Где берём</th>
                 <th className="num">Цена</th>
                 {yandex && <th className="num">Яндекс</th>}
                 <th className="num">Доступно / всего</th>
@@ -112,6 +119,10 @@ export function Products() {
                     <div className="muted small">{p.sku}</div>
                   </td>
                   <td>{p.brand}</td>
+                  <td className="small">
+                    {p.suppliers.length ? p.suppliers.map((s) => s.name).join(', ') : <span className="muted">—</span>}
+                    {p.on_zero_supplier && <div className="muted">ноль → под заказ: {p.on_zero_supplier.name}</div>}
+                  </td>
                   <td className="num">{money(p.price_uzs)}</td>
                   {yandex && (
                     <td className="num">

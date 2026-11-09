@@ -30,9 +30,11 @@ export interface AdminOrder {
   customer_comment: string | null;
   /** 3.7: list_price_uzs — the regular price when the line was bought in a sale (unit_price_uzs is the sale price) */
   items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; line_total_uzs: number; cross_border?: boolean }[];
-  /** D-60: lines «Под заказ из США» — the stage, the promised window, the moved dates */
+  /** D-60/D-61: «под заказ» lines — the stage, the promised window, the moved dates; foreign («из США») or local */
   cross_border?: {
     stage: string | null;
+    kind?: 'foreign' | 'local';
+    from_ru?: string | null;
     lines_waiting: number;
     expected_from: string | null;
     expected_to: string | null;
@@ -205,7 +207,7 @@ export function OrderDetail() {
                 <tr key={i.product_id}>
                   <td>
                     <Link to={`/products/${i.product_id}`}>{i.name_ru}</Link>
-                    {i.cross_border && <> <Badge tone="info">из США</Badge></>}
+                    {i.cross_border && <> <Badge tone="info">{o.cross_border?.kind === 'local' ? 'под заказ' : `под заказ ${o.cross_border?.from_ru ?? 'из США'}`}</Badge></>}
                     <div className="muted small">{i.sku}</div>
                   </td>
                   <td className="num">

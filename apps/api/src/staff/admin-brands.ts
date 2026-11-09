@@ -12,6 +12,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -84,10 +85,15 @@ export class AdminBrandsService {
     @Inject(FILE_STORAGE) private readonly storage: FileStorage,
   ) {}
 
-  async list() {
+  /** D-61: `supplierId` — the supplier tab: brands with products bought there («none» — products without a supplier), only those products counted. */
+  async list(supplierId?: string) {
+    const bySupplier: Prisma.productsWhereInput | undefined = supplierId
+      ? { suppliers: supplierId === 'none' ? { none: {} } : { some: { supplier_id: supplierId } } }
+      : undefined;
     const rows = await this.prisma.brands.findMany({
+      where: bySupplier && { products: { some: bySupplier } },
       orderBy: [{ status: 'asc' }, { sort_order: 'asc' }, { name_ru: 'asc' }],
-      include: { products: { select: { status: true, inventory: { select: { actual_qty: true, reserved_qty: true } } } } },
+      include: { products: { where: bySupplier, select: { status: true, inventory: { select: { actual_qty: true, reserved_qty: true } } } } },
     });
     return rows.map(({ products, ...b }) => {
       const active = products.filter((p) => p.status === 'active');
@@ -180,8 +186,9 @@ export class AdminBrandsController {
   constructor(private readonly brands: AdminBrandsService) {}
 
   @Get()
-  list() {
-    return this.brands.list().then((items) => ({ items, logo: { width: LOGO_SIZE, height: LOGO_SIZE } }));
+  list(@Query('supplier_id') supplierId?: string) {
+    if (supplierId && !/^(none|[0-9a-f-]{36})$/i.test(supplierId)) throw new BadRequestException({ code: 'BAD_SUPPLIER', message: 'supplier_id: id or none' });
+    return this.brands.list(supplierId || undefined).then((items) => ({ items, logo: { width: LOGO_SIZE, height: LOGO_SIZE } }));
   }
 
   @Patch(':id')

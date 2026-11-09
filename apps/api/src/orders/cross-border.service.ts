@@ -12,21 +12,25 @@ import {
   expectedWindow,
   isoDay,
   isOverdue,
-  loadCrossBorderSettings,
+  SUPPLIER_TERMS_SELECT,
   stageIndex,
   type BatchStage,
   type CbStage,
 } from './cross-border';
-import { crossBorderStageOf } from './order-view';
+import { cbPayloadOf, crossBorderStageOf, orderTermsOf } from './order-view';
 import { OrderUnitsService } from './order-units.service';
 
 type Tx = Prisma.TransactionClient;
 const TX = { maxWait: 10_000, timeout: 30_000 };
 
-const stageInclude = { items: { select: { source: true, arrived_at: true, cross_border_batch: { select: { stage: true } } } } } satisfies Prisma.ordersInclude;
+const stageInclude = {
+  items: { select: { source: true, arrived_at: true, cross_border_batch: { select: { stage: true } }, supplier: { select: SUPPLIER_TERMS_SELECT } } },
+} satisfies Prisma.ordersInclude;
+/** D-60 lines and parcels made before suppliers (D-61) — all were iHerb */
+const LEGACY_SUPPLIER = { id: null, name: 'iHerb', kind: 'foreign' };
 
 /**
- * D-60, «Под заказ из США»: the parcels, the stages the customer sees, the moved dates and the jars of the lines.
+ * D-60/D-61, «под заказ» (from abroad — iHerb «из США»; from a local supplier — Glorious Healthy Nutrition): the parcels, the stages the customer sees, the moved dates and the jars of the lines.
  *
  * - A line from the USA reserves nothing at the order. After the payment it waits to be put into a parcel.
  * - A parcel («Посылка из США») is one order on iHerb for several customers' lines: its stage is set once for all of
@@ -48,16 +52,17 @@ export class CrossBorderService {
 
   /** Payment confirmed: the promised window is counted from the payment (the order kept the one from its creation). */
   async onPaid(tx: Tx, orderId: string, paidAt: Date): Promise<void> {
-    if (!(await tx.order_items.count({ where: { order_id: orderId, source: 'cross_border' } }))) return;
-    const w = expectedWindow(paidAt, await loadCrossBorderSettings(tx));
+    const items = await tx.order_items.findMany({ where: { order_id: orderId }, select: { source: true, supplier: { select: SUPPLIER_TERMS_SELECT } } });
+    if (!items.some((i) => i.source === 'cross_border')) return;
+    const w = expectedWindow(paidAt, orderTermsOf({ items }));
     await tx.orders.update({ where: { id: orderId }, data: { expected_from: w.expected_from, expected_to: w.expected_to } });
   }
 
-  /** «Собирается» only when every line from the USA has its jars in Tashkent. */
+  /** «Собирается» only when every «под заказ» line has its jars in Tashkent. */
   async assertReadyForPicking(tx: Tx, orderId: string): Promise<void> {
     const waiting = await tx.order_items.findMany({ where: { order_id: orderId, source: 'cross_border', arrived_at: null }, select: { sku_snapshot: true } });
     if (waiting.length) {
-      throw new ConflictException({ code: 'CROSS_BORDER_WAITING', message: `Ждём товар из США: ${waiting.map((w) => w.sku_snapshot).join(', ')}. Собирать можно, когда банки будут на складе.` });
+      throw new ConflictException({ code: 'CROSS_BORDER_WAITING', message: `Ждём товар под заказ: ${waiting.map((w) => w.sku_snapshot).join(', ')}. Собирать можно, когда банки будут на складе.` });
     }
   }
 
@@ -69,6 +74,9 @@ export class CrossBorderService {
     const order = await tx.orders.findUniqueOrThrow({ where: { id: orderId }, include: { ...stageInclude, user: true } });
     const stage = crossBorderStageOf(order);
     if (!stage || stage === 'paid') return stage;
+    const cb = cbPayloadOf(order);
+    // D-61: a local supplier — nothing is shipped from abroad, no such message
+    if (cb.cb_kind === 'local' && (stage === 'shipped' || stage === 'arrived_uz')) return stage;
     const done = await tx.cross_border_events.findMany({ where: { order_id: orderId, type: 'stage' }, select: { stage: true } });
     const last = done.reduce((m, e) => Math.max(m, stageIndex(e.stage as CbStage)), 0);
     if (stageIndex(stage) <= last) return stage;
@@ -84,6 +92,7 @@ export class CrossBorderService {
         lang: order.user.language,
         open_path: `/orders/${orderId}`,
         stage: stage as Exclude<CbStage, 'paid'>,
+        ...cb,
         expected_from: isoDay(order.expected_from),
         expected_to: isoDay(order.expected_to),
         expiry,
@@ -109,7 +118,7 @@ export class CrossBorderService {
    */
   async attachLine(tx: Tx, itemId: string, staffId: string | null): Promise<void> {
     const item = await tx.order_items.findUnique({ where: { id: itemId }, include: { product: { select: { unit_tracking: true } } } });
-    if (!item || item.source !== 'cross_border') throw new NotFoundException({ code: 'NOT_CROSS_BORDER', message: 'Это не строка «из США»' });
+    if (!item || item.source !== 'cross_border') throw new NotFoundException({ code: 'NOT_CROSS_BORDER', message: 'Это не строка «под заказ»' });
     if (item.arrived_at) throw new ConflictException({ code: 'ALREADY_ARRIVED', message: 'Банки этой строки уже на складе' });
     const [order] = await tx.$queryRaw<{ id: string; order_number: string; status: string }[]>`
       SELECT id, order_number, status::text AS status FROM orders WHERE id = ${item.order_id}::uuid FOR UPDATE`;
@@ -151,21 +160,32 @@ export class CrossBorderService {
     return attached;
   }
 
-  // ───────────── «Посылки из США» (admin panel) ─────────────
+  // ───────────── «Поставки под заказ» (admin panel) ─────────────
 
-  /** Paid lines from the USA not yet in a parcel, the earliest payment first. */
+  /**
+   * Paid (or, payment on delivery, confirmed) «под заказ» lines not yet in a parcel, the earliest first, with their
+   * supplier (D-61: a parcel is for one supplier).
+   */
   async waiting() {
     const rows = await this.prisma.order_items.findMany({
       where: { source: 'cross_border', arrived_at: null, cross_border_batch_id: null, order: { status: 'paid' } },
-      include: { order: { select: { id: true, order_number: true, paid_at: true, expected_to: true } }, product: { select: { sku: true, name_ru: true, iherb_url: true } } },
+      include: {
+        order: { select: { id: true, order_number: true, paid_at: true, created_at: true, expected_to: true } },
+        product: { select: { sku: true, name_ru: true, iherb_url: true } },
+        supplier: { select: { id: true, name: true, kind: true } },
+      },
     });
+    const at = (o: { paid_at: Date | null; created_at: Date }) => (o.paid_at ?? o.created_at).getTime();
     return rows
-      .sort((a, b) => (a.order.paid_at?.getTime() ?? 0) - (b.order.paid_at?.getTime() ?? 0))
+      .sort((a, b) => at(a.order) - at(b.order))
       .map((r) => ({
         item_id: r.id,
         order_id: r.order.id,
         order_number: r.order.order_number,
         paid_at: r.order.paid_at,
+        /** payment on delivery: nothing is paid yet */
+        cod: !r.order.paid_at,
+        supplier: r.supplier ?? LEGACY_SUPPLIER,
         expected_to: isoDay(r.order.expected_to),
         product_id: r.product_id,
         sku: r.product.sku,
@@ -179,12 +199,17 @@ export class CrossBorderService {
     const rows = await this.prisma.cross_border_batches.findMany({
       orderBy: { created_at: 'desc' },
       take: 100,
-      include: { items: { select: { qty: true, order_id: true, arrived_at: true } }, purchase: { select: { id: true, purchase_date: true, status: true } } },
+      include: {
+        items: { select: { qty: true, order_id: true, arrived_at: true } },
+        purchase: { select: { id: true, purchase_date: true, status: true } },
+        supplier: { select: { id: true, name: true, kind: true } },
+      },
     });
     return rows.map((b) => ({
       id: b.id,
       number: b.number,
       stage: b.stage,
+      supplier: b.supplier ?? LEGACY_SUPPLIER,
       note: b.note,
       ordered_at: b.ordered_at,
       shipped_at: b.shipped_at,
@@ -226,11 +251,15 @@ export class CrossBorderService {
     };
   }
 
-  /** «Создать посылку»: the lines just ordered on iHerb — their customers get «Заказан в США». */
+  /** «Создать поставку»: the lines just ordered from one supplier — their customers get «Заказан …». */
   async createBatch(staffId: string, input: { item_ids: string[]; note?: string | null; purchase_id?: string | null }) {
-    if (!input.item_ids.length) throw new ConflictException({ code: 'EMPTY_BATCH', message: 'Отметьте строки заказов для посылки' });
+    if (!input.item_ids.length) throw new ConflictException({ code: 'EMPTY_BATCH', message: 'Отметьте строки заказов для поставки' });
     return this.prisma.$transaction(async (tx) => {
-      const batch = await tx.cross_border_batches.create({ data: { note: input.note?.trim() || null, purchase_id: input.purchase_id ?? null, created_by: staffId } });
+      const suppliers = await tx.order_items.findMany({ where: { id: { in: input.item_ids } }, select: { supplier_id: true }, distinct: ['supplier_id'] });
+      if (suppliers.length > 1) throw new ConflictException({ code: 'MIXED_SUPPLIERS', message: 'В одной поставке — строки одного поставщика' });
+      const batch = await tx.cross_border_batches.create({
+        data: { note: input.note?.trim() || null, purchase_id: input.purchase_id ?? null, created_by: staffId, supplier_id: suppliers[0]?.supplier_id ?? null },
+      });
       await this.putLines(tx, batch.id, input.item_ids, staffId);
       await tx.audit_logs.create({ data: { staff_user_id: staffId, action: 'cross_border.batch_created', entity_type: 'cross_border_batch', entity_id: batch.id, after_json: { number: batch.number, item_ids: input.item_ids } } });
       return { id: batch.id, number: batch.number };
@@ -253,7 +282,11 @@ export class CrossBorderService {
     const items = await tx.order_items.findMany({ where: { id: { in: itemIds } }, include: { order: { select: { status: true, order_number: true } } } });
     const bad = items.filter((i) => i.source !== 'cross_border' || i.arrived_at || i.cross_border_batch_id || i.order.status !== 'paid');
     if (items.length !== new Set(itemIds).size || bad.length) {
-      throw new ConflictException({ code: 'LINES_NOT_WAITING', message: `Не все строки ждут заказа в США: ${bad.map((b) => b.order.order_number).join(', ') || 'строка не найдена'}` });
+      throw new ConflictException({ code: 'LINES_NOT_WAITING', message: `Не все строки ждут заказа у поставщика: ${bad.map((b) => b.order.order_number).join(', ') || 'строка не найдена'}` });
+    }
+    const batch = await tx.cross_border_batches.findUniqueOrThrow({ where: { id: batchId }, select: { supplier_id: true } });
+    if (items.some((i) => i.supplier_id !== batch.supplier_id)) {
+      throw new ConflictException({ code: 'MIXED_SUPPLIERS', message: 'В одной поставке — строки одного поставщика' });
     }
     await tx.order_items.updateMany({ where: { id: { in: itemIds } }, data: { cross_border_batch_id: batchId } });
     for (const orderId of new Set(items.map((i) => i.order_id))) await this.syncStage(tx, orderId, staffId, batchId);
@@ -264,6 +297,10 @@ export class CrossBorderService {
     await this.prisma.$transaction(async (tx) => {
       const [batch] = await tx.$queryRaw<{ id: string; stage: string }[]>`SELECT id, stage FROM cross_border_batches WHERE id = ${batchId}::uuid FOR UPDATE`;
       if (!batch) throw new NotFoundException('Parcel not found');
+      const sup = await tx.cross_border_batches.findUnique({ where: { id: batchId }, select: { supplier: { select: { kind: true } } } });
+      if (sup?.supplier?.kind === 'local') {
+        throw new ConflictException({ code: 'LOCAL_BATCH', message: 'У местного поставщика нет этапов «отправлена» и «прибыла» — примите поставку закупкой' });
+      }
       if (BATCH_STAGES.indexOf(stage) <= BATCH_STAGES.indexOf(batch.stage as BatchStage)) {
         throw new ConflictException({ code: 'STAGE_NOT_FORWARD', message: 'Этап посылки можно только продвинуть вперёд' });
       }
@@ -340,7 +377,7 @@ export class CrossBorderService {
           chatId: order.user.telegram_user_id,
           orderId,
           template: 'order.cb_delay',
-          payload: { order_number: order.order_number, lang: order.user.language, open_path: `/orders/${orderId}`, expected_from: isoDay(from), expected_to: isoDay(to), reason },
+          payload: { order_number: order.order_number, lang: order.user.language, open_path: `/orders/${orderId}`, ...cbPayloadOf(order), expected_from: isoDay(from), expected_to: isoDay(to), reason },
         });
         moved++;
       }
@@ -370,7 +407,7 @@ export class CrossBorderService {
       if (!isOverdue({ status: o.status, stage: crossBorderStageOf(o), expected_to: o.expected_to, overdue_for: o.cross_border_overdue_for }, now)) continue;
       await this.prisma.$transaction(async (tx) => {
         await tx.orders.update({ where: { id: o.id }, data: { cross_border_overdue_for: o.expected_to } });
-        await this.notifications.toStaffRoles(tx, ['admin', 'manager'], 'staff.cb_overdue', { order_number: o.order_number, expected_to: isoDay(o.expected_to), admin_path: `/orders/${o.id}` });
+        await this.notifications.toStaffRoles(tx, ['admin', 'manager'], 'staff.cb_overdue', { order_number: o.order_number, ...cbPayloadOf(o), expected_to: isoDay(o.expected_to), admin_path: `/orders/${o.id}` });
       });
       sent++;
     }

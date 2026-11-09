@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { listImage, listInclude } from '../catalog/product.mapper';
 import type { CampaignLine, PricingSnapshot } from '../promo/promo.service';
 import { CUSTOMER_CANCELLABLE } from './order-state';
-import { CB_STAGES, isoDay, lineStage, orderStage, type CbStage } from './cross-border';
+import { CB_STAGES, combineTerms, CROSS_BORDER_DEFAULTS, isoDay, lineStage, LOCAL_CB_STAGES, orderStage, SUPPLIER_TERMS_SELECT, supplierTerms, underOrderMark, type CbStage, type CrossBorderSettings, type SupplierRow, type SupplyTerms } from './cross-border';
 
 export const orderViewInclude = {
   items: {
@@ -10,6 +10,7 @@ export const orderViewInclude = {
     include: {
       product: { select: { name_uz: true, short_name_ru: true, short_name_uz: true, form: true, media: listInclude.media } },
       cross_border_batch: { select: { stage: true } },
+      supplier: { select: SUPPLIER_TERMS_SELECT },
     },
   },
   cross_border_events: { orderBy: { created_at: 'asc' } },
@@ -67,6 +68,8 @@ export function toOrderView(o: OrderForView) {
       paid_line_total_uzs: num(i.paid_line_total_uzs),
       /** D-60: «Под заказ из США» */
       cross_border: i.source === 'cross_border',
+      /** D-61: «Из США» or «Под заказ» (older lines without a supplier: from the USA) */
+      under_order: i.source !== 'cross_border' ? null : (underOrderMark(supplierTerms(i.supplier ? { ...i.supplier, status: 'active' } : null)) ?? LEGACY_MARK),
     })),
     cross_border: crossBorderOf(o),
     totals: {
@@ -108,25 +111,73 @@ const cbLines = (o: OrderForView) =>
   o.items.filter((i) => i.source === 'cross_border').map((i) => ({ arrived_at: i.arrived_at, batch_stage: i.cross_border_batch?.stage ?? null }));
 
 /**
- * D-60: the tracking of an order with lines from the USA — the stage it is at (null before the payment), every stage
- * with its date (from the history), the promised window and the moves of the date with reasons. null — no such lines.
+ * Paid — or, with payment on delivery (D-61: a local «под заказ»), confirmed by the manager: the order is in «paid» or
+ * further without paid_at. Before that nothing is ordered from the supplier.
+ */
+const confirmedOf = (o: { paid_at: Date | null; status: string }) =>
+  o.status !== 'new' && o.status !== 'awaiting_payment' && (!!o.paid_at || o.status !== 'cancelled');
+
+/**
+ * D-61: the terms of an order's «под заказ» lines — the longest of their suppliers (older lines without a supplier:
+ * the D-60 «из США» defaults). foreign: a line from abroad (full tracking, «из США»).
+ */
+export function orderTermsOf(o: { items: { source: string; supplier?: SupplierRow | null }[] }): CrossBorderSettings & { foreign: boolean; from_ru: string | null; from_uz: string | null } {
+  const terms = o.items
+    .filter((i) => i.source === 'cross_border')
+    .map((i) => supplierTerms(i.supplier ? { ...i.supplier, status: 'active' } : null))
+    .filter((t): t is SupplyTerms => !!t);
+  const c = combineTerms(terms) ?? { ...CROSS_BORDER_DEFAULTS, foreign: true };
+  const f = terms.find((t) => t.kind === 'foreign');
+  // a line without a supplier is a D-60 line from the USA
+  const legacy = o.items.some((i) => i.source === 'cross_border' && !i.supplier);
+  return { ...c, foreign: c.foreign || legacy, from_ru: f?.from_ru ?? (legacy ? 'из США' : null), from_uz: f?.from_uz ?? (legacy ? 'AQShdan' : null) };
+}
+
+const LEGACY_MARK = { kind: 'foreign' as const, from_ru: 'из США', from_uz: 'AQShdan' };
+
+/** D-61: «из США» (foreign) or «у поставщика» (local) of an order's «под заказ» lines; null — none. */
+export function cbMarkOf(o: { items: { source: string; supplier?: SupplierRow | null }[] }) {
+  if (!o.items.some((i) => i.source === 'cross_border')) return null;
+  const t = orderTermsOf(o);
+  return { kind: t.foreign ? ('foreign' as const) : ('local' as const), from_ru: t.from_ru, from_uz: t.from_uz };
+}
+
+/** D-61: what a customer / staff message about a «под заказ» order says: «из США» or «у поставщика», and from whom. */
+export function cbPayloadOf(o: { items: { source: string; supplier?: SupplierRow | null }[] }) {
+  const t = orderTermsOf(o);
+  const names = [...new Set(o.items.filter((i) => i.source === 'cross_border').map((i) => i.supplier?.name ?? 'iHerb'))];
+  return { cb_kind: t.foreign ? ('foreign' as const) : ('local' as const), from_ru: t.from_ru, from_uz: t.from_uz, supplier_name: names.join(', ') || null };
+}
+
+/**
+ * D-60/D-61: the tracking of an order with «под заказ» lines — the stage it is at (null before the payment), every
+ * stage with its date, the promised window and the moves of the date with reasons. null — no such lines.
+ * From abroad: paid → ordered → shipped → arrived in Uzbekistan → in stock; from a local supplier: paid → ordered →
+ * in stock.
  */
 export function crossBorderOf(o: OrderForView) {
   const lines = cbLines(o);
   if (!lines.length) return null;
-  const paid = !!o.paid_at && o.status !== 'new' && o.status !== 'awaiting_payment';
+  const paid = confirmedOf(o);
+  const terms = orderTermsOf(o);
+  const stages = terms.foreign ? CB_STAGES : LOCAL_CB_STAGES;
+  const paidAt = o.paid_at ?? o.history.find((h) => h.to_status === 'paid')?.created_at ?? null;
   // after the jars are in Tashkent the order goes the usual way (picking, courier…): the tracking shows it as done
   const stage: CbStage | null = orderStage(paid, lines) ?? (paid ? 'paid' : null);
   const reached = (s: CbStage) => o.cross_border_events.find((e) => e.type === 'stage' && e.stage === s)?.created_at ?? null;
   return {
     stage,
+    /** D-61: from abroad (full tracking, «из США») or from a local supplier */
+    kind: terms.foreign ? ('foreign' as const) : ('local' as const),
+    from_ru: terms.from_ru,
+    from_uz: terms.from_uz,
     lines_waiting: lines.filter((l) => lineStage(l) !== 'in_stock').length,
     expected_from: isoDay(o.expected_from),
     expected_to: isoDay(o.expected_to),
-    steps: CB_STAGES.map((s) => ({
+    steps: stages.map((s) => ({
       stage: s,
       done: !!stage && CB_STAGES.indexOf(s) <= CB_STAGES.indexOf(stage),
-      at: s === 'paid' ? (paid ? o.paid_at : null) : reached(s),
+      at: s === 'paid' ? (paid ? paidAt : null) : reached(s),
     })),
     delays: o.cross_border_events.filter((e) => e.type === 'delay').map((e) => ({ at: e.created_at, expected_to: isoDay(e.expected_to), reason: e.reason })),
   };
@@ -135,8 +186,7 @@ export function crossBorderOf(o: OrderForView) {
 /** The same stage from the item rows only (lists, jobs). */
 export function crossBorderStageOf(o: { paid_at: Date | null; status: string; items: { source: string; arrived_at: Date | null; cross_border_batch: { stage: string } | null }[] }): CbStage | null {
   const lines = o.items.filter((i) => i.source === 'cross_border').map((i) => ({ arrived_at: i.arrived_at, batch_stage: i.cross_border_batch?.stage ?? null }));
-  const paid = !!o.paid_at && o.status !== 'new' && o.status !== 'awaiting_payment';
-  return orderStage(paid, lines);
+  return orderStage(confirmedOf(o), lines);
 }
 
 /** 3.7: «Акция 11.11: −X сум» lines of the order, from its frozen calculation (older orders: none). */

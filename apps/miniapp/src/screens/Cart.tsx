@@ -209,7 +209,7 @@ export function Cart() {
               <Link to={`/product/${l.product_id}`} className="cart-name" title={[l.brand, l.form && formLabel(l.form, lang)].filter(Boolean).join(' · ')}>
                 {shortNameOf(l, lang)}
               </Link>
-              {l.cross_border && <UsaBadge />}
+              {l.cross_border && <UsaBadge mark={l.under_order} />}
               {l.status === 'unavailable' ? (
                 <div className="error-text small">{t('cart.unavailable')}</div>
               ) : (

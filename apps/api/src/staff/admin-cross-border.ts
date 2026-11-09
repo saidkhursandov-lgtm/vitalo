@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, UseGu
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { BATCH_MANUAL_STAGES, CROSS_BORDER_SETTINGS_KEY, loadCrossBorderSettings, mergeCrossBorderSettings, type CrossBorderSettings } from '../orders/cross-border';
+import { BATCH_MANUAL_STAGES } from '../orders/cross-border';
 import { CrossBorderService } from '../orders/cross-border.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
@@ -34,14 +34,7 @@ class MoveDateDto {
   @ApiProperty({ description: 'Причина — её прочитает покупатель' }) @IsString() @MinLength(3) @MaxLength(300) reason!: string;
 }
 
-class CrossBorderSettingsDto implements Partial<CrossBorderSettings> {
-  @ApiPropertyOptional({ description: 'Срок «из США» от оплаты: с, дней' }) @IsOptional() @IsInt() @Min(1) @Max(90) days_min?: number;
-  @ApiPropertyOptional({ description: 'Срок «из США» от оплаты: по, дней' }) @IsOptional() @IsInt() @Min(1) @Max(120) days_max?: number;
-  @ApiPropertyOptional({ description: 'Гарантия: через столько дней после оплаты без товара на складе покупатель может сам отменить' })
-  @IsOptional() @IsInt() @Min(1) @Max(180) guarantee_days?: number;
-}
-
-/** D-60: «Посылки из США» in the admin panel. */
+/** D-60/D-61: «Поставки под заказ» in the admin panel. The terms live with each supplier (Справочники → Поставщики). */
 @ApiTags('staff: cross-border')
 @ApiBearerAuth()
 @UseGuards(StaffGuard)
@@ -111,24 +104,5 @@ export class AdminCrossBorderController {
   @RequirePermission('cross_border.manage')
   moveDate(@CurrentStaff() me: StaffContext, @Body() dto: MoveDateDto) {
     return this.cb.moveDate(me.staff.id, dto);
-  }
-
-  @Get('settings')
-  @RequirePermission('cross_border.view')
-  settings() {
-    return loadCrossBorderSettings(this.prisma);
-  }
-
-  @Put('settings')
-  @RequirePermission('settings.manage')
-  async setSettings(@CurrentStaff() me: StaffContext, @Body() dto: CrossBorderSettingsDto) {
-    const before = await loadCrossBorderSettings(this.prisma);
-    const value = mergeCrossBorderSettings({ ...before, ...Object.fromEntries(Object.entries(dto).filter(([, v]) => v !== undefined)) });
-    const json = value as unknown as Prisma.InputJsonValue;
-    await this.prisma.$transaction(async (tx) => {
-      await tx.settings.upsert({ where: { key: CROSS_BORDER_SETTINGS_KEY }, create: { key: CROSS_BORDER_SETTINGS_KEY, value: json }, update: { value: json } });
-      await this.audit.log({ staffId: me.staff.id, action: 'settings.cross_border_updated', entityType: 'settings', before, after: value }, tx);
-    });
-    return value;
   }
 }

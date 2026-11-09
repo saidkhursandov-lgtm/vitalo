@@ -239,12 +239,25 @@ async function seedSubstances() {
   }
 }
 
+/** D-61: the suppliers the code knows (same as the migration 20261119100000_supply_sources); never changed if they exist. */
+async function seedSuppliers() {
+  const rows = [
+    { code: 'ozon', name: 'Ozon', kind: 'ozon', sort: 10 },
+    { code: 'iherb', name: 'iHerb', kind: 'foreign', from_ru: 'из США', from_uz: 'AQShdan', days_min: 7, days_max: 14, guarantee_days: 21, sort: 20 },
+  ];
+  for (const r of rows) await prisma.suppliers.upsert({ where: { code: r.code }, create: r, update: {} });
+  if (!(await prisma.suppliers.findFirst({ where: { name: { startsWith: 'Glorious', mode: 'insensitive' } } }))) {
+    await prisma.suppliers.create({ data: { name: 'Glorious Healthy Nutrition', kind: 'local', days_min: 1, days_max: 2, guarantee_days: 7, sort: 30 } });
+  }
+}
+
 async function main() {
   await seedRegions();
   const categoryIds = await seedCategories();
   await seedProducts(categoryIds);
   await seedCheckoutSettings();
   await seedSubstances();
+  await seedSuppliers();
   console.log(
     `Seed done: ${REGIONS.length} regions, ${categoryIds.size} categories, ${PRODUCTS.length} products, ` +
       `${TARIFFS.length} tariffs, ${PAYMENT_METHODS.length} payment methods, ${DEV_STAFF.length} dev staff.`,

@@ -17,7 +17,8 @@ import {
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { EntityStatus, Prisma } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { SUPPLIER_KINDS, type SupplierKind } from '../orders/cross-border';
 import { cleanName, DICTIONARY_COLUMNS, DICTIONARY_KINDS, DictionaryKind, matchKey } from '../dictionaries/dictionary-names';
 import { uniqueSlug } from '../catalog/brand-names';
 import { PrismaService } from '../prisma/prisma.service';
@@ -118,8 +119,21 @@ export async function freeBrandSlug(db: Db, name: string): Promise<string> {
 const clean = ({ value }: { value: unknown }) => (typeof value === 'string' ? cleanName(value) : value);
 const cleanOrNull = ({ value }: { value: unknown }) => (typeof value === 'string' ? cleanName(value) || null : value);
 
+/** D-61: what a supplier is — Ozon (stock only), local (Tashkent) or foreign — «из США», its terms and its tab order. */
+class SupplierFields {
+  @ApiPropertyOptional({ enum: SUPPLIER_KINDS, description: 'Только поставщики: ozon — на склад; local — местный; foreign — из-за рубежа' })
+  @IsOptional() @IsIn(SUPPLIER_KINDS) kind?: SupplierKind;
+  @ApiPropertyOptional({ nullable: true, description: 'Только зарубежные: «из США»' }) @IsOptional() @Transform(cleanOrNull) @IsString() @MaxLength(40) from_ru?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Только зарубежные: «AQShdan»' }) @IsOptional() @Transform(cleanOrNull) @IsString() @MaxLength(40) from_uz?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Под заказ: от, дней (пусто — 1 местный / 7 зарубежный)' }) @IsOptional() @IsInt() @Min(1) @Max(120) days_min?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Под заказ: до, дней (пусто — 2 / 14)' }) @IsOptional() @IsInt() @Min(1) @Max(120) days_max?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Гарантия: можно отменить, если товара нет к этому дню (пусто — 7 / 21)' }) @IsOptional() @IsInt() @Min(1) @Max(180) guarantee_days?: number | null;
+  @ApiPropertyOptional({ description: 'Порядок вкладки' }) @IsOptional() @IsInt() @Min(0) @Max(10000) sort?: number;
+}
+const SUPPLIER_FIELDS = ['kind', 'from_ru', 'from_uz', 'days_min', 'days_max', 'guarantee_days', 'sort'] as const;
+
 /** name_ru is «the name» of every dictionary (suppliers and Ozon accounts store it as `name`). */
-export class DictionaryInput {
+export class DictionaryInput extends SupplierFields {
   @ApiProperty({ example: 'Эвалар' }) @Transform(clean) @IsString() @IsNotEmpty() @MaxLength(200) name_ru!: string;
   @ApiPropertyOptional({ nullable: true, description: 'Только бренды, производители, страны, формы' })
   @IsOptional()
@@ -135,7 +149,7 @@ export class DictionaryInput {
   note?: string | null;
 }
 
-export class DictionaryPatch {
+export class DictionaryPatch extends SupplierFields {
   @ApiPropertyOptional() @IsOptional() @Transform(clean) @IsString() @IsNotEmpty() @MaxLength(200) name_ru?: string;
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(cleanOrNull) @IsString() @MaxLength(200) name_uz?: string | null;
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(cleanOrNull) @IsString() @MaxLength(1000) note?: string | null;
@@ -147,6 +161,16 @@ export class DictionaryQuery {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   include_archived?: boolean;
+  @ApiPropertyOptional({ description: 'D-61: только бренды — те, у которых есть товары этого поставщика' })
+  @IsOptional() @IsUUID() supplier_id?: string;
+}
+
+/** D-61: the supplier columns sent (undefined — unchanged); «из …» only for a foreign one. */
+function supplierData(dto: SupplierFields): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of SUPPLIER_FIELDS) if (dto[f] !== undefined) out[f] = dto[f];
+  if (out.kind && out.kind !== 'foreign') Object.assign(out, { from_ru: null, from_uz: null });
+  return out;
 }
 
 /** One shape for the admin screen: `products` = how many products (or purchases) use the value. */
@@ -155,8 +179,14 @@ const toView = (kind: AnyDictionaryKind, r: AnyRow) => ({
   name_ru: nameOf(r),
   name_uz: isPurchaseKind(kind) ? null : (r.name_uz ?? null),
   status: r.status,
-  products: r._count?.products ?? r._count?.purchases ?? 0,
-  ...(kind === 'suppliers' && { note: r.note ?? null }),
+  products: kind === 'suppliers' ? (r._count?.purchases ?? 0) : (r._count?.products ?? r._count?.purchases ?? 0),
+  ...(kind === 'suppliers' && {
+    note: r.note ?? null,
+    ...Object.fromEntries(SUPPLIER_FIELDS.map((f) => [f, (r as unknown as Record<string, unknown>)[f] ?? null])),
+    code: (r as unknown as { code?: string | null }).code ?? null,
+    /** D-61: products bought from it (`products` stays the number of purchases) */
+    product_count: r._count?.products ?? 0,
+  }),
 });
 
 /** Stage 1.1 + 2A.1: brands / manufacturers / countries / forms / suppliers / Ozon accounts. Never deleted, only archived. */
@@ -167,11 +197,20 @@ export class AdminDictionariesService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(kind: AnyDictionaryKind, includeArchived = false) {
+  async list(kind: AnyDictionaryKind, includeArchived = false, supplierId?: string) {
+    // D-61: the brands tab of a supplier — brands with its products, the count of those products
+    const bySupplier = kind === 'brands' && supplierId ? { suppliers: { some: { supplier_id: supplierId } } } : null;
     const rows = await anyTable(this.prisma, kind).findMany({
-      where: includeArchived ? {} : { status: 'active' },
-      orderBy: [{ status: 'asc' }, { [isPurchaseKind(kind) ? 'name' : 'name_ru']: 'asc' }],
-      include: { _count: { select: { [isPurchaseKind(kind) ? 'purchases' : 'products']: true } } },
+      where: { ...(includeArchived ? {} : { status: 'active' }), ...(bySupplier && { products: { some: bySupplier } }) },
+      orderBy: [{ status: 'asc' }, ...(kind === 'suppliers' ? [{ sort: 'asc' }] : []), { [isPurchaseKind(kind) ? 'name' : 'name_ru']: 'asc' }],
+      include: {
+        _count: {
+          select:
+            kind === 'suppliers'
+              ? { purchases: true, products: true }
+              : { [isPurchaseKind(kind) ? 'purchases' : 'products']: bySupplier ? { where: bySupplier } : true },
+        },
+      },
     });
     return rows.map((r) => toView(kind, r));
   }
@@ -181,7 +220,7 @@ export class AdminDictionariesService {
       const same = await findSame(tx, kind, dto.name_ru);
       if (same) throw duplicate(kind, same);
       const data = isPurchaseKind(kind)
-        ? { name: dto.name_ru, ...(kind === 'suppliers' && { note: dto.note ?? null }) }
+        ? { name: dto.name_ru, ...(kind === 'suppliers' && { note: dto.note ?? null, ...supplierData(dto) }) }
         : { name_ru: dto.name_ru, name_uz: dto.name_uz ?? null, ...(kind === 'brands' && { slug: await freeBrandSlug(tx, dto.name_ru) }) };
       const row = await anyTable(tx, kind).create({ data });
       await this.audit.log({ staffId, action: 'dictionary.created', entityType: kind, entityId: row.id, after: row }, tx);
@@ -207,8 +246,26 @@ export class AdminDictionariesService {
       if (rename) data[purchaseKind ? 'name' : 'name_ru'] = dto.name_ru;
       if (!purchaseKind && dto.name_uz !== undefined && dto.name_uz !== before.name_uz) data.name_uz = dto.name_uz;
       if (kind === 'suppliers' && dto.note !== undefined && dto.note !== before.note) data.note = dto.note;
+      if (kind === 'suppliers') {
+        for (const [k, v] of Object.entries(supplierData(dto))) if (v !== (before as unknown as Record<string, unknown>)[k]) data[k] = v;
+        const kindNow = (data.kind ?? (before as unknown as { kind: string }).kind) as string;
+        const code = (before as unknown as { code: string | null }).code;
+        // the built-in ones keep their kind: Ozon is the stock, iHerb is abroad
+        if (data.kind && code && data.kind !== (code === 'ozon' ? 'ozon' : 'foreign')) {
+          throw new BadRequestException({ code: 'SUPPLIER_KIND_FIXED', message: 'Тип Ozon и iHerb не меняется' });
+        }
+        if (kindNow === 'ozon' && data.kind) {
+          // Ozon cannot be «под заказ»: products using a supplier turned into Ozon lose that choice
+          await tx.products.updateMany({ where: { on_zero_supplier_id: id }, data: { on_zero_supplier_id: null } });
+        }
+      }
       if (dto.status !== undefined && dto.status !== before.status) data.status = dto.status;
       if (!Object.keys(data).length) return toView(kind, before);
+      if (kind === 'suppliers') {
+        const after = { ...before, ...data } as unknown as { days_min: number | null; days_max: number | null; guarantee_days: number | null };
+        if (after.days_min && after.days_max && after.days_max < after.days_min) throw new BadRequestException({ code: 'BAD_TERMS', message: '«До» не может быть меньше «от»' });
+        if (after.days_max && after.guarantee_days && after.guarantee_days < after.days_max) throw new BadRequestException({ code: 'BAD_TERMS', message: 'Гарантия не может быть короче срока «до»' });
+      }
 
       const after = await anyTable(tx, kind).update({ where: { id }, data });
       let productsUpdated = 0;
@@ -252,13 +309,17 @@ export class AdminDictionariesController {
   /** The product card shows product dictionaries to everyone who may open it; purchase ones go with purchases. */
   @Get(':kind')
   @RequirePermission('products.view', 'settings.dictionaries', 'purchases.view')
-  list(@CurrentStaff() me: StaffContext, @Param('kind') raw: string, @Query() q: DictionaryQuery) {
+  async list(@CurrentStaff() me: StaffContext, @Param('kind') raw: string, @Query() q: DictionaryQuery) {
     const kind = kindOf(raw);
     const role = me.staff.role;
-    if (isPurchaseKind(kind) && !can(role, 'purchases.view') && !can(role, 'settings.dictionaries')) {
+    // D-61: suppliers are also the tabs of «Товары» and «Бренды» — anyone who sees products sees their names
+    if (kind === 'ozon_accounts' && !can(role, 'purchases.view') && !can(role, 'settings.dictionaries')) {
       throw new ForbiddenException({ code: 'FORBIDDEN_FOR_ROLE', message: `Role ${role} cannot see ${kind}` });
     }
-    return this.dictionaries.list(kind, q.include_archived);
+    const rows = await this.dictionaries.list(kind, q.include_archived, q.supplier_id);
+    // the notes (contacts, terms) stay with purchases
+    if (kind === 'suppliers' && !can(role, 'purchases.view') && !can(role, 'settings.dictionaries')) return rows.map((r) => ({ ...r, note: null }));
+    return rows;
   }
 
   @Post(':kind')

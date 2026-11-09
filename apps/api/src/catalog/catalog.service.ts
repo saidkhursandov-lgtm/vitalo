@@ -8,7 +8,6 @@ import { manifestOrDefault } from '../settings/home-content';
 import { SettingsService, supportLink } from '../settings/settings.service';
 import { buildCategoryTrees, CategoryTrees, collectDescendantIds, pruneEmpty } from './category-tree';
 import { ListProductsQuery, ProductSort, SearchQuery } from './catalog.dto';
-import { loadCrossBorderSettings } from '../orders/cross-border';
 import { availableQty, cardInclude, listInclude, ProductListItem, toProductCard, toProductListItem } from './product.mapper';
 
 export const PAGE_SIZE = 24;
@@ -229,10 +228,8 @@ export class CatalogService {
     const product = await this.prisma.products.findFirst({ where: { id, status: 'active' }, include: cardInclude });
     if (!product) throw new NotFoundException('Product not found');
     const card = await this.campaigns.decorateCard(toProductCard(product));
-    // D-60: «Под заказ из США • 7–14 дней» and the guarantee, from the settings
-    if (!card.cross_border) return { ...card, cross_border_terms: null };
-    const s = await loadCrossBorderSettings(this.prisma);
-    return { ...card, cross_border_terms: { days_min: s.days_min, days_max: s.days_max, guarantee_days: s.guarantee_days } };
+    // D-60/D-61: «Под заказ из США • 7–14 дней» / «Под заказ • 1–2 дня» and the guarantee, from the supplier
+    return { ...card, cross_border_terms: card.under_order };
   }
 
   /**
