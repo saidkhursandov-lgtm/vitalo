@@ -635,6 +635,8 @@ model products {
   shell_ru                 String? // «Оболочка: …» fact line
   shell_uz                 String?
   halal_vege_source        String? // admin only: label, maker's site, certificate
+  /// 6а-В (D-62): manual promo label on the card and the tile — eleven_eleven | black_friday | hit | new; null = none
+  promo_label              String?
   market_advantage_percent Int? // «На X% выгоднее Маркета», 0–50 (D-10)
   doctor_verdict_ru        String?
   doctor_verdict_uz        String?

@@ -44,7 +44,7 @@ import {
 import { randomUUID } from 'crypto';
 import { memoryStorage } from 'multer';
 import { PageQuery } from '../catalog/catalog.dto';
-import { HALAL_VEGE, type HalalVege } from '../catalog/product.mapper';
+import { HALAL_VEGE, PROMO_LABELS, type HalalVege, type PromoLabel } from '../catalog/product.mapper';
 import { DOSE_PER, DOSE_UNITS, normalizeMatchForm, parseIherbUrl, STOCK_PRICE_MODES, type DosePer, type DoseUnit } from '../iherb/iherb-fields';
 import { DICTIONARY_COLUMNS, DICTIONARY_KINDS, matchKey } from '../dictionaries/dictionary-names';
 import { isGloriousSku, isIherbSku } from '../orders/cross-border';
@@ -138,6 +138,8 @@ export class ProductInput {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() std_original?: boolean;
   @ApiPropertyOptional({ nullable: true, enum: HALAL_VEGE, description: 'Halal только с сертификатом, VEGE только по этикетке (D-32)' })
   @IsOptional() @IsIn([...HALAL_VEGE, null]) halal_vege?: HalalVege | null;
+  @ApiPropertyOptional({ nullable: true, enum: PROMO_LABELS, description: '6а-В: промо-метка на карточке — 11.11, Black Friday, Хит, Новинка; null — выкл' })
+  @IsOptional() @IsIn([...PROMO_LABELS, null]) promo_label?: PromoLabel | null;
   @ApiPropertyOptional({ description: 'Оболочка, напр. «говяжий желатин»' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) shell_ru?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) shell_uz?: string | null;
   @ApiPropertyOptional({ description: 'Откуда данные Halal/VEGE (только админка)' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) halal_vege_source?: string | null;
@@ -276,6 +278,8 @@ export const CONTENT_FIELDS = [
   'short_description_uz',
   'search_keywords',
   'category_ids',
+  // 6а-В: the promo label is marketing — the marketer may set it too
+  'promo_label',
 ] as const;
 
 function assertContentOnly(role: StaffRole, dto: object) {

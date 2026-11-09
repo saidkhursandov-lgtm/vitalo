@@ -122,3 +122,41 @@ export function prettyPhone(phone: string): string {
 
 /** 3.5: an order number never breaks at its hyphens (VTL-20261101-0001): non-breaking hyphens, for display only. */
 export const orderNo = (n: string) => n.replace(/-/g, '\u2011');
+
+/**
+ * 6а-В: the product's country is stored in Russian (the dictionary); the Uzbek shop shows it in Uzbek («США» → «AQSh»).
+ * An unknown country stays as it is.
+ */
+const COUNTRY_UZ: Record<string, string> = {
+  США: 'AQSh',
+  Россия: 'Rossiya',
+  Великобритания: 'Buyuk Britaniya',
+  Польша: 'Polsha',
+  Корея: 'Koreya',
+  'Южная Корея': 'Janubiy Koreya',
+  Германия: 'Germaniya',
+  Норвегия: 'Norvegiya',
+  Италия: 'Italiya',
+  Франция: 'Fransiya',
+  Испания: 'Ispaniya',
+  Канада: 'Kanada',
+  Китай: 'Xitoy',
+  Индия: 'Hindiston',
+  Япония: 'Yaponiya',
+  Турция: 'Turkiya',
+  Швейцария: 'Shveytsariya',
+  Нидерланды: 'Niderlandiya',
+  Дания: 'Daniya',
+  Швеция: 'Shvetsiya',
+  Финляндия: 'Finlyandiya',
+  Израиль: 'Isroil',
+  Латвия: 'Latviya',
+  Литва: 'Litva',
+  Беларусь: 'Belarus',
+  Казахстан: 'Qozog‘iston',
+  Узбекистан: 'O‘zbekiston',
+  Австралия: 'Avstraliya',
+  'Новая Зеландия': 'Yangi Zelandiya',
+  Исландия: 'Islandiya',
+};
+export const countryName = (country: string, lang: Lang): string => (lang === 'uz' ? (COUNTRY_UZ[country.trim()] ?? country) : country);

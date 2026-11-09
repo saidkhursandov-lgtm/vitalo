@@ -1,7 +1,8 @@
 /**
  * Генплан, этап 5, ветка iherb-2-prices (D-57, docs/plans/IHERB_PLAN.md «Автоцена»): the VITALO price from the iHerb price.
  *
- * new price = iHerb price × (1 + markup %), rounded UP to price_round_to. Guards:
+ * new price = iHerb price × (1 + markup %), rounded to the NEAREST price_round_to (6а-В, D-62: 270 254 → 270 000,
+ * 386 773 → 387 000; was «up»). Guards:
  *  (а) never below the purchase cost + the minimum markup of «Настройки → Промокоды» (the 3.3 rule);
  *  (б) a jump of more than 20% is applied at once (owner's decision) and only flagged;
  *  (в) the product is on our shelf and the mode is «freeze» — the price stays, only the chart moves;
@@ -42,8 +43,15 @@ export const roundUp = (value: number, step: number) => {
   return Math.ceil(value / s) * s;
 };
 
+/** 6а-В: to the nearest multiple of step, a half goes up (270 254 → 270 000, 386 773 → 387 000, 270 500 → 271 000). */
+export const roundNearest = (value: number, step: number) => {
+  const s = Math.max(1, Math.floor(step));
+  return Math.max(s, Math.round(value / s) * s);
+};
+
 export function autoPrice(i: AutoPriceInput): AutoPriceResult {
-  let target = roundUp((i.iherb_price_uzs * (100 + i.markup_percent)) / 100, i.price_round_to);
+  // the floor below stays rounded UP: the price never falls under cost + the minimum markup
+  let target = roundNearest((i.iherb_price_uzs * (100 + i.markup_percent)) / 100, i.price_round_to);
   let floor_applied = false;
   if (i.cost_uzs != null) {
     const floor = roundUp((i.cost_uzs * (100 + i.min_markup_pct)) / 100, i.price_round_to);

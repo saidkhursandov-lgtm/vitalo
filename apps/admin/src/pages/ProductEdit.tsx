@@ -56,7 +56,7 @@ const TEXTS = [
 ] as const;
 
 /** D-53: what a marketer (products.content) may change — the same list as CONTENT_FIELDS in apps/api admin-products.ts */
-const CONTENT_FIELDS: string[] = ['name_ru', 'name_uz', 'short_name_ru', 'short_name_uz', 'short_description_ru', 'short_description_uz', 'search_keywords', 'category_ids'];
+const CONTENT_FIELDS: string[] = ['name_ru', 'name_uz', 'short_name_ru', 'short_name_uz', 'short_description_ru', 'short_description_uz', 'search_keywords', 'category_ids', 'promo_label'];
 
 /** 07.11: the shop's one ИКПУ and package code for Payme — the same as PRODUCT_DEFAULT_* in apps/api payme-config.ts */
 const PRODUCT_DEFAULT_IKPU = '02106999028000000';
@@ -75,6 +75,7 @@ const PLAIN = [
   'shell_uz',
   'halal_vege_source',
   'halal_vege',
+  'promo_label',
   'admin_note',
   'ikpu_code',
   'package_code',
@@ -89,14 +90,26 @@ const STANDARDS = [
   ['std_tested', 'Проверенный состав'],
   ['std_original', '100% оригинал'],
 ] as const;
-const HALAL_VEGE: [string, string][] = [
-  ['', '— не заполнено —'],
-  ['halal', 'Halal'],
-  ['vege', 'VEGE'],
-  ['halal_vege', 'Halal и VEGE'],
-  ['none', 'Нет'],
-  ['unknown', 'Не знаю'],
+/**
+ * 6а-В (D-62): Halal and Vegan / VEGE are two separate switches set by hand (a fish-gelatin capsule had «VEGE» from the
+ * old one-choice list). Stored in the same column halal_vege: both → halal_vege, one → halal / vege, none → «Нет».
+ */
+export function halalVegeOf(halal: boolean, vege: boolean, before: string): string | null {
+  if (halal && vege) return 'halal_vege';
+  if (halal) return 'halal';
+  if (vege) return 'vege';
+  // both off: a product that had a mark gets «Нет»; untouched «не заполнено» / «Не знаю» stay as they were
+  return before === 'halal' || before === 'vege' || before === 'halal_vege' ? 'none' : before || null;
+}
+/** 6а-В (D-62): the manual promo label on the card and the tile in the shop. */
+export const PROMO_LABELS: [string, string][] = [
+  ['', 'Выкл'],
+  ['eleven_eleven', '11.11'],
+  ['black_friday', 'Black Friday'],
+  ['hit', 'Хит'],
+  ['new', 'Новинка'],
 ];
+const GELATIN = /желатин|gelatin|jelatin/i;
 /** Dictionary fields: the text column the shop shows + the dictionary link. */
 const DICTS: [DictionaryKind, string, string, boolean][] = [
   ['brands', 'brand', 'Бренд', true],
@@ -134,6 +147,8 @@ type Form = Record<string, string> & { status: string };
 function toForm(p?: AdminProduct): Form {
   const f: Form = { status: (p?.status as string) ?? 'active' };
   for (const k of PLAIN) f[k] = (p?.[k] as string | null) ?? '';
+  f.hv_halal = f.halal_vege === 'halal' || f.halal_vege === 'halal_vege' ? '1' : '';
+  f.hv_vege = f.halal_vege === 'vege' || f.halal_vege === 'halal_vege' ? '1' : '';
   for (const k of INTS) f[k] = p?.[k] == null ? '' : String(p[k]);
   for (const [k] of STANDARDS) f[k] = p?.[k] ? '1' : '';
   for (const [k] of TEXTS) for (const l of ['ru', 'uz']) f[`${k}_${l}`] = (p?.[`${k}_${l}`] as string | null) ?? '';
@@ -204,7 +219,8 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       }
       const body: Record<string, unknown> = { status: f.status, category_ids: [...cats] };
       for (const k of PLAIN) body[k] = f[k].trim();
-      body.halal_vege = f.halal_vege || null;
+      body.halal_vege = halalVegeOf(f.hv_halal === '1', f.hv_vege === '1', f.halal_vege);
+      body.promo_label = f.promo_label || null;
       for (const k of INTS) body[k] = toInt(f[k]) ?? null;
       for (const [k] of STANDARDS) body[k] = f[k] === '1';
       for (const [, text, , required] of DICTS) {
@@ -341,7 +357,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         )}
       </PageHead>
       {!editable && !contentOnly && <div className="alert alert-info">Только просмотр: менять товары может администратор.</div>}
-      {contentOnly && <div className="alert alert-info">Вы можете менять названия, краткое описание, слова для поиска, категории и фото. Цены, состав и остальное меняет администратор.</div>}
+      {contentOnly && <div className="alert alert-info">Вы можете менять названия, краткое описание, слова для поиска, категории, промо-метку и фото. Цены, состав и остальное меняет администратор.</div>}
       {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине.</div>}
       {product?.admin_note ? <div className="alert alert-warn">Комментарий: {product.admin_note as string}</div> : null}
       {saved && <div className="alert alert-ok">Сохранено</div>}
@@ -584,20 +600,38 @@ function ProductForm({ product }: { product?: AdminProduct }) {
           <Field label="Выгоднее Маркета, %" hint="0–50, только если правда. Пусто — плашки нет">
             {input('market_advantage_percent', { inputMode: 'numeric' })}
           </Field>
-          <Field label="Halal / VEGE" hint="Halal — только с сертификатом, VEGE — только по этикетке (D-32)">
-            <select value={f.halal_vege} disabled={!editable} onChange={(e) => set('halal_vege', e.target.value)}>
-              {HALAL_VEGE.map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Оболочка (RU)" hint="Строка «Оболочка: …»">{input('shell_ru', { maxLength: 100, placeholder: 'Например: говяжий желатин' })}</Field>
           <Field label="Оболочка (UZ)">{input('shell_uz', { maxLength: 100, placeholder: 'Masalan: mol jelatini' })}</Field>
           <Field label="Откуда данные Halal / VEGE" hint="Видно только в админке">
             {input('halal_vege_source', { maxLength: 300 })}
           </Field>
+        </div>
+        <div className="check-col">
+          <h3>Halal и Vegan</h3>
+          <label className="check">
+            <input type="checkbox" checked={f.hv_halal === '1'} disabled={!editable} onChange={(e) => set('hv_halal', e.target.checked ? '1' : '')} />
+            Halal — только с сертификатом
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={f.hv_vege === '1'} disabled={!editable} onChange={(e) => set('hv_vege', e.target.checked ? '1' : '')} />
+            Vegan / VEGE — только по этикетке
+          </label>
+          {f.hv_vege === '1' && GELATIN.test(`${f.shell_ru} ${f.shell_uz}`) && (
+            <p className="text-warn small" role="alert">
+              В оболочке желатин — Vegan / VEGE так не бывает. Проверьте этикетку.
+            </p>
+          )}
+        </div>
+        <div className="check-col">
+          <h3>Промо-метка</h3>
+          <select aria-label="Промо-метка" style={{ maxWidth: 320 }} value={f.promo_label} disabled={!canEdit('promo_label')} onChange={(e) => set('promo_label', e.target.value)}>
+            {PROMO_LABELS.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+          <p className="muted small">Видна на карточке и в списках магазина. Если на товар идёт акция, показывается значок акции.</p>
         </div>
         <div className="check-col">
           <h3>Стандарт VITALO</h3>
@@ -726,7 +760,8 @@ function IherbCard({
   const markup = toInt(f.markup_percent) ?? 80;
   const round = Math.max(1, toInt(f.price_round_to) ?? 1000);
   const example = 100_000;
-  const exampleOut = Math.ceil((example * (1 + markup / 100)) / round) * round;
+  // 6а-В: to the nearest step (270 254 → 270 000, 386 773 → 387 000), the same as autoPrice on the server
+  const exampleOut = Math.max(round, Math.round((example * (1 + markup / 100)) / round) * round);
   return (
     <section className="card">
       <div className="section-head">
@@ -749,7 +784,7 @@ function IherbCard({
             <Field label="Наценка, %" hint={`Пример: iHerb 100 000 сум → ${exampleOut.toLocaleString('ru-RU')} сум`}>
               {input('markup_percent', { inputMode: 'numeric' })}
             </Field>
-            <Field label="Округлять вверх до, сум" hint="1000 — до тысячи">
+            <Field label="Округлять до, сум" hint="1000 — до ближайшей тысячи: 270 254 → 270 000, 386 773 → 387 000">
               {input('price_round_to', { inputMode: 'numeric' })}
             </Field>
             <Field label="Если товар есть на складе" hint="Цена всё равно не опустится ниже себестоимости с минимальной маржой">

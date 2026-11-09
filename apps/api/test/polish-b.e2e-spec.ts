@@ -57,6 +57,8 @@ describe('6а-Б: home strips and brands (e2e)', () => {
     await prisma.products.update({ where: { id: usa.id }, data: { brand_id: b.id, brand: b.name_ru } });
   });
   afterAll(async () => {
+    // the «из США» product moved to its own brand: archive it by id too (others count active products)
+    await prisma.products.updateMany({ where: { id: { in: [hit.id, hitOut.id, usa.id, usaGone.id, plainNew.id] } }, data: { status: 'archived', popularity_30d: 0 } });
     await archiveTestProducts(prisma);
     await app.close();
   });

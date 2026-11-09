@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { money } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import type { CampaignLine, CampaignSkin, CampaignSummary, Lang, ShopCampaign } from '../lib/types';
+import type { CampaignLine, CampaignSkin, CampaignSummary, Lang, ShopCampaign, PromoLabel } from '../lib/types';
 
 /**
  * 3.7 «Акции»: the skin draws the badge on the photo and the colour of the sale price.
@@ -89,4 +89,10 @@ export function CampaignRows({ campaigns }: { campaigns?: CampaignLine[] }) {
       ))}
     </>
   );
+}
+
+/** 6а-В (D-62): the manual label in the top left corner of the photo: «11.11», «Black Friday», «Хит», «Новинка». */
+export function PromoLabelBadge({ label, className = '' }: { label: PromoLabel; className?: string }) {
+  const { t } = useI18n();
+  return <span className={`promo-label promo-${label} ${className}`}>{t(`promo.label.${label}` as MessageKey)}</span>;
 }

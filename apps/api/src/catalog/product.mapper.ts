@@ -43,6 +43,10 @@ export const cardInclude = {
 
 /** 2.3: Halal / VEGE (D-32): Halal only with a certificate, VEGE only from the label. */
 export const HALAL_VEGE = ['halal', 'vege', 'halal_vege', 'none', 'unknown'] as const;
+/** 6а-В (D-62): the manual label of an event or a status, chosen in the admin product card. */
+export const PROMO_LABELS = ['eleven_eleven', 'black_friday', 'hit', 'new'] as const;
+export type PromoLabel = (typeof PROMO_LABELS)[number];
+const promoLabelOf = (v: string | null): PromoLabel | null => ((PROMO_LABELS as readonly string[]).includes(v ?? '') ? (v as PromoLabel) : null);
 export type HalalVege = (typeof HALAL_VEGE)[number];
 
 /** «Хватит на N дней» — only from 7 days on (shorter courses are not shown). */
@@ -82,6 +86,8 @@ export interface ProductListItem {
   under_order: UnderOrderView | null;
   /** 3.7: a running sale — price_uzs is then the sale price and old_price_uzs the regular one (CampaignsService.decorate) */
   campaign: ShopCampaign | null;
+  /** 6а-В: «11.11», «Black Friday», «Хит», «Новинка» set by hand (a running sale's badge wins in the shop) */
+  promo_label: PromoLabel | null;
 }
 
 /** 3.7: what the shop shows about a product's sale: the badge (skin, title, %) and the countdown. */
@@ -142,6 +148,7 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     in_stock: availableQty(p.inventory) > 0,
     ...underOrderFields(p),
     campaign: null,
+    promo_label: promoLabelOf(p.promo_label),
   };
 }
 

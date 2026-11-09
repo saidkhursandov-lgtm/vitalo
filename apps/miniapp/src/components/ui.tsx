@@ -6,7 +6,7 @@ import { errorText, shownStatus, orderStatusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, ShopCampaign } from '../lib/types';
 import { useUnderOrderText } from './CrossBorder';
-import { SaleBadge, SalePrice } from './Campaign';
+import { PromoLabelBadge, SaleBadge, SalePrice } from './Campaign';
 import { Picture } from './Picture';
 import { QuickAdd } from './QuickAdd';
 import { useQuickCart } from '../lib/quick-cart';
@@ -275,9 +275,11 @@ export function ProductTile({ product }: { product: ProductListItem }) {
       <div className="tile-img">
         {product.image ? <Picture src={product.image} /> : product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" />}
         <FavoriteButton productId={product.id} className="tile-fav" />
-        {/* the discount lives on the photo, so the price is always one line; the old price is on the product page */}
-        {pct && product.in_stock && <span className="tile-discount">−{pct}%</span>}
-        {sale && <SaleBadge campaign={sale} className="tile-sale" />}
+        {/* the badges live on the photo (top left, one under another): a sale or the manual promo label, then −% */}
+        <div className="tile-badges">
+          {sale ? <SaleBadge campaign={sale} className="tile-sale" /> : product.promo_label && <PromoLabelBadge label={product.promo_label} />}
+          {pct && product.in_stock && <span className="tile-discount">−{pct}%</span>}
+        </div>
         {!product.in_stock && (product.cross_border ? <span className="tile-usa">{uo('short', product.under_order)}</span> : <span className="tile-out">{t('product.outOfStock')}</span>)}
       </div>
       <div className="tile-body">

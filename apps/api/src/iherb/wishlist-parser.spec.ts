@@ -1,4 +1,4 @@
-import { autoPrice, roundUp } from './auto-price';
+import { autoPrice, roundNearest, roundUp } from './auto-price';
 import { parseWishlist } from './wishlist-parser';
 import { reminderSlot } from './iherb-prices';
 
@@ -104,9 +104,17 @@ describe('auto price (D-57)', () => {
     min_markup_pct: 10,
   };
 
-  it('iHerb × (1 + markup), rounded up', () => {
+  it('iHerb × (1 + markup), rounded to the thousand', () => {
     expect(roundUp(180_001, 1000)).toBe(181_000);
     expect(autoPrice({ ...base, iherb_price_uzs: 100_300 })).toEqual({ target_uzs: 181_000, apply: true, skip_reason: null, floor_applied: false, big_jump: false });
+  });
+
+  it('6а-В: the retail price goes to the nearest thousand (270 254 → 270 000, 386 773 → 387 000)', () => {
+    expect(roundNearest(270_254, 1000)).toBe(270_000);
+    expect(roundNearest(386_773, 1000)).toBe(387_000);
+    expect(roundNearest(270_500, 1000)).toBe(271_000);
+    expect(autoPrice({ ...base, iherb_price_uzs: 150_141 }).target_uzs).toBe(270_000); // 270 253.8
+    expect(autoPrice({ ...base, iherb_price_uzs: 214_874 }).target_uzs).toBe(387_000); // 386 773.2
   });
 
   it('never below the cost + minimum markup', () => {

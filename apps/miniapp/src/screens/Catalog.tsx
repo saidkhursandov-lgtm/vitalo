@@ -4,7 +4,7 @@ import { BrandLogo, BrandStrip, CategoryLink } from '../components/CatalogLayers
 import { ChevronIcon, CloseIcon, FilterIcon } from '../components/Icons';
 import { ClampText } from '../components/ClampText';
 import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
-import { formLabel, nameOf } from '../lib/format';
+import { countryName, formLabel, nameOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useBrandPage, useBrands, useCategories, useForms, useProducts, useProductsCount, type ProductFilters, type Sort } from '../lib/queries';
 import type { CategoryNode } from '../lib/types';
@@ -65,7 +65,8 @@ export function BrandScreen() {
     );
   }
   const b = brand.data;
-  const country = (lang === 'uz' && b.country_uz) || b.country_ru;
+  // 6а-В: «AQSH» typed in the brand card is shown as «AQSh»; no Uzbek country — the Russian one in Uzbek
+  const country = lang === 'uz' ? (b.country_uz?.replace(/^AQSH$/i, 'AQSh') || (b.country_ru && countryName(b.country_ru, 'uz'))) : b.country_ru;
   const why = (lang === 'uz' && b.why_vitalo_uz) || b.why_vitalo_ru;
   return (
     <ProductList

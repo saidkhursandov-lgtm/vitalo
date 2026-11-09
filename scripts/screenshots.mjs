@@ -25,7 +25,8 @@ mkdirSync(outDir, { recursive: true });
 
 const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PORT = 9333;
-const BASE = { miniapp: 'http://localhost:5173', admin: 'http://localhost:5174' };
+// SHOTS_MINIAPP / SHOTS_ADMIN: another copy, e.g. the one on the test database (.claude/launch.json, ports 5183 / 5184)
+const BASE = { miniapp: process.env.SHOTS_MINIAPP ?? 'http://localhost:5173', admin: process.env.SHOTS_ADMIN ?? 'http://localhost:5174' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const chrome = spawn(CHROME, [

@@ -108,7 +108,7 @@ describe('brand page (2.2)', () => {
 
   it('Uzbek: country and the text in Uzbek', async () => {
     show('uz', <BrandScreen />, '/brand/now-foods');
-    expect(await screen.findByText('AQSH')).toBeTruthy();
+    expect(await screen.findByText('AQSh')).toBeTruthy(); // 6а-В: «AQSH» from the brand card is shown as «AQSh»
     expect(screen.getByText('Nega NOW Foods VITALOda')).toBeTruthy();
     expect(screen.getByText('GMP sertifikatli ishlab chiqaruvchi.')).toBeTruthy();
   });

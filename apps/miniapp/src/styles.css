@@ -913,7 +913,17 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
   font-size: 11px; line-height: 1.25; font-weight: 700; white-space: nowrap;
 }
 /* on a narrow card the skin name wraps under the % instead of being cut */
-.tile-sale { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 56px); flex-wrap: wrap; column-gap: 4px; row-gap: 0; }
+.tile-sale { flex-wrap: wrap; column-gap: 4px; row-gap: 0; }
+/* 6а-В: all photo badges in one column top left (sale or promo label, then −%), clear of the heart */
+.tile-badges { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: calc(100% - 56px); pointer-events: none; }
+.tile-badges .tile-discount { position: static; }
+.tile-badges:empty { display: none; }
+.promo-label { display: inline-block; padding: 3px 7px; border-radius: 6px; font-size: 11px; line-height: 1.25; font-weight: 700; white-space: nowrap; }
+.promo-hit { background: var(--primary); color: var(--on-primary); }
+.promo-new { background: var(--primary-soft); color: var(--primary-text); }
+.promo-eleven_eleven { background: var(--skin-orange); color: var(--skin-dark); }
+.promo-black_friday { background: var(--skin-dark); color: var(--skin-gold); }
+.gallery-label { position: absolute; left: 12px; top: 12px; font-size: 12px; padding: 4px 9px; }
 .sale-black_friday { background: var(--skin-dark); color: var(--on-skin); }
 .sale-black_friday .sale-badge-pct { color: var(--skin-gold); }
 .sale-eleven_eleven { background: var(--skin-orange); color: var(--skin-dark); }

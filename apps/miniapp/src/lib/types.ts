@@ -72,6 +72,8 @@ export interface ProductListItem extends Named {
   under_order?: UnderOrderTerms | null;
   /** 3.7: the product is in a running sale — price_uzs is the sale price, campaign.list_price_uzs the regular one */
   campaign?: ShopCampaign | null;
+  /** 6а-В: the manual label «11.11», «Black Friday», «Хит», «Новинка» (a running sale's badge wins) */
+  promo_label?: PromoLabel | null;
 }
 
 /** 3.7: «Акции»: the skin draws the badge and the price colour; «none» — only the two prices. */
@@ -656,3 +658,6 @@ export interface AiState {
   result?: 'instant' | 'ai' | 'ai_cache' | 'specialist' | 'unavailable';
   reason?: string;
 }
+
+/** 6а-В (D-62): the manual promo label of a product, chosen in the admin product card. */
+export type PromoLabel = 'eleven_eleven' | 'black_friday' | 'hit' | 'new';

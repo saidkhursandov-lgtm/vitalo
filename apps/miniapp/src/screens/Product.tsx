@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
-import { formLabel, money, nameOf, pricePerDay, shortNameOf, textOf } from '../lib/format';
+import { countryName, formLabel, money, nameOf, pricePerDay, shortNameOf, textOf } from '../lib/format';
+import { PromoLabelBadge } from '../components/Campaign';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
@@ -67,6 +68,8 @@ export function Product() {
           />
         )}
         <FavoriteButton productId={p.id} className="gallery-fav" />
+        {/* 6а-В: the manual promo label (a running sale shows its own prices instead) */}
+        {p.promo_label && !p.campaign && <PromoLabelBadge label={p.promo_label} className="gallery-label" />}
       </div>
       {images.length > 1 && (
         <div className="thumbs">
@@ -142,7 +145,7 @@ export function Product() {
           {p.country && (
             <>
               <dt>{t('product.country')}</dt>
-              <dd>{p.country}</dd>
+              <dd>{countryName(p.country, lang)}</dd>
             </>
           )}
           {p.form && (
