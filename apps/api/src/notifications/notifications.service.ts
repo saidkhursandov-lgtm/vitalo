@@ -27,6 +27,16 @@ export function intakeGuideItems(
 
 type Db = Prisma.TransactionClient | PrismaService;
 
+/**
+ * 6а-А: the Mini App screen a «Оплатить» button opens — the same rule as `payPath` in the Mini App: Payme has its own
+ * screen; card / bank transfer — the transfer screen; any other method (Click, Uzum later) — the order itself.
+ */
+export function payOpenPath(orderId: string, method: string | null | undefined): string {
+  if (method === 'payme') return `/orders/${orderId}/payme`;
+  if (method === 'card_transfer' || method === 'bank_transfer') return `/orders/${orderId}/pay`;
+  return `/orders/${orderId}`;
+}
+
 /** Roles that get operational messages about orders and payments. */
 const ORDER_STAFF_ROLES = ['admin', 'manager'] as const;
 
@@ -46,7 +56,7 @@ export class NotificationsService {
   async orderStatusChanged(db: Db, orderId: string, status: OrderStatus, reason?: string | null): Promise<void> {
     let template: TemplateName | undefined = CUSTOMER_STATUS_TEMPLATES[status as keyof typeof CUSTOMER_STATUS_TEMPLATES];
     if (!template) return;
-    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, payments: { include: { method: { select: { code: true } } } } } });
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, payments: { orderBy: { created_at: 'asc' }, include: { method: { select: { code: true } } } } } });
     const cod = order.payments.some((p) => p.method.code === 'cod');
     // A card order is «new» only for a moment: it gets «Ожидает оплаты» right after.
     if (status === 'new' && !cod) return;
@@ -66,7 +76,7 @@ export class NotificationsService {
       }
     }
     if (status === 'awaiting_payment') {
-      payload.open_path = `/orders/${order.id}/pay`;
+      payload.open_path = payOpenPath(order.id, order.payments.at(-1)?.method.code);
       payload.open_button = 'pay';
       if (order.reserved_until) payload.until = tashkentDateTime(order.reserved_until);
     }
@@ -98,14 +108,14 @@ export class NotificationsService {
 
   /** "Заказ №… ждёт оплаты до …" with a button that opens the payment screen (D3). */
   async paymentReminder(db: Db, orderId: string): Promise<void> {
-    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true } });
+    const order = await db.orders.findUniqueOrThrow({ where: { id: orderId }, include: { user: true, payments: { orderBy: { created_at: 'asc' }, include: { method: { select: { code: true } } } } } });
     if (!order.reserved_until) return;
     await this.toCustomer(db, {
       userId: order.user_id,
       chatId: order.user.telegram_user_id,
       orderId: order.id,
       template: 'order.payment_reminder',
-      payload: { order_number: order.order_number, until: tashkentDateTime(order.reserved_until), open_path: `/orders/${order.id}/pay`, open_button: 'pay', lang: order.user.language },
+      payload: { order_number: order.order_number, until: tashkentDateTime(order.reserved_until), open_path: payOpenPath(order.id, order.payments.at(-1)?.method.code), open_button: 'pay', lang: order.user.language },
     });
   }
 

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { ErrorState, Loading, StickyAction } from '../components/ui';
 import { PayBy } from '../components/PayBy';
 import { SupportButton } from '../components/Support';
@@ -40,6 +40,8 @@ export function PaymePayment() {
   if (order.isPending) return <div className="page"><Loading /></div>;
   if (order.isError) return <ErrorState error={order.error} onRetry={() => void order.refetch()} />;
   const d = o!;
+  // 6а-А: not a Payme order (an old link) — the order screen shows the right way to pay
+  if (d.payment?.method && d.payment.method !== 'payme') return <Navigate to={`/orders/${id}`} replace />;
   const paid = d.payment_status === 'payment_success';
   const cancelled = d.status === 'cancelled';
 

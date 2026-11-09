@@ -80,6 +80,15 @@ describe('Payme Merchant API (e2e)', () => {
     await app.close();
   });
 
+  // 6а-А (D-62): «Уведомления → Заказы → Ждёт оплаты» opened the card-transfer screen for a Payme order (an error)
+  it('a Payme order «ждёт оплаты»: the bot button opens the Payme screen, the centre card opens the order', async () => {
+    const { order, token } = await paymeOrder();
+    const row = await prisma.notifications.findFirstOrThrow({ where: { order_id: order.id, template: 'order.accepted_pay' } });
+    expect(row.payload).toMatchObject({ open_path: '/orders/' + order.id + '/payme', open_button: 'pay' });
+    const list = (await http().get('/api/notifications').set(bearer(token)).expect(200)).body;
+    expect(list.items[0]).toMatchObject({ category: 'order', path: '/orders/' + order.id });
+  });
+
   describe('access and settings', () => {
     it('wrong or missing key: -32504, nothing is touched', async () => {
       const { account, amount, order } = await paymeOrder();

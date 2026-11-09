@@ -58,6 +58,8 @@ describe('Stage 3.2 notifications (e2e)', () => {
     expect(rows.map((r) => r.template)).toEqual(['order.accepted_pay']);
     expect(rows[0]).toMatchObject({ category: 'order', user_id: c.user.id, dedup_key: `order:${order.id}:awaiting_payment` });
     expect(rows[0].payload).toMatchObject({ open_path: `/orders/${order.id}/pay`, open_button: 'pay', total_uzs: order.totals.total_uzs });
+    // 6а-А: the centre card of an order opens the order itself (its screen has the right «Оплатить»)
+    expect((await http().get('/api/notifications').set(bearer(c.token)).expect(200)).body.items[0]).toMatchObject({ path: `/orders/${order.id}` });
 
     const cod = await placeOrder(c.token, 'cod');
     expect((await rowsOf(cod.order.id)).map((r) => r.template)).toEqual(['order.accepted_cod']);

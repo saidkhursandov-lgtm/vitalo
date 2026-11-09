@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { CopyIcon, ReceiptIcon } from '../components/Icons';
 import { ErrorState, Loading, StickyAction } from '../components/ui';
 import { api, ApiError, isNetworkError } from '../lib/api';
@@ -85,6 +85,9 @@ export function Payment() {
   });
 
   if (details.isPending) return <div className="page"><Loading /></div>;
+  // 6а-А: an old «Оплатить» button (bot, notification) can lead a Payme / Click order here — open the order, which has
+  // the right payment button, instead of «Что-то пошло не так»
+  if (details.isError && details.error instanceof ApiError && details.error.code === 'NOT_BANK_TRANSFER') return <Navigate to={`/orders/${id}`} replace />;
   if (details.isError) return <ErrorState error={details.error} onRetry={() => void details.refetch()} />;
   const d = details.data;
 

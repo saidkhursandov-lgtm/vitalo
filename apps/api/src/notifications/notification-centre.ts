@@ -88,7 +88,9 @@ export function buildCards(rows: notifications[], lang: Lang): CentreCard[] {
       ...renderCentre(main.template, p, lang),
       steps,
       has_guide: asc.some((n) => n.template === 'order.intake_guide'),
-      path: pathOf(main, p),
+      // 6а-А: an order card always opens the order itself — its screen has the right «Оплатить» for the payment method;
+      // a stored «/orders/:id/pay» (card transfer screen) opened a Payme order as «Что-то пошло не так»
+      path: `/orders/${main.order_id}`,
       read: asc.every((n) => n.read_at),
       created_at: latest.created_at,
     });
