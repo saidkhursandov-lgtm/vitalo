@@ -35,9 +35,9 @@ describe('iHerb wishlist: saved page (D-57, источник «Б»)', () => {
     expect(r.format).toBe('html');
     expect(r.problems).toEqual([]);
     expect(r.items).toEqual([
-      { iherb_product_id: '62118', title: 'California Gold Nutrition, Omega-3, 100 мягких капсул', price_uzs: 245_000, list_price_uzs: null, in_stock: true, bestseller: false, weight_kg: null },
-      { iherb_product_id: '2902', title: 'NOW Foods, Цинк, 50 мг, 250 таблеток', price_uzs: 120_500, list_price_uzs: 150_000, in_stock: true, bestseller: true, weight_kg: 0.25 },
-      { iherb_product_id: '103250', title: 'Nordic Naturals, Ultimate Omega', price_uzs: 512_300, list_price_uzs: null, in_stock: false, bestseller: false, weight_kg: null },
+      { iherb_product_id: '62118', title: 'California Gold Nutrition, Omega-3, 100 мягких капсул', price_uzs: 245_000, list_price_uzs: null, in_stock: true, bestseller: false, bestseller_rank: null, weight_kg: null },
+      { iherb_product_id: '2902', title: 'NOW Foods, Цинк, 50 мг, 250 таблеток', price_uzs: 120_500, list_price_uzs: 150_000, in_stock: true, bestseller: true, bestseller_rank: null, weight_kg: 0.25 },
+      { iherb_product_id: '103250', title: 'Nordic Naturals, Ultimate Omega', price_uzs: 512_300, list_price_uzs: null, in_stock: false, bestseller: false, bestseller_rank: null, weight_kg: null },
     ]);
   });
 
@@ -74,11 +74,20 @@ describe('iHerb wishlist: a table pasted by hand', () => {
     );
     expect(r.format).toBe('table');
     expect(r.items).toEqual([
-      { iherb_product_id: '62118', title: null, price_uzs: 245_000, list_price_uzs: null, in_stock: true, bestseller: false, weight_kg: null },
-      { iherb_product_id: '2902', title: null, price_uzs: 120_500, list_price_uzs: null, in_stock: false, bestseller: false, weight_kg: null },
-      { iherb_product_id: '103250', title: null, price_uzs: 512_300, list_price_uzs: null, in_stock: true, bestseller: true, weight_kg: null },
+      { iherb_product_id: '62118', title: null, price_uzs: 245_000, list_price_uzs: null, in_stock: true, bestseller: false, bestseller_rank: null, weight_kg: null },
+      { iherb_product_id: '2902', title: null, price_uzs: 120_500, list_price_uzs: null, in_stock: false, bestseller: false, bestseller_rank: null, weight_kg: null },
+      { iherb_product_id: '103250', title: null, price_uzs: 512_300, list_price_uzs: null, in_stock: true, bestseller: true, bestseller_rank: null, weight_kg: null },
     ]);
     expect(r.problems).toEqual(['«просто строка 50000»: нет ссылки или номера товара iHerb', 'iHerb 555: нет цены в сумах']);
+  });
+});
+
+describe('iHerb wishlist: best-seller place', () => {
+  it('the page: «#3 Best Seller» / «Бестселлер №12»; a table: «#3», «место 7»', () => {
+    const r = parseWishlist(page(card(62118, 'omega', 'Omega-3', '245 000 сум', '<span>#3 Best Seller</span>') + card(2902, 'zinc', 'Zinc', '120 500 сум', '<span>Бестселлер № 12 в категории</span>')));
+    expect(r.items.map((i) => [i.bestseller, i.bestseller_rank])).toEqual([[true, 3], [true, 12]]);
+    const t = parseWishlist(['62118 245 000 #3', '2902;120500;место 7;нет', '103250 512300'].join(String.fromCharCode(10)));
+    expect(t.items.map((i) => [i.price_uzs, i.bestseller_rank, i.in_stock])).toEqual([[245_000, 3, true], [120_500, 7, false], [512_300, null, true]]);
   });
 });
 

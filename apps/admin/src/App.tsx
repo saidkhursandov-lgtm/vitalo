@@ -9,6 +9,7 @@ import { Audit } from './pages/Audit';
 import { CustomerDetail, Customers } from './pages/Customers';
 import { Waitlist, WaitlistProductPage } from './pages/Waitlist';
 import { Iherb } from './pages/Iherb';
+import { AiAnalyst } from './pages/AiAnalyst';
 import { Promo } from './pages/Promo';
 import { PromoCodes } from './pages/PromoCodes';
 import { Storefront } from './pages/Storefront';
@@ -55,6 +56,7 @@ export function App() {
         <Route path="products/new" element={<Guard perm="products.edit"><ProductEdit /></Guard>} />
         <Route path="products/:id" element={<Guard perm="products.view"><ProductEdit /></Guard>} />
         <Route path="iherb" element={<Guard perm="iherb.prices"><Iherb /></Guard>} />
+        <Route path="ai-analyst" element={<Guard perm="ai_analyst.use"><AiAnalyst /></Guard>} />
         <Route path="inventory" element={<Guard perm="inventory.view"><Inventory /></Guard>} />
         <Route path="purchases" element={<Guard perm="purchases.view"><Purchases /></Guard>} />
         <Route path="purchases/new" element={<Guard perm="purchases.manage"><PurchaseNew /></Guard>} />

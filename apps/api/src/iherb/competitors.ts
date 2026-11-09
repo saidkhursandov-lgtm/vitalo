@@ -8,7 +8,7 @@ import { tashkentDateString } from '../common/tashkent';
 import { AuditService } from '../staff/audit.service';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
 import { DOSE_PER, DOSE_UNITS, normalizeMatchForm } from './iherb-fields';
-import { matchOneToOne, PLATFORMS, type MatchResult, type MatchValues, type Platform } from './one-to-one';
+import { matchOneToOne, PLATFORM_LABELS, PLATFORMS, type MatchResult, type MatchValues, type Platform } from './one-to-one';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -27,6 +27,7 @@ export class CompetitorPriceInput {
   @ApiPropertyOptional({ nullable: true, enum: DOSE_UNITS }) @IsOptional() @IsIn([...DOSE_UNITS, null]) dose_unit?: string | null;
   @ApiPropertyOptional({ nullable: true, enum: DOSE_PER }) @IsOptional() @IsIn([...DOSE_PER, null]) dose_per?: string | null;
   @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsInt() @Min(1) @Max(100000) pack_count?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Сколько заказов / продаж показывает конкурент (Uzum)' }) @IsOptional() @IsInt() @Min(0) @Max(100_000_000) orders_count?: number | null;
 }
 
 export class CompetitorListQuery {
@@ -72,6 +73,7 @@ function view(c: CompetitorRow, now: MatchResult) {
     dose_unit: c.dose_unit,
     dose_per: c.dose_per,
     pack_count: c.pack_count,
+    orders_count: c.orders_count,
     source: c.source,
     created_at: c.created_at,
     match_status: now.status,
@@ -103,11 +105,19 @@ export async function matchedCompetitors(db: Db, productIds: string[], days: num
   return out;
 }
 
-/** The newest matched price of each platform — the bars «конкуренты по площадкам». */
-export function latestPerPlatform(rows: CompetitorView[]): CompetitorView[] {
+/**
+ * The newest matched price of each seller — the bars (owner, 09.11: every shop is its own bar, Fitvibe and BioBox on
+ * «Другое» are two bars). A row without a shop name is its own seller per platform.
+ */
+export function latestPerSeller(rows: CompetitorView[]): CompetitorView[] {
   const seen = new Set<string>();
-  return rows.filter((r) => (seen.has(r.platform) ? false : (seen.add(r.platform), true)));
+  const key = (r: CompetitorView) => `${r.platform}|${(r.seller ?? '').trim().toLowerCase()}`;
+  return rows.filter((r) => (seen.has(key(r)) ? false : (seen.add(key(r)), true)));
 }
+
+/** «Fitvibe (Instagram / Telegram)» — where the lowest price is, for the purchase signal. */
+export const whereText = (r: Pick<CompetitorView, 'platform' | 'seller'>) =>
+  r.seller ? `${r.seller} (${PLATFORM_LABELS[r.platform as Platform] ?? r.platform})` : (PLATFORM_LABELS[r.platform as Platform] ?? r.platform);
 
 @Injectable()
 export class CompetitorsService {
@@ -138,7 +148,13 @@ export class CompetitorsService {
     }
     const today = tashkentDateString(new Date());
     if (d.observed_on && d.observed_on > today) throw new BadRequestException({ code: 'DATE_IN_FUTURE', message: 'Дата не может быть позже сегодняшней' });
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction((tx) => this.addTx(tx, staffId, productId, d, source));
+  }
+
+  /** The same inside the caller's transaction (the AI analyst saves several rows at once). Checks are the caller's. */
+  async addTx(tx: Prisma.TransactionClient, staffId: string, productId: string, d: CompetitorPriceInput, source: 'manual' | 'ai') {
+    const today = tashkentDateString(new Date());
+    {
       const p = await this.product(tx, productId);
       const values: MatchValues = {
         brand: d.brand ?? null,
@@ -159,6 +175,7 @@ export class CompetitorsService {
           price_uzs: BigInt(d.price_uzs),
           observed_on: new Date(`${d.observed_on ?? today}T00:00:00Z`),
           ...values,
+          orders_count: d.orders_count ?? null,
           match_status: m.status,
           mismatch_reasons: m.reasons,
           source,
@@ -167,7 +184,7 @@ export class CompetitorsService {
       });
       await this.audit.log({ staffId, action: 'competitor_price.added', entityType: 'product', entityId: productId, after: { ...row, price_uzs: d.price_uzs } }, tx);
       return view(row, m);
-    });
+    }
   }
 
   /** «Убрать»: the row is hidden, never deleted (it stays in the audit log and the database). */

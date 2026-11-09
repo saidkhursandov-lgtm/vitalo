@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, ErrorBox, Loading, PageHead } from '../components/ui';
 import { Competitors, CostBars, PLATFORM_LABELS } from '../components/Competitors';
+import { SignalChips, SignalList, type PurchaseSignal } from '../components/PurchaseSignals';
 import { api, errorText } from '../lib/api';
 import { dateTime, money } from '../lib/format';
 
@@ -22,6 +23,7 @@ interface PreviewRow {
   list_price_uzs: number | null;
   in_stock: boolean;
   bestseller: boolean;
+  bestseller_rank: number | null;
   weight_kg: number | null;
   product: { id: string; sku: string; name_ru: string; price_uzs: number; status: string } | null;
   last_price_uzs: number | null;
@@ -54,7 +56,14 @@ interface IherbProduct {
   /** the lowest «1-в-1» competitor price of the last 60 days */
   market_min_uzs: number | null;
   competitors_count: number;
-  last_snapshot: { price_uzs: number; in_stock: boolean; bestseller: boolean; taken_at: string } | null;
+  last_snapshot: { price_uzs: number; in_stock: boolean; bestseller: boolean; bestseller_rank: number | null; taken_at: string } | null;
+  /** the last iHerb price + delivery by weight */
+  iherb_landed_uzs: number | null;
+  weight_missing: boolean;
+  /** the average of daily averages of the landed cost, 30 days */
+  avg30_uzs: number | null;
+  avg_days: number;
+  signals: PurchaseSignal[];
   last_change: { old_price_uzs: number; new_price_uzs: number; big_jump: boolean; floor_applied: boolean; yandex_check: boolean; created_at: string } | null;
 }
 
@@ -64,6 +73,20 @@ interface History {
   changes: { created_at: string; old_price_uzs: number; new_price_uzs: number; iherb_price_uzs: number | null; big_jump: boolean; floor_applied: boolean; yandex_check: boolean }[];
   competitors?: { observed_on: string; platform: string; seller: string | null; price_uzs: number }[];
   competitors_latest?: { observed_on: string; platform: string; seller: string | null; price_uzs: number }[];
+  iherb_landed_uzs?: number | null;
+  weight_missing?: boolean;
+  avg30_uzs?: number | null;
+  avg_days?: number;
+  signals?: PurchaseSignal[];
+  shipping_rate_per_kg_uzs?: number;
+}
+
+interface IherbSettings {
+  reminders: boolean;
+  shipping_rate_per_kg_uzs: number;
+  signal_a_pct: number;
+  signal_a_strong_pct: number;
+  signal_b_pct: number;
 }
 
 interface Upload {
@@ -86,10 +109,11 @@ export function Iherb() {
   return (
     <>
       <PageHead title="iHerb и цены" />
+      <SignalsCard />
       <UploadCard />
       <ProductsCard />
       <div className="grid-2">
-        <RemindersCard />
+        <SettingsCard />
         <UploadsCard />
       </div>
     </>
@@ -258,7 +282,7 @@ function PreviewTable({ rows }: { rows: PreviewRow[] }) {
                 <div className="muted small">
                   № {r.iherb_product_id}
                   {!r.in_stock && ' · нет в наличии'}
-                  {r.bestseller && ' · бестселлер'}
+                  {r.bestseller && (r.bestseller_rank ? ` · бестселлер №${r.bestseller_rank}` : ' · бестселлер')}
                   {r.weight_kg != null && ` · ${r.weight_kg} кг`}
                 </div>
               </td>
@@ -358,6 +382,7 @@ function ProductRow({ p, open, onToggle }: { p: IherbProduct; open: boolean; onT
           <div className="muted small">
             {p.sku} · № iHerb {p.iherb_product_id} · на складе {p.available}
           </div>
+          <SignalChips signals={p.signals ?? []} />
         </td>
         <td className="num">
           {p.last_snapshot ? (
@@ -366,7 +391,14 @@ function ProductRow({ p, open, onToggle }: { p: IherbProduct; open: boolean; onT
               <div className="muted small">
                 {dateTime(p.last_snapshot.taken_at)}
                 {!p.last_snapshot.in_stock && ' · нет в наличии'}
+                {p.last_snapshot.bestseller_rank ? ` · бестселлер №${p.last_snapshot.bestseller_rank}` : p.last_snapshot.bestseller ? ' · бестселлер' : ''}
               </div>
+              {p.iherb_landed_uzs != null && p.iherb_landed_uzs !== p.last_snapshot.price_uzs && <div className="muted small">с доставкой {money(p.iherb_landed_uzs)}</div>}
+              {p.avg30_uzs != null && (
+                <div className="muted small" title={`Средняя по дням, дней с замерами: ${p.avg_days}`}>
+                  средняя 30 дн. {money(p.avg30_uzs)}
+                </div>
+              )}
             </>
           ) : (
             <span className="muted">ещё не загружалась</span>
@@ -452,8 +484,17 @@ function PriceChart({ productId }: { productId: string }) {
       ) : (
         <>
           <Chart h={q.data} days={days} />
+          <SignalList signals={q.data.signals ?? []} />
           <h3>Закупка, наша цена и конкуренты</h3>
-          <CostBars d={{ cost_uzs: q.data.product.cost_uzs, price_uzs: q.data.product.price_uzs, competitors: q.data.competitors_latest ?? [] }} />
+          <CostBars d={{ cost_uzs: q.data.product.cost_uzs, iherb_landed_uzs: q.data.iherb_landed_uzs, price_uzs: q.data.product.price_uzs, competitors: q.data.competitors_latest ?? [] }} />
+          {q.data.iherb_landed_uzs != null && (
+            <p className="muted small">
+              Закупка iHerb = последняя цена iHerb
+              {q.data.shipping_rate_per_kg_uzs ? ` + вес × ${money(q.data.shipping_rate_per_kg_uzs)} за кг` : ' (доставка бесплатная — меняется в настройках внизу страницы)'}
+              {q.data.weight_missing && '. Вес банки на iHerb неизвестен — доставка не учтена'}
+              {q.data.avg30_uzs != null && `. Средняя за 30 дней: ${money(q.data.avg30_uzs)} (дней с замерами: ${q.data.avg_days})`}.
+            </p>
+          )}
         </>
       )}
     </div>
@@ -544,31 +585,119 @@ export function Chart({ h, days }: { h: History; days: number }) {
   );
 }
 
-function RemindersCard() {
+/** «Сигналы закупки»: every product with signal A or B, on top of the page. */
+function SignalsCard() {
+  const q = useQuery({ queryKey: ['iherb', 'products'], queryFn: () => api<IherbProduct[]>('/staff/iherb/products') });
+  if (!q.data) return null;
+  const withSignals = q.data.filter((p) => p.signals?.length);
+  return (
+    <section className="card">
+      <h2>Сигналы закупки</h2>
+      {!withSignals.length ? (
+        <p className="muted">
+          Сейчас сигналов нет. Сигнал А появляется, когда закупка на iHerb дешевле своей средней за 30 дней; сигнал Б — когда товар «1-в-1» в
+          Узбекистане дешевле или почти как на iHerb.
+        </p>
+      ) : (
+        <ul className="plain-list signal-products">
+          {withSignals.map((p) => (
+            <li key={p.id}>
+              <Link to={`/products/${p.id}`} className="strong">
+                {p.name_ru}
+              </Link>{' '}
+              <span className="muted small">
+                {p.sku} · на складе {p.available}
+              </span>
+              <SignalList signals={p.signals} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Reminders and the purchase signal settings (owner, 09.11): delivery per kg and the thresholds of rules A and B. */
+function SettingsCard() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['iherb', 'settings'], queryFn: () => api<{ reminders: boolean }>('/staff/iherb/settings') });
+  const q = useQuery({ queryKey: ['iherb', 'settings'], queryFn: () => api<IherbSettings>('/staff/iherb/settings') });
   const m = useMutation({
-    mutationFn: (reminders: boolean) => api<{ reminders: boolean }>('/staff/iherb/settings', { method: 'PUT', body: { reminders } }),
-    onSuccess: (r) => qc.setQueryData(['iherb', 'settings'], r),
+    mutationFn: (body: Partial<IherbSettings>) => api<IherbSettings>('/staff/iherb/settings', { method: 'PUT', body }),
+    onSuccess: (r) => {
+      qc.setQueryData(['iherb', 'settings'], r);
+      void qc.invalidateQueries({ queryKey: ['iherb', 'products'] });
+      void qc.invalidateQueries({ queryKey: ['iherb', 'history'] });
+    },
   });
   return (
     <section className="card">
-      <h2>Напоминания</h2>
+      <h2>Настройки</h2>
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (
         <ErrorBox error={q.error} />
       ) : (
-        <label className="check">
-          <input type="checkbox" checked={q.data.reminders} disabled={m.isPending} onChange={(e) => m.mutate(e.target.checked)} />
-          <span>
-            Напоминать администраторам в Telegram в 09:00, 15:00 и 21:00, если вишлист ещё не загружали
-            <span className="muted small"> — не чаще одного раза в каждое из этих времён</span>
-          </span>
-        </label>
+        <>
+          <label className="check">
+            <input type="checkbox" checked={q.data.reminders} disabled={m.isPending} onChange={(e) => m.mutate({ reminders: e.target.checked })} />
+            <span>
+              Напоминать администраторам в Telegram в 09:00, 15:00 и 21:00, если вишлист ещё не загружали
+              <span className="muted small"> — не чаще одного раза в каждое из этих времён</span>
+            </span>
+          </label>
+          <SignalSettingsForm key={JSON.stringify(q.data)} s={q.data} pending={m.isPending} onSave={(b) => m.mutate(b)} />
+        </>
       )}
       {m.isError && <p className="text-bad">{errorText(m.error)}</p>}
     </section>
+  );
+}
+
+function SignalSettingsForm({ s, pending, onSave }: { s: IherbSettings; pending: boolean; onSave: (b: Partial<IherbSettings>) => void }) {
+  const [f, setF] = useState({
+    shipping_rate_per_kg_uzs: String(s.shipping_rate_per_kg_uzs),
+    signal_a_pct: String(s.signal_a_pct),
+    signal_a_strong_pct: String(s.signal_a_strong_pct),
+    signal_b_pct: String(s.signal_b_pct),
+  });
+  const n = (v: string) => Number(v.replace(/\s/g, '').replace(',', '.'));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    onSave({ shipping_rate_per_kg_uzs: Math.round(n(f.shipping_rate_per_kg_uzs)), signal_a_pct: n(f.signal_a_pct), signal_a_strong_pct: n(f.signal_a_strong_pct), signal_b_pct: n(f.signal_b_pct) });
+  };
+  const input = (k: keyof typeof f, suffix: string) => (
+    <span className="input-suffix">
+      <input inputMode="decimal" value={f[k]} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value }))} />
+      <span className="muted small">{suffix}</span>
+    </span>
+  );
+  return (
+    <form onSubmit={submit} className="signal-settings">
+      <h3>Сигналы закупки</h3>
+      <label className="field">
+        <span className="field-label">Доставка с iHerb, сум за кг</span>
+        {input('shipping_rate_per_kg_uzs', 'сум/кг')}
+        <span className="muted small">0 — доставка бесплатная. Закупка iHerb = цена + вес банки × это число.</span>
+      </label>
+      <label className="field">
+        <span className="field-label">Сигнал А «Выгодный закуп на iHerb»: ниже средней за 30 дней на</span>
+        {input('signal_a_pct', '%')}
+      </label>
+      <label className="field">
+        <span className="field-label">«Сильная просадка» — ниже средней на</span>
+        {input('signal_a_strong_pct', '%')}
+      </label>
+      <label className="field">
+        <span className="field-label">Сигнал Б «Перехват в Ташкенте»: дороже закупки iHerb не больше чем на</span>
+        {input('signal_b_pct', '%')}
+        <span className="muted small">Если в Узбекистане «1-в-1» дешевле закупки iHerb — сигнал «Срочно брать в Ташкенте».</span>
+      </label>
+      <div className="iherb-actions">
+        <button type="submit" className="btn" disabled={pending}>
+          {pending ? 'Сохраняю…' : 'Сохранить настройки'}
+        </button>
+      </div>
+    </form>
   );
 }
 

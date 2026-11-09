@@ -547,7 +547,32 @@ textarea { resize: vertical; }
 .cost-bar-track { height: 14px; background: var(--neutral-soft); border-radius: 4px; overflow: hidden; }
 .cost-bar { display: block; height: 100%; border-radius: 4px; }
 .cost-bar.bar-cost { background: var(--muted); }
+.cost-bar.bar-iherb { background: var(--chart-yandex); }
 .cost-bar.bar-vitalo { background: var(--chart-vitalo); }
 .cost-bar.bar-margin { background: var(--chart-margin); }
 .cost-bar.bar-market { background: var(--chart-market); }
 .cost-bar-value { white-space: nowrap; text-align: right; min-width: 90px; }
+
+/* Генплан, этап 5 (D-57, 09.11): purchase signals A and B */
+.signal-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.signal-chip { display: inline-flex; align-items: center; gap: 4px; }
+.signal-icon { flex: none; }
+.signal-list { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.signal-line { display: flex; align-items: flex-start; gap: 8px; margin: 0; }
+.signal-line .signal-icon { margin-top: 3px; }
+.signal-products > li + li { margin-top: 12px; }
+.signal-settings { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.input-suffix { display: flex; align-items: center; gap: 8px; }
+.input-suffix input { width: 140px; max-width: 100%; }
+
+/* Генплан, этап 5, admin-ai-analyst (D-57, узел 5) */
+.ai-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.ai-settings { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; max-width: 480px; }
+.ai-chat { display: flex; flex-direction: column; gap: 14px; max-height: 520px; overflow-y: auto; margin-bottom: 12px; }
+.ai-chat-pair { display: flex; flex-direction: column; gap: 6px; }
+.ai-chat-q { align-self: flex-end; max-width: 85%; background: var(--primary); color: var(--panel); border-radius: 12px 12px 2px 12px; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-chat-a { max-width: 95%; background: var(--neutral-soft); border-radius: 12px 12px 12px 2px; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-form { display: grid; grid-template-columns: auto minmax(0, 220px) minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
+.row-muted td { opacity: 0.65; }
+.ai-feed-text { overflow-wrap: anywhere; }
+@media (max-width: 720px) { .memory-form { grid-template-columns: 1fr; } }

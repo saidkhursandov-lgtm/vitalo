@@ -57,11 +57,35 @@ describe('«Цены конкурентов» (D-57, узел 4)', () => {
     expect(sent).toMatchObject({ platform: 'uzum', price_uzs: 179_000, brand: 'Test Brand', dose_amount: 200, dose_unit: 'mg', pack_count: 60 });
   });
 
-  it('bars: purchase, our price, margin and each platform', () => {
-    render(<CostBars d={{ cost_uzs: 120_000, price_uzs: 200_000, competitors: [{ platform: 'uzum', seller: null, price_uzs: 185_000, observed_on: '2026-11-08' }] }} />);
-    expect(screen.getByText('Закупка')).toBeTruthy();
+  it('bars: stock cost, iHerb landed cost, our price, margin and every seller', () => {
+    const { unmount } = render(
+      <CostBars
+        d={{
+          cost_uzs: 120_000,
+          iherb_landed_uzs: 150_000,
+          price_uzs: 200_000,
+          competitors: [
+            { platform: 'uzum', seller: null, price_uzs: 185_000, observed_on: '2026-11-08' },
+            { platform: 'other', seller: 'Fitvibe', price_uzs: 199_000, observed_on: '2026-11-08' },
+            { platform: 'other', seller: 'BioBox', price_uzs: 250_000, observed_on: '2026-11-08' },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText('Себестоимость склада')).toBeTruthy();
+    expect(screen.getByText('Закупка iHerb (с доставкой)')).toBeTruthy();
     expect(screen.getByText('Маржа')).toBeTruthy();
     expect(screen.getByText('Uzum Market')).toBeTruthy();
-    expect(screen.getByText(/80\s000/)).toBeTruthy();
+    // two sellers on the same platform are two bars (owner, 09.11)
+    expect(screen.getByText('Fitvibe (Другое)')).toBeTruthy();
+    expect(screen.getByText('BioBox (Другое)')).toBeTruthy();
+    expect(screen.getByText(/80\s000/)).toBeTruthy(); // margin from the stock cost
+    unmount();
+    // nothing in stock: the iHerb landed cost alone, the margin counts from it
+    render(<CostBars d={{ cost_uzs: null, iherb_landed_uzs: 150_000, price_uzs: 240_000, competitors: [] }} />);
+    expect(screen.queryByText('Себестоимость склада')).toBeNull();
+    expect(screen.getByText('Закупка iHerb (с доставкой)')).toBeTruthy();
+    expect(screen.getByText('цена − закупка iHerb', { exact: false })).toBeTruthy();
+    expect(screen.getByText(/90\s000/)).toBeTruthy();
   });
 });

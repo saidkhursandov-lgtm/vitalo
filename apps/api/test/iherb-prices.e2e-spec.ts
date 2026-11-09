@@ -142,7 +142,7 @@ describe('iHerb prices (e2e)', () => {
 
   it('reminders: off by default; on — once per slot, not after a fresh upload', async () => {
     const svc = app.get(IherbPricesService);
-    expect((await http().get('/api/staff/iherb/settings').set(bearer(admin)).expect(200)).body).toEqual({ reminders: false });
+    expect((await http().get('/api/staff/iherb/settings').set(bearer(admin)).expect(200)).body).toEqual({ reminders: false, shipping_rate_per_kg_uzs: 0, signal_a_pct: 10, signal_a_strong_pct: 15, signal_b_pct: 7 });
     // 15:10 Tashkent of a day far in the future (no upload near it)
     const at = new Date('2031-03-03T10:10:00Z');
     expect(await svc.remindOnce(at)).toBe(false);

@@ -16,6 +16,8 @@ export interface WishlistItem {
   list_price_uzs: number | null;
   in_stock: boolean;
   bestseller: boolean;
+  /** The place in the iHerb best-seller list («#3 Best Seller», «№ 3», «место 3»), when the page or table shows it. */
+  bestseller_rank: number | null;
   weight_kg: number | null;
 }
 
@@ -43,6 +45,17 @@ const DOLLARS = /(?:\$\s?\d|\d\s?\$|\bUSD\b)/;
 const NOT_A_PRICE = /(эконом\S*|выгод\S*|скидк\S*|save|saving|tejang\S*|bepul|бесплатн\S*|free\s+\S+|from|от|dan)\W{0,3}$/i;
 const OUT_OF_STOCK = /(нет в наличии|закончил|out of stock|sold out|notify me|сообщить о|mavjud emas|sotuvda yo['ʻ’]?q|tugagan)/i;
 const BESTSELLER = /(бестселлер|best[\s-]?seller|хит продаж|eng ko['ʻ’]?p sotilgan)/i;
+/** «#3 Best Seller», «№3 в бестселлерах», «Best Seller #3» on the page. */
+const RANK_HTML = [/(?:#|№)\s*(\d{1,5})(?!\d)\s*(?:в\s+|in\s+)?(?:best[\s-]?seller|бестселлер|хит)/i, /(?:best[\s-]?seller|бестселлер)\D{0,20}?(?:#|№)\s*(\d{1,5})(?!\d)/i];
+/** In a hand table: «#3», «№ 3», «место 3», «rank 3». */
+const RANK_TABLE = /(?:(?:#|№)\s*|(?:место|rank|top|топ)\s*)(\d{1,5})(?!\d)/i;
+const rankOf = (text: string, res: RegExp[]) => {
+  for (const r of res) {
+    const m = r.exec(text);
+    if (m && Number(m[1]) >= 1) return Number(m[1]);
+  }
+  return null;
+};
 const WEIGHT = /(\d+(?:[.,]\d+)?)\s*(kg|кг|lbs?|фунт)(?![a-zа-я])/i;
 /** An element whose sum is the old (crossed-out) price. */
 const STRUCK_TAG = /^(del|s|strike)$/i;
@@ -162,7 +175,8 @@ function parseHtml(html: string): WishlistParse {
       price_uzs: current.value,
       list_price_uzs: old?.value ?? null,
       in_stock: !OUT_OF_STOCK.test(plain),
-      bestseller: BESTSELLER.test(plain),
+      bestseller: BESTSELLER.test(plain) || rankOf(plain, RANK_HTML) != null,
+      bestseller_rank: rankOf(plain, RANK_HTML),
       weight_kg: weightOf(plain),
     });
   });
@@ -196,6 +210,9 @@ function parseTable(input: string): WishlistParse {
       problems.push(`«${line.slice(0, 80)}»: нет ссылки или номера товара iHerb`);
       continue;
     }
+    // «#3» / «место 3» is the best-seller place, not a price: taken out before the price is looked for
+    const rank = rankOf(rest, [RANK_TABLE]);
+    if (rank != null) rest = rest.replace(RANK_TABLE, ' ');
     // the first sum after the number is the price; whatever is left («нет», «бестселлер», «0.2 kg») are notes
     const pm = new RegExp(NUM + String.raw`\s*(?:` + CUR + ')?', 'i').exec(rest);
     const price = pm ? digits(pm[1]) : 0;
@@ -210,7 +227,8 @@ function parseTable(input: string): WishlistParse {
       price_uzs: price,
       list_price_uzs: null,
       in_stock: !(/(^|\s)(нет|no|yo['ʻ’]?q|0)(\s|$)/i.test(other) || OUT_OF_STOCK.test(other)),
-      bestseller: BESTSELLER.test(other),
+      bestseller: BESTSELLER.test(other) || rank != null,
+      bestseller_rank: rank,
       weight_kg: weightOf(other),
     });
   }

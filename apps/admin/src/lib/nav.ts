@@ -95,6 +95,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/settings?tab=texts', label: 'Тексты и контакты', permission: 'settings.manage' },
       { to: '/settings?tab=docs', label: 'Документы', permission: 'settings.manage' },
       { to: '/settings?tab=ai', label: 'VITALO AI', permission: 'settings.manage' },
+      // D-57 узел 5: the admin AI analyst (its own key and budget) — admin only
+      { to: '/ai-analyst', label: 'AI-аналитик', permission: 'ai_analyst.use' },
       { to: '/settings?tab=staff', label: 'Сотрудники', permission: 'settings.manage' },
       { to: '/yandex-sync', label: 'Синхронизация Яндекса', permission: 'yandex.sync' },
       { to: '/audit', label: 'Журнал аудита', permission: 'audit.view' },

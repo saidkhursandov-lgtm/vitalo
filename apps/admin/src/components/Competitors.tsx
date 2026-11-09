@@ -40,6 +40,7 @@ interface MatchValues {
 }
 
 interface CompetitorRow extends MatchValues {
+  orders_count: number | null;
   id: string;
   platform: string;
   seller: string | null;
@@ -127,7 +128,9 @@ export function Competitors({ productId }: { productId: string }) {
                         <div>
                           {PLATFORM_LABELS[c.platform] ?? c.platform}
                           {c.seller && <span className="muted"> · {c.seller}</span>}
+                          {c.source === 'ai' && <span className="muted small"> · от AI</span>}
                         </div>
+                        {c.orders_count != null && <div className="muted small">заказов: {c.orders_count.toLocaleString('ru-RU')}</div>}
                         {(c.title || c.url) && (
                           <div className="muted small">
                             {c.url ? (
@@ -191,6 +194,7 @@ function AddForm({ productId, ours, onDone }: { productId: string; ours: MatchVa
     dose_unit: ours.dose_unit ?? '',
     dose_per: ours.dose_per ?? '',
     pack_count: ours.pack_count == null ? '' : String(ours.pack_count),
+    orders_count: '',
   });
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
   const m = useMutation({
@@ -210,6 +214,7 @@ function AddForm({ productId, ours, onDone }: { productId: string; ours: MatchVa
           dose_unit: f.dose_unit || null,
           dose_per: f.dose_per || null,
           pack_count: toInt(f.pack_count) ?? null,
+          orders_count: toInt(f.orders_count) ?? null,
         },
       }),
     onSuccess: () => {
@@ -240,6 +245,7 @@ function AddForm({ productId, ours, onDone }: { productId: string; ours: MatchVa
         <Field label="Когда видели">{text('observed_on', { type: 'date', max: today() })}</Field>
         <Field label="Ссылка">{text('url', { type: 'url', maxLength: 500 })}</Field>
         <Field label="Название у конкурента">{text('title', { maxLength: 300 })}</Field>
+        <Field label="Заказов у конкурента">{text('orders_count', { inputMode: 'numeric', placeholder: 'например, 350 на Uzum' })}</Field>
       </div>
       <h3>Что продаёт конкурент</h3>
       <p className="muted small">Заполнено как у нашего товара — сверьте со страницей конкурента и исправьте, что отличается.</p>
@@ -281,23 +287,34 @@ function AddForm({ productId, ours, onDone }: { productId: string; ours: MatchVa
 }
 
 export interface CostBarsData {
+  /** D-39: the larger of the cost in the card and the dearest jar on hand; null — no stock cost */
   cost_uzs: number | null;
+  /** the last iHerb price + delivery by weight; null — no iHerb snapshot yet */
+  iherb_landed_uzs?: number | null;
   price_uzs: number;
   competitors: { platform: string; seller: string | null; price_uzs: number; observed_on: string }[];
 }
 
-/** Bars: our purchase cost, our price, the margin and the newest «1-в-1» price of each platform. */
+/**
+ * Bars: the stock cost and / or the iHerb landed cost (owner, 09.11: shown even with nothing in stock), our price, the
+ * margin and the newest «1-в-1» price of every seller.
+ */
 export function CostBars({ d }: { d: CostBarsData }) {
-  const bars: { label: string; value: number; cls: string; hint?: string }[] = [];
-  if (d.cost_uzs != null) bars.push({ label: 'Закупка', value: d.cost_uzs, cls: 'bar-cost' });
-  bars.push({ label: 'VITALO', value: d.price_uzs, cls: 'bar-vitalo' });
-  if (d.cost_uzs != null) bars.push({ label: 'Маржа', value: Math.max(0, d.price_uzs - d.cost_uzs), cls: 'bar-margin', hint: 'цена − закупка' });
-  for (const c of d.competitors) bars.push({ label: c.seller ? `${PLATFORM_LABELS[c.platform] ?? c.platform}, ${c.seller}` : (PLATFORM_LABELS[c.platform] ?? c.platform), value: c.price_uzs, cls: 'bar-market', hint: ruDate(c.observed_on) });
+  const bars: { key: string; label: string; value: number; cls: string; hint?: string }[] = [];
+  if (d.cost_uzs != null) bars.push({ key: 'cost', label: 'Себестоимость склада', value: d.cost_uzs, cls: 'bar-cost' });
+  if (d.iherb_landed_uzs != null) bars.push({ key: 'iherb', label: 'Закупка iHerb (с доставкой)', value: d.iherb_landed_uzs, cls: 'bar-iherb' });
+  bars.push({ key: 'vitalo', label: 'VITALO', value: d.price_uzs, cls: 'bar-vitalo' });
+  // the margin counts from the stock cost when there is one, otherwise from what buying on iHerb would cost now
+  const base = d.cost_uzs ?? d.iherb_landed_uzs ?? null;
+  if (base != null) bars.push({ key: 'margin', label: 'Маржа', value: Math.max(0, d.price_uzs - base), cls: 'bar-margin', hint: d.cost_uzs != null ? 'цена − себестоимость' : 'цена − закупка iHerb' });
+  d.competitors.forEach((c, i) =>
+    bars.push({ key: `c${i}`, label: c.seller ? `${c.seller} (${PLATFORM_LABELS[c.platform] ?? c.platform})` : (PLATFORM_LABELS[c.platform] ?? c.platform), value: c.price_uzs, cls: 'bar-market', hint: ruDate(c.observed_on) }),
+  );
   const max = Math.max(...bars.map((b) => b.value), 1);
   return (
     <div className="cost-bars" role="img" aria-label="Закупка, цена VITALO, маржа и цены конкурентов">
       {bars.map((b) => (
-        <div key={b.label} className="cost-bar-row">
+        <div key={b.key} className="cost-bar-row">
           <span className="cost-bar-label small">
             {b.label}
             {b.hint && <span className="muted"> · {b.hint}</span>}
@@ -308,7 +325,7 @@ export function CostBars({ d }: { d: CostBarsData }) {
           <span className="cost-bar-value small">{money(b.value)}</span>
         </div>
       ))}
-      {d.cost_uzs == null && <p className="muted small">Закупка и маржа появятся, когда у товара будет себестоимость.</p>}
+      {d.cost_uzs == null && d.iherb_landed_uzs == null && <p className="muted small">Закупка и маржа появятся после первой загрузки вишлиста iHerb или когда у товара будет себестоимость.</p>}
       {!d.competitors.length && <p className="muted small">Цен конкурентов «1-в-1» за этот период нет.</p>}
     </div>
   );

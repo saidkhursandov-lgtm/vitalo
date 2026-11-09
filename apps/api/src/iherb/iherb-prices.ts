@@ -1,9 +1,9 @@
 import { BadRequestException, Body, Controller, Get, Injectable, Logger, Param, ParseUUIDPipe, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiProperty, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
-import { IsBoolean } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { memoryStorage } from 'multer';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,7 +11,8 @@ import { purchaseCosts } from '../promo/purchase-costs';
 import { SettingsService } from '../settings/settings.service';
 import { AuditService } from '../staff/audit.service';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from '../staff/staff-auth';
-import { latestPerPlatform, matchedCompetitors } from './competitors';
+import { latestPerSeller, matchedCompetitors, whereText, type CompetitorView } from './competitors';
+import { AVG_DAYS, purchaseSignals, SIGNAL_DEFAULTS, type SignalSettings, type SnapshotPoint } from './purchase-signals';
 import { autoPrice, SKIP_LABELS, type AutoPriceResult } from './auto-price';
 import { parseWishlist, type WishlistItem } from './wishlist-parser';
 
@@ -21,10 +22,10 @@ type Db = Prisma.TransactionClient | PrismaService;
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 /** «Настройки» key: Telegram reminders to admins at 09:00 / 15:00 / 21:00 Tashkent (off until the owner switches them on). */
 export const IHERB_SETTINGS_KEY = 'iherb_prices';
-export interface IherbSettings {
+export interface IherbSettings extends SignalSettings {
   reminders: boolean;
 }
-const SETTINGS_DEFAULT: IherbSettings = { reminders: false };
+const SETTINGS_DEFAULT: IherbSettings = { reminders: false, ...SIGNAL_DEFAULTS };
 /** Tashkent hours of the three daily snapshots (D-57). */
 export const SNAPSHOT_HOURS = [9, 15, 21] as const;
 const TASHKENT_MS = 5 * 3600_000;
@@ -55,10 +56,44 @@ export interface PreviewRow extends WishlistItem {
 }
 
 export class IherbSettingsInput {
-  @ApiProperty({ description: 'Напоминать администраторам в Telegram в 09:00, 15:00 и 21:00 (Ташкент)' }) @IsBoolean() reminders!: boolean;
+  @ApiPropertyOptional({ description: 'Напоминать администраторам в Telegram в 09:00, 15:00 и 21:00 (Ташкент)' }) @IsOptional() @IsBoolean() reminders?: boolean;
+  @ApiPropertyOptional({ description: 'Доставка с iHerb, сум за кг (0 — бесплатная доставка)' }) @IsOptional() @IsInt() @Min(0) @Max(10_000_000) shipping_rate_per_kg_uzs?: number;
+  @ApiPropertyOptional({ description: 'Сигнал А: цена ниже средней за 30 дней на, %' }) @IsOptional() @IsNumber() @Min(1) @Max(90) signal_a_pct?: number;
+  @ApiPropertyOptional({ description: 'Сигнал А: «сильная просадка» от, %' }) @IsOptional() @IsNumber() @Min(1) @Max(90) signal_a_strong_pct?: number;
+  @ApiPropertyOptional({ description: 'Сигнал Б: «близко к закупке» — дороже iHerb не больше чем на, %' }) @IsOptional() @IsNumber() @Min(0) @Max(100) signal_b_pct?: number;
 }
 
 const num = (v: bigint | null | undefined) => (v == null ? null : Number(v));
+
+/** Saved settings over the defaults; a wrong value falls back to the default. */
+export function mergeSettings(saved: Partial<IherbSettings> | null | undefined): IherbSettings {
+  const s = (saved ?? {}) as Record<string, unknown>;
+  const n = (k: keyof SignalSettings, min: number, max: number) => {
+    const v = s[k];
+    return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : SIGNAL_DEFAULTS[k];
+  };
+  return {
+    reminders: typeof s.reminders === 'boolean' ? s.reminders : SETTINGS_DEFAULT.reminders,
+    shipping_rate_per_kg_uzs: Math.round(n('shipping_rate_per_kg_uzs', 0, 10_000_000)),
+    signal_a_pct: n('signal_a_pct', 1, 90),
+    signal_a_strong_pct: n('signal_a_strong_pct', 1, 90),
+    signal_b_pct: n('signal_b_pct', 0, 100),
+  };
+}
+
+const point = (r: { taken_at: Date; price_uzs: bigint; weight_kg: Prisma.Decimal | null; in_stock: boolean }): SnapshotPoint => ({
+  taken_at: r.taken_at,
+  price_uzs: Number(r.price_uzs),
+  weight_kg: r.weight_kg == null ? null : Number(r.weight_kg),
+  in_stock: r.in_stock,
+});
+
+/** Signals A and B of one product; the market minimum is the lowest «1-в-1» price of the period. */
+export function signalsFor(points: SnapshotPoint[], comp: CompetitorView[], s: SignalSettings) {
+  const min = comp.length ? comp.reduce((a, b) => (b.price_uzs < a.price_uzs ? b : a)) : null;
+  const r = purchaseSignals(points, min ? { price_uzs: min.price_uzs, where: whereText(min) } : null, s);
+  return { iherb_landed_uzs: r.landed_uzs, weight_missing: r.weight_missing, avg30_uzs: r.avg30_uzs, avg_days: r.avg_days, signals: r.signals };
+}
 
 @Injectable()
 export class IherbPricesService {
@@ -102,6 +137,7 @@ export class IherbPricesService {
             list_price_uzs: r.list_price_uzs == null ? null : BigInt(r.list_price_uzs),
             in_stock: r.in_stock,
             bestseller: r.bestseller,
+            bestseller_rank: r.bestseller_rank,
             weight_kg: r.weight_kg,
             taken_at: upload.created_at,
           })),
@@ -240,16 +276,19 @@ export class IherbPricesService {
       },
     });
     const ids = list.map((p) => p.iherb_product_id!);
-    const [lasts, changes, costs, market] = await Promise.all([
+    const [lasts, changes, costs, market, recent, settings] = await Promise.all([
       this.prisma.iherb_price_snapshots.findMany({ where: { iherb_product_id: { in: ids } }, orderBy: [{ iherb_product_id: 'asc' }, { taken_at: 'desc' }], distinct: ['iherb_product_id'] }),
       this.prisma.price_changes.findMany({ where: { product_id: { in: list.map((p) => p.id) } }, orderBy: [{ product_id: 'asc' }, { created_at: 'desc' }], distinct: ['product_id'] }),
       purchaseCosts(this.prisma, list.map((p) => p.id)),
       matchedCompetitors(this.prisma, list.map((p) => p.id), MARKET_DAYS),
+      this.recentSnapshots(ids),
+      this.getSettings(),
     ]);
     return list.map(({ inventory, ...p }) => {
       const comp = market.get(p.id) ?? [];
       const s = lasts.find((l) => l.iherb_product_id === p.iherb_product_id);
       const c = changes.find((x) => x.product_id === p.id);
+      const sig = signalsFor(s ? [...(recent.get(p.iherb_product_id!) ?? []), point(s)] : [], comp, settings);
       return {
         ...p,
         price_uzs: Number(p.price_uzs),
@@ -258,7 +297,8 @@ export class IherbPricesService {
         // D-57 узел 4: the lowest «1-в-1» competitor price of the last 60 days, and how many prices there are
         market_min_uzs: comp.length ? Math.min(...comp.map((c) => c.price_uzs)) : null,
         competitors_count: comp.length,
-        last_snapshot: s ? { price_uzs: Number(s.price_uzs), in_stock: s.in_stock, bestseller: s.bestseller, taken_at: s.taken_at } : null,
+        last_snapshot: s ? { price_uzs: Number(s.price_uzs), in_stock: s.in_stock, bestseller: s.bestseller, bestseller_rank: s.bestseller_rank, taken_at: s.taken_at } : null,
+        ...sig,
         last_change: c ? { old_price_uzs: Number(c.old_price_uzs), new_price_uzs: Number(c.new_price_uzs), big_jump: c.big_jump, floor_applied: c.floor_applied, yandex_check: c.yandex_check, created_at: c.created_at } : null,
       };
     });
@@ -269,21 +309,28 @@ export class IherbPricesService {
     const p = await this.prisma.products.findUnique({ where: { id: productId }, select: { id: true, sku: true, name_ru: true, price_uzs: true, iherb_product_id: true, markup_percent: true } });
     if (!p) throw new BadRequestException({ code: 'PRODUCT_NOT_FOUND', message: 'Товар не найден' });
     const since = new Date(Date.now() - days * 86400_000);
-    const [snapshots, changes, costs, market] = await Promise.all([
+    const [snapshots, changes, costs, market, recent, settings] = await Promise.all([
       p.iherb_product_id
         ? this.prisma.iherb_price_snapshots.findMany({ where: { iherb_product_id: p.iherb_product_id, taken_at: { gte: since } }, orderBy: { taken_at: 'asc' }, take: 2000 })
         : [],
       this.prisma.price_changes.findMany({ where: { product_id: p.id, created_at: { gte: since } }, orderBy: { created_at: 'asc' }, take: 2000 }),
       purchaseCosts(this.prisma, [p.id]),
       matchedCompetitors(this.prisma, [p.id], days),
+      p.iherb_product_id ? this.recentSnapshots([p.iherb_product_id], true) : Promise.resolve(new Map<string, SnapshotPoint[]>()),
+      this.getSettings(),
     ]);
     const comp = market.get(p.id) ?? [];
+    // signal B looks at the same 60 days as the market minimum in the list, whatever period the chart shows
+    const fresh = comp.filter((c) => Date.now() - Date.parse(`${c.observed_on}T00:00:00Z`) <= MARKET_DAYS * 86400_000);
+    const sig = signalsFor(p.iherb_product_id ? (recent.get(p.iherb_product_id) ?? []) : [], fresh, settings);
     return {
+      ...sig,
+      shipping_rate_per_kg_uzs: settings.shipping_rate_per_kg_uzs,
       /** «1-в-1» competitor prices in the period (chart points) and the newest per platform (bars) */
       competitors: comp.map((c) => ({ observed_on: c.observed_on, platform: c.platform, seller: c.seller, price_uzs: c.price_uzs })),
-      competitors_latest: latestPerPlatform(comp).map((c) => ({ observed_on: c.observed_on, platform: c.platform, seller: c.seller, price_uzs: c.price_uzs })),
+      competitors_latest: latestPerSeller(comp).map((c) => ({ observed_on: c.observed_on, platform: c.platform, seller: c.seller, price_uzs: c.price_uzs })),
       product: { ...p, price_uzs: Number(p.price_uzs), cost_uzs: costs.get(p.id) ?? null },
-      snapshots: snapshots.map((s) => ({ taken_at: s.taken_at, price_uzs: Number(s.price_uzs), list_price_uzs: num(s.list_price_uzs), in_stock: s.in_stock, bestseller: s.bestseller })),
+      snapshots: snapshots.map((s) => ({ taken_at: s.taken_at, price_uzs: Number(s.price_uzs), list_price_uzs: num(s.list_price_uzs), in_stock: s.in_stock, bestseller: s.bestseller, bestseller_rank: s.bestseller_rank, weight_kg: s.weight_kg == null ? null : Number(s.weight_kg) })),
       changes: changes.map((c) => ({
         created_at: c.created_at,
         old_price_uzs: Number(c.old_price_uzs),
@@ -303,17 +350,46 @@ export class IherbPricesService {
   }
 
   async getSettings(): Promise<IherbSettings> {
-    return { ...SETTINGS_DEFAULT, ...((await this.settings.get<IherbSettings>(IHERB_SETTINGS_KEY)) ?? {}) };
+    return mergeSettings(await this.settings.get<Partial<IherbSettings>>(IHERB_SETTINGS_KEY));
   }
 
-  async setSettings(staffId: string, value: IherbSettings): Promise<IherbSettings> {
+  /** Changes only what was sent; «сильная просадка» is never below the signal A threshold. */
+  async setSettings(staffId: string, input: Partial<IherbSettings>): Promise<IherbSettings> {
     const before = await this.getSettings();
-    const json = { reminders: value.reminders } as unknown as Prisma.InputJsonValue;
+    const value = mergeSettings({ ...before, ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) });
+    if (value.signal_a_strong_pct < value.signal_a_pct) {
+      throw new BadRequestException({ code: 'SIGNAL_STRONG_BELOW_A', message: '«Сильная просадка» не может быть меньше порога сигнала А' });
+    }
+    const json = value as unknown as Prisma.InputJsonValue;
     await this.prisma.$transaction(async (tx) => {
       await tx.settings.upsert({ where: { key: IHERB_SETTINGS_KEY }, create: { key: IHERB_SETTINGS_KEY, value: json }, update: { value: json } });
       await this.audit.log({ staffId, action: 'settings.iherb_prices_updated', entityType: 'settings', before, after: value }, tx);
     });
     return this.getSettings();
+  }
+
+  /**
+   * iHerb snapshots of the last 30 days (for the daily average), per iHerb product. `withLast`: plus the newest one
+   * when there is none in 30 days (the landed cost of a product nobody uploaded for a month).
+   */
+  private async recentSnapshots(iherbIds: string[], withLast = false): Promise<Map<string, SnapshotPoint[]>> {
+    const out = new Map<string, SnapshotPoint[]>();
+    if (!iherbIds.length) return out;
+    const since = new Date(Date.now() - (AVG_DAYS + 1) * 86400_000);
+    const rows = await this.prisma.iherb_price_snapshots.findMany({
+      where: { iherb_product_id: { in: iherbIds }, taken_at: { gte: since } },
+      select: { iherb_product_id: true, taken_at: true, price_uzs: true, weight_kg: true, in_stock: true },
+      orderBy: { taken_at: 'asc' },
+    });
+    for (const r of rows) out.set(r.iherb_product_id, [...(out.get(r.iherb_product_id) ?? []), point(r)]);
+    if (withLast) {
+      for (const id of iherbIds) {
+        if (out.get(id)?.length) continue;
+        const last = await this.prisma.iherb_price_snapshots.findFirst({ where: { iherb_product_id: id }, orderBy: { taken_at: 'desc' } });
+        if (last) out.set(id, [point(last)]);
+      }
+    }
+    return out;
   }
 
   @Interval('iherb-reminders', 5 * 60_000)

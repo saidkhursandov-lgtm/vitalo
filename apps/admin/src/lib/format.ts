@@ -163,7 +163,11 @@ export const AUDIT_ACTION: Record<string, string> = {
   'product.unit_tracking_started': 'Товар переведён на учёт по банкам (приёмка по закупке)',
   'product.price_auto_iherb': 'Автоцена по iHerb',
   'iherb.wishlist_uploaded': 'Загружен вишлист iHerb',
-  'settings.iherb_prices_updated': 'Изменены напоминания iHerb',
+  'settings.iherb_prices_updated': 'Изменены настройки iHerb (напоминания, сигналы закупки)',
+  'settings.admin_ai_updated': 'Изменены настройки AI-аналитика',
+  'ai_analyst.feed_saved': 'AI-аналитик: сохранены данные из загрузки',
+  'ai_analyst.fact_added': 'AI-аналитик: записано решение или заметка',
+  'ai_analyst.fact_off': 'AI-аналитик: факт убран из памяти',
   'product.unit_tracking_fix': 'Учёт по банкам включён вручную (исправление данных)',
 };
 

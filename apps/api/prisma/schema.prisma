@@ -473,6 +473,9 @@ model staff_users {
   iherb_uploads         iherb_uploads[]
   price_changes         price_changes[]
   competitor_prices     competitor_prices[]
+  admin_ai_feed         admin_ai_feed[]
+  admin_ai_memory       admin_business_memory[]
+  admin_ai_requests     admin_ai_requests[]
 }
 
 model staff_sessions {
@@ -682,6 +685,7 @@ model products {
   iherb_snapshots         iherb_price_snapshots[]
   price_changes           price_changes[]
   competitor_prices       competitor_prices[]
+  admin_ai_memory         admin_business_memory[]
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -1010,6 +1014,7 @@ model iherb_price_snapshots {
   list_price_uzs   BigInt?
   in_stock         Boolean       @default(true)
   bestseller       Boolean       @default(false)
+  bestseller_rank  Int? // place in the iHerb best-seller list, when the page / table shows it
   weight_kg        Decimal?      @db.Decimal(8, 3)
   source           String        @default("wishlist")
   taken_at         DateTime      @default(now())
@@ -1062,6 +1067,7 @@ model competitor_prices {
   dose_unit        String?
   dose_per         String?
   pack_count       Int?
+  orders_count     Int? // how many orders / sales the competitor shows (Uzum «N заказов»)
   match_status     String // match | mismatch | incomplete
   mismatch_reasons Json         @default("[]")
   source           String       @default("manual") // manual | ai
@@ -1072,6 +1078,69 @@ model competitor_prices {
   staff            staff_users? @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
 
   @@index([product_id, observed_on], map: "competitor_prices_product_observed_idx")
+}
+
+/// AI analyst (D-57, node 5): what the owner pasted («Что я прислал») and what the model read from it.
+model admin_ai_feed {
+  id            String                  @id @default(uuid()) @db.Uuid
+  staff_user_id String?                 @db.Uuid
+  raw_text      String
+  status        String                  @default("parsed") // parsed | saved | failed
+  rows          Json                    @default("[]") // what the model read, checked by our code («1-в-1»)
+  saved         Json? // { competitor_prices, facts }
+  error_code    String?
+  request_id    String?                 @db.Uuid
+  created_at    DateTime                @default(now())
+  saved_at      DateTime?
+  staff         staff_users?            @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
+  facts         admin_business_memory[]
+
+  @@index([created_at], map: "admin_ai_feed_created_idx")
+}
+
+/// AI analyst long memory («Память о бизнесе»): one fact per row; never deleted, «Убрать» sets active = false.
+model admin_business_memory {
+  id            String         @id @default(uuid()) @db.Uuid
+  kind          String // competitor_price | orders | bestseller_rank | decision | note
+  product_id    String?        @db.Uuid
+  platform      String?
+  seller        String?
+  value_num     Decimal?       @db.Decimal(18, 2)
+  value_text    String?
+  observed_on   DateTime       @db.Date
+  source        String         @default("feed") // feed | manual
+  feed_id       String?        @db.Uuid
+  staff_user_id String?        @db.Uuid
+  active        Boolean        @default(true)
+  created_at    DateTime       @default(now())
+  product       products?      @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  feed          admin_ai_feed? @relation(fields: [feed_id], references: [id], onDelete: SetNull)
+  staff         staff_users?   @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
+
+  @@index([active, observed_on], map: "admin_business_memory_active_idx")
+  @@index([product_id], map: "admin_business_memory_product_idx")
+}
+
+/// AI analyst request log («Журнал запросов»): every call to the model, its tokens and cost (the monthly budget).
+model admin_ai_requests {
+  id                 String       @id @default(uuid()) @db.Uuid
+  staff_user_id      String?      @db.Uuid
+  scenario           String // feed | chat
+  model              String
+  question           String?
+  answer             String?
+  input_tokens       Int          @default(0)
+  output_tokens      Int          @default(0)
+  cache_read_tokens  Int          @default(0)
+  cache_write_tokens Int          @default(0)
+  cost_usd           Decimal      @default(0) @db.Decimal(12, 6)
+  outcome            String // ok | refusal | max_tokens | not_json | error
+  error_code         String?
+  latency_ms         Int          @default(0)
+  created_at         DateTime     @default(now())
+  staff              staff_users? @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
+
+  @@index([created_at], map: "admin_ai_requests_created_idx")
 }
 
 /// A 09/15/21 reminder slot that was already sent.
