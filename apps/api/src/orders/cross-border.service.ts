@@ -331,7 +331,8 @@ export class CrossBorderService {
         if (!order) continue;
         const stage = crossBorderStageOf(order);
         if (order.status !== 'paid' || !stage || stage === 'in_stock') continue;
-        const from = order.expected_from && order.expected_from.getTime() <= to.getTime() ? order.expected_from : to;
+        // after a delay the customer gets one new day («до 30 ноября»), not a range that starts before the old end
+        const from = to;
         await tx.orders.update({ where: { id: orderId }, data: { expected_from: from, expected_to: to } });
         await tx.cross_border_events.create({ data: { order_id: orderId, batch_id: input.batch_id ?? null, type: 'delay', expected_from: from, expected_to: to, reason, created_by: staffId } });
         await this.notifications.toCustomer(tx, {

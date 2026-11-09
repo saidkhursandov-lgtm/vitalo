@@ -140,7 +140,8 @@ export function OrderDetail() {
           <br />
           {o.delivery.address_text}
         </p>
-        {term && <p className="hint small">{t('delivery.term', { days: term })}</p>}
+        {/* D-60: while the jars are on their way from the USA the tracking above gives the date, not the courier term */}
+        {term && (!o.cross_border || o.cross_border.stage === 'in_stock') && <p className="hint small">{t('delivery.term', { days: term })}</p>}
         <h2>{t('orders.recipient')}</h2>
         <p>
           {o.recipient.name}, {prettyPhone(o.recipient.phone)}

@@ -37,7 +37,7 @@ export function CrossBorderBox({
       <ol className="cb-steps">
         {cb.steps.map((s) => (
           <li key={s.stage} className={s.done ? 'is-done' : ''}>
-            <span>{STAGE[s.stage] ?? s.stage}</span>
+            <span>{s.stage === 'paid' ? 'Оплачен' : STAGE[s.stage] ?? s.stage}</span>
             <span className="muted small">{s.at ? dateTime(s.at) : '—'}</span>
           </li>
         ))}

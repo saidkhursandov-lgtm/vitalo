@@ -27,7 +27,7 @@ describe('D-60: «Под заказ из США» on the customer side', () => {
   it('before paying: the window, prepayment only and the money-back term', () => {
     wrap('ru', <UsaWindowNotice window={{ expected_from: '2026-11-16', expected_to: '2026-11-23', guarantee_days: 21 }} />);
     expect(screen.getByText('Товары из США. Ожидаемая доставка: 16–23 ноября')).toBeTruthy();
-    expect(screen.getByText(/Оплата только онлайн или переводом.*через 21 дней/)).toBeTruthy();
+    expect(screen.getByText(/Оплата только онлайн или переводом.*на 21-й день/)).toBeTruthy();
   });
 
   it('the order: every stage, the moved date with its reason, from which day the money can be returned', () => {
