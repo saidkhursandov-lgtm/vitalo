@@ -13,6 +13,7 @@
 | Админка | React 19, Vite 7, React Query | `apps/admin` |
 | Бот | grammY (long polling), tsx | `apps/bot` |
 | AI (3.8) | Claude API (Anthropic) через `@anthropic-ai/sdk`; модель — настройка в админке, ключ — только `ANTHROPIC_API_KEY` в `.env` | `apps/api/src/compat` |
+| AI-аналитик для админа (этап 5, ветка 4) | Второй контур Claude, отдельный ключ `ANTHROPIC_ADMIN_API_KEY`, своя модель и бюджет, только администратор | `apps/api/src/ai-analyst` |
 | Тесты | Jest (API, e2e на базе `vitalo_test`), Vitest (Mini App, админка, бот) | `apps/*/test`, `*.test.ts` |
 
 ## Как части связаны
@@ -65,6 +66,7 @@
 | Лист ожидания | `product_waitlist` | товар и покупатель (уникально); `notified_at` — когда бот написал «снова в наличии» (2.4, миграция `20261031100000`, только добавляющая; на сервере с 31.10); `cancelled_at` — покупатель выключил колокольчик, запись не удаляется (патч 2.4, миграция `20261031200000`, только добавляющая; на сервере с 31.10) |
 | iHerb и цены (этап 5, D-57) | `iherb_uploads`, `iherb_price_snapshots`, `price_changes`, `iherb_reminders`; поля iHerb в `products` (`iherb_url`, `iherb_product_id`, наценка, округление, режим склада, доза, форма — миграция `20261114100000`, применена на `vitalo_dev` и на сервере 08.11) | загрузка вишлиста → срезы цен (`iherb_price_snapshots`, товар может быть без ссылки) → автоцена → журнал `price_changes`; миграция `20261115100000_iherb_prices` (только добавляющая) — применена на `vitalo_dev` и на сервере 08.11 |
 | Цены конкурентов (этап 5, ветка 3, D-57) | `competitor_prices` (товар VITALO, площадка, название и ссылка у конкурента, цена, дата, 4 поля сверки, результат, источник вручную / ai, `hidden_at` вместо удаления) | сверка «1-в-1» проверяется по текущей карточке товара; миграция `20261116100000_competitor_prices` (только добавляющая) — применена на `vitalo_dev` 08.11 и на сервере 09.11 (выложено, `release-stage5-competitors`) |
+| AI-аналитик и сигналы закупки (этап 5, ветка 4, D-59) | `admin_ai_feed` (что прислал владелец), `admin_business_memory` (память: решения и заметки; «Убрать» — `active` = false), `admin_ai_requests` (журнал запросов, стоимость с учётом кеша); поля `iherb_price_snapshots.bestseller_rank`, `competitor_prices.orders_count`; миграция `20261117100000_admin_ai_analyst` (только добавления) — применена на `vitalo_test` и `vitalo_dev` 09.11; на сервере — нет |
 | Сотрудники и аудит | `staff_users` (3.4: поле `is_specialist`), `staff_sessions` (устройство, IP, последний вход; миграция `20261113100000`, применена на сервере 08.11), `staff_devices` и `staff_login_requests`, `staff_backup_codes` (вход в браузере), `audit_logs`, `system_errors`, `legal_documents`, `legal_acceptances` | — |
 
 ## API (основное)
