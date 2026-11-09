@@ -496,33 +496,57 @@ details.card[open] summary { margin-bottom: 4px; }
 /* Payme / Click / Uzum «Скоро» (D-20) */
 .pay-hint { margin: 10px 0 0; }
 /* 3.5: a compact row ABOVE the working methods, with the label «Скоро подключим» (D-41: acquiring comes last) */
-.online-soon { margin: 0 0 12px; padding: 0 0 12px; border-bottom: 1px solid var(--border); }
-.online-soon-label { margin: 0 0 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.online-soon-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.online-soon-btn { display: flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 4px 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; }
-.online-soon-btn:active { background: var(--surface-2); }
-.online-soon-btn img { max-width: 100%; height: 24px; object-fit: contain; filter: grayscale(0.15); }
 .online-soon-logo { display: block; height: 32px; margin: 8px auto 0; }
-.online-soon .sheet .sheet-actions { grid-template-columns: 1fr; }
 .progress-box { margin: 8px 0; font-size: 14px; }
 .progress { height: 6px; border-radius: 3px; background: var(--neutral-soft); overflow: hidden; margin-top: 8px; }
 .progress div { height: 100%; background: var(--primary); transition: width 0.3s; }
 .progress-box.is-done .progress div { background: var(--success); }
 
-.pay-option {
-  display: flex; align-items: flex-start; gap: 12px; min-height: 56px; padding: 14px; margin: 0 0 8px;
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; background: var(--surface);
-}
-.pay-option > span { min-width: 0; }
-.pay-option.is-on { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); background: var(--primary-soft); }
-.pay-option input { width: 22px; height: 22px; margin: 0; accent-color: var(--primary); flex: none; }
-.pay-option.is-disabled { cursor: default; align-items: center; background: var(--surface-2); border-color: var(--border); color: var(--muted); }
-.pay-option.is-disabled span:nth-child(2) { flex: 1; }
-/* Payme: the logo instead of a title; the logo keeps its own colours (D-19: no orange fill) */
-.pay-option-logo { display: block; height: 22px; width: auto; margin: 0 0 4px; }
-.pay-option.is-disabled .pay-option-logo { opacity: 0.5; }
 .btn img[aria-hidden] { flex: none; border-radius: 4px; background: #fff; }
 .soon-badge { flex: none; padding: 3px 10px; border-radius: 10px; background: var(--neutral-soft); color: var(--muted); font-size: 12px; font-weight: 600; }
+
+/* 6а-Г: every payment method is the same card — logo box, name + one line, the choice on the right */
+.pay-methods { display: grid; gap: 8px; margin: 0 0 8px; }
+.pay-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; margin: 0;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.pay-card.is-on { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); background: var(--primary-soft); }
+.pay-card input { width: 22px; height: 22px; margin: 0; accent-color: var(--primary); flex: none; }
+/* the logos keep their own colours (D-19: no orange fill); the box is white even on a selected card */
+.pay-card-logo {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 56px; height: 40px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+}
+.pay-card-logo img { display: block; max-width: 46px; max-height: 18px; width: auto; height: auto; object-fit: contain; }
+.pay-card-logo.is-icon { border-color: transparent; background: var(--primary-soft); color: var(--primary); }
+.pay-card.is-on .pay-card-logo.is-icon { background: var(--surface); }
+.pay-card-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pay-card-text strong { font-size: 15px; line-height: 1.3; }
+.pay-card-text .hint { line-height: 1.35; }
+.pay-card.is-disabled, .pay-card.is-soon { background: var(--surface-2); border-color: var(--border); }
+.pay-card.is-disabled { cursor: default; }
+.pay-card.is-disabled .pay-card-text strong, .pay-card.is-soon .pay-card-text strong { color: var(--muted); }
+.pay-card.is-disabled .pay-card-logo img, .pay-card.is-soon .pay-card-logo img { opacity: 0.55; }
+.pay-card.is-soon:active { background: var(--neutral-soft); }
+
+/* 6а-Г: «Чек VITALO» over the checkout (Payme / Click) */
+.receipt-sheet .sheet-head { margin-bottom: 4px; }
+.receipt { margin: 4px 0 12px; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); }
+.receipt-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.receipt-row strong { white-space: nowrap; }
+.receipt-timer { margin: 6px 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--primary-soft); color: var(--primary-text); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.receipt-timer.is-over { background: var(--error-soft); color: var(--error); }
+.receipt-items { list-style: none; margin: 0 0 4px; padding: 8px 0; border-top: 1px dashed var(--border-strong); border-bottom: 1px dashed var(--border-strong); }
+.receipt-items li { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 14px; }
+.receipt-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receipt-item-qty { flex: none; color: var(--muted); }
+.receipt-item-sum { flex: none; white-space: nowrap; }
+.receipt-total { padding-top: 8px; font-size: 16px; }
+.receipt-total strong { font-size: 18px; }
+.term .hint.block { font-weight: 500; }
+.term .nowrap { white-space: nowrap; }
 
 /* ---------- payment / orders / profile ---------- */
 .amount-card { text-align: center; }

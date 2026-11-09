@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CartIcon, MinusIcon, PinIcon, PlusIcon, TrashIcon } from '../components/Icons';
-import { QuoteTerm } from '../components/Delivery';
+import { OrderTerm } from '../components/Delivery';
 import { useQuickNotify } from '../components/QuickAdd';
 import { useQuickCart } from '../lib/quick-cart';
 import { tapHaptic } from '../lib/telegram';
@@ -264,7 +264,7 @@ export function Cart() {
         )}
         {delivery ? (
           <>
-            <QuoteTerm min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />
+            <OrderTerm window={data.cross_border} min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />
             <FreeShippingProgress quote={delivery} />
             <UpsellStrip city={selected} goodsTotal={data.goods_total_uzs} inCart={data.items.map((l) => l.product_id)} />
           </>

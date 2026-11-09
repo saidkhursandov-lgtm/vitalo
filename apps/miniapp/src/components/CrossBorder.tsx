@@ -65,12 +65,14 @@ export function UsaBadge({ mark }: { mark?: UnderOrderMark | null }) {
   );
 }
 
+/** A foreign line in the order — the «из США» texts (prepayment only); only local lines — «под заказ». */
+export const windowMark = (w: CrossBorderWindow): UnderOrderMark => (w.foreign === false ? { kind: 'local' } : { kind: 'foreign', from_ru: w.from_ru, from_uz: w.from_uz });
+
 /** D-60: before the payment — when it comes, that everything comes together, prepayment only (abroad), cancel and money back. */
 export function UsaWindowNotice({ window: w }: { window: CrossBorderWindow }) {
   const { lang } = useI18n();
   const uo = useUnderOrderText();
-  // a foreign line in the order — the «из США» texts (prepayment only); only local lines — «под заказ»
-  const mark: UnderOrderMark = w.foreign === false ? { kind: 'local' } : { kind: 'foreign', from_ru: w.from_ru, from_uz: w.from_uz };
+  const mark = windowMark(w);
   return (
     <div className="usa-notice" role="note">
       {mark.kind !== 'local' && <PlaneIcon width={20} height={20} />}

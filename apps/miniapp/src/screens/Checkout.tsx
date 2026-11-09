@@ -18,16 +18,11 @@ import { PhoneIcon } from '../components/Icons';
 import type { Order, OrderPreview, PaymentMethodCode } from '../lib/types';
 
 import { FreeShippingProgress } from './Cart';
-import { OnlineSoon, OrderItems, OrderTotals } from '../components/OrderItems';
+import { OrderItems, OrderTotals } from '../components/OrderItems';
 import type { OnlineProvider } from '../lib/types';
-
-/**
- * Release 1: «Перевод по реквизитам компании» is gone (D-06). «Оплата при получении» is added only where the server
- * says it is possible (the city of Tashkent, up to the limit). 2.1 (D-20): Payme / Click / Uzum each have a mode in
- * Настройки → Оплата; «Скоро» = a logo button that explains, «Скрыта» = not shown.
- */
-const ONLINE: OnlineProvider[] = ['payme', 'click', 'uzum'];
-import { QuoteTerm } from '../components/Delivery';
+import { PayMethods, type PayCard } from '../components/PayMethods';
+import { PayReceiptSheet } from '../components/PayReceipt';
+import { OrderTerm } from '../components/Delivery';
 import { UsaWindowNotice, useUnderOrderText } from '../components/CrossBorder';
 
 interface Form {
@@ -78,6 +73,8 @@ export function Checkout() {
   const [method, setMethod] = useState<PaymentMethodCode>('card_transfer');
   const [errors, setErrors] = useState<Partial<Record<keyof Form, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 6а-Г: the order is placed with an online payment — «Чек VITALO» opens over the checkout
+  const [receipt, setReceipt] = useState<{ id: string; provider: OnlineProvider } | null>(null);
   // 3.3: «Купить сейчас» keeps its code here; a cart checkout uses the code saved on the cart (the server reads it)
   const [buyPromo, setBuyPromo] = useState<string | null>(null);
   const [promoNotice, setPromoNotice] = useState<string | null>(null);
@@ -236,8 +233,10 @@ export function Checkout() {
       void client.invalidateQueries({ queryKey: ['cart'] });
       void client.invalidateQueries({ queryKey: ['orders'] });
       void client.invalidateQueries({ queryKey: ['free-shipping'] }); // the first-order offer is gone now
-      // Cash on delivery has no transfer screen: the order waits for the manager's call; Payme has its own screen
-      navigate(order.payment?.method === 'cod' ? `/orders/${order.id}` : payPath(order.id, order.payment?.method), { replace: true });
+      // 6а-Г: Payme — «Чек VITALO» over the checkout, no screen in between; cash on delivery waits for the manager's
+      // call (the order screen); the card transfer has its own screen with the card number
+      if (order.payment?.method === 'payme') setReceipt({ id: order.id, provider: 'payme' });
+      else navigate(order.payment?.method === 'cod' ? `/orders/${order.id}` : payPath(order.id, order.payment?.method), { replace: true });
     } catch (err) {
       haptic('error');
       const code = err instanceof ApiError ? err.code : undefined;
@@ -253,7 +252,22 @@ export function Checkout() {
   }
 
   const p = preview.data;
-  const blocked = !p || !p.can_place || placeOrder.isPending;
+  const blocked = !p || !p.can_place || placeOrder.isPending || !!receipt;
+
+  // 6а-Г: every method is the same card. Payme / Click / Uzum by their mode in Настройки → Оплата: «Скоро» — a grey
+  // card that explains, «Скрыта» — none; Payme «Работает» (or «Тест» for staff) — a real choice. «При получении» only
+  // where the server allows it (Tashkent, up to the limit: above it shown disabled with the reason).
+  const online = shop.data?.checkout?.online;
+  const soonCard = (code: OnlineProvider): PayCard => ({ code, state: 'soon', desc: t('pay.soonDesc') });
+  const cards: PayCard[] = [];
+  if (paymeOpen && codOption) cards.push({ code: 'payme', state: codOption.payme ? 'ok' : 'disabled', desc: codOption.payme ? t('pay.paymeDesc') : t('pay.paymeIkpu') });
+  else if (online?.payme === 'soon') cards.push(soonCard('payme'));
+  for (const s of ['click', 'uzum'] as const) if (online?.[s] === 'soon') cards.push(soonCard(s));
+  cards.push({ code: 'card_transfer', state: 'ok', desc: t('pay.cardDesc') });
+  if (codOption && (codOption.cod || codOption.cod_unavailable === 'limit')) {
+    const desc = codOption.cod || shop.data?.checkout?.cod_max_total_uzs == null ? t('pay.codDesc') : t('pay.codLimit', { max: money(shop.data.checkout.cod_max_total_uzs, lang) });
+    cards.push({ code: 'cod', state: codOption.cod ? 'ok' : 'disabled', desc });
+  }
 
   return (
     <form className="page checkout" onSubmit={(e) => void submit(e)} noValidate>
@@ -342,48 +356,14 @@ export function Checkout() {
         <h2>{t('checkout.payment')}</h2>
         {/* D-60: lines from the USA — when it comes, prepayment only, cancel and money back */}
         {preview.data?.cross_border && <UsaWindowNotice window={preview.data.cross_border} />}
-        {/* 3.5: Payme / Click / Uzum «Скоро подключим» above the working methods; the card transfer stays chosen */}
-        <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon' && !(s === 'payme' && paymeOpen))} />
-        {/* Payme «Работает»: a real method; a product without ИКПУ shows it disabled with the reason */}
-        {paymeOpen && codOption && (
-          <label className={`pay-option pay-option-online ${method === 'payme' ? 'is-on' : ''} ${codOption.payme ? '' : 'is-disabled'}`}>
-            <input type="radio" name="payment" checked={method === 'payme'} disabled={!codOption.payme} onChange={() => setMethod('payme')} />
-            <span>
-              <img className="pay-option-logo" src="/payment/payme.png" alt={t('pay.paymeTitle')} height={22} />
-              <span className="hint small block">{codOption.payme ? t('pay.paymeDesc') : t('pay.paymeIkpu')}</span>
-            </span>
-          </label>
-        )}
-        <label className={`pay-option ${method === 'card_transfer' ? 'is-on' : ''}`}>
-          <input type="radio" name="payment" checked={method === 'card_transfer'} onChange={() => setMethod('card_transfer')} />
-          <span>
-            <strong>{t('pay.card')}</strong>
-            <span className="hint small block">{t('pay.cardDesc')}</span>
-          </span>
-        </label>
-        {/* Hidden for other regions; for an order above the limit it is shown disabled with the reason */}
-        {codOption && (codOption.cod || codOption.cod_unavailable === 'limit') && (
-          <label className={`pay-option ${method === 'cod' ? 'is-on' : ''} ${codOption.cod ? '' : 'is-disabled'}`}>
-            <input
-              type="radio"
-              name="payment"
-              checked={method === 'cod'}
-              disabled={!codOption.cod}
-              onChange={() => {
-                setMethod('cod');
-                track('cod_selected');
-              }}
-            />
-            <span>
-              <strong>{t('pay.codTitle')}</strong>
-              <span className="hint small block">
-                {codOption.cod || shop.data?.checkout?.cod_max_total_uzs == null
-                  ? t('pay.codDesc')
-                  : t('pay.codLimit', { max: money(shop.data.checkout.cod_max_total_uzs, lang) })}
-              </span>
-            </span>
-          </label>
-        )}
+        <PayMethods
+          cards={cards}
+          value={method}
+          onChange={(code) => {
+            setMethod(code);
+            if (code === 'cod') track('cod_selected');
+          }}
+        />
         {codOption?.cod_unavailable === 'cross_border' && (
           <p className="hint small">{uo('codOff', { kind: 'foreign', from_ru: preview.data?.cross_border?.from_ru, from_uz: preview.data?.cross_border?.from_uz })}</p>
         )}
@@ -422,7 +402,7 @@ export function Checkout() {
                 total={p.totals.total_uzs}
               />
               <FreeShippingProgress quote={p.delivery} />
-              <QuoteTerm min={p.delivery.min_days} max={p.delivery.max_days} note={lang === 'uz' ? p.delivery.note_uz : p.delivery.note_ru} />
+              <OrderTerm window={p.cross_border} min={p.delivery.min_days} max={p.delivery.max_days} note={lang === 'uz' ? p.delivery.note_uz : p.delivery.note_ru} />
             </>
           )
         )}
@@ -439,6 +419,7 @@ export function Checkout() {
           {placeOrder.isPending ? t('common.loading') : t(method === 'cod' ? 'checkout.confirmCod' : 'checkout.confirm', { sum: p ? money(p.totals.total_uzs, lang) : '…' })}
         </button>
       </StickyAction>
+      {receipt && <PayReceiptSheet orderId={receipt.id} provider={receipt.provider} onClose={() => navigate(`/orders/${receipt.id}`, { replace: true })} />}
     </form>
   );
 }

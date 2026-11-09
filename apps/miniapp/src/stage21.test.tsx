@@ -2,7 +2,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bannerHref, HomeCarousel } from './components/HomeBlocks';
-import { OnlineSoon, OrderItems, OrderTotals } from './components/OrderItems';
+import { OrderItems, OrderTotals } from './components/OrderItems';
+import { PayMethods, type PayCard } from './components/PayMethods';
 import * as analytics from './lib/analytics';
 import { formLabel, shortNameOf } from './lib/format';
 import { I18nProvider } from './lib/i18n';
@@ -77,9 +78,13 @@ describe('Payme / Click / Uzum «Скоро» (D-20)', () => {
   beforeEach(() => vi.spyOn(analytics, 'track').mockImplementation(() => undefined));
   afterEach(() => vi.restoreAllMocks());
 
-  it('logo buttons + disclaimer; a tap opens the sheet and counts payment_soon_click with the system', () => {
+  // 6а-Г: «Скоро» is the same payment card, greyed, with the «Скоро» chip
+  const soon = (codes: PayCard['code'][]): PayCard[] => codes.map((code) => ({ code, state: 'soon', desc: code === 'click' ? 'Tez orada ulanadi' : 'Скоро подключим' }));
+  const OnlineSoon = ({ systems }: { systems: PayCard['code'][] }) => <PayMethods cards={soon(systems)} value="card_transfer" onChange={() => undefined} />;
+
+  it('grey cards with «Скоро»; a tap opens the sheet and counts payment_soon_click with the system', () => {
     wrap('ru', <OnlineSoon systems={['payme', 'click', 'uzum']} />);
-    expect(screen.getByText('Скоро подключим')).toBeTruthy();
+    expect(screen.getAllByText('Скоро подключим').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button')).toHaveLength(3);
     fireEvent.click(screen.getByLabelText('Uzum · Скоро'));
     expect(analytics.track).toHaveBeenCalledWith('payment_soon_click', { system: 'uzum' });
@@ -97,9 +102,9 @@ describe('Payme / Click / Uzum «Скоро» (D-20)', () => {
     expect(screen.getByText('Tushunarli')).toBeTruthy();
   });
 
-  it('nothing in «Скоро»: the block is not rendered', () => {
+  it('nothing in «Скоро»: no cards', () => {
     const { container } = wrap('ru', <OnlineSoon systems={[]} />);
-    expect(container.innerHTML).toBe('');
+    expect(container.querySelectorAll('.pay-card')).toHaveLength(0);
   });
 });
 

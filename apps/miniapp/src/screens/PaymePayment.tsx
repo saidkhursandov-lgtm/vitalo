@@ -1,55 +1,27 @@
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ErrorState, Loading, StickyAction } from '../components/ui';
 import { PayBy } from '../components/PayBy';
+import { usePaymeFlow } from '../components/PayReceipt';
 import { SupportButton } from '../components/Support';
-import { api, ApiError } from '../lib/api';
 import { money, orderNo } from '../lib/format';
-import { errorText, useI18n } from '../lib/i18n';
-import { useOrder } from '../lib/queries';
-import { openLink } from '../lib/telegram';
-import type { OnlinePaymentStart } from '../lib/types';
-
-/** While the order waits, its status is asked again this often: Payme tells our server, not the Mini App. */
-const POLL_MS = 4000;
+import { useI18n } from '../lib/i18n';
 
 /**
  * Payme: one button «Оплатить через Payme» opens Payme's page (through the Telegram adapter, inside the tap). The
  * customer pays there and comes back; meanwhile the screen asks for the order status and shows «Оплачен» as soon as
- * Payme has confirmed the payment to the server (PerformTransaction).
+ * Payme has confirmed the payment to the server (PerformTransaction). 6а-Г: right after the checkout the same payment
+ * opens as «Чек VITALO» over the checkout; this screen stays for the links from the order and the notifications.
  */
 export function PaymePayment() {
   const { id = '' } = useParams();
   const { t, lang } = useI18n();
-  const [opened, setOpened] = useState(false);
-  const order = useOrder(id);
-  const o = order.data;
-  const waiting = o?.status === 'awaiting_payment' && o.payment_status === 'payment_pending';
-  // the page link is prepared before the tap: Telegram opens links only right inside the tap
-  const link = useQuery({
-    queryKey: ['order', id, 'payme-link', lang],
-    queryFn: () => api<OnlinePaymentStart>(`/payments/online/payme/orders/${id}/start`, { method: 'POST', body: { lang } }),
-    enabled: waiting,
-    staleTime: Infinity,
-    retry: false,
-  });
-  // polling: after the tap — every few seconds; and every time the customer comes back to the Mini App (focus)
-  useQuery({ queryKey: ['order', id, 'poll'], queryFn: () => order.refetch().then(() => true), enabled: waiting && opened, refetchInterval: POLL_MS });
+  const { order, link, opened, pay, waiting, paid, cancelled, linkError } = usePaymeFlow(id);
 
   if (order.isPending) return <div className="page"><Loading /></div>;
   if (order.isError) return <ErrorState error={order.error} onRetry={() => void order.refetch()} />;
-  const d = o!;
+  const d = order.data;
   // 6а-А: not a Payme order (an old link) — the order screen shows the right way to pay
   if (d.payment?.method && d.payment.method !== 'payme') return <Navigate to={`/orders/${id}`} replace />;
-  const paid = d.payment_status === 'payment_success';
-  const cancelled = d.status === 'cancelled';
-
-  const pay = () => {
-    if (!link.data) return;
-    openLink(link.data.checkout_url);
-    setOpened(true);
-  };
 
   return (
     <div className="page">
@@ -73,9 +45,9 @@ export function PaymePayment() {
           ) : (
             <p className="notice notice-info">{t('pay.paymeStep')}</p>
           )}
-          {link.isError && (
+          {linkError && (
             <p className="error-text" role="alert">
-              {errorText(lang, link.error instanceof ApiError ? link.error.code : undefined)}
+              {linkError}
             </p>
           )}
           <StickyAction>

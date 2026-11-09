@@ -40,6 +40,8 @@ import {
   Phone,
   ShieldCheck,
   Copy,
+  CreditCard,
+  Banknote,
   Heart,
   Hourglass,
   House,
@@ -108,6 +110,8 @@ export const SupportIcon = make(MessageCircle);
 export const GiftIcon = make(Gift);
 export const PhoneIcon = make(Phone);
 export const ReceiptIcon = make(ReceiptText);
+export const CardPayIcon = make(CreditCard);
+export const CashIcon = make(Banknote);
 export const BadgeIcon = make(BadgeCheck);
 export const StarIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
   <Star strokeWidth={STROKE} aria-hidden fill={filled ? 'currentColor' : 'none'} {...p} />

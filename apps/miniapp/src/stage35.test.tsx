@@ -10,7 +10,7 @@ import { resetQuickCart } from './lib/quick-cart';
 import type { BankTransfer, Lang, ProductListItem } from './lib/types';
 import { UpsellStrip } from './screens/Cart';
 import { Payment } from './screens/Payment';
-import { OnlineSoon } from './components/OrderItems';
+import { PayMethods } from './components/PayMethods';
 import { HERO_AUTOPLAY_MS, HomeCarousel } from './components/HomeBlocks';
 
 
@@ -134,14 +134,15 @@ describe('3.5 card transfer on one screen', () => {
   });
 });
 
-describe('3.5 Payme / Click / Uzum «Скоро подключим»', () => {
-  it('the label comes before the logos (RU / UZ)', () => {
-    const { container } = show('uz', <OnlineSoon systems={['payme', 'click', 'uzum']} />);
-    const block = container.querySelector('.online-soon')!;
-    expect(block.firstElementChild!.textContent).toBe('Tez orada ulanadi');
+describe('3.5 / 6а-Г Payme / Click / Uzum «Скоро»', () => {
+  it('each card: the logo, the name, then the «Скоро» chip (RU / UZ)', () => {
+    const { container } = show('uz', <PayMethods cards={[{ code: 'click', state: 'soon', desc: 'Tez orada ulanadi' }]} value="card_transfer" onChange={() => undefined} />);
+    const card = container.querySelector('.pay-card.is-soon')!;
+    expect([...card.children].map((c) => c.className)).toEqual(['pay-card-logo', 'pay-card-text', 'soon-badge']);
+    expect(card.textContent).toContain('Tez orada');
     cleanup();
-    show('ru', <OnlineSoon systems={['payme']} />);
-    expect(screen.getByText('Скоро подключим')).toBeTruthy();
+    show('ru', <PayMethods cards={[{ code: 'payme', state: 'soon', desc: 'Скоро подключим' }]} value="card_transfer" onChange={() => undefined} />);
+    expect(screen.getByText('Скоро')).toBeTruthy();
   });
 });
 
