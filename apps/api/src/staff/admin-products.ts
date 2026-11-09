@@ -156,7 +156,7 @@ export class ProductInput {
   // Генплан, этап 5 (D-57): iHerb. The link is checked and its product number taken on the server.
   @ApiPropertyOptional({ nullable: true, description: 'Ссылка на товар iHerb (uz.iherb.com/pr/…/12345)' })
   @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(500) iherb_url?: string | null;
-  @ApiPropertyOptional({ description: '«Под заказ из США», когда на складе ноль (включается после ответа юриста)' }) @IsOptional() @IsBoolean() cross_border_eligible?: boolean;
+  @ApiPropertyOptional({ description: '«Под заказ из США», когда на складе ноль. Товары с артикулом VTL-H… и VTL-GH… идут из США и без этой галочки' }) @IsOptional() @IsBoolean() cross_border_eligible?: boolean;
   @ApiPropertyOptional({ description: 'Автоцена: цена iHerb × (1 + наценка %) — только администратор' }) @IsOptional() @IsBoolean() auto_pricing_enabled?: boolean;
   @ApiPropertyOptional({ description: 'Наценка к цене iHerb, % (по умолчанию 80) — только администратор' }) @IsOptional() @IsInt() @Min(0) @Max(1000) markup_percent?: number;
   @ApiPropertyOptional({ description: 'Округлять автоцену вверх до, сум — только администратор' }) @IsOptional() @IsInt() @Min(1) @Max(100000) price_round_to?: number;

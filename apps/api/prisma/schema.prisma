@@ -474,6 +474,8 @@ model staff_users {
   price_changes         price_changes[]
   competitor_prices     competitor_prices[]
   admin_ai_feed         admin_ai_feed[]
+  cross_border_batches  cross_border_batches[]
+  cross_border_events   cross_border_events[]
   admin_ai_memory       admin_business_memory[]
   admin_ai_requests     admin_ai_requests[]
 }
@@ -788,13 +790,14 @@ model purchases {
   created_at             DateTime           @default(now())
   updated_at             DateTime           @updatedAt
 
-  ozon_account ozon_accounts?       @relation(fields: [ozon_account_id], references: [id])
-  supplier     suppliers?           @relation(fields: [supplier_id], references: [id])
-  staff        staff_users?         @relation(fields: [created_by], references: [id])
-  lines        purchase_lines[]
-  events       purchase_events[]
-  units        physical_units[]
-  receiving    receiving_sessions[]
+  ozon_account         ozon_accounts?         @relation(fields: [ozon_account_id], references: [id])
+  supplier             suppliers?             @relation(fields: [supplier_id], references: [id])
+  staff                staff_users?           @relation(fields: [created_by], references: [id])
+  lines                purchase_lines[]
+  events               purchase_events[]
+  units                physical_units[]
+  receiving            receiving_sessions[]
+  cross_border_batches cross_border_batches[]
 
   @@index([source_type, purchase_date])
   @@index([ozon_account_id, ozon_order_number])
@@ -1585,45 +1588,57 @@ model orders {
   /// 3.3: the promo code (normalized) and the frozen price calculation; never recalculated after creation
   promo_code                     String?
   pricing_json                   Json?
+  /// D-60: the promised delivery window of an order with lines from the USA (moved by staff with a reason)
+  expected_from                  DateTime?     @db.Date
+  expected_to                    DateTime?     @db.Date
+  /// D-60: the staff reminder «дата прошла» was sent for this expected_to
+  cross_border_overdue_for       DateTime?     @db.Date
 
-  user            users                  @relation(fields: [user_id], references: [id])
-  region          regions                @relation(fields: [region_id], references: [id])
-  city            cities                 @relation(fields: [city_id], references: [id])
-  promo           promotions?            @relation(fields: [promo_id], references: [id])
-  shipment        shipments?             @relation(fields: [shipment_id], references: [id])
-  items           order_items[]
-  item_units      order_item_units[]
-  history         order_status_history[]
-  edits           order_edit_log[]
-  payments        payments[]
-  returns         returns[]
-  promo_usages    promotion_usages[]
-  ledger          bonus_ledger[]
-  cancel_requests cancel_requests[]
-  tasks           manager_tasks[]
-  notifications   notifications[]
-  receipts        payment_receipts[]
-  payme_txs       payme_transactions[]
+  user                users                  @relation(fields: [user_id], references: [id])
+  region              regions                @relation(fields: [region_id], references: [id])
+  city                cities                 @relation(fields: [city_id], references: [id])
+  promo               promotions?            @relation(fields: [promo_id], references: [id])
+  shipment            shipments?             @relation(fields: [shipment_id], references: [id])
+  items               order_items[]
+  item_units          order_item_units[]
+  history             order_status_history[]
+  edits               order_edit_log[]
+  payments            payments[]
+  returns             returns[]
+  promo_usages        promotion_usages[]
+  ledger              bonus_ledger[]
+  cancel_requests     cancel_requests[]
+  tasks               manager_tasks[]
+  notifications       notifications[]
+  receipts            payment_receipts[]
+  payme_txs           payme_transactions[]
+  cross_border_events cross_border_events[]
 
   @@index([user_id, status, created_at])
   @@index([status, reserved_until]) // reservation-expiry job
 }
 
 model order_items {
-  id                  String             @id @default(uuid()) @db.Uuid
-  order_id            String             @db.Uuid
-  product_id          String             @db.Uuid
-  sku_snapshot        String
-  name_ru_snapshot    String
-  qty                 Int
-  unit_price_uzs      BigInt
-  line_total_uzs      BigInt
-  discount_uzs        BigInt             @default(0)
-  paid_line_total_uzs BigInt // actual paid price of line (basis for returns)
-  order               orders             @relation(fields: [order_id], references: [id])
-  product             products           @relation(fields: [product_id], references: [id])
-  return_items        return_items[]
-  units               order_item_units[]
+  id                    String                @id @default(uuid()) @db.Uuid
+  order_id              String                @db.Uuid
+  product_id            String                @db.Uuid
+  sku_snapshot          String
+  name_ru_snapshot      String
+  qty                   Int
+  unit_price_uzs        BigInt
+  line_total_uzs        BigInt
+  discount_uzs          BigInt                @default(0)
+  paid_line_total_uzs   BigInt // actual paid price of line (basis for returns)
+  /// D-60: local | cross_border («Под заказ из США»: nothing reserved until the jars arrive)
+  source                String                @default("local")
+  cross_border_batch_id String?               @db.Uuid
+  /// D-60: the cross-border line got its jars in Tashkent (from the parcel or from the Tashkent stock)
+  arrived_at            DateTime?
+  cross_border_batch    cross_border_batches? @relation(fields: [cross_border_batch_id], references: [id])
+  order                 orders                @relation(fields: [order_id], references: [id])
+  product               products              @relation(fields: [product_id], references: [id])
+  return_items          return_items[]
+  units                 order_item_units[]
 
   @@index([order_id])
 }
@@ -2375,4 +2390,48 @@ model analytics_events {
 
   @@index([event, created_at])
   @@index([user_id, created_at])
+}
+
+// ───────────── «ПОД ЗАКАЗ ИЗ США» (D-60) ─────────────
+/// «Посылка из США»: one order on iHerb for several customers' lines. stage: ordered | shipped | arrived_uz | received.
+model cross_border_batches {
+  id            String    @id @default(uuid()) @db.Uuid
+  number        Int       @unique @default(autoincrement())
+  stage         String    @default("ordered")
+  purchase_id   String?   @db.Uuid
+  note          String?
+  ordered_at    DateTime  @default(now())
+  shipped_at    DateTime?
+  arrived_uz_at DateTime?
+  received_at   DateTime?
+  created_by    String?   @db.Uuid
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now()) @updatedAt
+
+  purchase purchases?            @relation(fields: [purchase_id], references: [id])
+  staff    staff_users?          @relation(fields: [created_by], references: [id])
+  items    order_items[]
+  events   cross_border_events[]
+
+  @@index([stage, created_at])
+}
+
+/// The customer's timeline of an order from the USA: type stage (ordered | shipped | arrived_uz | in_stock) or delay.
+model cross_border_events {
+  id            String    @id @default(uuid()) @db.Uuid
+  order_id      String    @db.Uuid
+  batch_id      String?   @db.Uuid
+  type          String
+  stage         String?
+  expected_from DateTime? @db.Date
+  expected_to   DateTime? @db.Date
+  reason        String?
+  created_by    String?   @db.Uuid
+  created_at    DateTime  @default(now())
+
+  order orders                @relation(fields: [order_id], references: [id], onDelete: Restrict)
+  batch cross_border_batches? @relation(fields: [batch_id], references: [id])
+  staff staff_users?          @relation(fields: [created_by], references: [id])
+
+  @@index([order_id, created_at])
 }

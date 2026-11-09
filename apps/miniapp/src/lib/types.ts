@@ -66,6 +66,8 @@ export interface ProductListItem extends Named {
   /** Thumbnail with JPEG fallback and size (null for products without photos). */
   image?: { webp: string; jpeg: string | null; width: number | null; height: number | null } | null;
   in_stock: boolean;
+  /** D-60: nothing in Tashkent, but it can be ordered «Под заказ из США» (prepayment only) */
+  cross_border?: boolean;
   /** 3.7: the product is in a running sale — price_uzs is the sale price, campaign.list_price_uzs the regular one */
   campaign?: ShopCampaign | null;
 }
@@ -131,6 +133,8 @@ export interface BrandPage extends BrandCard {
 }
 
 export interface ProductCard extends ProductListItem {
+  /** D-60: «Под заказ из США • 7–14 дней» and the money-back term (null: the product is in stock or not from the USA) */
+  cross_border_terms?: { days_min: number; days_max: number; guarantee_days: number } | null;
   available_qty: number;
   /** 2.2: the brand page address; null — the brand has no page yet */
   brand_slug?: string | null;
@@ -308,6 +312,8 @@ export interface CartLine extends Named {
   status: 'available' | 'unavailable';
   qty: number;
   available_qty: number;
+  /** D-60: «Под заказ из США» */
+  cross_border?: boolean;
   unit_price_uzs: number;
   line_total_uzs: number;
   /** 3.7: the regular price (equals unit_price_uzs outside a sale) */
@@ -329,6 +335,27 @@ export interface Cart {
   goods_list_total_uzs?: number;
   campaign_discount_uzs?: number;
   campaigns?: CampaignLine[];
+  /** D-60: the cart has lines from the USA — the promised window counted from today */
+  cross_border?: CrossBorderWindow | null;
+}
+
+/** D-60: «Ожидаемая доставка: 18–25 ноября», YYYY-MM-DD */
+export interface CrossBorderWindow {
+  expected_from: string;
+  expected_to: string;
+  guarantee_days: number;
+}
+
+export type CbStage = 'paid' | 'ordered' | 'shipped' | 'arrived_uz' | 'in_stock';
+
+/** D-60: the tracking of an order with lines from the USA. */
+export interface CrossBorderTracking {
+  stage: CbStage | null;
+  lines_waiting: number;
+  expected_from: string | null;
+  expected_to: string | null;
+  steps: { stage: CbStage; done: boolean; at: string | null }[];
+  delays: { at: string; expected_to: string | null; reason: string | null }[];
 }
 
 export interface Region extends Named {
@@ -385,8 +412,12 @@ export interface Order {
   recipient: { name: string; phone: string };
   delivery: { region: Named; city: Named; address_text: string; cost_uzs: number };
   customer_comment: string | null;
-  items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; list_price_uzs?: number; form?: string | null; image_url?: string | null })[];
+  items: (ShortNamed & { product_id: string; sku: string; qty: number; unit_price_uzs: number; line_total_uzs: number; list_price_uzs?: number; form?: string | null; image_url?: string | null; cross_border?: boolean })[];
   totals: Totals;
+  /** D-60: lines «Под заказ из США» — stages and the promised window (null: none) */
+  cross_border?: CrossBorderTracking | null;
+  /** D-60: may the customer cancel the paid order «из США» now, and from which day by the guarantee */
+  cross_border_cancel?: { allowed: boolean; reason: 'not_ordered' | 'guarantee' | null; guarantee_date: string | null } | null;
   /** 3.7: «Акция 11.11: −X сум», frozen at creation */
   campaigns?: CampaignLine[];
   /** 3.3: the order's promo code (frozen at creation) */
@@ -442,6 +473,9 @@ export interface ActiveOrder {
     payment_reported: boolean;
     can_pay: boolean;
     delivery_eta: DeliveryEta | null;
+    /** D-60: a paid order waiting for the USA — its stage and the last promised day */
+    cross_border_stage?: CbStage | null;
+    expected_to?: string | null;
   } | null;
   more: number;
 }
@@ -455,10 +489,14 @@ export interface OrderListItem {
   items_count: number;
   payment_reported?: boolean;
   payment_method?: string | null;
+  /** D-60: a paid order waiting for the USA shows its stage instead of «Оплачен» */
+  cross_border_stage?: CbStage | null;
 }
 
 export interface OrderPreview {
-  items: (ShortNamed & { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null; campaign?: { discount_pct: number } | null })[];
+  items: (ShortNamed & { product_id: string; qty: number; unit_price_uzs: number; line_total_uzs: number; form?: string | null; image_url?: string | null; campaign?: { discount_pct: number } | null; cross_border?: boolean })[];
+  /** D-60: lines from the USA — the promised window */
+  cross_border?: CrossBorderWindow | null;
   skipped_unavailable: string[];
   totals: Totals;
   delivery: DeliveryQuote;
@@ -472,7 +510,7 @@ export interface OrderPreview {
   /** «Оплата при получении» is offered only for the city of Tashkent and up to the limit. */
   payment_options?: {
     cod: boolean;
-    cod_unavailable: 'region' | 'limit' | 'off' | null;
+    cod_unavailable: 'region' | 'limit' | 'off' | 'cross_border' | null;
     /** Payme: «Работает» and every product (and a paid delivery) has ИКПУ for the receipt */
     payme?: boolean;
     payme_unavailable?: 'off' | 'ikpu' | null;

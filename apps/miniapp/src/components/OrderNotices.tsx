@@ -7,6 +7,7 @@ import { orderNo } from '../lib/format';
 import type { IntakeGuide } from '../lib/types';
 import { ChevronIcon, DoctorIcon, STATUS_ICONS } from './Icons';
 import { useAskSpecialist } from './Support';
+import { dayMonth, useUsaStageLabel } from './CrossBorder';
 
 /**
  * 3.2: under the search on the home screen — «Заказ №… · статус · срок доставки» and «Подробнее ›» for the newest
@@ -17,11 +18,14 @@ export function ActiveOrderBar() {
   const { t, lang } = useI18n();
   const active = useActiveOrder();
   const shop = useShopTexts();
+  const usaStage = useUsaStageLabel();
   const o = active.data?.order;
   if (!o) return null;
   const cod = o.payment_method === 'cod';
-  const status = t(orderStatusKey(o.status, { reported: o.payment_reported, cod }));
-  const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
+  // D-60: a paid order waiting for the USA shows its stage and the last promised day
+  const cb = o.status === 'paid' && o.cross_border_stage && o.cross_border_stage !== 'in_stock' ? o.cross_border_stage : null;
+  const status = cb ? usaStage(cb) : t(orderStatusKey(o.status, { reported: o.payment_reported, cod }));
+  const term = cb ? null : daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
   const I = STATUS_ICONS[shownStatus(o.status, o.payment_reported)];
   const more = active.data?.more ?? 0;
 
@@ -40,6 +44,7 @@ export function ActiveOrderBar() {
             <span className="active-order-status">
               {status}
               {term && ` · ${t('activeOrder.term', { days: term })}`}
+              {cb && o.expected_to && ` · ${t('usa.until', { date: dayMonth(o.expected_to, lang) })}`}
             </span>
             <span className="active-order-more">
               {t('activeOrder.more')}

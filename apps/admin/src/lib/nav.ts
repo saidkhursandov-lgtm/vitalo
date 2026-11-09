@@ -59,6 +59,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/settings?tab=print', label: 'Печать этикеток', permission: 'settings.manage' },
       // D-57: iHerb wishlist prices, history and auto price — admin only (margins)
       { to: '/iherb', label: 'iHerb и цены', permission: 'iherb.prices' },
+      // D-60: «Под заказ из США» — what to order on iHerb, parcels and their stages
+      { to: '/cross-border', label: 'Посылки из США', permission: 'cross_border.view' },
     ],
   },
   {

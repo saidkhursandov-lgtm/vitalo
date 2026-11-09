@@ -43,6 +43,8 @@ export type Permission =
   | 'inventory.unit_override'
   | 'products.label'
   | 'orders.units'
+  | 'cross_border.view'
+  | 'cross_border.manage'
   | 'orders.waybill'
   | 'yandex.orders.view'
   | 'yandex.orders'

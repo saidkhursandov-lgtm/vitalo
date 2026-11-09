@@ -673,7 +673,7 @@ function IherbCard({
           <input type="checkbox" checked={f.cross_border_eligible === '1'} disabled={!editable} onChange={(e) => set('cross_border_eligible', e.target.checked ? '1' : '')} />
           <span>
             «Под заказ из США», когда на складе ноль
-            <span className="muted small"> — покупатели увидят после ответа юриста и включения функции</span>
+            <span className="muted small"> — товары с артикулом VTL-H… и VTL-GH… (из iHerb) идут из США и без галочки</span>
           </span>
         </label>
       </div>

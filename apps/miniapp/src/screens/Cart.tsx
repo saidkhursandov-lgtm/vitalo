@@ -16,6 +16,7 @@ import { useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useCartActions, useCartMapPick, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
 import { PromoBox } from '../components/Promo';
 import { CompatBlock } from '../components/Compat';
+import { UsaBadge, UsaWindowNotice } from '../components/CrossBorder';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
 
 /** Human text for a cart warning (price changed / qty reduced / out of stock). */
@@ -195,6 +196,7 @@ export function Cart() {
     <div className="page cart">
       <h1>{t('cart.title')}</h1>
       <CartWarnings cart={data} warnings={warnings} />
+      {data.cross_border && <UsaWindowNotice window={data.cross_border} />}
 
       <ul className="cart-lines">
         {data.items.map((l) => (
@@ -207,6 +209,7 @@ export function Cart() {
               <Link to={`/product/${l.product_id}`} className="cart-name" title={[l.brand, l.form && formLabel(l.form, lang)].filter(Boolean).join(' · ')}>
                 {shortNameOf(l, lang)}
               </Link>
+              {l.cross_border && <UsaBadge />}
               {l.status === 'unavailable' ? (
                 <div className="error-text small">{t('cart.unavailable')}</div>
               ) : (

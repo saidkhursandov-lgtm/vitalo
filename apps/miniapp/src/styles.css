@@ -1472,3 +1472,41 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .clamp-toggle[aria-expanded='true'] svg { transform: rotate(180deg); }
 .why-brand .clamp-toggle { color: var(--on-primary); }
 @media (prefers-reduced-motion: reduce) { .clamp-text, .clamp-toggle svg { transition: none; } }
+
+/* D-60: «Под заказ из США» — navy marks (not stock green, not orange text), stages as a vertical list */
+.tile-usa {
+  position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 8px;
+  background: var(--primary-soft); color: var(--primary-text); font-size: 11px; font-weight: 600; border: 1px solid var(--ai-box-border);
+}
+.stock.is-usa { color: var(--primary-text); }
+.usa-note { line-height: 1.45; }
+.usa-badge {
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-top: 2px; padding: 2px 8px; border-radius: 8px;
+  background: var(--primary-soft); color: var(--primary-text); font-size: 12px; font-weight: 600;
+}
+.usa-notice {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; margin: 0 0 12px; border-radius: var(--radius-sm);
+  background: var(--primary-soft); color: var(--text); font-size: 14px;
+}
+.usa-notice > svg { flex: none; margin-top: 1px; color: var(--primary-text); }
+.usa-notice strong { display: block; color: var(--primary-text); }
+.usa-notice p { margin: 4px 0 0; line-height: 1.45; }
+.usa-row { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; color: var(--primary-text); font-weight: 600; }
+.usa-eta { margin: 0 0 12px; }
+.usa-steps { list-style: none; margin: 0 0 8px; padding: 0; }
+.usa-step { position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 0 0 14px; color: var(--muted); }
+.usa-step:last-child { padding-bottom: 0; }
+.usa-step:not(:last-child)::after { content: ''; position: absolute; left: 11px; top: 26px; bottom: 2px; width: 2px; background: var(--border); }
+.usa-step.is-done:not(:last-child)::after { background: var(--primary); }
+.usa-step-dot {
+  flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1.5px solid var(--border-strong); color: var(--muted);
+}
+.usa-step.is-done .usa-step-dot { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.usa-step.is-current .usa-step-dot { border-color: var(--primary); color: var(--primary-text); }
+.usa-step.is-done, .usa-step.is-current { color: var(--text); }
+.usa-step.is-current .usa-step-text > span { font-weight: 700; }
+.usa-step-text { display: flex; flex-direction: column; gap: 1px; padding-top: 2px; min-width: 0; }
+.usa-delays { list-style: none; margin: 8px 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--warning-soft); }
+.usa-delays li + li { margin-top: 4px; }
+.usa-tracking .hint.small:last-child { margin-bottom: 0; }

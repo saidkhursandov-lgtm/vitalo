@@ -39,6 +39,10 @@ export type TemplateName =
   | 'order.cod_confirmed'
   | 'order.receipt_rejected'
   | 'order.intake_guide'
+  | 'order.cb_paid'
+  | 'order.cb_stage'
+  | 'order.cb_delay'
+  | 'staff.cb_overdue'
   | 'waitlist.back_in_stock'
   | 'promo.message';
 
@@ -103,6 +107,11 @@ export interface TemplatePayload {
   tg_message_id?: number;
   /** 3.6: staff.new_order — «Открыть в Яндекс Картах» at the point the customer chose (orders without a point: none) */
   map_url?: string;
+  /** D-60: «Под заказ из США» — the stage reached, the promised window (YYYY-MM-DD) and the jar's expiry */
+  stage?: 'ordered' | 'shipped' | 'arrived_uz' | 'in_stock';
+  expected_from?: string | null;
+  expected_to?: string | null;
+  expiry?: string | null;
 }
 
 /** 3.6: the button under staff.new_order when the customer chose a point on the map. */
@@ -154,6 +163,38 @@ export const ADMIN_BUTTON = 'Открыть в админке';
 export const EXPIRED_REASON_CODE = '@expired';
 /** Payme: the payment system cancelled a paid order's payment and returns the money itself. */
 export const PAYME_CANCELLED_REASON_CODE = '@payme_cancelled';
+/** D-60: the customer cancelled a paid order «из США» by themselves; the money is returned by staff. */
+export const CB_CUSTOMER_CANCEL_REASON_CODE = '@cb_customer_cancel';
+
+/** D-60: «18.11.2026» from «2026-11-18». */
+const dmy = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '—');
+/** D-60: «Ожидаемая доставка: 18.11.2026 – 25.11.2026» */
+function windowLine(p: TemplatePayload, lang: Lang): string {
+  if (!p.expected_to) return '';
+  const range = p.expected_from && p.expected_from !== p.expected_to ? `${dmy(p.expected_from)} – ${dmy(p.expected_to)}` : dmy(p.expected_to);
+  return lang === 'uz' ? `\nKutilayotgan yetkazish: ${range}.` : `\nОжидаемая доставка: ${range}.`;
+}
+const CB_STAGE_TEXT: Record<Lang, Record<NonNullable<TemplatePayload['stage']>, string>> = {
+  ru: {
+    ordered: 'товар заказан в США.',
+    shipped: 'товар отправлен из США.',
+    arrived_uz: 'товар прибыл в Узбекистан и едет на наш склад в Ташкенте.',
+    in_stock: 'товар на складе VITALO в Ташкенте, мы его проверили.',
+  },
+  uz: {
+    ordered: 'mahsulot AQSHda buyurtma qilindi.',
+    shipped: 'mahsulot AQSHdan jo‘natildi.',
+    arrived_uz: 'mahsulot O‘zbekistonga yetib keldi va Toshkentdagi omborimizga kelmoqda.',
+    in_stock: 'mahsulot Toshkentdagi VITALO omborida, biz uni tekshirdik.',
+  },
+};
+function cbStageText(p: TemplatePayload, lang: Lang): string {
+  const stage = p.stage ?? 'ordered';
+  const head = lang === 'uz' ? `№${p.order_number} buyurtma: ${CB_STAGE_TEXT.uz[stage]}` : `Заказ №${p.order_number}: ${CB_STAGE_TEXT.ru[stage]}`;
+  if (stage !== 'in_stock') return head + windowLine(p, lang);
+  const expiry = p.expiry ? (lang === 'uz' ? `\nYaroqlilik muddati: ${dmy(p.expiry)} gacha.` : `\nСрок годности: до ${dmy(p.expiry)}.`) : '';
+  return head + expiry + (lang === 'uz' ? '\nTez orada yig‘ishni boshlaymiz.' : '\nСкоро начнём сборку.');
+}
 
 function reasonLine(p: TemplatePayload, lang: Lang): string {
   if (!p.reason) return '';
@@ -166,7 +207,11 @@ function reasonLine(p: TemplatePayload, lang: Lang): string {
         ? lang === 'uz'
           ? 'to‘lov Payme’da bekor qilindi, pul kartangizga qaytariladi'
           : 'оплата отменена в Payme, деньги вернутся на карту'
-        : p.reason;
+        : p.reason === CB_CUSTOMER_CANCEL_REASON_CODE
+          ? lang === 'uz'
+            ? 'buyurtmani o‘zingiz bekor qildingiz; pulni qaytaramiz, menejer siz bilan bog‘lanadi'
+            : 'вы отменили заказ; деньги вернём, менеджер свяжется с вами'
+          : p.reason;
   return lang === 'uz' ? `\nSabab: ${text}` : `\nПричина: ${text}`;
 }
 
@@ -253,6 +298,23 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
   'order.cod_confirmed': {
     ru: (p) => `Заказ №${p.order_number} подтверждён. Оплата при получении: ${sum(p.total_uzs, 'ru')} наличными или переводом курьеру.${promoLine(p, 'ru')}`,
     uz: (p) => `№${p.order_number} buyurtma tasdiqlandi. Qabul qilganda to‘lash: ${sum(p.total_uzs, 'uz')} naqd yoki kuryerga o‘tkazma.${promoLine(p, 'uz')}`,
+  },
+  // D-60: «Под заказ из США»
+  'order.cb_paid': {
+    ru: (p) => `Заказ №${p.order_number}: оплата подтверждена. Заказываем товар в США.${windowLine(p, 'ru')}\nО каждом этапе напишем здесь.`,
+    uz: (p) => `№${p.order_number} buyurtma: to‘lov tasdiqlandi. Mahsulotni AQSHdan buyurtma qilamiz.${windowLine(p, 'uz')}\nHar bir bosqich haqida shu yerda yozamiz.`,
+  },
+  'order.cb_stage': {
+    ru: (p) => cbStageText(p, 'ru'),
+    uz: (p) => cbStageText(p, 'uz'),
+  },
+  'order.cb_delay': {
+    ru: (p) => `Заказ №${p.order_number} задерживается.${windowLine(p, 'ru')}${reasonLine(p, 'ru')}\nПриносим извинения за ожидание.`,
+    uz: (p) => `№${p.order_number} buyurtma kechikmoqda.${windowLine(p, 'uz')}${reasonLine(p, 'uz')}\nKutganingiz uchun uzr so‘raymiz.`,
+  },
+  'staff.cb_overdue': {
+    ru: (p) => `⏰ Заказ ${p.order_number} из США: обещанная дата ${dmy(p.expected_to)} прошла, товара ещё нет на складе.\nСдвиньте дату с причиной в «Посылки из США» — клиент получит сообщение.`,
+    uz: (p) => `⏰ ${p.order_number} (AQSH): ${dmy(p.expected_to)} sanasi o‘tdi, mahsulot hali omborda emas.`,
   },
   'order.picking': {
     ru: (p) => `Заказ №${p.order_number} собирается. Сообщим, когда передадим в доставку.`,
@@ -404,6 +466,12 @@ const CENTRE_LINES: Partial<Record<TemplateName, Record<Lang, (p: TemplatePayloa
   'order.payment_reminder': { ru: (p) => `Ждёт оплаты до ${p.until}`, uz: (p) => `${p.until} gacha to‘lovni kutmoqda` },
   'order.receipt_rejected': { ru: (p) => `Чек не принят. Причина: ${p.reason ?? '—'}`, uz: (p) => `Chek qabul qilinmadi. Sabab: ${p.reason ?? '—'}` },
   'order.intake_guide': { ru: () => 'Как принимать ваш заказ', uz: () => 'Buyurtmani qanday qabul qilish kerak' },
+  'order.cb_paid': { ru: () => 'Оплата подтверждена, заказываем в США', uz: () => 'To‘lov tasdiqlandi, AQSHdan buyurtma qilamiz' },
+  'order.cb_stage': {
+    ru: (p) => ({ ordered: 'Заказан в США', shipped: 'Отправлен из США', arrived_uz: 'Прибыл в Узбекистан', in_stock: 'На складе VITALO' })[p.stage ?? 'ordered'],
+    uz: (p) => ({ ordered: 'AQSHda buyurtma qilindi', shipped: 'AQSHdan jo‘natildi', arrived_uz: 'O‘zbekistonga yetib keldi', in_stock: 'VITALO omborida' })[p.stage ?? 'ordered'],
+  },
+  'order.cb_delay': { ru: (p) => `Задерживается, новая дата — до ${dmy(p.expected_to)}`, uz: (p) => `Kechikmoqda, yangi sana — ${dmy(p.expected_to)} gacha` },
   'waitlist.back_in_stock': { ru: () => 'Снова в наличии', uz: () => 'Yana sotuvda' },
 };
 
@@ -436,6 +504,7 @@ const CENTRE_STEPS: Partial<Record<TemplateName, Record<Lang, string>>> = {
   'order.accepted_pay': { ru: 'Принят', uz: 'Qabul qilindi' },
   'order.accepted_cod': { ru: 'Принят', uz: 'Qabul qilindi' },
   'order.paid': { ru: 'Оплачен', uz: 'To‘landi' },
+  'order.cb_paid': { ru: 'Оплачен', uz: 'To‘landi' },
   'order.cod_confirmed': { ru: 'Подтверждён', uz: 'Tasdiqlandi' },
   'order.picking': { ru: 'Собирается', uz: 'Yig‘ilmoqda' },
   'order.handed_to_delivery': { ru: 'Передан курьеру', uz: 'Kuryerga topshirildi' },

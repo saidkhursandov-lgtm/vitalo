@@ -576,3 +576,14 @@ textarea { resize: vertical; }
 .row-muted td { opacity: 0.65; }
 .ai-feed-text { overflow-wrap: anywhere; }
 @media (max-width: 720px) { .memory-form { grid-template-columns: 1fr; } }
+
+/* D-60: «Посылки из США» */
+.cb-empty, .cb-pad { padding: 14px 20px; margin: 0; }
+.cb-create { padding: 14px 20px; border-top: 1px solid var(--border); }
+.cb-box-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cb-box-head h2 { margin: 0; }
+.cb-steps { list-style: none; margin: 8px 0 14px; padding: 0 0 0 14px; border-left: 2px solid var(--border); }
+.cb-steps li { position: relative; display: flex; justify-content: space-between; gap: 12px; padding: 0 0 10px 10px; color: var(--muted); }
+.cb-steps li::before { content: ''; position: absolute; left: -21px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); border: 2px solid var(--border-strong); box-sizing: border-box; }
+.cb-steps li.is-done { color: var(--text); }
+.cb-steps li.is-done::before { background: var(--primary); border-color: var(--primary); }

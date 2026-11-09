@@ -10,6 +10,7 @@ import { CheckIcon, ForwardIcon } from '../components/Icons';
 import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly';
 import { OrderFinance, TestBadge } from '../components/OrderFinance';
 import { OrderShipping } from './OrderLabel';
+import { CrossBorderBox } from './CrossBorderBox';
 
 interface Named {
   id: string;
@@ -28,7 +29,16 @@ export interface AdminOrder {
   delivery: { region: Named; city: Named; address_text: string; latitude: number | null; longitude: number | null; cost_uzs: number; method: string };
   customer_comment: string | null;
   /** 3.7: list_price_uzs — the regular price when the line was bought in a sale (unit_price_uzs is the sale price) */
-  items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; line_total_uzs: number }[];
+  items: { product_id: string; sku: string; name_ru: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; line_total_uzs: number; cross_border?: boolean }[];
+  /** D-60: lines «Под заказ из США» — the stage, the promised window, the moved dates */
+  cross_border?: {
+    stage: string | null;
+    lines_waiting: number;
+    expected_from: string | null;
+    expected_to: string | null;
+    steps: { stage: string; done: boolean; at: string | null }[];
+    delays: { at: string; expected_to: string | null; reason: string | null }[];
+  } | null;
   totals: { goods_list_total_uzs?: number; goods_total_uzs: number; discount_total_uzs: number; delivery_cost_uzs: number; total_uzs: number };
   /** 3.7: «Акция 11.11: −X сум» lines (frozen at checkout) */
   campaigns?: { promotion_id: string; title_ru: string; amount_uzs: number }[];
@@ -175,6 +185,7 @@ export function OrderDetail() {
           Клиент нажал «Я оплатил» {dateTime(o.payment.customer_reported_paid_at)}. Проверьте поступление на счёт и подтвердите оплату.
         </div>
       )}
+      {o.cross_border && <CrossBorderBox cb={o.cross_border} />}
       <OrderReceipts orderId={o.id} />
 
       <div className="grid-2">
@@ -194,6 +205,7 @@ export function OrderDetail() {
                 <tr key={i.product_id}>
                   <td>
                     <Link to={`/products/${i.product_id}`}>{i.name_ru}</Link>
+                    {i.cross_border && <> <Badge tone="info">из США</Badge></>}
                     <div className="muted small">{i.sku}</div>
                   </td>
                   <td className="num">

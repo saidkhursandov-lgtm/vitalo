@@ -42,6 +42,33 @@ export class StockService {
   }
 
   /**
+   * D-60: products that may be ordered «Под заказ из США» right now: an iHerb SKU (VTL-H001…, VTL-GH001… — IHERB_SKU)
+   * or switched on in the card, on sale, and iHerb has
+   * them (the newest iHerb snapshot is not «нет в наличии»; no snapshot yet counts as available).
+   */
+  async crossBorderOk(productIds: string[], db: Db = this.prisma): Promise<Set<string>> {
+    if (!productIds.length) return new Set();
+    const rows = await db.$queryRaw<{ id: string }[]>`
+      SELECT p.id FROM products p
+      WHERE p.id = ANY(${productIds}::uuid[]) AND (p.cross_border_eligible OR p.sku ~* '^VTL-G?H[0-9]') AND p.status = 'active'
+        AND COALESCE((SELECT s.in_stock FROM iherb_price_snapshots s WHERE s.product_id = p.id ORDER BY s.taken_at DESC LIMIT 1), true)`;
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
+   * D-60: how much of each product a cart line / an order may take and whether it goes «from the USA»: the Tashkent
+   * stock, or — nothing in Tashkent and «Под заказ из США» possible — up to `max` from the USA.
+   */
+  async orderable(productIds: string[], max: number, db: Db = this.prisma): Promise<Map<string, { qty: number; cross_border: boolean }>> {
+    const available = await this.availability(productIds, db);
+    const ok = await this.crossBorderOk(productIds.filter((id) => (available.get(id) ?? 0) <= 0), db);
+    return new Map(productIds.map((id) => {
+      const a = available.get(id) ?? 0;
+      return [id, a <= 0 && ok.has(id) ? { qty: max, cross_border: true } : { qty: Math.min(Math.max(a, 0), max), cross_border: false }];
+    }));
+  }
+
+  /**
    * Atomically reserves every line or throws 409 INSUFFICIENT_STOCK (the caller's transaction then
    * rolls back all lines). The conditional UPDATE re-checks availability under a row lock, so parallel
    * orders queue on the inventory row and can never push reserved above actual (also guarded by a CHECK).

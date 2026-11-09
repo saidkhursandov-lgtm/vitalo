@@ -52,6 +52,7 @@ import {
   Minus,
   Package,
   PackageCheck,
+  Plane,
   Plus,
   Search,
   SearchX,
@@ -181,3 +182,13 @@ export const STATUS_ICONS: Record<string, Icon> = {
   cancelled: make(CircleX),
   return: make(Undo2),
 };
+
+/** D-60: the stages of an order «из США». */
+export const USA_STAGE_ICONS: Record<string, Icon> = {
+  paid: make(CircleCheck),
+  ordered: make(ClipboardList),
+  shipped: make(Plane),
+  arrived_uz: make(MapPin),
+  in_stock: make(PackageCheck),
+};
+export const PlaneIcon = make(Plane);

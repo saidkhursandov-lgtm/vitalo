@@ -210,7 +210,7 @@ describe('Staff roles: the server enforces permissions (e2e)', () => {
   it('GET /staff/auth/me lists exactly the permissions of the role', async () => {
     const me = async (r: Role) => (await request(app.getHttpServer()).get('/api/staff/auth/me').set(bearer(tokens[r])).expect(200)).body;
     expect((await me('marketer')).permissions).toEqual(['dashboard.view', 'products.view', 'products.content', 'marketing.content', 'yandex.price.view', 'promo.view', 'promo.manage', 'promo.send']);
-    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'receiving.perform', 'units.view', 'orders.waybill', 'orders.units', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
+    expect((await me('warehouse')).permissions).toEqual(['orders.view', 'orders.fulfil', 'products.view', 'inventory.view', 'inventory.edit', 'cross_border.view', 'receiving.perform', 'units.view', 'orders.waybill', 'orders.units', 'yandex.orders.view', 'yandex.orders', 'units.missing', 'units.return_decision']);
     expect((await me('admin')).permissions).toEqual(expect.arrayContaining(['audit.view', 'costs.view', 'dashboard.revenue']));
     expect((await me('manager')).permissions).toContain('dashboard.revenue');
     expect((await me('manager')).permissions).not.toContain('costs.view');

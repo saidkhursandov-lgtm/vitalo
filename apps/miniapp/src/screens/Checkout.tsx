@@ -28,6 +28,7 @@ import type { OnlineProvider } from '../lib/types';
  */
 const ONLINE: OnlineProvider[] = ['payme', 'click', 'uzum'];
 import { QuoteTerm } from '../components/Delivery';
+import { UsaWindowNotice } from '../components/CrossBorder';
 
 interface Form {
   name: string;
@@ -338,6 +339,8 @@ export function Checkout() {
 
       <section className="card">
         <h2>{t('checkout.payment')}</h2>
+        {/* D-60: lines from the USA — when it comes, prepayment only, cancel and money back */}
+        {preview.data?.cross_border && <UsaWindowNotice window={preview.data.cross_border} />}
         {/* 3.5: Payme / Click / Uzum «Скоро подключим» above the working methods; the card transfer stays chosen */}
         <OnlineSoon systems={ONLINE.filter((s) => shop.data?.checkout?.online?.[s] === 'soon' && !(s === 'payme' && paymeOpen))} />
         {/* Payme «Работает»: a real method; a product without ИКПУ shows it disabled with the reason */}
@@ -380,6 +383,7 @@ export function Checkout() {
             </span>
           </label>
         )}
+        {codOption?.cod_unavailable === 'cross_border' && <p className="hint small">{t('usa.codOff')}</p>}
         <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : method === 'payme' ? 'pay.paymeHint' : 'checkout.bankTransferHint')}</p>
       </section>
 

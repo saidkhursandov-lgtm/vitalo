@@ -11,6 +11,7 @@ import { AdminCustomersController, AdminCustomersService } from './admin-custome
 import { AdminDictionariesController, AdminDictionariesService } from './admin-dictionaries';
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
 import { AdminOrdersController, AdminOrdersService } from './admin-orders';
+import { AdminCrossBorderController } from './admin-cross-border';
 import { AdminProductsController, AdminProductsService } from './admin-products';
 import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
 import { AdminWaitlistController, AdminWaitlistService } from './admin-waitlist';
@@ -67,6 +68,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     DashboardController,
     AllOrdersController,
     AdminOrdersController,
+    AdminCrossBorderController,
     OrderLabelController,
     PrintOrderLabelController,
     AdminProductsController,

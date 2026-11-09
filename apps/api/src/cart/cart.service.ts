@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
 import { CampaignLine, PromoCodesService, PromoView } from '../promo/promo.service';
 import { SettingsService } from '../settings/settings.service';
+import { expectedWindow, isoDay, loadCrossBorderSettings } from '../orders/cross-border';
 import { CartWarning, MAX_LINE_QTY, reconcileCartLine } from './cart-reconcile';
 import { rankUpsell, UPSELL_COUNT, UPSELL_MIN_COUNT, UPSELL_SPARE } from './upsell';
 
@@ -24,6 +25,8 @@ export interface CartLineView {
   status: 'available' | 'unavailable';
   qty: number;
   available_qty: number;
+  /** D-60: nothing in Tashkent — the line comes «Под заказ из США» (prepayment only, all delivered together) */
+  cross_border: boolean;
   unit_price_uzs: number;
   line_total_uzs: number;
   /** 3.7: the regular price (= unit_price_uzs when the product is not in a running sale) and the sale */
@@ -45,6 +48,8 @@ export interface CartView {
   delivery: DeliveryQuote | null;
   /** 3.3: the applied promo code (null — none or it stopped fitting, see warnings `promo_removed`). */
   promo: PromoView | null;
+  /** D-60: the cart has lines from the USA — the promised delivery window counted from today (YYYY-MM-DD) */
+  cross_border: { expected_from: string; expected_to: string; guarantee_days: number } | null;
 }
 
 @Injectable()
@@ -95,7 +100,7 @@ export class CartService {
       include: { items: { orderBy: { created_at: 'desc' }, include: { product: { include: listInclude } } } },
     });
     const items = cart?.items ?? [];
-    const available = await this.stock.availability(items.map((i) => i.product_id));
+    const available = await this.stock.orderable(items.map((i) => i.product_id), MAX_LINE_QTY);
     // 3.7: the sale prices of now; the sales the snapshots came from (for «Акция завершилась»)
     const products = await this.campaigns.decorate(items.map((i) => toProductListItem(i.product)));
     const endedIds = [...new Set(items.map((i) => i.campaign_id).filter((id): id is string => !!id && !products.some((p) => p.campaign?.id === id)))];
@@ -114,7 +119,7 @@ export class CartService {
         snapshot_campaign_id: item.campaign_id,
         current_campaign_id: campaignId,
         sellable: item.product.status === 'active',
-        available_qty: available.get(item.product_id) ?? 0,
+        available_qty: available.get(item.product_id)?.qty ?? 0,
       });
       // Persist corrections so each warning is shown once and the cart stays consistent between sessions.
       if (r.status === 'available' && (r.qty !== item.qty || r.unit_price_uzs !== Number(item.unit_price_snapshot_uzs) || campaignId !== item.campaign_id)) {
@@ -141,7 +146,8 @@ export class CartService {
         image_url: product.image_url,
         status: r.status,
         qty: r.qty,
-        available_qty: Math.min(available.get(item.product_id) ?? 0, MAX_LINE_QTY),
+        available_qty: available.get(item.product_id)?.qty ?? 0,
+        cross_border: r.status === 'available' && !!available.get(item.product_id)?.cross_border,
         unit_price_uzs: r.unit_price_uzs,
         line_total_uzs: r.unit_price_uzs * r.qty,
         list_price_uzs: product.campaign?.list_price_uzs ?? r.unit_price_uzs,
@@ -169,7 +175,15 @@ export class CartService {
       can_checkout: sellable.length > 0,
       delivery: calc.delivery,
       promo: calc.promo,
+      cross_border: sellable.some((l) => l.cross_border) ? await this.crossBorderWindow() : null,
     };
+  }
+
+  /** D-60: «Ожидаемая доставка: 18–25 ноября» for a cart with lines from the USA, counted from today. */
+  private async crossBorderWindow() {
+    const s = await loadCrossBorderSettings(this.prisma);
+    const w = expectedWindow(new Date(), s);
+    return { expected_from: isoDay(w.expected_from)!, expected_to: isoDay(w.expected_to)!, guarantee_days: s.guarantee_days };
   }
 
   /**
@@ -212,12 +226,12 @@ export class CartService {
       where: { cart: { user_id: userId, status: 'active' }, product: { status: 'active' } },
       select: { product_id: true, qty: true, product: { select: { price_uzs: true } } },
     });
-    const available = await this.stock.availability(items.map((i) => i.product_id));
+    const available = await this.stock.orderable(items.map((i) => i.product_id), MAX_LINE_QTY);
     const sale = await this.campaigns.running(this.prisma, items.map((i) => i.product_id));
     return items
       .map((i) => {
         const c = sale.get(i.product_id);
-        const qty = Math.min(i.qty, available.get(i.product_id) ?? 0, MAX_LINE_QTY);
+        const qty = Math.min(i.qty, available.get(i.product_id)?.qty ?? 0);
         return c ? { product_id: i.product_id, qty, unit_price_uzs: c.price_uzs, list_price_uzs: c.list_price_uzs, campaign: toShopCampaign(c) } : { product_id: i.product_id, qty, unit_price_uzs: Number(i.product.price_uzs) };
       })
       .filter((l) => l.qty > 0);
@@ -225,7 +239,7 @@ export class CartService {
 
   async addItem(userId: string, productId: string, qty: number): Promise<CartView> {
     const product = await this.findSellableProduct(productId);
-    const available = (await this.stock.availability([productId])).get(productId) ?? 0;
+    const available = (await this.stock.orderable([productId], MAX_LINE_QTY)).get(productId)?.qty ?? 0;
     if (available <= 0) throw new ConflictException({ code: 'OUT_OF_STOCK', message: 'Product is out of stock' });
 
     const cart = await this.getOrCreateActiveCart(userId);
@@ -242,7 +256,7 @@ export class CartService {
     if (!cart || !item) throw new NotFoundException('Product is not in the cart');
 
     const product = await this.findSellableProduct(productId);
-    const available = (await this.stock.availability([productId])).get(productId) ?? 0;
+    const available = (await this.stock.orderable([productId], MAX_LINE_QTY)).get(productId)?.qty ?? 0;
     if (available <= 0) throw new ConflictException({ code: 'OUT_OF_STOCK', message: 'Product is out of stock' });
     return this.writeLine(userId, cart.id, productId, product.price_uzs, qty, available);
   }

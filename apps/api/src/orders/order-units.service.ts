@@ -92,6 +92,15 @@ export class OrderUnitsService {
     return reserved;
   }
 
+  /**
+   * D-60: the jars of one line «из США» came (the parcel was received or the Tashkent stock is given to it): FEFO
+   * units for this line only, all or nothing (409 NOT_ENOUGH_UNITS). The caller reserved the quantity first.
+   */
+  async reserveItem(tx: Tx, order: OrderRef, itemId: string, staffId: string | null): Promise<string[]> {
+    const lines = (await this.trackedLines(tx, order.id)).filter((l) => l.id === itemId);
+    return this.reserveAll(tx, order, lines, staffId);
+  }
+
   private async reserveAll(tx: Tx, order: OrderRef, lines: Awaited<ReturnType<OrderUnitsService['trackedLines']>>, staffId: string | null): Promise<string[]> {
     const reserved: string[] = [];
     // products in a fixed order: two payments with the same products cannot deadlock

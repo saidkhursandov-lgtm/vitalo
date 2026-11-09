@@ -6,6 +6,7 @@ import { EXPIRED_REASON_CODE } from '../notifications/notification-templates';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertTransition, CONFIRMED_STATUSES, CUSTOMER_CANCELLABLE } from './order-state';
 import { OrderUnitsService } from './order-units.service';
+import { CrossBorderService } from './cross-border.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -34,6 +35,7 @@ export class OrderLifecycleService {
     private readonly stock: StockService,
     private readonly notifications: NotificationsService,
     private readonly units: OrderUnitsService,
+    private readonly crossBorder: CrossBorderService,
   ) {}
 
   async lockOrder(tx: Tx, orderId: string): Promise<LockedOrder> {
@@ -126,6 +128,7 @@ export class OrderLifecycleService {
       where: { order_id: order.id, type: 'bank_transfer_check', status: { not: 'done' } },
       data: { status: 'done', done_at: now, assigned_to: staffId },
     });
+    await this.crossBorder.onPaid(tx, order.id, now); // D-60: the promised window counted from the payment
     await this.addHistory(tx, order.id, order.status, 'paid', { type: 'staff', id: staffId }, cod ? 'Order confirmed by the manager (cash on delivery)' : 'Bank transfer confirmed');
     const units = await this.units.reserveOnPayment(tx, { id: order.id, order_number: order.order_number, status: 'paid' }, staffId);
     await tx.audit_logs.create({
@@ -180,6 +183,7 @@ export class OrderLifecycleService {
       data: { order_id: order.id, from_status: order.status, to_status: 'paid', reason: 'Online payment confirmed by the payment system', changed_by_type: 'system', changed_by_id: null, created_at: now },
     });
     await this.settlePromo(tx, order.id, 'paid');
+    await this.crossBorder.onPaid(tx, order.id, now); // D-60: the promised window counted from the payment
     await this.notifications.orderStatusChanged(tx, order.id, 'paid', null);
     await this.units.reserveOnPayment(tx, { id: order.id, order_number: order.order_number, status: 'paid' }, null);
     return 'paid';
@@ -199,7 +203,7 @@ export class OrderLifecycleService {
     order: LockedOrder,
     staffId: string | null,
     reason: string,
-    opts: { refundNote?: string; shownReason?: string } = {},
+    opts: { refundNote?: string; shownReason?: string; actor?: Actor } = {},
   ): Promise<void> {
     assertTransition(order.status, 'cancelled');
     await this.units.releaseOnCancel(tx, order, staffId, reason);
@@ -228,7 +232,7 @@ export class OrderLifecycleService {
             : `Вернуть клиенту ${Number(full.total_uzs)} сум: оплаченный заказ ${order.order_number} отменён. Причина: ${reason}`),
       },
     });
-    const actor: Actor = staffId ? { type: 'staff', id: staffId } : { type: 'system', id: null };
+    const actor: Actor = opts.actor ?? (staffId ? { type: 'staff', id: staffId } : { type: 'system', id: null });
     await this.addHistory(tx, order.id, order.status, 'cancelled', actor, reason, new Date(), opts.shownReason);
   }
 

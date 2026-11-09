@@ -88,8 +88,18 @@ export function Product() {
       {substance && <p className="product-sub">{substance}</p>}
       <div className="price-line">
         <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" campaign={p.campaign} />
-        <div className={`stock ${p.in_stock ? 'is-in' : 'is-out'}`}>{p.in_stock ? t('product.inStock') : t('product.outOfStock')}</div>
+        {p.in_stock ? (
+          <div className="stock is-in">{t('product.inStock')}</div>
+        ) : p.cross_border ? (
+          <div className="stock is-usa">{t('product.usaDays', { from: p.cross_border_terms?.days_min ?? 7, to: p.cross_border_terms?.days_max ?? 14 })}</div>
+        ) : (
+          <div className="stock is-out">{t('product.outOfStock')}</div>
+        )}
       </div>
+      {/* D-60: what «под заказ» means before the customer pays */}
+      {p.cross_border && !p.in_stock && (
+        <div className="notice notice-info usa-note">{t('product.usaNote', { days: p.cross_border_terms?.guarantee_days ?? 21 })}</div>
+      )}
       {p.course_days ? (
         <p className="lasts">
           {t('card.lasts', { n: p.course_days, d: dayWord(p.course_days), price: money(pricePerDay(p.price_uzs, p.course_days), lang) })}
@@ -196,7 +206,7 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
   const cart = useCart(null);
   const { qty, set } = useQuickCart(p.id, notify);
   const total = cart.data ? cart.data.goods_total_uzs - cart.data.discount_total_uzs : null;
-  const soldOut = !p.in_stock && qty === 0;
+  const soldOut = !p.in_stock && !p.cross_border && qty === 0;
 
   return (
     <div className="buy-panel" role="region" aria-label={t('product.addToCart')}>
@@ -227,7 +237,7 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
           </>
         ) : (
           <>
-            <QuickAdd productId={p.id} inStock={p.in_stock} variant="panel" campaignId={p.campaign?.id} />
+            <QuickAdd productId={p.id} inStock={p.in_stock || !!p.cross_border} variant="panel" campaignId={p.campaign?.id} />
             <Link to="/cart" className="btn to-cart">
               <span>{t('panel.toCart')}</span>
               {total !== null && <small>{money(total, lang)}</small>}

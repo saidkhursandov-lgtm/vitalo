@@ -23,6 +23,7 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { OrderLifecycleService } from '../orders/order-lifecycle.service';
 import { CONFIRMED_STATUSES } from '../orders/order-state';
 import { OrderUnitsService } from '../orders/order-units.service';
+import { CrossBorderService } from '../orders/cross-border.service';
 import { orderViewInclude, toOrderView } from '../orders/order-view';
 import { normalizeUzPhone } from '../orders/orders.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -123,6 +124,7 @@ export class AdminOrdersService {
     private readonly analytics: AnalyticsService,
     private readonly units: OrderUnitsService,
     private readonly settings: SettingsService,
+    private readonly crossBorder: CrossBorderService,
   ) {}
 
   async list(q: StaffOrdersQuery) {
@@ -285,6 +287,8 @@ export class AdminOrdersService {
       if (!can(staff.staff.role, step.permission)) {
         throw new ForbiddenException({ code: 'FORBIDDEN_FOR_ROLE', message: `Role ${staff.staff.role} cannot set ${to}` });
       }
+      // D-60: an order with lines from the USA is assembled only when their jars are in Tashkent
+      if (to === 'picking') await this.crossBorder.assertReadyForPicking(tx, id);
       // Stage 2E: the units of unit-tracked lines move with the order (and the stock is written off at the handover)
       if (to === 'handed_to_delivery') await this.units.handOver(tx, order, staff.staff.id);
       if (to === 'delivered') await this.units.deliver(tx, order, staff.staff.id);

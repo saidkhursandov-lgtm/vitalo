@@ -20,6 +20,10 @@ import { listImage, listInclude, ShopCampaign } from '../catalog/product.mapper'
 import { BankTransferDetails, COD_METHOD, MANUAL_PAYMENT_METHODS, SETTING_KEYS, SettingsService, type ManualPaymentMethod } from '../settings/settings.service';
 import { formatOrderNumber } from './order-number';
 import { CUSTOMER_CANCELLABLE } from './order-state';
+import { customerCancel, expectedWindow, guaranteeDate, isoDay, loadCrossBorderSettings } from './cross-border';
+import { crossBorderStageOf } from './order-view';
+import { CB_CUSTOMER_CANCEL_REASON_CODE } from '../notifications/notification-templates';
+import { MAX_LINE_QTY } from '../cart/cart-reconcile';
 import { OrderLifecycleService } from './order-lifecycle.service';
 import { orderViewInclude, OrderView, toOrderView } from './order-view';
 import { CreateOrderDto, OrderPreviewDto } from './orders.dto';
@@ -98,10 +102,12 @@ export class OrdersService {
   async preview(userId: string, dto: OrderPreviewDto) {
     const { lines, skipped, cartId, cartPromo } = await this.resolveLines(this.prisma, userId, dto);
     const priced = await this.priceLines(this.prisma, lines);
-    const available = await this.stock.availability(lines.map((l) => l.product_id));
+    const available = await this.stock.orderable(lines.map((l) => l.product_id), MAX_LINE_QTY);
     const problems = lines
-      .filter((l) => (available.get(l.product_id) ?? 0) < l.qty)
-      .map((l) => ({ code: 'INSUFFICIENT_STOCK', product_id: l.product_id, requested: l.qty, available: available.get(l.product_id) ?? 0 }));
+      .filter((l) => (available.get(l.product_id)?.qty ?? 0) < l.qty)
+      .map((l) => ({ code: 'INSUFFICIENT_STOCK', product_id: l.product_id, requested: l.qty, available: available.get(l.product_id)?.qty ?? 0 }));
+    // D-60: lines «Под заказ из США» — prepayment only; the window is shown before the order is placed
+    const crossBorder = lines.some((l) => available.get(l.product_id)?.cross_border);
     await this.resolvePaymentMethod(this.prisma, dto.payment_method, userId);
     const code = this.promoCodeOf(dto, cartPromo);
     const calc = await this.promo.calculate(this.prisma, userId, priced, { address: dto, code });
@@ -113,11 +119,19 @@ export class OrdersService {
     // Payme: only when «Работает» and every product (and a paid delivery) has ИКПУ for the fiscal receipt
     const checkoutOptions = await this.settings.getOrDefault('checkout_options');
     const payme = await paymeUnavailable(this.prisma, checkoutOptions, await this.paymeStaff(this.prisma, checkoutOptions, userId), lines.map((l) => l.product_id), totals.delivery_cost_uzs);
-    const payment_options = { cod: cod === 'ok', cod_unavailable: cod === 'ok' ? null : cod, payme: payme === null, payme_unavailable: payme };
-    const codBlocked = (dto.payment_method === COD_METHOD && cod !== 'ok') || (dto.payment_method === PAYME_METHOD && payme !== null);
+    const codWhy = crossBorder ? 'cross_border' : cod;
+    const payment_options = { cod: codWhy === 'ok', cod_unavailable: codWhy === 'ok' ? null : codWhy, payme: payme === null, payme_unavailable: payme };
+    const codBlocked = (dto.payment_method === COD_METHOD && codWhy !== 'ok') || (dto.payment_method === PAYME_METHOD && payme !== null);
+    const cbSettings = crossBorder ? await loadCrossBorderSettings(this.prisma) : null;
+    const window = cbSettings && expectedWindow(new Date(), cbSettings);
 
     return {
-      items: priced.map((l) => ({ ...l, discount_uzs: calc.snapshot.lines.find((s) => s.product_id === l.product_id)?.promo_discount_uzs ?? 0 })),
+      items: priced.map((l) => ({
+        ...l,
+        discount_uzs: calc.snapshot.lines.find((s) => s.product_id === l.product_id)?.promo_discount_uzs ?? 0,
+        cross_border: !!available.get(l.product_id)?.cross_border,
+      })),
+      cross_border: window && { expected_from: isoDay(window.expected_from)!, expected_to: isoDay(window.expected_to)!, guarantee_days: cbSettings!.guarantee_days },
       skipped_unavailable: skipped,
       totals,
       delivery: calc.delivery,
@@ -193,7 +207,11 @@ export class OrdersService {
         orderBy: { created_at: 'desc' },
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
-        include: { _count: { select: { items: true } }, payments: { orderBy: { created_at: 'desc' }, include: { manual: true, method: { select: { code: true } } } } },
+        include: {
+          _count: { select: { items: true } },
+          payments: { orderBy: { created_at: 'desc' }, include: { manual: true, method: { select: { code: true } } } },
+          items: { select: { source: true, arrived_at: true, cross_border_batch: { select: { stage: true } } } },
+        },
       }),
     ]);
     return {
@@ -208,6 +226,8 @@ export class OrdersService {
         payment_method: o.payments[0]?.method.code ?? null,
         // "Я оплатил(а)" pressed and not confirmed yet -> shown as "🔵 Оплата проверяется"
         payment_reported: o.payment_status === 'payment_pending' && o.payments.some((p) => p.manual.some((m) => m.customer_confirmed_at)),
+        // D-60: a paid order waiting for the USA shows its stage («Отправлен из США») instead of «Оплачен»
+        cross_border_stage: o.status === 'paid' ? crossBorderStageOf(o) : null,
       })),
       page,
       page_size: PAGE_SIZE,
@@ -216,11 +236,25 @@ export class OrdersService {
     };
   }
 
-  async get(userId: string, orderId: string): Promise<OrderView & { delivery_eta: Awaited<ReturnType<DeliveryService['eta']>>; intake_guide: IntakeGuide | null }> {
+  async get(userId: string, orderId: string) {
     const order = await this.prisma.orders.findFirst({ where: { id: orderId, user_id: userId }, include: orderViewInclude });
     if (!order) throw new NotFoundException('Order not found');
+    const view = toOrderView(order);
+    // D-60: a paid order «из США» — may the customer cancel it by themselves now, and from which day by the guarantee
+    let crossBorderCancel: { allowed: boolean; reason: string | null; guarantee_date: string | null } | null = null;
+    if (view.cross_border && order.paid_at) {
+      const s = await loadCrossBorderSettings(this.prisma);
+      const rule = customerCancel({ status: order.status, paid_at: order.paid_at, stage: view.cross_border.stage }, s);
+      crossBorderCancel = { allowed: rule.allowed, reason: rule.allowed ? rule.reason : null, guarantee_date: isoDay(guaranteeDate(order.paid_at, s)) };
+    }
     // Current delivery term for the order's city (working days).
-    return { ...toOrderView(order), delivery_eta: await this.delivery.eta(order.region_id, order.city_id), intake_guide: await this.intakeGuide(order) };
+    return {
+      ...view,
+      can_cancel: view.can_cancel || !!crossBorderCancel?.allowed,
+      cross_border_cancel: crossBorderCancel,
+      delivery_eta: await this.delivery.eta(order.region_id, order.city_id),
+      intake_guide: await this.intakeGuide(order),
+    };
   }
 
   /**
@@ -248,7 +282,10 @@ export class OrdersService {
       this.prisma.orders.findFirst({
         where,
         orderBy: { created_at: 'desc' },
-        include: { payments: { orderBy: { created_at: 'desc' }, include: { manual: true, method: { select: { code: true } } } } },
+        include: {
+          payments: { orderBy: { created_at: 'desc' }, include: { manual: true, method: { select: { code: true } } } },
+          items: { select: { source: true, arrived_at: true, cross_border_batch: { select: { stage: true } } } },
+        },
       }),
     ]);
     if (!o) return { order: null, more: 0 };
@@ -262,6 +299,8 @@ export class OrdersService {
         payment_reported: reported,
         // «Оплатить / Отправить чек»: the order waits for a transfer and the customer has not reported it yet
         can_pay: o.status === 'awaiting_payment' && !reported,
+        cross_border_stage: o.status === 'paid' ? crossBorderStageOf(o) : null,
+        expected_to: o.expected_to ? o.expected_to.toISOString().slice(0, 10) : null,
         delivery_eta: await this.delivery.eta(o.region_id, o.city_id),
       },
       more: count - 1,
@@ -291,9 +330,36 @@ export class OrdersService {
       if (reported && CUSTOMER_CANCELLABLE.includes(order.status)) {
         throw new ConflictException({ code: 'PAYMENT_BEING_CHECKED', message: 'The payment is being checked; please contact support to cancel' });
       }
+      if (order.status === 'paid') {
+        await this.cancelCrossBorderPaid(tx, order, userId, reason);
+        return toOrderView(await tx.orders.findUniqueOrThrow({ where: { id: orderId }, include: orderViewInclude }));
+      }
       await this.lifecycle.cancelUnpaid(tx, order, { type: 'customer', id: userId }, reason || 'Cancelled by customer');
       return toOrderView(await tx.orders.findUniqueOrThrow({ where: { id: orderId }, include: orderViewInclude }));
     }, TX_OPTIONS);
+  }
+
+  /**
+   * D-60: a paid order «из США» — the customer cancels it by themselves while nothing was ordered in the USA, or after
+   * the guarantee term without the jars in Tashkent. The money is returned by staff (a refund task, as for any paid
+   * order); any other paid order is cancelled only via support (409 ORDER_NOT_CANCELLABLE).
+   */
+  private async cancelCrossBorderPaid(tx: Tx, order: Awaited<ReturnType<OrderLifecycleService['lockOrder']>>, userId: string, reason?: string) {
+    const full = await tx.orders.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: { select: { source: true, arrived_at: true, cross_border_batch: { select: { stage: true } } } } },
+    });
+    const s = await loadCrossBorderSettings(tx);
+    const rule = customerCancel({ status: full.status, paid_at: full.paid_at, stage: crossBorderStageOf(full) }, s);
+    if (!rule.allowed) {
+      throw new ConflictException({ code: 'ORDER_NOT_CANCELLABLE', message: 'Paid orders cannot be cancelled by the customer; please contact support' });
+    }
+    const why = rule.reason === 'guarantee' ? `прошло ${s.guarantee_days} дней, товара нет на складе (гарантия)` : 'до заказа в США';
+    await this.lifecycle.cancelPaid(tx, order, null, `Клиент отменил заказ из США: ${why}${reason ? `. Комментарий: ${reason}` : ''}`, {
+      actor: { type: 'customer', id: userId },
+      shownReason: CB_CUSTOMER_CANCEL_REASON_CODE,
+      refundNote: `Вернуть клиенту ${formatUzs(Number(full.total_uzs))} сум: клиент сам отменил оплаченный заказ ${order.order_number} из США (${why}). Payme — через кабинет Payme Business, перевод — переводом.`,
+    });
   }
 
   /**
@@ -380,8 +446,12 @@ export class OrdersService {
     const method = await this.resolvePaymentMethod(tx, dto.payment_method, userId);
     const orderId = randomUUID();
 
+    // D-60: a line with nothing in Tashkent and «Под заказ из США» possible reserves nothing: its jars come with a parcel.
+    const orderable = await this.stock.orderable(lines.map((l) => l.product_id), MAX_LINE_QTY, tx);
+    const crossBorderIds = new Set(lines.filter((l) => orderable.get(l.product_id)?.cross_border).map((l) => l.product_id));
+
     // 1. Stock first: all-or-nothing, throws 409 INSUFFICIENT_STOCK and rolls the whole order back.
-    await this.stock.reserve(tx, orderId, lines);
+    await this.stock.reserve(tx, orderId, lines.filter((l) => !crossBorderIds.has(l.product_id)));
 
     // 2. Prices are read on the server, inside the transaction, and frozen into the order.
     //    3.3: the promo row is locked here, so parallel orders never exceed its limits.
@@ -405,6 +475,9 @@ export class OrdersService {
     // Cash on delivery: no transfer to wait for, so no payment deadline — the order waits for the manager's
     // confirmation in «Новый» («Ожидает подтверждения менеджером») and is never cancelled automatically.
     const cod = method.code === COD_METHOD;
+    if (cod && crossBorderIds.size) {
+      throw new UnprocessableEntityException({ code: 'CROSS_BORDER_PREPAY_ONLY', message: 'Products from the USA are ordered with prepayment only' });
+    }
     if (cod) {
       const why = await this.codAvailable(tx, dto.region_id, totals.total_uzs);
       if (why !== 'ok') {
@@ -425,6 +498,8 @@ export class OrdersService {
 
     const now = new Date();
     const orderNumber = await this.nextOrderNumber(tx, now);
+    // D-60: the promised window; counted again from the payment (CrossBorderService.onPaid)
+    const window = crossBorderIds.size ? expectedWindow(now, await loadCrossBorderSettings(tx)) : null;
     await tx.orders.create({
       data: {
         id: orderId,
@@ -450,6 +525,8 @@ export class OrdersService {
         promo_id: calc.applied?.promotion_id ?? null,
         promo_code: calc.promo?.code ?? null,
         pricing_json: calc.snapshot as unknown as Prisma.InputJsonValue,
+        expected_from: window?.expected_from ?? null,
+        expected_to: window?.expected_to ?? null,
         created_at: now,
         reserved_until: cod ? null : new Date(now.getTime() + method.timeout_minutes * 60_000),
         items: {
@@ -465,6 +542,7 @@ export class OrdersService {
               discount_uzs: BigInt(s.promo_discount_uzs),
               // the basis of a refund: what the customer really paid for the line
               paid_line_total_uzs: BigInt(s.paid_line_total_uzs),
+              source: crossBorderIds.has(l.product_id) ? 'cross_border' : 'local',
             };
           }),
         },
@@ -513,8 +591,8 @@ export class OrdersService {
       include: { items: { include: { product: { select: { status: true } } } } },
     });
     const items = cart?.items ?? [];
-    const available = await this.stock.availability(items.map((i) => i.product_id), db);
-    const sellable = items.filter((i) => i.product.status === 'active' && (available.get(i.product_id) ?? 0) > 0);
+    const available = await this.stock.orderable(items.map((i) => i.product_id), MAX_LINE_QTY, db);
+    const sellable = items.filter((i) => i.product.status === 'active' && (available.get(i.product_id)?.qty ?? 0) > 0);
     if (!sellable.length) {
       throw new UnprocessableEntityException({ code: 'EMPTY_ORDER', message: 'There is nothing available to order in the cart' });
     }

@@ -45,7 +45,7 @@ export class AllOrdersService {
 
     const vWhere = Prisma.sql`WHERE TRUE
       ${q.hide_test ? Prisma.sql`AND NOT o.is_test` : Prisma.empty}
-      ${q.ship_today ? Prisma.sql`AND o.status IN ('paid', 'picking')` : Prisma.empty}
+      ${q.ship_today ? Prisma.sql`AND o.status IN ('paid', 'picking') AND NOT EXISTS (SELECT 1 FROM order_items ci WHERE ci.order_id = o.id AND ci.source = 'cross_border' AND ci.arrived_at IS NULL)` : Prisma.empty}
       ${like ? Prisma.sql`AND o.order_number ILIKE ${like}` : Prisma.empty}`;
     const yWhere = Prisma.sql`WHERE TRUE
       ${q.hide_test ? Prisma.sql`AND NOT m.is_test` : Prisma.empty}
@@ -118,7 +118,7 @@ export class AllOrdersService {
   /** «Отгрузить сегодня» counter (both channels the employee may see), whatever the filters are. */
   private async shipTodayCount(today: string, allowed: { vitalo: boolean; yandex: boolean }) {
     const [v, y] = await Promise.all([
-      allowed.vitalo ? this.prisma.orders.count({ where: { is_test: false, status: { in: ['paid', 'picking'] } } }) : 0,
+      allowed.vitalo ? this.prisma.orders.count({ where: { is_test: false, status: { in: ['paid', 'picking'] }, items: { none: { source: 'cross_border', arrived_at: null } } } }) : 0,
       allowed.yandex
         ? this.prisma.marketplace_orders.count({ where: { is_test: false, status: { in: ['NEW', 'ASSEMBLED'] }, ship_by_date: { lte: new Date(`${today}T00:00:00Z`) } } })
         : 0,

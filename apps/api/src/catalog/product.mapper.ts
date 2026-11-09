@@ -1,14 +1,20 @@
 import { Prisma } from '@prisma/client';
+import { crossBorderOkRow } from '../orders/cross-border';
 import { thumbSize } from '../storage/image-processing';
+
+/** D-60: the newest iHerb snapshot says whether «Под заказ из США» is possible now */
+const lastIherb = { orderBy: { taken_at: 'desc' }, take: 1, select: { in_stock: true } } satisfies Prisma.products$iherb_snapshotsArgs;
 
 export const listInclude = {
   media: { where: { media_type: 'image' }, orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }], take: 1 },
   inventory: { select: { actual_qty: true, reserved_qty: true } },
+  iherb_snapshots: lastIherb,
 } satisfies Prisma.productsInclude;
 
 export const cardInclude = {
   media: { orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }] },
   inventory: { select: { actual_qty: true, reserved_qty: true } },
+  iherb_snapshots: lastIherb,
   categories: { include: { category: true } },
   brand_entry: { select: { slug: true, name_ru: true, name_uz: true, why_vitalo_ru: true, why_vitalo_uz: true } },
   relations: {
@@ -53,6 +59,8 @@ export interface ProductListItem {
   image_url: string | null;
   image: ListImage | null;
   in_stock: boolean;
+  /** D-60: nothing in Tashkent, but it can be ordered «Под заказ из США» (prepayment only) */
+  cross_border: boolean;
   /** 3.7: a running sale — price_uzs is then the sale price and old_price_uzs the regular one (CampaignsService.decorate) */
   campaign: ShopCampaign | null;
 }
@@ -113,6 +121,7 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     image_url: listImage(p.media.find((m) => m.media_type === 'image'))?.webp ?? null,
     image: listImage(p.media.find((m) => m.media_type === 'image')),
     in_stock: availableQty(p.inventory) > 0,
+    cross_border: availableQty(p.inventory) <= 0 && crossBorderOkRow(p),
     campaign: null,
   };
 }
@@ -123,7 +132,8 @@ export function toProductCard(p: ProductForCard) {
 
   return {
     ...toProductListItem(p),
-    available_qty: Math.min(availableQty(p.inventory), 99), // upper bound for the qty stepper
+    // upper bound for the qty stepper; D-60: from the USA — up to the line maximum
+    available_qty: availableQty(p.inventory) <= 0 && crossBorderOkRow(p) ? 99 : Math.min(availableQty(p.inventory), 99),
     /** 2.2: the brand page address (null = the brand is not in the dictionary) */
     brand_slug: p.brand_entry?.slug ?? null,
     // 2.3: «Почему [бренд] отобран в VITALO»

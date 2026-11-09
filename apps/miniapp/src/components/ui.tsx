@@ -251,14 +251,14 @@ export function ProductTile({ product }: { product: ProductListItem }) {
   const sale = product.campaign ?? null;
   const pct = sale ? null : discountPercent(product.price_uzs, product.old_price_uzs ?? null);
   return (
-    <Link to={`/product/${product.id}`} className={`tile ${product.in_stock ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
+    <Link to={`/product/${product.id}`} className={`tile ${product.in_stock || product.cross_border ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
       <div className="tile-img">
         {product.image ? <Picture src={product.image} /> : product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" />}
         <FavoriteButton productId={product.id} className="tile-fav" />
         {/* the discount lives on the photo, so the price is always one line; the old price is on the product page */}
         {pct && product.in_stock && <span className="tile-discount">−{pct}%</span>}
         {sale && <SaleBadge campaign={sale} className="tile-sale" />}
-        {!product.in_stock && <span className="tile-out">{t('product.outOfStock')}</span>}
+        {!product.in_stock && (product.cross_border ? <span className="tile-usa">{t('product.usaShort')}</span> : <span className="tile-out">{t('product.outOfStock')}</span>)}
       </div>
       <div className="tile-body">
         <div className="tile-brand">{product.brand}</div>
@@ -271,7 +271,7 @@ export function ProductTile({ product }: { product: ProductListItem }) {
           {sale && <s className="tile-price-old">{money(sale.list_price_uzs, lang)}</s>}
           <div className={`tile-price${sale ? ` sale-text-${sale.skin}` : ''}`}>{money(product.price_uzs, lang)}</div>
           <div className="tile-action">
-            <QuickAdd productId={product.id} inStock={product.in_stock} campaignId={sale?.id} />
+            <QuickAdd productId={product.id} inStock={product.in_stock || !!product.cross_border} campaignId={sale?.id} />
           </div>
         </div>
       </div>

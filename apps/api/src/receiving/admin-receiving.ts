@@ -23,6 +23,7 @@ import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEnum, IsInt, IsOption
 import { requireIdempotencyKey, runIdempotent } from '../common/idempotency';
 import { tashkentDateString } from '../common/tashkent';
 import { StockService } from '../inventory/stock.service';
+import { CrossBorderService } from '../orders/cross-border.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { costQty, derivePurchaseStatus, lineBase, remainingQty } from '../purchases/purchase-cost';
 import { auditJson, AuditService } from '../staff/audit.service';
@@ -116,6 +117,7 @@ export class AdminReceivingService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly stock: StockService,
+    private readonly crossBorder: CrossBorderService,
   ) {}
 
   /** Active Ozon accounts and suppliers with how many units are still expected, and the open session if any. */
@@ -429,6 +431,12 @@ export class AdminReceivingService {
             started: started.map((s) => s.sku),
             not_started: states.filter((s) => !canStartTracking(s)).map((s) => ({ sku: s.sku, actual_qty: s.actual, units_on_shelf: s.on_shelf })),
           };
+        }
+        // D-60: the new jars go first to the paid lines «из США» that wait for them (the earliest payment first)
+        const cbAttached = await this.crossBorder.fulfilWaiting(tx, [...byProduct.keys()], staffId);
+        if (cbAttached) {
+          await this.crossBorder.markReceivedBatches(tx);
+          summary.cross_border_lines = cbAttached;
         }
       } else {
         // Opening balance: the stock becomes the number of units in stock; from now on the product is unit-tracked.

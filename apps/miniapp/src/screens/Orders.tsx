@@ -14,6 +14,8 @@ import { PayBy } from '../components/PayBy';
 import { OrderItems, OrderTotals } from '../components/OrderItems';
 import { IntakeGuideBlock } from '../components/OrderNotices';
 import type { Order, OrderListItem } from '../lib/types';
+import { UsaTracking, useUsaStageLabel } from '../components/CrossBorder';
+import { PlaneIcon } from '../components/Icons';
 
 /** The same status twice in a row (e.g. "new" -> "awaiting_payment" shown as "Ожидает оплаты" twice) is shown once. */
 export function dedupeHistory<T extends { to_status: string }>(history: T[], label: (s: string) => string = (s) => s): T[] {
@@ -22,6 +24,8 @@ export function dedupeHistory<T extends { to_status: string }>(history: T[], lab
 
 export function OrderRow({ order }: { order: OrderListItem }) {
   const { t, lang } = useI18n();
+  const usaStage = useUsaStageLabel();
+  const cb = order.status === 'paid' && order.cross_border_stage && order.cross_border_stage !== 'in_stock' ? order.cross_border_stage : null;
   return (
     <Link to={`/orders/${order.id}`} className="order-row">
       <div>
@@ -29,6 +33,12 @@ export function OrderRow({ order }: { order: OrderListItem }) {
         <div className="hint small">
           {dateTime(order.created_at, lang)} · {t('orders.items', { n: order.items_count })}
         </div>
+        {cb && (
+          <div className="usa-row small">
+            <PlaneIcon width={14} height={14} aria-hidden />
+            {usaStage(cb)}
+          </div>
+        )}
       </div>
       <div className="order-row-right">
         <StatusPill status={order.status} reported={order.payment_reported} cod={order.payment_method === 'cod'} />
@@ -98,7 +108,7 @@ export function OrderDetail() {
   const term = daysText(o.delivery_eta?.min_days, o.delivery_eta?.max_days, shop.data?.delivery_days_label, lang);
 
   async function onCancel() {
-    const ok = await confirm({ message: t('orders.cancelConfirm', { n: o.order_number }), ok: t('orders.cancelYes'), cancel: t('orders.cancelNo'), danger: true });
+    const ok = await confirm({ message: t(o.status === 'paid' ? 'usa.cancelConfirm' : 'orders.cancelConfirm', { n: o.order_number }), ok: t('orders.cancelYes'), cancel: t('orders.cancelNo'), danger: true });
     if (ok) cancel.mutate();
   }
 
@@ -113,6 +123,8 @@ export function OrderDetail() {
       {cod && o.status === 'new' && <div className="notice notice-info">{t('orders.codWaiting')}</div>}
       {unpaid && o.reserved_until && !reported && <PayBy until={o.reserved_until} />}
       {unpaid && reported && <div className="notice notice-ok">{t('orders.payWaiting')}</div>}
+      {/* D-60: «Где ваш заказ из США» — stages, dates, moved dates and when the money can be returned */}
+      {o.cross_border && o.status !== 'cancelled' && <UsaTracking tracking={o.cross_border} cancel={o.cross_border_cancel} />}
 
       <section className="card summary">
         <OrderItems items={o.items} />
@@ -156,7 +168,7 @@ export function OrderDetail() {
       {cancel.isError && (
         <div className="notice notice-error">{errorText(lang, cancel.error instanceof ApiError ? cancel.error.code : undefined)}</div>
       )}
-      {o.status === 'paid' && <p className="hint small">{t('orders.paidNoCancel')}</p>}
+      {o.status === 'paid' && !o.cross_border && <p className="hint small">{t('orders.paidNoCancel')}</p>}
       {unpaid && reported && <p className="hint small">{t('orders.checkingNoCancel')}</p>}
 
       <div className="actions">

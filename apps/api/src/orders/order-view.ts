@@ -2,12 +2,17 @@ import { Prisma } from '@prisma/client';
 import { listImage, listInclude } from '../catalog/product.mapper';
 import type { CampaignLine, PricingSnapshot } from '../promo/promo.service';
 import { CUSTOMER_CANCELLABLE } from './order-state';
+import { CB_STAGES, isoDay, lineStage, orderStage, type CbStage } from './cross-border';
 
 export const orderViewInclude = {
   items: {
     orderBy: { name_ru_snapshot: 'asc' },
-    include: { product: { select: { name_uz: true, short_name_ru: true, short_name_uz: true, form: true, media: listInclude.media } } },
+    include: {
+      product: { select: { name_uz: true, short_name_ru: true, short_name_uz: true, form: true, media: listInclude.media } },
+      cross_border_batch: { select: { stage: true } },
+    },
   },
+  cross_border_events: { orderBy: { created_at: 'asc' } },
   region: true,
   city: true,
   history: { orderBy: { created_at: 'asc' } },
@@ -60,7 +65,10 @@ export function toOrderView(o: OrderForView) {
       line_total_uzs: num(i.line_total_uzs),
       discount_uzs: num(i.discount_uzs),
       paid_line_total_uzs: num(i.paid_line_total_uzs),
+      /** D-60: «Под заказ из США» */
+      cross_border: i.source === 'cross_border',
     })),
+    cross_border: crossBorderOf(o),
     totals: {
       goods_list_total_uzs: num(o.goods_total_uzs) + campaignsOf(o).reduce((s, c) => s + c.amount_uzs, 0),
       campaign_discount_uzs: campaignsOf(o).reduce((s, c) => s + c.amount_uzs, 0),
@@ -95,6 +103,41 @@ export function toOrderView(o: OrderForView) {
 }
 
 export type OrderView = ReturnType<typeof toOrderView>;
+
+const cbLines = (o: OrderForView) =>
+  o.items.filter((i) => i.source === 'cross_border').map((i) => ({ arrived_at: i.arrived_at, batch_stage: i.cross_border_batch?.stage ?? null }));
+
+/**
+ * D-60: the tracking of an order with lines from the USA — the stage it is at (null before the payment), every stage
+ * with its date (from the history), the promised window and the moves of the date with reasons. null — no such lines.
+ */
+export function crossBorderOf(o: OrderForView) {
+  const lines = cbLines(o);
+  if (!lines.length) return null;
+  const paid = !!o.paid_at && o.status !== 'new' && o.status !== 'awaiting_payment';
+  // after the jars are in Tashkent the order goes the usual way (picking, courier…): the tracking shows it as done
+  const stage: CbStage | null = orderStage(paid, lines) ?? (paid ? 'paid' : null);
+  const reached = (s: CbStage) => o.cross_border_events.find((e) => e.type === 'stage' && e.stage === s)?.created_at ?? null;
+  return {
+    stage,
+    lines_waiting: lines.filter((l) => lineStage(l) !== 'in_stock').length,
+    expected_from: isoDay(o.expected_from),
+    expected_to: isoDay(o.expected_to),
+    steps: CB_STAGES.map((s) => ({
+      stage: s,
+      done: !!stage && CB_STAGES.indexOf(s) <= CB_STAGES.indexOf(stage),
+      at: s === 'paid' ? (paid ? o.paid_at : null) : reached(s),
+    })),
+    delays: o.cross_border_events.filter((e) => e.type === 'delay').map((e) => ({ at: e.created_at, expected_to: isoDay(e.expected_to), reason: e.reason })),
+  };
+}
+
+/** The same stage from the item rows only (lists, jobs). */
+export function crossBorderStageOf(o: { paid_at: Date | null; status: string; items: { source: string; arrived_at: Date | null; cross_border_batch: { stage: string } | null }[] }): CbStage | null {
+  const lines = o.items.filter((i) => i.source === 'cross_border').map((i) => ({ arrived_at: i.arrived_at, batch_stage: i.cross_border_batch?.stage ?? null }));
+  const paid = !!o.paid_at && o.status !== 'new' && o.status !== 'awaiting_payment';
+  return orderStage(paid, lines);
+}
 
 /** 3.7: «Акция 11.11: −X сум» lines of the order, from its frozen calculation (older orders: none). */
 export function campaignsOf(o: { pricing_json: Prisma.JsonValue | null }): CampaignLine[] {
