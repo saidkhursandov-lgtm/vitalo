@@ -58,6 +58,7 @@ import {
   Plus,
   Search,
   SearchX,
+  SendHorizontal,
   ShoppingCart,
   Star,
   Stethoscope,
@@ -107,6 +108,7 @@ export const OfflineIcon = make(WifiOff);
 export const AlertIcon = make(CircleAlert);
 export const InfoIcon = make(Info);
 export const SupportIcon = make(MessageCircle);
+export const SendIcon = make(SendHorizontal);
 export const GiftIcon = make(Gift);
 export const PhoneIcon = make(Phone);
 export const ReceiptIcon = make(ReceiptText);

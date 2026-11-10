@@ -285,7 +285,7 @@ function AskSpecialist({ id, name }: { id: string; name: string }) {
   const { openAsk } = useSheets();
   // 6а-Д: the in-app sheet with this product attached (no jump to the Telegram chat)
   return (
-    <button type="button" className="ask-card" onClick={() => openAsk({ product: { id, name }, topic: 'medical', source: 'product' })}>
+    <button type="button" className="ask-card" onClick={() => openAsk({ product: { id, name }, topic: 'product', source: 'product' })}>
       <span className="ask-icon" aria-hidden>
         <SupportIcon width={20} height={20} />
       </span>

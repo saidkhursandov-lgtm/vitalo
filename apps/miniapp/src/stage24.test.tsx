@@ -194,13 +194,13 @@ describe('2.4: the centre «VITALO AI» (3.8, was «AI-подбор»)', () => {
 });
 
 describe('2.4 / 6а-Д: «Спросить специалиста»', () => {
-  it('opens the in-app sheet with topic chips — no jump to the Telegram chat (RU / UZ)', async () => {
+  it('opens the in-app sheet with the topic row (6б-Б) — no jump to the Telegram chat', async () => {
     tg.on = true;
     show('ru', <ManifestEntry />);
     fireEvent.click(await screen.findByRole('button', { name: /Как VITALO/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Спросить специалиста' }));
     const sheet = await screen.findByRole('dialog', { name: 'Спросить специалиста' });
-    expect(within(sheet).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Медицинский вопрос / Подбор', 'По заказу', 'Акции и промокоды', 'Технический вопрос']);
+    expect(within(sheet).getByRole('button', { name: /Тема вопроса/ }).textContent).toContain('Медицинский вопрос / Подбор');
     await act(() => vi.advanceTimersByTimeAsync(ASK_OPEN_DELAY_MS + 10));
     expect(tg.opened).toEqual([]);
   });

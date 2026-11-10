@@ -597,3 +597,7 @@ textarea { resize: vertical; }
 .support-msg { max-width: 760px; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); }
 .support-msg.is-staff { align-self: flex-end; background: var(--primary-soft); }
 .support-msg p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 6б-Б: the customer's rating of a closed request */
+.support-stars { color: var(--orange); letter-spacing: 1px; white-space: nowrap; }
+.support-stars .muted { color: var(--border); }
+.support-head p { margin: 4px 0; }

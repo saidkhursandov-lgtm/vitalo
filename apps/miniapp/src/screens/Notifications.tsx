@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { BellIcon, GiftIcon, InfoIcon, OrdersIcon, SupportIcon, type Icon } from '../components/Icons';
 import { EmptyState, ErrorState, Loading } from '../components/ui';
 import { track } from '../lib/analytics';
 import { dateTime } from '../lib/format';
 import { useI18n } from '../lib/i18n';
-import { useNotificationActions, useNotifications } from '../lib/queries';
+import { useNotificationActions, useNotifications, useSupportThreads } from '../lib/queries';
 import type { CentreItem, CentreTab } from '../lib/types';
+import { SupportThreadsList } from './Support';
 
 const TABS: CentreTab[] = ['personal', 'orders', 'promo', 'service'];
 const CATEGORY_ICONS: Record<CentreItem['category'], Icon> = { order: OrdersIcon, waitlist: BellIcon, promo: GiftIcon, compat: SupportIcon, personal: SupportIcon };
@@ -24,7 +25,9 @@ export function Notifications() {
   const list = useNotifications(lang);
   const { read, readAll } = useNotificationActions();
   const [chosen, setChosen] = useState<CentreTab | null>(null);
-  const tab = chosen ?? TABS.find((k) => list.data?.tabs[k]) ?? 'orders';
+  // 6б-Б: a customer with requests always sees the tabs (the requests live in «Личные»)
+  const hasThreads = !!useSupportThreads().data?.length;
+  const tab = chosen ?? TABS.find((k) => list.data?.tabs[k]) ?? (hasThreads && !list.data?.items.length ? 'personal' : 'orders');
 
   function open(n: CentreItem) {
     track('notification_open', { category: n.category, template: n.template, tab: n.tab });
@@ -36,7 +39,8 @@ export function Notifications() {
     readAll.mutate();
   }
 
-  const items = list.data?.items.filter((n) => n.tab === tab) ?? [];
+  // 6б-Б: «Личные» lists the requests themselves (number, status, new replies) — their reply cards are not repeated
+  const items = list.data?.items.filter((n) => n.tab === tab && !(tab === 'personal' && n.template.startsWith('support.'))) ?? [];
   return (
     <div className="page">
       <div className="page-head">
@@ -51,7 +55,7 @@ export function Notifications() {
         <Loading variant="list" />
       ) : list.isError ? (
         <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-      ) : list.data.items.length === 0 ? (
+      ) : list.data.items.length === 0 && !hasThreads ? (
         <EmptyState icon={BellIcon} title={t('notifications.emptyTitle')} text={t('notifications.empty')} />
       ) : (
         <>
@@ -63,14 +67,9 @@ export function Notifications() {
               </button>
             ))}
           </div>
-          {/* 6а-Д: «Личные» — the specialist's replies; all questions are one tap away */}
-          {tab === 'personal' && (
-            <Link to="/support" className="link centre-support-link">
-              {t('support.listTitle')} ›
-            </Link>
-          )}
+          {tab === 'personal' && <SupportThreadsList source="centre" />}
           {items.length === 0 ? (
-            <EmptyState icon={TAB_ICONS[tab]} title={t('notifications.emptyTab')} />
+            tab !== 'personal' && <EmptyState icon={TAB_ICONS[tab]} title={t('notifications.emptyTab')} />
           ) : (
             <ul className="card list centre-list" role="tabpanel">
               {items.map((n) => {

@@ -9,7 +9,8 @@ import { useOrder, useOrders, useShopTexts } from '../lib/queries';
 import { daysText, payPath } from '../lib/shop';
 import { haptic } from '../lib/telegram';
 import { useConfirm } from '../components/Confirm';
-import { SupportButton } from '../components/Support';
+import { useSheets } from '../components/Sheets';
+import { SupportIcon } from '../components/Icons';
 import { PayBy } from '../components/PayBy';
 import { OrderItems, OrderTotals } from '../components/OrderItems';
 import { IntakeGuideBlock } from '../components/OrderNotices';
@@ -184,9 +185,20 @@ export function OrderDetail() {
             {t('orders.cancel')}
           </button>
         )}
-        {/* After "Я оплатил(а)" there is no cancel button: only support can cancel a payment being checked. */}
-        <SupportButton />
+        {/* After "Я оплатил(а)" there is no cancel button: only support can cancel a payment being checked.
+            6б-Б: a question about this order — a request with the order attached, inside the Mini App */}
+        <OrderAsk order={{ id: o.id, number: o.order_number }} />
       </div>
     </div>
+  );
+}
+
+function OrderAsk({ order }: { order: { id: string; number: string } }) {
+  const { t } = useI18n();
+  const { openAsk } = useSheets();
+  return (
+    <button type="button" className="btn btn-secondary btn-block" onClick={() => openAsk({ order, topic: 'order', source: 'order' })}>
+      <SupportIcon width={20} height={20} /> {t('orders.ask')}
+    </button>
   );
 }

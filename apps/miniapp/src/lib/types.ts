@@ -663,14 +663,21 @@ export interface AiState {
 export type PromoLabel = 'eleven_eleven' | 'black_friday' | 'hit' | 'new';
 
 /** 6а-Д: «Спросить специалиста» — the topic chips. */
-export type SupportTopic = 'medical' | 'order' | 'promo' | 'tech';
+export type SupportTopic = 'product' | 'medical' | 'order' | 'promo' | 'tech';
 export interface SupportThread {
   id: string;
+  /** 6б-Б: «0012» — shown as «Обращение №0012» */
+  number: string;
   topic: SupportTopic;
   /** open — waits for the shop; answered — the shop replied last; closed */
   status: 'open' | 'answered' | 'closed';
   unread: number;
+  /** customer | staff (the shop wrote first about an order) */
+  started_by: 'customer' | 'staff';
+  rating: number | null;
+  closed_at: string | null;
   product: { id: string; name: string } | null;
+  order: { id: string; number: string } | null;
   last_message_at: string;
   created_at: string;
   messages: { id: string; author: 'customer' | 'staff'; text: string; created_at: string }[];

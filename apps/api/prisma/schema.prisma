@@ -480,6 +480,7 @@ model staff_users {
   admin_ai_memory       admin_business_memory[]
   admin_ai_requests     admin_ai_requests[]
   support_messages      support_messages[]
+  support_closed        support_threads[]              @relation("support_closed_by")
 }
 
 model staff_sessions {
@@ -1650,6 +1651,7 @@ model orders {
   receipts            payment_receipts[]
   payme_txs           payme_transactions[]
   cross_border_events cross_border_events[]
+  support_threads     support_threads[]
 
   @@index([user_id, status, created_at])
   @@index([status, reserved_until]) // reservation-expiry job
@@ -2494,11 +2496,25 @@ model support_threads {
   customer_unread Int                @default(0)
   last_message_at DateTime           @default(now())
   created_at      DateTime           @default(now())
+  /// 6б-Б: the request number the customer and the staff see («Обращение №0012»)
+  number          Int                @unique @default(autoincrement())
+  /// 6б-Б: the order the request is about (chosen by the customer or «Написать покупателю» in the admin)
+  order_id        String?            @db.Uuid
+  /// customer | staff (the shop wrote first from the order card)
+  started_by      String             @default("customer")
+  closed_at       DateTime?
+  closed_by       String?            @db.Uuid
+  /// 1–5 stars the customer gave after the request was closed
+  rating          Int?               @db.SmallInt
+  rated_at        DateTime?
   user            users              @relation(fields: [user_id], references: [id])
   product         products?          @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  order           orders?            @relation(fields: [order_id], references: [id], onDelete: SetNull)
+  closer          staff_users?       @relation("support_closed_by", fields: [closed_by], references: [id], onDelete: SetNull)
   messages        support_messages[]
 
   @@index([user_id])
+  @@index([order_id])
   @@index([status, last_message_at])
 }
 

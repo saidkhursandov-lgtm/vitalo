@@ -3,37 +3,41 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
+import { orderNo } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { haptic } from '../lib/telegram';
 import type { SupportThread, SupportTopic } from '../lib/types';
-import { CheckIcon, CloseIcon, PillIcon } from './Icons';
+import { CheckIcon, ChevronDownIcon, CloseIcon, OrdersIcon, PillIcon } from './Icons';
 
-export const SUPPORT_TOPICS: SupportTopic[] = ['medical', 'order', 'promo', 'tech'];
+export const SUPPORT_TOPICS: SupportTopic[] = ['product', 'medical', 'order', 'promo', 'tech'];
 export const SUPPORT_TEXT_MAX = 2000;
 
-/** What the sheet opens with: the product of the card (attached by itself) and the first chosen topic. */
+/** What the sheet opens with: the product of the card or the order (attached by themselves) and the topic. */
 export interface AskOptions {
   product?: { id: string; name: string } | null;
+  order?: { id: string; number: string } | null;
   topic?: SupportTopic;
   source?: string;
 }
 
 /**
- * 6а-Д (D-62): «Спросить специалиста» inside the Mini App (product card, «Поможем с выбором», «Подбор», the intake
- * memo): a topic by chips, the question, the product attached by itself. The answer comes to «Уведомления → Личные»
- * and as a bot message; the conversation goes on in the Mini App.
+ * 6а-Д (D-62), 6б-Б (D-63): «Спросить специалиста» inside the Mini App. The topic is one row «Тема · … ›» (set by
+ * itself from a product card or an order; a tap opens a short list), the product or the order is attached, then the
+ * question. The answer comes to «Уведомления → Личные» and as a bot message; the conversation goes on in the Mini App.
  */
 export function AskSheet({ options, onClose }: { options: AskOptions; onClose: () => void }) {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const client = useQueryClient();
-  const [topic, setTopic] = useState<SupportTopic>(options.topic ?? 'medical');
+  const [topic, setTopic] = useState<SupportTopic>(options.topic ?? (options.order ? 'order' : options.product ? 'product' : 'medical'));
+  const [picking, setPicking] = useState(false);
   const [text, setText] = useState('');
   const send = useMutation({
-    mutationFn: () => api<SupportThread>('/support/threads', { method: 'POST', body: { topic, text: text.trim(), product_id: options.product?.id } }),
+    mutationFn: () =>
+      api<SupportThread>('/support/threads', { method: 'POST', body: { topic, text: text.trim(), product_id: options.product?.id, order_id: options.order?.id } }),
     onSuccess: () => {
       haptic('success');
-      track('support_ask_sent', { topic, source: options.source ?? 'other', product: !!options.product });
+      track('support_ask_sent', { topic, source: options.source ?? 'other', product: !!options.product, order: !!options.order });
       void client.invalidateQueries({ queryKey: ['support'] });
     },
     onError: () => haptic('error'),
@@ -58,6 +62,7 @@ export function AskSheet({ options, onClose }: { options: AskOptions; onClose: (
                 <CheckIcon width={28} height={28} />
               </span>
               <strong>{t('ask.sentTitle')}</strong>
+              <span className="hint">{t('support.no', { n: done.number })}</span>
               <p className="hint">{t('ask.sentText')}</p>
             </div>
             <div className="sheet-actions">
@@ -79,23 +84,48 @@ export function AskSheet({ options, onClose }: { options: AskOptions; onClose: (
         ) : (
           <>
             <div className="sheet-body">
-              <p className="ask-label">{t('ask.topic')}</p>
-              <div className="chips ask-topics" role="radiogroup" aria-label={t('ask.topic')}>
-                {SUPPORT_TOPICS.map((k) => (
-                  <button key={k} type="button" role="radio" aria-checked={k === topic} className={`chip${k === topic ? ' is-on' : ''}`} onClick={() => setTopic(k)}>
-                    {t(`ask.topic.${k}`)}
-                  </button>
-                ))}
-              </div>
+              {/* 6б-Б: one row instead of five big chips; the list opens only on a tap */}
+              <button type="button" className="ask-topic-row" aria-expanded={picking} onClick={() => setPicking((v) => !v)}>
+                <span className="hint">{t('ask.topic')}</span>
+                <strong>{t(`ask.topic.${topic}`)}</strong>
+                <ChevronDownIcon width={18} height={18} />
+              </button>
+              {picking && (
+                <ul className="ask-topic-list" role="radiogroup" aria-label={t('ask.topic')}>
+                  {SUPPORT_TOPICS.map((k) => (
+                    <li key={k}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={k === topic}
+                        className={k === topic ? 'is-on' : ''}
+                        onClick={() => {
+                          setTopic(k);
+                          setPicking(false);
+                        }}
+                      >
+                        <span>{t(`ask.topic.${k}`)}</span>
+                        {k === topic && <CheckIcon width={18} height={18} />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {options.product && (
                 <div className="ask-product">
                   <PillIcon width={18} height={18} aria-hidden />
                   <span>{options.product.name}</span>
                 </div>
               )}
+              {options.order && (
+                <div className="ask-product">
+                  <OrdersIcon width={18} height={18} aria-hidden />
+                  <span>{t('orders.number', { n: orderNo(options.order.number) })}</span>
+                </div>
+              )}
               <label className="field">
-                <span>{t('ask.question')}</span>
-                <textarea rows={4} maxLength={SUPPORT_TEXT_MAX} value={text} placeholder={t('ask.placeholder')} onChange={(e) => setText(e.target.value)} />
+                <span className="visually-hidden">{t('ask.question')}</span>
+                <textarea rows={4} maxLength={SUPPORT_TEXT_MAX} value={text} placeholder={t('ask.placeholder')} aria-label={t('ask.question')} onChange={(e) => setText(e.target.value)} />
               </label>
               <p className="hint small">{topic === 'medical' ? t('ask.medicalNote') : t('ask.whereAnswer')}</p>
               {error && <p className="error-text" role="alert">{error}</p>}

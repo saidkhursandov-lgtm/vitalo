@@ -11,6 +11,7 @@ import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly'
 import { OrderFinance, TestBadge } from '../components/OrderFinance';
 import { OrderShipping } from './OrderLabel';
 import { CrossBorderBox } from './CrossBorderBox';
+import { OrderSupport } from './Support';
 
 interface Named {
   id: string;
@@ -189,6 +190,7 @@ export function OrderDetail() {
       )}
       {o.cross_border && <CrossBorderBox cb={o.cross_border} />}
       <OrderReceipts orderId={o.id} />
+      {can('support.view') && <OrderSupport orderId={o.id} />}
 
       <div className="grid-2">
         <section className="card">

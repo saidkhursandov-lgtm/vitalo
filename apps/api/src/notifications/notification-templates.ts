@@ -36,6 +36,7 @@ export type TemplateName =
   | 'staff.iherb_upload_due'
   | 'compat.answered'
   | 'support.reply'
+  | 'support.closed'
   | 'staff.support_new'
   | 'order.payment_reminder'
   | 'order.cod_confirmed'
@@ -104,6 +105,8 @@ export interface TemplatePayload {
   answer?: string;
   /** 6а-Д: «Спросить специалиста» — the conversation and its topic (medical | order | promo | tech) */
   thread_id?: string;
+  /** 6б-Б: «0012» — the request number */
+  thread_no?: string;
   topic?: string;
   question?: string;
   /** 3.4: a template answer in both languages — the centre shows the one the customer reads now */
@@ -439,18 +442,32 @@ Kutmoqda: ${p.count ?? 0}`,
     uz: (p: TemplatePayload) =>
       `VITALO mutaxassisi moslik haqidagi soʻrovingizga javob berdi\n\n${p.verdict ? VERDICT_LABELS[p.verdict].uz : ''}\n${p.answer ?? ''}\n\nTibbiy maslahat hisoblanmaydi.`,
   },
-  // 6а-Д: the shop answered a question from «Спросить специалиста» (bot + «Личные» of the Mini App centre).
+  // 6а-Д / 6б-Б: a message of the shop in a request (an answer, or the shop wrote first from the order card).
   'support.reply': {
-    ru: (p: TemplatePayload) => `Специалист VITALO ответил на ваш вопрос
+    ru: (p: TemplatePayload) => `VITALO · Обращение №${p.thread_no ?? ''}${p.order_number ? ` · заказ №${p.order_number}` : ''}
 
 ${p.answer ?? ''}`,
-    uz: (p: TemplatePayload) => `VITALO mutaxassisi savolingizga javob berdi
+    uz: (p: TemplatePayload) => `VITALO · Murojaat №${p.thread_no ?? ''}${p.order_number ? ` · №${p.order_number} buyurtma` : ''}
 
 ${p.answer ?? ''}`,
   },
+  // 6б-Б: the shop closed the request; the customer may rate the answer.
+  'support.closed': {
+    ru: (p: TemplatePayload) => `Обращение №${p.thread_no ?? ''} закрыто${p.answer ? `
+
+${p.answer}` : ''}
+
+Оцените, пожалуйста, ответ — это займёт секунду.`,
+    uz: (p: TemplatePayload) => `Murojaat №${p.thread_no ?? ''} yopildi${p.answer ? `
+
+${p.answer}` : ''}
+
+Iltimos, javobni baholang — bir soniya vaqt oladi.`,
+  },
   // 6а-Д: a new question (or a new message) from «Спросить специалиста» (admins and managers; medical — admins and specialists).
   'staff.support_new': {
-    ru: (p: TemplatePayload) => `Новый вопрос покупателя: ${SUPPORT_TOPICS[(p.topic ?? 'tech') as SupportTopic]?.ru ?? p.topic}${p.product ? `
+    ru: (p: TemplatePayload) => `${p.thread_no ? `Обращение №${p.thread_no} · ` : ''}Вопрос покупателя: ${SUPPORT_TOPICS[(p.topic ?? 'tech') as SupportTopic]?.ru ?? p.topic}${p.order_number ? `
+Заказ №${p.order_number}` : ''}${p.product ? `
 Товар: ${p.product}` : ''}
 
 ${p.question ?? ''}
@@ -527,9 +544,11 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
   }
   const line = isTemplate(template) ? CENTRE_LINES[template]?.[lang](payload) : undefined;
   if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
-  if (template === 'support.reply') {
+  if (template === 'support.reply' || template === 'support.closed') {
     const topic = SUPPORT_TOPICS[(payload.topic ?? 'tech') as SupportTopic]?.[lang] ?? '';
-    return { title: lang === 'uz' ? `Mutaxassis javobi · ${topic}` : `Ответ специалиста · ${topic}`, body: payload.answer ?? '' };
+    const head = lang === 'uz' ? `Murojaat №${payload.thread_no ?? ''}` : `Обращение №${payload.thread_no ?? ''}`;
+    if (template === 'support.closed') return { title: `${head} · ${lang === 'uz' ? 'yopildi' : 'закрыто'}`, body: payload.answer || (lang === 'uz' ? 'Javobni baholang' : 'Оцените ответ') };
+    return { title: `${head} · ${topic}`, body: payload.answer ?? '' };
   }
   if (template === 'compat.answered') {
     const label = payload.verdict ? VERDICT_LABELS[payload.verdict][lang] : '';
@@ -564,10 +583,12 @@ export function centreStep(template: string, lang: Lang): string | null {
   return isTemplate(template) ? (CENTRE_STEPS[template]?.[lang] ?? null) : null;
 }
 
-/** 6а-Д: topics of «Спросить специалиста» (chips in the Mini App, the admin list, the staff message). */
-export const SUPPORT_TOPIC_CODES = ['medical', 'order', 'promo', 'tech'] as const;
+/** 6а-Д: topics of «Спросить специалиста» (6б-Б: the topic row in the Mini App, the admin list, the staff message). */
+export const supportNo = (n: number) => String(n).padStart(4, '0');
+export const SUPPORT_TOPIC_CODES = ['product', 'medical', 'order', 'promo', 'tech'] as const;
 export type SupportTopic = (typeof SUPPORT_TOPIC_CODES)[number];
 export const SUPPORT_TOPICS: Record<SupportTopic, Record<Lang, string>> = {
+  product: { ru: 'Вопрос о товаре', uz: 'Mahsulot haqida savol' },
   medical: { ru: 'Медицинский вопрос / Подбор', uz: 'Tibbiy savol / Tanlash' },
   order: { ru: 'По заказу', uz: 'Buyurtma bo‘yicha' },
   promo: { ru: 'Акции и промокоды', uz: 'Aksiyalar va promokodlar' },
