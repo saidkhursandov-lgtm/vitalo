@@ -119,5 +119,15 @@ describe('6а-Д: questions to the specialist (e2e)', () => {
     expect(rated.rating).toBe(4);
     const list = (await http().get('/api/staff/support/threads?status=closed').set(bearer(manager)).expect(200)).body;
     expect(list.items.find((t: { id: string }) => t.id === asked.id)).toMatchObject({ rating: 4, order_number: order.order_number });
+
+    // owner, 10.11: the customer closes a request himself — only after the shop answered; then rates it
+    const fresh = (await http().post('/api/support/threads').set(bearer(customer)).send({ topic: 'tech', text: 'Не открывается оплата' }).expect(201)).body;
+    await http().post(`/api/support/threads/${fresh.id}/close`).set(bearer(customer)).expect(409);
+    await http().post(`/api/staff/support/threads/${fresh.id}/reply`).set(bearer(manager)).send({ text: 'Обновите приложение, пожалуйста.' }).expect(200);
+    await http().post(`/api/support/threads/${fresh.id}/close`).set(bearer(stranger)).expect(404);
+    const mine = (await http().post(`/api/support/threads/${fresh.id}/close`).set(bearer(customer)).expect(200)).body;
+    expect(mine).toMatchObject({ status: 'closed', closed_at: expect.any(String) });
+    expect((await http().get(`/api/staff/support/threads/${fresh.id}`).set(bearer(manager)).expect(200)).body.closed_by).toBe('покупатель');
+    await http().post(`/api/support/threads/${fresh.id}/rating`).set(bearer(customer)).send({ rating: 5 }).expect(200);
   });
 });

@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AskSheet } from './components/AskSheet';
+import { ConfirmProvider } from './components/Confirm';
 import { I18nProvider } from './lib/i18n';
 import type { Lang, SupportThread } from './lib/types';
 import { SupportThreadScreen } from './screens/Support';
@@ -34,9 +35,10 @@ beforeEach(() => {
   current = thread;
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status });
-    if (init.method === 'POST') posted.push({ url, body: JSON.parse(init.body as string) });
+    if (init.method === 'POST') posted.push({ url, body: init.body ? JSON.parse(init.body as string) : {} });
     if (url.endsWith('/support/threads') && init.method === 'POST') return json({ ...thread, status: 'open' }, 201);
     if (url.endsWith('/support/threads/t1/messages')) return json({ ...current, status: 'open', messages: [...current.messages, { id: 'm3', author: 'customer', text: 'Спасибо', created_at: '2026-11-09T11:00:00Z' }] }, 201);
+    if (url.endsWith('/support/threads/t1/close')) return json({ ...current, status: 'closed', closed_at: '2026-11-09T12:00:00Z' });
     if (url.endsWith('/support/threads/t1/rating')) return json({ ...current, rating: JSON.parse(init.body as string).rating });
     if (url.endsWith('/support/threads/t1')) return json(current);
     return json([]);
@@ -53,10 +55,12 @@ function show(lang: Lang, ui: React.ReactNode, path = '/') {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <I18nProvider lang={lang} setLang={() => undefined}>
+          <ConfirmProvider>
           <Routes>
             <Route path="/" element={ui} />
             <Route path="/support/:id" element={<SupportThreadScreen />} />
           </Routes>
+        </ConfirmProvider>
         </I18nProvider>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -112,14 +116,26 @@ describe('6б-Б: the request as a chat', () => {
     expect(posted.at(-1)).toEqual({ url: expect.stringContaining('/support/threads/t1/messages'), body: { text: 'Спасибо' } });
   });
 
-  it('a closed request: no input, 1–5 stars and «Новое обращение»', async () => {
+  it('a closed request: no input, 1–5 stars, back to the list (no «Новое обращение» inside)', async () => {
     current = { ...thread, status: 'closed', closed_at: '2026-11-09T12:00:00Z' };
     show('ru', null, '/support/t1');
     expect(await screen.findByText('Обращение №0012 закрыто')).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Новое обращение' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Новое обращение' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'К списку обращений' })).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: '5 из 5' }));
     expect(await screen.findByText('Спасибо за оценку!')).toBeTruthy();
     expect(posted.at(-1)).toEqual({ url: expect.stringContaining('/support/threads/t1/rating'), body: { rating: 5 } });
+  });
+
+  it('the shop answered: the customer closes the request himself (after a confirmation), then rates it', async () => {
+    show('ru', null, '/support/t1');
+    expect(await screen.findByText('Вопрос решён?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть обращение' }));
+    const dialog = await screen.findByRole('alertdialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Закрыть обращение' }));
+    await waitFor(() => expect(posted.map((p) => p.url).join()).toContain('/close'));
+    expect(await screen.findByText('Обращение №0012 закрыто')).toBeTruthy();
+    expect(posted.at(-1)?.url).toContain('/support/threads/t1/close');
   });
 });

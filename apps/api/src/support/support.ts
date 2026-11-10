@@ -131,6 +131,20 @@ export class SupportService {
     return this.one(userId, id);
   }
 
+  /**
+   * 6б-Б (owner, 10.11): the customer closes the request himself once the shop has answered — then rates it.
+   * Before any answer of the shop there is nothing to close (409 THREAD_NOT_ANSWERED).
+   */
+  async customerClose(userId: string, id: string) {
+    const t = await this.prisma.support_threads.findFirst({ where: { id, user_id: userId }, include: { messages: { where: { author: 'staff' }, take: 1 } } });
+    if (!t) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Question not found' });
+    if (t.status === 'closed') return this.one(userId, id);
+    if (!t.messages.length) throw new ConflictException({ code: 'THREAD_NOT_ANSWERED', message: 'The shop has not answered yet' });
+    await this.prisma.support_threads.update({ where: { id }, data: { status: 'closed', closed_at: new Date(), closed_by: null } });
+    await this.prisma.analytics_events.create({ data: { user_id: userId, event: 'support_closed_by_customer', props: { thread_id: id, topic: t.topic } } });
+    return this.one(userId, id);
+  }
+
   /** 6б-Б: 1–5 stars after the shop closed the request (may be changed). */
   async rate(userId: string, id: string, rating: number) {
     const t = await this.prisma.support_threads.findFirst({ where: { id, user_id: userId } });
@@ -189,7 +203,7 @@ export class SupportService {
       rating: t.rating,
       started_by: t.started_by,
       closed_at: t.closed_at,
-      closed_by: t.closer?.name ?? null,
+      closed_by: t.closer?.name ?? (t.status === 'closed' ? 'покупатель' : null),
       customer: { name: customerName(t.user), phone: t.user.phone, username: t.user.username },
       product: t.product ? { id: t.product.id, sku: t.product.sku, name: productTitle(t.product, 'ru') } : null,
       order: t.order ? { id: t.order.id, number: t.order.order_number } : null,
@@ -323,6 +337,13 @@ export class SupportController {
   @Post(':id/messages')
   reply(@CurrentAuth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: SupportTextDto) {
     return this.support.reply(auth.user.id, id, dto.text);
+  }
+
+  /** 6б-Б: «Закрыть обращение» by the customer (only after the shop answered). */
+  @Post(':id/close')
+  @HttpCode(200)
+  close(@CurrentAuth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    return this.support.customerClose(auth.user.id, id);
   }
 
   @Post(':id/rating')

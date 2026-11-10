@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SUPPORT_TEXT_MAX } from '../components/AskSheet';
 import { BackIcon, CheckIcon, SendIcon, StarIcon, SupportIcon } from '../components/Icons';
+import { useConfirm } from '../components/Confirm';
 import { useSheets } from '../components/Sheets';
 import { useSupportUrl } from '../components/Support';
 import { EmptyState, ErrorState, Loading } from '../components/ui';
@@ -51,10 +52,7 @@ export function SupportThreadsList({ source }: { source: string }) {
                   <SupportIcon width={20} height={20} />
                 </span>
                 <span className="centre-text">
-                  <span className="support-row-head">
-                    <strong>{t('support.no', { n: th.number })}</strong>
-                    <span className={`support-status is-${th.status}`}>{t(`support.status.${th.status}`)}</span>
-                  </span>
+                  <strong>{t('support.no', { n: th.number })}</strong>
                   <span className="hint small">
                     {t(`ask.topic.${th.topic}`)}
                     {about ? ` · ${about}` : ''}
@@ -63,7 +61,10 @@ export function SupportThreadsList({ source }: { source: string }) {
                     {last?.author === 'customer' && <span className="hint">{t('support.you')}: </span>}
                     {last?.text}
                   </span>
-                  <span className="hint small">{dateTime(th.last_message_at, lang)}</span>
+                  {/* the status next to the date: the number never gets cut on a 320 px screen */}
+                  <span className="hint small">
+                    <span className={`support-status is-${th.status}`}>{t(`support.status.${th.status}`)}</span> · {dateTime(th.last_message_at, lang)}
+                  </span>
                 </span>
                 {!!th.unread && <span className="centre-dot" aria-label={t('notifications.unread')} />}
               </Link>
@@ -81,12 +82,14 @@ export function SupportList() {
   const telegramUrl = useSupportUrl();
   return (
     <div className="page">
-      <h1>{t('support.listTitle')}</h1>
+      {/* owner, 10.11: Telegram is a small pill at the top, not a stray button under the list */}
+      <div className="support-top">
+        <h1>{t('support.listTitle')}</h1>
+        <button type="button" className="support-telegram" onClick={() => openSupport(telegramUrl)}>
+          <SendIcon width={16} height={16} /> {t('support.telegramShort')}
+        </button>
+      </div>
       <SupportThreadsList source="support_list" />
-      {/* 6б-А: the Telegram account stays only as the last resort */}
-      <button type="button" className="link support-telegram" onClick={() => openSupport(telegramUrl)}>
-        {t('support.telegram')}
-      </button>
     </div>
   );
 }
@@ -117,7 +120,7 @@ export function SupportThreadScreen() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const thread = useSupportThread(id);
-  const { openAsk } = useSheets();
+  const confirm = useConfirm();
   const [text, setText] = useState('');
   const box = useRef<HTMLTextAreaElement>(null);
   const count = thread.data?.messages.length ?? 0;
@@ -161,10 +164,23 @@ export function SupportThreadScreen() {
     },
   });
 
+  // owner, 10.11: the customer may close the request himself once the shop has answered
+  const closeMine = useMutation({
+    mutationFn: () => api<SupportThread>(`/support/threads/${id}/close`, { method: 'POST' }),
+    onSuccess: (th) => {
+      haptic('success');
+      update(th);
+    },
+  });
+  async function onClose() {
+    if (await confirm({ message: t('support.closeConfirm'), ok: t('support.closeMine'), cancel: t('common.cancel') })) closeMine.mutate();
+  }
+
   if (thread.isPending) return <div className="page"><Loading /></div>;
   if (thread.isError) return <ErrorState error={thread.error} onRetry={() => void thread.refetch()} />;
   const th = thread.data;
   const closed = th.status === 'closed';
+  const answered = !closed && th.messages.some((m) => m.author === 'staff');
   const about = th.order ? t('orders.number', { n: orderNo(th.order.number) }) : th.product?.name;
   const aboutPath = th.order ? `/orders/${th.order.id}` : th.product ? `/product/${th.product.id}` : null;
 
@@ -227,11 +243,21 @@ export function SupportThreadScreen() {
               <CheckIcon width={16} height={16} /> {t('support.ratedNote')}
             </span>
           )}
-          <button type="button" className="btn btn-block" onClick={() => openAsk({ source: 'closed_thread', order: th.order, product: th.product })}>
-            {t('support.newRequest')}
-          </button>
+          {/* owner, 10.11: a closed request ends here — a new question is a separate request from the list */}
+          <Link to="/support" className="btn btn-secondary btn-block">
+            {t('support.backToList')}
+          </Link>
         </div>
       ) : (
+        <>
+        {answered && (
+          <div className="chat-resolve">
+            <span>{t('support.resolvedQ')}</span>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={closeMine.isPending} onClick={() => void onClose()}>
+              <CheckIcon width={16} height={16} /> {t('support.closeMine')}
+            </button>
+          </div>
+        )}
         <form
           className="chat-bar"
           onSubmit={(e) => {
@@ -257,6 +283,7 @@ export function SupportThreadScreen() {
             <SendIcon width={20} height={20} />
           </button>
         </form>
+        </>
       )}
     </div>
   );
