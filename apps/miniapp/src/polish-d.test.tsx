@@ -133,7 +133,7 @@ describe('6б-Б: the request as a chat', () => {
     expect(await screen.findByText('Вопрос решён?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть обращение' }));
     const dialog = await screen.findByRole('alertdialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Закрыть обращение' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Закрыть' }));
     await waitFor(() => expect(posted.map((p) => p.url).join()).toContain('/close'));
     expect(await screen.findByText('Обращение №0012 закрыто')).toBeTruthy();
     expect(posted.at(-1)?.url).toContain('/support/threads/t1/close');

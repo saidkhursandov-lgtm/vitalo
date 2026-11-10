@@ -173,7 +173,7 @@ export function SupportThreadScreen() {
     },
   });
   async function onClose() {
-    if (await confirm({ message: t('support.closeConfirm'), ok: t('support.closeMine'), cancel: t('common.cancel') })) closeMine.mutate();
+    if (await confirm({ message: t('support.closeConfirm'), ok: t('support.closeOk'), cancel: t('common.cancel') })) closeMine.mutate();
   }
 
   if (thread.isPending) return <div className="page"><Loading /></div>;
