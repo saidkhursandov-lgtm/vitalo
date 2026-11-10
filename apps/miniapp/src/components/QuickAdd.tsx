@@ -25,8 +25,7 @@ export function useQuickNotify() {
 }
 
 /**
- * One-tap add (F1): on a card (add-on v3.1) a round [+] 40×40 with a 44×44 tap area opposite the price, then a compact
- * «− 1 +»; on the product page the wide «В корзину». The number is the same on all cards of the
+ * One-tap add (F1): on a card (6б-А) a wide «В корзину» under the price, then «− 1 +» in its place; on the product page the wide «В корзину». The number is the same on all cards of the
  * product and in the cart; «−» at 1 removes the product. Out of stock (2.4): «Сообщить о поступлении» — a bell of the
  * same size on a card, a wide button on the product page.
  */
@@ -42,8 +41,7 @@ export function QuickAdd({ productId, inStock, variant = 'card', onAdd, campaign
     return (
       <button
         type="button"
-        className="quick-round"
-        aria-label={t('product.addToCart')}
+        className="quick-add quick-card-add"
         onClick={(e) => {
           stop(e);
           tapHaptic();
@@ -53,9 +51,8 @@ export function QuickAdd({ productId, inStock, variant = 'card', onAdd, campaign
           onAdd?.();
         }}
       >
-        <span className="quick-round-dot">
-          <PlusIcon width={20} height={20} />
-        </span>
+        <CartIcon width={18} height={18} aria-hidden />
+        <span>{t('product.addToCart')}</span>
       </button>
     );
   }
@@ -145,8 +142,9 @@ export function WaitlistButton({ productId, variant }: { productId: string; vari
   };
   if (variant === 'card') {
     return (
-      <button type="button" className={`quick-round quick-bell ${waiting ? 'is-on' : ''}`} aria-label={t(waiting ? 'waitlist.cancel' : 'waitlist.notify')} aria-pressed={waiting} onClick={onClick}>
-        <span className="quick-round-dot">{waiting ? <BellCheckIcon width={20} height={20} /> : <BellIcon width={20} height={20} />}</span>
+      <button type="button" className={`quick-add quick-card-bell ${waiting ? 'is-on' : ''}`} aria-label={t(waiting ? 'waitlist.cancel' : 'waitlist.notify')} aria-pressed={waiting} onClick={onClick}>
+        {waiting ? <BellCheckIcon width={18} height={18} aria-hidden /> : <BellIcon width={18} height={18} aria-hidden />}
+        <span>{t(waiting ? 'waitlist.shortOn' : 'waitlist.short')}</span>
       </button>
     );
   }

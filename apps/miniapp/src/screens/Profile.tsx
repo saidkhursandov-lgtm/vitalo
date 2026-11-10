@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronIcon, SupportIcon } from '../components/Icons';
-import { useSupportUrl } from '../components/Support';
-import { openSupport } from '../lib/shop';
+import { ChevronIcon } from '../components/Icons';
 import { BonusTeaser } from '../components/BonusTeaser';
 import { api } from '../lib/api';
 import { useUser } from '../lib/auth';
@@ -14,7 +12,6 @@ export function Profile() {
   const { t } = useI18n();
   const user = useUser();
   const orders = useOrders();
-  const supportUrl = useSupportUrl();
   const recent = orders.data?.pages[0].items.slice(0, 3) ?? [];
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
   const [marketing, setMarketing] = useState(user.marketing_opt_in);
@@ -39,15 +36,6 @@ export function Profile() {
 
       {/* 2.2: no «Язык» block here — the language is switched with RU | UZ in the header (saved on the server). */}
 
-      <section className="card">
-        <h2>{t('profile.notifications')}</h2>
-        <label className="check-row">
-          <input type="checkbox" checked={marketing} onChange={(e) => toggleMarketing(e.target.checked)} />
-          {t('profile.marketing')}
-        </label>
-        <p className="hint small">{t('profile.serviceAlways')}</p>
-      </section>
-
       <section className="card list">
         <Link to="/orders" className="list-row">
           <span>{t('profile.orders')}</span>
@@ -61,10 +49,16 @@ export function Profile() {
           <span>{t('profile.addresses')}</span>
           <ChevronIcon width={18} height={18} />
         </Link>
-        <button type="button" className="list-row" onClick={() => openSupport(supportUrl)}>
+        {/* 6б-А: support lives inside the Mini App (the questions and the replies); Telegram is the last line there */}
+        <Link to="/support" className="list-row">
           <span>{t('profile.support')}</span>
-          <SupportIcon width={18} height={18} />
-        </button>
+          <ChevronIcon width={18} height={18} />
+        </Link>
+        {/* 6б-А: one row instead of the «Уведомления в Telegram» block; order messages come always */}
+        <label className="list-row switch-row">
+          <span>{t('profile.marketingRow')}</span>
+          <input type="checkbox" role="switch" className="switch" checked={marketing} onChange={(e) => toggleMarketing(e.target.checked)} />
+        </label>
       </section>
 
       {recent.length > 0 && (

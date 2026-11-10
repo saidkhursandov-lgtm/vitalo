@@ -10,12 +10,15 @@ import { errorText, useI18n } from '../lib/i18n';
 import { useSupportThread, useSupportThreads } from '../lib/queries';
 import type { SupportThread } from '../lib/types';
 import { SUPPORT_TEXT_MAX } from '../components/AskSheet';
+import { useSupportUrl } from '../components/Support';
+import { openSupport } from '../lib/shop';
 
 /** 6а-Д: «Мои вопросы специалисту» — every question with its topic, the last message and the new replies. */
 export function SupportList() {
   const { t, lang } = useI18n();
   const list = useSupportThreads();
   const { openAsk } = useSheets();
+  const telegramUrl = useSupportUrl();
   return (
     <div className="page">
       <h1>{t('support.listTitle')}</h1>
@@ -52,6 +55,10 @@ export function SupportList() {
       )}
       <button type="button" className="btn btn-secondary btn-block" onClick={() => openAsk({ source: 'support_list' })}>
         <SupportIcon width={20} height={20} /> {t('support.newQuestion')}
+      </button>
+      {/* 6б-А: the Telegram account stays only as the last resort */}
+      <button type="button" className="link support-telegram" onClick={() => openSupport(telegramUrl)}>
+        {t('support.telegram')}
       </button>
     </div>
   );

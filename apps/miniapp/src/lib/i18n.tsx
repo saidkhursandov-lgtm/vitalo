@@ -209,6 +209,7 @@ const ru = {
   'support.emptyTitle': 'Вопросов пока нет',
   'support.empty': 'Задайте вопрос — специалист VITALO ответит прямо здесь.',
   'support.newQuestion': 'Задать новый вопрос',
+  'support.telegram': 'Написать нам в Telegram',
   'support.status.open': 'Ждёт ответа',
   'support.status.answered': 'Есть ответ',
   'support.status.closed': 'Закрыт',
@@ -218,6 +219,8 @@ const ru = {
   'notifications.tab.personal': 'Личные',
   // 2.4: «Сообщить о поступлении»
   'waitlist.notify': 'Сообщить о поступлении',
+  'waitlist.short': 'Сообщить',
+  'waitlist.shortOn': 'Сообщим',
   'waitlist.done': 'Сообщим в Telegram, когда появится',
   'waitlist.in': 'Вы в списке ожидания',
   // 2.4 patch: the bell is a switch
@@ -472,6 +475,7 @@ const ru = {
   'profile.addresses': 'Мои адреса',
   'profile.notifications': 'Уведомления в Telegram',
   'profile.marketing': 'Получать акции и новости',
+  'profile.marketingRow': 'Акции и новости в Telegram',
   'profile.serviceAlways': 'Сообщения о ваших заказах приходят всегда',
 
   'addresses.title': 'Мои адреса',
@@ -780,6 +784,7 @@ const uz: Record<MessageKey, string> = {
   'support.emptyTitle': 'Hozircha savollar yo‘q',
   'support.empty': 'Savol bering — VITALO mutaxassisi shu yerda javob beradi.',
   'support.newQuestion': 'Yangi savol berish',
+  'support.telegram': 'Bizga Telegramda yozish',
   'support.status.open': 'Javob kutilmoqda',
   'support.status.answered': 'Javob bor',
   'support.status.closed': 'Yopilgan',
@@ -788,6 +793,8 @@ const uz: Record<MessageKey, string> = {
   'support.reply': 'Xabaringiz',
   'notifications.tab.personal': 'Shaxsiy',
   'waitlist.notify': 'Kelganda xabar berish',
+  'waitlist.short': 'Xabar berish',
+  'waitlist.shortOn': 'Xabar beramiz',
   'waitlist.done': 'Kelganda Telegramda xabar beramiz',
   'waitlist.in': 'Siz kutish roʻyxatidasiz',
   'waitlist.undo': 'Bekor qilish',
@@ -1038,6 +1045,7 @@ const uz: Record<MessageKey, string> = {
   'profile.addresses': 'Manzillarim',
   'profile.notifications': 'Telegram xabarnomalari',
   'profile.marketing': 'Aksiya va yangiliklarni olish',
+  'profile.marketingRow': 'Aksiya va yangiliklar Telegramda',
   'profile.serviceAlways': 'Buyurtmalaringiz haqidagi xabarlar har doim keladi',
 
   'addresses.title': 'Manzillarim',

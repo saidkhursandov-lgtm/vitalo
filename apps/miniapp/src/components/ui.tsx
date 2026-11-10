@@ -9,7 +9,6 @@ import { useUnderOrderText } from './CrossBorder';
 import { PromoLabelBadge, SaleBadge, SalePrice } from './Campaign';
 import { Picture } from './Picture';
 import { QuickAdd } from './QuickAdd';
-import { useQuickCart } from '../lib/quick-cart';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
 
 // ---------------------------------------------------------------- loading skeletons (no spinners)
@@ -259,8 +258,6 @@ function TilePrice({ amount }: { amount: number }) {
   );
 }
 
-const noNotice = () => undefined;
-
 export function ProductTile({ product }: { product: ProductListItem }) {
   const { t, lang } = useI18n();
   const uo = useUnderOrderText();
@@ -268,8 +265,6 @@ export function ProductTile({ product }: { product: ProductListItem }) {
   const pct = sale ? null : discountPercent(product.price_uzs, product.old_price_uzs ?? null);
   // 6а-Б: the old price crossed out over the price (a sale or a Market old price); the slot is kept empty otherwise
   const old = sale ? sale.list_price_uzs : pct && product.in_stock ? product.old_price_uzs : null;
-  // in the cart the «− 1 +» takes the whole row (the price comes back when the product leaves the cart)
-  const { qty } = useQuickCart(product.id, noNotice);
   return (
     <Link to={`/product/${product.id}`} className={`tile ${product.in_stock || product.cross_border ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
       <div className="tile-img">
@@ -287,9 +282,9 @@ export function ProductTile({ product }: { product: ProductListItem }) {
         {/* 2.3: the short name, exactly 2 lines, whole words; the full one stays in search */}
         <div className="tile-name">{shortNameOf(product, lang)}</div>
         <TileMeta product={product} />
-        {/* 6а-Б: the price on the left (the old one over it), [+] / the bell on the right — one row of a fixed height,
-            so in a row of cards the prices and the buttons are on one level */}
-        <div className={`tile-foot${qty > 0 ? ' is-in-cart' : ''}`}>
+        {/* 6б-А: the price (the old one over it), under it a wide «В корзину» / «− 1 +» / «Сообщить» — fixed heights,
+            so in a row of cards the prices and the buttons are on one level and the button never covers the price */}
+        <div className="tile-foot">
           <div className="tile-prices">
             <s className="tile-price-old">{old ? <TilePrice amount={old} /> : ''}</s>
             <div className={`tile-price${sale ? ` sale-text-${sale.skin}` : ''}`}>

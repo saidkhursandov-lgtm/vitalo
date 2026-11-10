@@ -94,14 +94,14 @@ describe('2.3 fixes: helpers', () => {
 });
 
 describe('2.3 fixes: mini-card', () => {
-  it('fixed places: name, one meta line (kept even when empty), then price and [+] in one row (6а-Б)', () => {
+  it('fixed places: name, one meta line (kept even when empty), then the price and under it a wide «В корзину» (6б-А)', () => {
     const { container } = show('ru', <ProductTile product={{ ...PRODUCT, substance_form_ru: null, course_days: null }} />);
     const body = container.querySelector('.tile-body')!;
     expect([...body.children].map((e) => e.className)).toEqual(['tile-brand', 'tile-name', 'tile-meta', 'tile-foot']);
-    // the price block on the left (an empty old-price slot over the price), the button on the right
+    // the price block (an empty old-price slot over the price), the button row under it
     expect([...container.querySelector('.tile-foot')!.children].map((e) => e.className)).toEqual(['tile-prices', 'tile-action']);
     expect([...container.querySelector('.tile-prices')!.children].map((e) => e.className)).toEqual(['tile-price-old', 'tile-price']);
-    expect(container.querySelector('.tile-action .quick-round')).not.toBeNull();
+    expect(container.querySelector('.tile-action .quick-card-add')!.textContent).toBe('В корзину');
   });
 
   it('6а-Б: «На 30 дн. · 3 260 сум/день» is one line; «На» and «сум» are separate so a narrow card can drop them', () => {
@@ -115,11 +115,11 @@ describe('2.3 fixes: mini-card', () => {
     expect(uz.container.querySelector('.tile-meta')!.textContent!.replace(/ /g, ' ')).toBe('30 kun · 3 260 so‘m/kun');
   });
 
-  it('6а-Б: after [+] the compact «− 1 +» takes the row', async () => {
+  it('6б-А: after «В корзину» the «− 1 +» takes its row; the price stays visible', async () => {
     const { container } = show('ru', <ProductTile product={PRODUCT} />);
     fireEvent.click(await screen.findByRole('button', { name: 'В корзину' }));
     expect(await screen.findByRole('button', { name: 'Больше' })).toBeTruthy();
-    expect(container.querySelector('.tile-foot')!.classList.contains('is-in-cart')).toBe(true);
+    expect(container.querySelector('.tile-price')).not.toBeNull();
     expect(container.querySelector('.tile-action .qty-control')).not.toBeNull();
   });
 
