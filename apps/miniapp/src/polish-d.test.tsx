@@ -68,7 +68,7 @@ function show(lang: Lang, ui: React.ReactNode, path = '/') {
 }
 
 describe('6б-Б: «Спросить специалиста» sheet', () => {
-  it('from the product card: «Тема · Вопрос о товаре» in one row, the list only on a tap; the product is sent; then the request number', async () => {
+  it('from the product card: «Тема · Вопрос о товаре» in one row, the list only on a tap; another topic drops the product; then the request number', async () => {
     show('ru', <AskSheet options={{ product: { id: 'p1', name: 'Магний B6' }, topic: 'product' }} onClose={() => undefined} />);
     expect(screen.getByText('Магний B6')).toBeTruthy();
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
@@ -77,13 +77,14 @@ describe('6б-Б: «Спросить специалиста» sheet', () => {
     fireEvent.click(row);
     fireEvent.click(screen.getByRole('radio', { name: 'Акции и промокоды' }));
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(screen.queryByText('Магний B6')).toBeNull();
     const send = screen.getByRole('button', { name: 'Отправить' }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Есть скидка?' } });
     fireEvent.click(send);
     expect(await screen.findByText('Вопрос отправлен')).toBeTruthy();
     expect(screen.getByText('Обращение №0012')).toBeTruthy();
-    expect(posted[0]).toEqual({ url: expect.stringContaining('/support/threads'), body: { topic: 'promo', text: 'Есть скидка?', product_id: 'p1' } });
+    expect(posted[0]).toEqual({ url: expect.stringContaining('/support/threads'), body: { topic: 'promo', text: 'Есть скидка?' } });
     fireEvent.click(screen.getByRole('button', { name: 'Открыть вопрос' }));
     expect(await screen.findByText('Да, VITA10')).toBeTruthy();
   });
@@ -96,6 +97,13 @@ describe('6б-Б: «Спросить специалиста» sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
     await screen.findByText('Вопрос отправлен');
     expect(posted[0].body).toEqual({ topic: 'order', text: 'Когда доставка?', order_id: 'o1' });
+  });
+
+  it('from an order, another topic: the order is no longer attached', () => {
+    show('ru', <AskSheet options={{ order: { id: 'o1', number: 'VTL-26-0042' } }} onClose={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: /Тема вопроса/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Технический вопрос' }));
+    expect(screen.queryByText(/VTL.26.0042/)).toBeNull();
   });
 
   it('Uzbek topics', () => {

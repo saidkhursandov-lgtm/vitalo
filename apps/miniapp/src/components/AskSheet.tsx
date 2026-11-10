@@ -32,12 +32,15 @@ export function AskSheet({ options, onClose }: { options: AskOptions; onClose: (
   const [topic, setTopic] = useState<SupportTopic>(options.topic ?? (options.order ? 'order' : options.product ? 'product' : 'medical'));
   const [picking, setPicking] = useState(false);
   const [text, setText] = useState('');
+  // owner, 10.11: the product goes only with «Вопрос о товаре», the order only with «По заказу» — another topic drops it
+  const product = topic === 'product' ? options.product : null;
+  const order = topic === 'order' ? options.order : null;
   const send = useMutation({
     mutationFn: () =>
-      api<SupportThread>('/support/threads', { method: 'POST', body: { topic, text: text.trim(), product_id: options.product?.id, order_id: options.order?.id } }),
+      api<SupportThread>('/support/threads', { method: 'POST', body: { topic, text: text.trim(), product_id: product?.id, order_id: order?.id } }),
     onSuccess: () => {
       haptic('success');
-      track('support_ask_sent', { topic, source: options.source ?? 'other', product: !!options.product, order: !!options.order });
+      track('support_ask_sent', { topic, source: options.source ?? 'other', product: !!product, order: !!order });
       void client.invalidateQueries({ queryKey: ['support'] });
     },
     onError: () => haptic('error'),
@@ -111,16 +114,16 @@ export function AskSheet({ options, onClose }: { options: AskOptions; onClose: (
                   ))}
                 </ul>
               )}
-              {options.product && (
+              {product && (
                 <div className="ask-product">
                   <PillIcon width={18} height={18} aria-hidden />
-                  <span>{options.product.name}</span>
+                  <span>{product.name}</span>
                 </div>
               )}
-              {options.order && (
+              {order && (
                 <div className="ask-product">
                   <OrdersIcon width={18} height={18} aria-hidden />
-                  <span>{t('orders.number', { n: orderNo(options.order.number) })}</span>
+                  <span>{t('orders.number', { n: orderNo(order.number) })}</span>
                 </div>
               )}
               <label className="field">
