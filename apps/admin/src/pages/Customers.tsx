@@ -6,6 +6,7 @@ import { api, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, prettyPhone } from '../lib/format';
 import { BackIcon } from '../components/Icons';
+import { TestFlag, useShowTest } from '../components/TestFlag';
 
 interface CustomerRow {
   id: string;
@@ -16,6 +17,7 @@ interface CustomerRow {
   phone: string | null;
   language: string;
   status: string;
+  is_test?: boolean;
   created_at: string;
   paid_orders: number;
   spent_uzs: number;
@@ -34,9 +36,10 @@ export function Customers() {
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState(params.get('q') ?? '');
   const page = Number(params.get('page')) || 1;
+  const { hideTest, toggle: testToggle } = useShowTest();
   const q = useQuery({
     queryKey: ['customers', params.toString()],
-    queryFn: () => api<{ items: CustomerRow[]; total: number; total_pages: number }>(`/staff/customers${qs({ q: params.get('q'), status: params.get('status'), page })}`),
+    queryFn: () => api<{ items: CustomerRow[]; total: number; total_pages: number }>(`/staff/customers${qs({ q: params.get('q'), status: params.get('status'), hide_test: hideTest, page })}`),
   });
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
@@ -62,6 +65,7 @@ export function Customers() {
           <option value="active">Активные</option>
           <option value="blocked">Заблокированные</option>
         </select>
+        {testToggle}
       </form>
       {q.isPending ? (
         <Loading />
@@ -87,6 +91,12 @@ export function Customers() {
                     <Link to={`/customers/${c.id}`} className="strong">
                       {fullName(c)}
                     </Link>
+                    {c.is_test && (
+                      <>
+                        {' '}
+                        <Badge tone="warn">Тест</Badge>
+                      </>
+                    )}
                     {c.phone && <div className="muted small">{prettyPhone(c.phone)}</div>}
                   </td>
                   <td>
@@ -171,6 +181,7 @@ export function CustomerDetail() {
             <dt>Бонусы</dt>
             <dd>{money(c.bonus_balance_uzs)}</dd>
           </dl>
+          <TestFlag entity="customer" id={c.id} value={!!c.is_test} invalidate={['customer', id]} />
           <h3>Адреса</h3>
           {c.addresses.length === 0 && <p className="muted">Нет сохранённых адресов</p>}
           {c.addresses.map((a) => (

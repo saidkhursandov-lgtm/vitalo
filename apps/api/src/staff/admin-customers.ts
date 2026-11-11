@@ -16,6 +16,10 @@ const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? val
 export class CustomersQuery extends PageQuery {
   @ApiPropertyOptional({ description: 'Имя, @username, телефон или Telegram ID' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100) q?: string;
   @ApiPropertyOptional({ enum: UserStatus }) @IsOptional() @IsEnum(UserStatus) status?: UserStatus;
+  @ApiPropertyOptional({ description: 'true — скрыть тестовых клиентов (аудит 10.11, п. 1.5)' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  hide_test?: boolean;
 }
 
 export class BlockDto {
@@ -44,7 +48,7 @@ export class AdminCustomersService {
         if (/^\d+$/.test(s)) or.push({ telegram_user_id: BigInt(s) });
       }
     }
-    const where: Prisma.usersWhereInput = { ...(q.status && { status: q.status }), ...(or.length && { OR: or }) };
+    const where: Prisma.usersWhereInput = { ...(q.status && { status: q.status }), ...(q.hide_test && { is_test: false }), ...(or.length && { OR: or }) };
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.users.count({ where }),
       this.prisma.users.findMany({ where, orderBy: { created_at: 'desc' }, skip: (q.page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
@@ -58,7 +62,7 @@ export class AdminCustomersService {
     return {
       items: rows.map((u) => {
         const s = stats.find((x) => x.user_id === u.id);
-        return { ...toUserProfile(u), status: u.status, paid_orders: s?._count._all ?? 0, spent_uzs: Number(s?._sum.total_uzs ?? 0n) };
+        return { ...toUserProfile(u), status: u.status, is_test: u.is_test, paid_orders: s?._count._all ?? 0, spent_uzs: Number(s?._sum.total_uzs ?? 0n) };
       }),
       page: q.page,
       page_size: PAGE_SIZE,
@@ -80,6 +84,7 @@ export class AdminCustomersService {
     return {
       ...toUserProfile(u),
       status: u.status,
+      is_test: u.is_test,
       bonus_balance_uzs: Number(u.bonus_account?.balance_uzs ?? 0n),
       addresses: u.addresses.map((a) => ({ id: a.id, label: a.label, region: a.region.name_ru, city: a.city.name_ru, address_text: a.address_text, is_primary: a.is_primary })),
       orders: u.orders.map((o) => ({ id: o.id, order_number: o.order_number, created_at: o.created_at, status: o.status, total_uzs: Number(o.total_uzs) })),

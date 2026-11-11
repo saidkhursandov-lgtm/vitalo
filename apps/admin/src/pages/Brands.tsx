@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
-import { api, errorText } from '../lib/api';
+import { api, errorText, qs } from '../lib/api';
+import { TestFlag, useShowTest } from '../components/TestFlag';
 import { useSession } from '../lib/auth';
 import { dictionaryKey } from '../components/DictionarySelect';
 import { SupplierTabs } from '../components/SupplierTabs';
@@ -22,6 +23,7 @@ interface Brand {
   products_active: number;
   products_in_stock: number;
   shown_in_showcase: boolean;
+  is_test?: boolean;
 }
 interface BrandList {
   items: Brand[];
@@ -53,7 +55,11 @@ function checkLogo(file: File, min: number): Promise<string[]> {
 export function Brands() {
   // D-61: the supplier tab — brands with products bought there, only those products counted
   const [supplier, setSupplier] = useState('');
-  const q = useQuery({ queryKey: ['brands', 'admin', supplier], queryFn: () => api<BrandList>(`/staff/brands${supplier ? `?supplier_id=${supplier}` : ''}`) });
+  const { hideTest, toggle: testToggle } = useShowTest();
+  const q = useQuery({
+    queryKey: ['brands', 'admin', supplier, hideTest],
+    queryFn: () => api<BrandList>(`/staff/brands${qs({ supplier_id: supplier, hide_test: hideTest })}`),
+  });
   const [editing, setEditing] = useState<string | null>(null);
   const brand = q.data?.items.find((b) => b.id === editing);
   const [adding, setAdding] = useState(false);
@@ -77,6 +83,7 @@ export function Brands() {
         Переименование — в «Настройки → Справочники»: название у товаров меняется вместе с ним.
       </p>
       <SupplierTabs value={supplier} onChange={setSupplier} />
+      <div className="filters">{testToggle}</div>
       {remove.isError && <p className="alert alert-error">{errorText(remove.error)}</p>}
       {q.isPending ? (
         <Loading />
@@ -106,6 +113,9 @@ export function Brands() {
                   <td>
                     <strong>{b.name_ru}</strong>
                     {b.why_vitalo_ru || b.why_vitalo_uz ? <div className="muted small">Есть «Почему в VITALO»</div> : null}
+                    <div className="small">
+                      <TestFlag entity="brand" id={b.id} value={!!b.is_test} invalidate={['brands']} />
+                    </div>
                   </td>
                   <td className="small">{b.slug ?? '—'}</td>
                   <td>{b.country_ru ?? '—'}</td>

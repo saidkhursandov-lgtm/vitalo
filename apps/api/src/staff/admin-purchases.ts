@@ -111,6 +111,10 @@ export class PurchasesQuery extends PageQuery {
   @ApiPropertyOptional({ example: '2026-10-01' }) @IsOptional() @Matches(DATE) date_from?: string;
   @ApiPropertyOptional({ example: '2026-10-31' }) @IsOptional() @Matches(DATE) date_to?: string;
   @ApiPropertyOptional({ description: 'Поиск по номеру заказа Ozon' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100) q?: string;
+  @ApiPropertyOptional({ description: 'true — скрыть тестовые закупки (аудит 10.11, п. 1.5)' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  hide_test?: boolean;
 }
 
 export class CostPreviewLine {
@@ -179,6 +183,7 @@ function purchaseView(p: PurchaseRow, costs: boolean) {
     purchase_date: day(p.purchase_date),
     status: p.status,
     comment: p.comment,
+    is_test: p.is_test,
     created_by_name: p.staff?.name ?? null,
     created_at: p.created_at,
     updated_at: p.updated_at,
@@ -217,6 +222,7 @@ export class AdminPurchasesService {
     if (q.date_from) and.push({ purchase_date: { gte: new Date(`${q.date_from}T00:00:00Z`) } });
     if (q.date_to) and.push({ purchase_date: { lte: new Date(`${q.date_to}T00:00:00Z`) } });
     if (q.q) and.push({ ozon_order_number: { contains: q.q, mode: 'insensitive' } });
+    if (q.hide_test) and.push({ is_test: false });
     const where: Prisma.purchasesWhereInput = { AND: and };
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.purchases.count({ where }),

@@ -225,6 +225,10 @@ export class StaffProductsQuery extends PageQuery {
   yandex_sync_needed?: boolean;
   @ApiPropertyOptional({ description: 'D-61: вкладка поставщика (id) или none — товары без поставщика' })
   @IsOptional() @Matches(/^(none|[0-9a-f-]{36})$/i) supplier_id?: string;
+  @ApiPropertyOptional({ description: 'true — скрыть тестовые товары (аудит 10.11, п. 1.5)' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  hide_test?: boolean;
 }
 
 /** Real image type from the first bytes (the browser-provided mimetype can lie). */
@@ -365,6 +369,7 @@ export class AdminProductsService {
     const where: Prisma.productsWhereInput = {
       ...(q.status && { status: q.status }),
       ...(q.yandex_sync_needed && { yandex_price_sync_needed: true }),
+      ...(q.hide_test && { is_test: false }),
       ...(q.supplier_id && { suppliers: q.supplier_id === 'none' ? { none: {} } : { some: { supplier_id: q.supplier_id } } }),
       ...(q.q && {
         OR: [
@@ -402,6 +407,7 @@ export class AdminProductsService {
         price_uzs: Number(p.price_uzs),
         status: p.status,
         min_stock: p.min_stock,
+        is_test: p.is_test,
         image_url: p.media[0]?.thumb_url ?? p.media[0]?.url ?? null,
         actual_qty: p.inventory.reduce((s, i) => s + i.actual_qty, 0),
         available_qty: p.inventory.reduce((s, i) => s + i.actual_qty - i.reserved_qty, 0),

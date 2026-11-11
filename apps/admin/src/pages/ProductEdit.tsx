@@ -9,6 +9,7 @@ import { useSession } from '../lib/auth';
 import { Competitors } from '../components/Competitors';
 import { dateTime, discountAboveLimit, MAX_SHOWN_DISCOUNT, PRODUCT_STATUS } from '../lib/format';
 import { BackIcon } from '../components/Icons';
+import { TestFlag } from '../components/TestFlag';
 import { SUPPLIER_KIND_LABELS, supplierTerms, useSuppliers } from '../components/SupplierTabs';
 
 interface CategoryNode {
@@ -21,6 +22,7 @@ interface AdminProduct {
   id: string;
   sku: string;
   status: string;
+  is_test?: boolean;
   price_uzs: number;
   old_price_uzs: number | null;
   cost_uzs?: number | null;
@@ -326,6 +328,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         <Link to="/products" className="btn btn-ghost">
           <BackIcon /> К списку
         </Link>
+        {product && <TestFlag entity="product" id={product.id} value={!!product.is_test} invalidate={['product', product.id]} />}
         {editable && product && product.status !== 'archived' && (
           <button
             type="button"

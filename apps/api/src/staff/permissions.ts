@@ -45,6 +45,7 @@ export const PERMISSIONS = {
   'cross_border.manage': ['manager'], // D-60: create parcels, set their stages, move the promised date, give Tashkent jars to a waiting line
   'iherb.prices': [], // D-57: «iHerb и цены» — wishlist upload, price history, auto price log (shows margins) — admin only
   'catalog.delete': [], // D-54: «Удалить» a product or a brand (erases it; with history — archived and hidden) — admin only
+  'test_flags.manage': [], // аудит 10.11, п. 1.5: отметка «тестовый» у товара, бренда, закупки, клиента — admin only
   'yandex.price.view': ['manager', 'marketer'], // Yandex Market price and its sync status (not warehouse)
   'yandex.price.sync': ['manager'], // «Отметить синхронизированной»
   'purchases.view': ['manager'], // Stage 2A: list and cards of purchases (quantities only)

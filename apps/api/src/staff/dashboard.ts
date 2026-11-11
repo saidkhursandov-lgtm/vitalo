@@ -164,7 +164,7 @@ export class DashboardService {
                   FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id
                   WHERE l.product_id = p.id AND pu.status = 'EXPECTED'), 0) AS incoming
       FROM products p
-      WHERE p.status = 'active' AND p.min_stock > 0
+      WHERE p.status = 'active' AND p.min_stock > 0 AND NOT p.is_test
         AND COALESCE((SELECT SUM(i.actual_qty - i.reserved_qty) FROM inventory i WHERE i.product_id = p.id), 0) <= p.min_stock
       ORDER BY available, p.name_ru
       LIMIT 20`;
@@ -190,7 +190,7 @@ export class DashboardService {
       this.prisma.marketplace_orders.count({ where: { is_test: false, status: { in: ['NEW', 'ASSEMBLED'] }, ship_by_date: { lte: new Date(`${today}T00:00:00Z`) } } }),
       this.prisma.ai_compat_answers.count({ where: { review: 'new', verdict: 'consult' } }),
       this.prisma.compat_requests.count({ where: { status: 'pending' } }),
-      this.prisma.physical_units.count({ where: { status: { in: ['IN_STOCK', 'ASSIGNED'] }, expiry_date: { lt: in90 } } }),
+      this.prisma.physical_units.count({ where: { status: { in: ['IN_STOCK', 'ASSIGNED'] }, expiry_date: { lt: in90 }, product: { is_test: false } } }),
       this.prisma.$queryRaw<{ products: bigint; people: bigint; in_stock: bigint; no_supply: bigint }[]>`
         SELECT COUNT(DISTINCT w.product_id) AS products, COUNT(*) AS people,
           COUNT(DISTINCT w.product_id) FILTER (WHERE COALESCE((SELECT SUM(i.actual_qty - i.reserved_qty) FROM inventory i WHERE i.product_id = w.product_id), 0) > 0) AS in_stock,

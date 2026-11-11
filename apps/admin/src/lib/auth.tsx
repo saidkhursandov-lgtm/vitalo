@@ -28,6 +28,7 @@ export type Permission =
   | 'dashboard.revenue'
   | 'settings.dictionaries'
   | 'catalog.delete'
+  | 'test_flags.manage'
   | 'units.start_tracking'
   | 'iherb.prices'
   | 'ai_analyst.use'

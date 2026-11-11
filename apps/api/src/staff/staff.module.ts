@@ -7,6 +7,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { OnlinePaymentsModule } from '../payments/online/online-payments.module';
 import { AdminBannersController, AdminBannersService } from './admin-banners';
 import { AdminBrandsController, AdminBrandsService } from './admin-brands';
+import { TestFlagsController, TestFlagsService } from './test-flags';
 import { AdminCustomersController, AdminCustomersService } from './admin-customers';
 import { AdminDictionariesController, AdminDictionariesService } from './admin-dictionaries';
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
@@ -66,6 +67,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     BotStaffLoginController,
     AdminBannersController,
     AdminBrandsController,
+    TestFlagsController,
     DashboardController,
     AllOrdersController,
     AdminOrdersController,
@@ -111,6 +113,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
   providers: [
     AdminBannersService,
     AdminBrandsService,
+    TestFlagsService,
     AdminPromoCodesService,
     AdminCampaignsService,
     StaffAuthService,

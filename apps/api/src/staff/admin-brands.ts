@@ -86,12 +86,13 @@ export class AdminBrandsService {
   ) {}
 
   /** D-61: `supplierId` — the supplier tab: brands with products bought there («none» — products without a supplier), only those products counted. */
-  async list(supplierId?: string) {
+  async list(supplierId?: string, hideTest = false) {
     const bySupplier: Prisma.productsWhereInput | undefined = supplierId
       ? { suppliers: supplierId === 'none' ? { none: {} } : { some: { supplier_id: supplierId } } }
       : undefined;
     const rows = await this.prisma.brands.findMany({
-      where: bySupplier && { products: { some: bySupplier } },
+      // аудит 10.11, п. 1.5: тестовые бренды скрыты по умолчанию в админке
+      where: { ...(bySupplier && { products: { some: bySupplier } }), ...(hideTest && { is_test: false }) },
       orderBy: [{ status: 'asc' }, { sort_order: 'asc' }, { name_ru: 'asc' }],
       include: { products: { where: bySupplier, select: { status: true, inventory: { select: { actual_qty: true, reserved_qty: true } } } } },
     });
@@ -186,9 +187,9 @@ export class AdminBrandsController {
   constructor(private readonly brands: AdminBrandsService) {}
 
   @Get()
-  list(@Query('supplier_id') supplierId?: string) {
+  list(@Query('supplier_id') supplierId?: string, @Query('hide_test') hideTest?: string) {
     if (supplierId && !/^(none|[0-9a-f-]{36})$/i.test(supplierId)) throw new BadRequestException({ code: 'BAD_SUPPLIER', message: 'supplier_id: id or none' });
-    return this.brands.list(supplierId || undefined).then((items) => ({ items, logo: { width: LOGO_SIZE, height: LOGO_SIZE } }));
+    return this.brands.list(supplierId || undefined, hideTest === 'true').then((items) => ({ items, logo: { width: LOGO_SIZE, height: LOGO_SIZE } }));
   }
 
   @Patch(':id')

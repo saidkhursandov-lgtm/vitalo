@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useDictionary } from '../components/DictionarySelect';
 import { BackIcon } from '../components/Icons';
+import { TestFlag, useShowTest } from '../components/TestFlag';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '../components/ui';
 import { api, newKey, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
@@ -38,6 +39,7 @@ interface Purchase {
   purchase_date: string;
   status: 'EXPECTED' | 'RECEIVED';
   comment: string | null;
+  is_test?: boolean;
   created_by_name: string | null;
   created_at: string;
   progress: Progress;
@@ -93,9 +95,10 @@ export function Purchases() {
     date_to: params.get('date_to'),
     q: params.get('q'),
   };
+  const { hideTest, toggle: testToggle } = useShowTest();
   const q = useQuery({
     queryKey: ['purchases', params.toString()],
-    queryFn: () => api<{ items: Purchase[]; total: number; total_pages: number }>(`/staff/purchases${qs({ ...filters, page })}`),
+    queryFn: () => api<{ items: Purchase[]; total: number; total_pages: number }>(`/staff/purchases${qs({ ...filters, hide_test: hideTest, page })}`),
   });
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
@@ -155,6 +158,7 @@ export function Purchases() {
         </select>
         <input type="date" value={filters.date_from ?? ''} onChange={(e) => set('date_from', e.target.value)} aria-label="С даты" />
         <input type="date" value={filters.date_to ?? ''} onChange={(e) => set('date_to', e.target.value)} aria-label="По дату" />
+        {testToggle}
       </form>
       {q.isPending ? (
         <Loading />
@@ -620,6 +624,7 @@ export function PurchaseDetail() {
         <Link to="/purchases" className="btn btn-ghost">
           <BackIcon /> К списку
         </Link>
+        <TestFlag entity="purchase" id={p.id} value={!!p.is_test} invalidate={['purchase', id]} />
       </PageHead>
       <ErrorBox error={saveHeader.error ?? lineOp.error} />
       <div className="grid-2">

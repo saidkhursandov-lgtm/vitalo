@@ -6,6 +6,7 @@ import { api, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { money, PRODUCT_STATUS } from '../lib/format';
 import { SupplierTabs } from '../components/SupplierTabs';
+import { useShowTest } from '../components/TestFlag';
 
 interface ProductRow {
   id: string;
@@ -24,6 +25,7 @@ interface ProductRow {
   /** D-61: «Где берём» and the «под заказ» one */
   suppliers: { id: string; name: string }[];
   on_zero_supplier: { id: string; name: string } | null;
+  is_test?: boolean;
 }
 
 export function Products() {
@@ -36,11 +38,12 @@ export function Products() {
   const syncOnly = params.get('yandex_sync') === '1';
   const supplier = params.get('supplier') ?? '';
   const client = useQueryClient();
+  const { hideTest, toggle: testToggle } = useShowTest();
   const q = useQuery({
     queryKey: ['products', params.toString()],
     queryFn: () =>
       api<{ items: ProductRow[]; total: number; total_pages: number }>(
-        `/staff/products${qs({ q: params.get('q'), status, page, yandex_sync_needed: syncOnly ? 'true' : undefined, supplier_id: supplier || undefined })}`,
+        `/staff/products${qs({ q: params.get('q'), status, page, yandex_sync_needed: syncOnly ? 'true' : undefined, supplier_id: supplier || undefined, hide_test: hideTest })}`,
       ),
   });
   const synced = useMutation({
@@ -87,6 +90,7 @@ export function Products() {
             Цена Яндекса требует синхронизации
           </label>
         )}
+        {testToggle}
       </form>
       <ErrorBox error={synced.error} />
       {q.isPending ? (
@@ -116,6 +120,12 @@ export function Products() {
                     <Link to={`/products/${p.id}`} className="strong">
                       {p.name_ru}
                     </Link>
+                    {p.is_test && (
+                      <>
+                        {' '}
+                        <Badge tone="warn">Тест</Badge>
+                      </>
+                    )}
                     <div className="muted small">{p.sku}</div>
                   </td>
                   <td>{p.brand}</td>

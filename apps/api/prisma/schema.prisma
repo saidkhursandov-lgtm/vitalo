@@ -334,6 +334,7 @@ model users {
   id               String     @id @default(uuid()) @db.Uuid
   telegram_user_id BigInt     @unique
   status           UserStatus @default(active)
+  is_test          Boolean    @default(false) // аудит 10.11, п. 1.5: тестовый клиент, скрыт в списках
   first_name       String
   last_name        String?
   username         String?
@@ -598,6 +599,7 @@ model products {
   warnings_uz          String?
   search_keywords      String?
   popularity_30d       Int           @default(0) // recalculated daily (30-day sold units)
+  is_test              Boolean       @default(false) // аудит 10.11, п. 1.5: тестовый товар, скрыт в списках и сводках
   shipping_weight_g    Int?
   shipping_length_mm   Int?
   shipping_width_mm    Int?
@@ -715,6 +717,7 @@ model brands {
   name_ru          String
   name_uz          String?
   status           EntityStatus        @default(active)
+  is_test          Boolean             @default(false) // аудит 10.11, п. 1.5
   // 2.2: brand showcase and the brand page
   slug             String?             @unique
   logo_url         String?
@@ -819,6 +822,7 @@ model purchases {
   source_type            PurchaseSourceType
   ozon_account_id        String?            @db.Uuid
   supplier_id            String?            @db.Uuid
+  is_test                Boolean            @default(false) // аудит 10.11, п. 1.5: не входит в «вложено в закупки»
   ozon_order_number      String?
   purchase_date          DateTime           @db.Date
   final_actual_total_uzs BigInt? // what was really paid; null = the line prices are used

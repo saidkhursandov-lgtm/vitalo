@@ -406,7 +406,8 @@ export class FinanceService {
     const summary = summarize(events, { from: q.from, to: q.to, taxRates: rates, channel: q.channel ?? null, otherExpenses: shared ? Number(expenses._sum.amount_uzs ?? 0n) : 0, salaries: shared ? salaries : 0 });
 
     // «вложено в закупки» — for reference only: the cost is already counted through the units sold
-    const purchases = await this.prisma.purchases.findMany({ where: { purchase_date: { gte: asDate(q.from), lte: asDate(q.to) } }, include: { lines: true } });
+    // аудит 10.11, п. 1.5: тестовые закупки не входят
+    const purchases = await this.prisma.purchases.findMany({ where: { is_test: false, purchase_date: { gte: asDate(q.from), lte: asDate(q.to) } }, include: { lines: true } });
     const invested = purchases.reduce((s, p) => s + (p.final_actual_total_uzs !== null ? Number(p.final_actual_total_uzs) : p.lines.reduce((x, l) => x + (l.ordered_qty - l.cancelled_qty) * Number(l.unit_price_original_uzs), 0)), 0);
 
     return {
@@ -423,7 +424,7 @@ export class FinanceService {
   private async attention(events: SaleEvent[], today: string) {
     const in90 = new Date(asDate(today).getTime() + 90 * 86_400_000);
     const expiring = await this.prisma.physical_units.findMany({
-      where: { status: { in: ['IN_STOCK', 'ASSIGNED'] }, expiry_date: { lt: in90 } },
+      where: { status: { in: ['IN_STOCK', 'ASSIGNED'] }, expiry_date: { lt: in90 }, product: { is_test: false } },
       orderBy: [{ expiry_date: 'asc' }, { seq: 'asc' }],
       take: 100,
       select: { id: true, physical_id: true, expiry_date: true, status: true, product: { select: { sku: true, name_ru: true } } },
@@ -432,7 +433,7 @@ export class FinanceService {
     const soldRecently = new Set(events.filter((e) => e.sign === 1 && e.day >= since).flatMap((e) => e.lines.map((l) => l.product_id)));
     const onShelf = await this.prisma.physical_units.groupBy({ by: ['product_id'], where: { status: 'IN_STOCK' }, _count: { _all: true } });
     const staleIds = onShelf.filter((r) => !soldRecently.has(r.product_id));
-    const staleProducts = await this.prisma.products.findMany({ where: { id: { in: staleIds.map((r) => r.product_id) }, status: { not: 'archived' } }, select: { id: true, sku: true, name_ru: true } });
+    const staleProducts = await this.prisma.products.findMany({ where: { id: { in: staleIds.map((r) => r.product_id) }, status: { not: 'archived' }, is_test: false }, select: { id: true, sku: true, name_ru: true } });
     const waiting = await this.prisma.orders.findMany({ where: { units_attention: { not: null }, status: { in: ['paid', 'picking'] } }, select: { id: true, order_number: true, units_attention: true }, orderBy: { paid_at: 'asc' } });
     return {
       expiring: expiring.map((u) => ({ id: u.id, physical_id: u.physical_id, sku: u.product.sku, name: u.product.name_ru, expiry_date: dateOnly(u.expiry_date), expired: dateOnly(u.expiry_date) < today })),
