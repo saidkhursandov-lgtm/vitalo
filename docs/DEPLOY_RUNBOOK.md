@@ -543,6 +543,29 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://vitalo.uz
 Хорошо: `syntax is ok`, затем `200`, `200`, строка с `"status":"ok"`, `404` (документация API закрыта), `404`
 (внутренний вход бота закрыт), `301` (с http перенаправляет на https).
 
+### 5.2 Заголовки безопасности (аудит админки 10.11, п. 1.13)
+
+`update.sh` файлы nginx не копирует — после выкладки кода их применяет **владелец** (нужен `sudo`). Сначала копия
+старого файла, потом проверка синтаксиса; если `nginx -t` пишет ошибку — вернуть копию и ничего не перезагружать.
+
+```bash
+sudo cp /etc/nginx/sites-available/vitalo.conf /etc/nginx/sites-available/vitalo.conf.bak-$(date +%Y%m%d)
+sudo cp /opt/vitalo/app/deploy/nginx/vitalo.conf /etc/nginx/sites-available/vitalo.conf
+sudo nginx -t && sudo systemctl reload nginx
+curl -sI https://admin.vitalo.uz | grep -i -E 'permissions-policy|content-security'
+```
+
+Хорошо: `syntax is ok`, затем две строки — `Permissions-Policy` и `Content-Security-Policy-Report-Only`.
+
+**Шаг 2 — через день.** CSP сейчас только «наблюдает»: браузер пишет нарушения в консоль (F12 → Console,
+строки «Content-Security-Policy-Report-Only»), но ничего не блокирует. Проверить: вход через Telegram, фото товаров,
+печать этикеток, админку из бота, Mini App в Telegram Web / Desktop / на телефоне, карту и Payme. Если нарушений нет —
+в обоих местах файла заменить `Content-Security-Policy-Report-Only` на `Content-Security-Policy` и повторить три
+команды выше. Если есть — сначала добавить нужный адрес в правило (Claude подскажет по тексту из консоли).
+
+Путь `/etc/nginx/sites-available/vitalo.conf` — как при первой установке ([DEPLOY.md](../DEPLOY.md)); если там другое
+имя, взять его из `ls /etc/nginx/sites-enabled/`.
+
 ### 5.2 Автообновление сертификата
 
 ```bash

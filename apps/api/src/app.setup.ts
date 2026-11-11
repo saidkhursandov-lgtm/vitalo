@@ -29,4 +29,10 @@ export function configureApp(app: INestApplication) {
   app.useGlobalFilters(new UnexpectedErrorFilter(app.get(HttpAdapterHost).httpAdapter, app.get(SystemErrorsService)));
   // Uploaded product photos (LocalFileStorage). With S3 this line goes away.
   app.use('/uploads', serveStatic(uploadDir(config), { index: false, maxAge: '7d' }));
+  // Аудит 10.11, п. 1.13: ответы админки (заказы, клиенты, деньги) не сохраняются в кэше браузера и прокси.
+  // Здесь, а не в nginx: add_header внутри location отключил бы общие заголовки безопасности сайта.
+  app.use('/api/staff', (_req: unknown, res: { setHeader(n: string, v: string): void }, next: () => void) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
 }
