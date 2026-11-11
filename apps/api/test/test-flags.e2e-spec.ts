@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { archiveTestProducts, bearer, createTestApp, createTestProduct, loginStaff } from './helpers';
+import { archiveTestProducts, bearer, createTestApp, createTestProduct, loginCustomer, loginStaff } from './helpers';
 
 const STAFF_TG = { admin: 222_222_221, manager: 222_222_222, warehouse: 222_222_223, marketer: 222_222_224 } as const;
 type Role = keyof typeof STAFF_TG;
@@ -43,8 +43,9 @@ describe('Test flags (e2e)', () => {
   });
 
   it('brand, purchase, customer: flag and hide', async () => {
-    const brand = await prisma.brands.findFirstOrThrow();
-    const user = await prisma.users.findFirstOrThrow();
+    const brand = await prisma.brands.create({ data: { name_ru: `Флаг-тест ${Date.now()}` } });
+    await loginCustomer(app, 975_300_001); // creates the customer if the database has none yet
+    const user = await prisma.users.findUniqueOrThrow({ where: { telegram_user_id: 975_300_001n } });
     const purchase = await prisma.purchases.findFirst();
     try {
       await flag('admin', 'brand', brand.id, true).expect(200);
