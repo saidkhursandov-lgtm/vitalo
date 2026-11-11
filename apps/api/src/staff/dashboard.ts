@@ -145,7 +145,11 @@ export class DashboardService {
     };
   }
 
-  /** Available at or below the product's minimum; `incoming` — still expected from open purchases («уже едет»). */
+  /**
+   * Available at or below the product's minimum; `incoming` — still expected from open purchases («уже едет»).
+   * Минимум 0 = «за остатком не следим» (так у товаров «под заказ» и у новых без настройки) — такие товары
+   * в список не попадают (аудит 10.11, п. 1.1).
+   */
   private async lowStock() {
     const rows = await this.prisma.$queryRaw<{ id: string; sku: string; name_ru: string; min_stock: number; available: bigint; incoming: bigint }[]>`
       SELECT p.id, p.sku, p.name_ru, p.min_stock,
@@ -154,7 +158,7 @@ export class DashboardService {
                   FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id
                   WHERE l.product_id = p.id AND pu.status = 'EXPECTED'), 0) AS incoming
       FROM products p
-      WHERE p.status = 'active'
+      WHERE p.status = 'active' AND p.min_stock > 0
         AND COALESCE((SELECT SUM(i.actual_qty - i.reserved_qty) FROM inventory i WHERE i.product_id = p.id), 0) <= p.min_stock
       ORDER BY available, p.name_ru
       LIMIT 20`;
@@ -164,7 +168,8 @@ export class DashboardService {
   /** «Требует внимания»: counters; each opens the list it counts. */
   private async attention(today: string) {
     const in90 = new Date(Date.parse(`${today}T00:00:00Z`) + 90 * 86_400_000);
-    const [awaitingConfirmation, unitsAttention, yandexToShip, aiRed, compatPending, expiring, waitlist] = await Promise.all([
+    const dayAgo = new Date(Date.now() - 86_400_000);
+    const [awaitingConfirmation, unitsAttention, yandexToShip, aiRed, compatPending, expiring, waitlist, yandexSync, staleReceiving, awaitingPayment] = await Promise.all([
       // «Я оплатил(а)» pressed, or cash on delivery waiting for the manager's call — the same filter as «Заказы»
       this.prisma.orders.count({
         where: {
@@ -180,11 +185,24 @@ export class DashboardService {
       this.prisma.ai_compat_answers.count({ where: { review: 'new', verdict: 'consult' } }),
       this.prisma.compat_requests.count({ where: { status: 'pending' } }),
       this.prisma.physical_units.count({ where: { status: { in: ['IN_STOCK', 'ASSIGNED'] }, expiry_date: { lt: in90 } } }),
-      this.prisma.$queryRaw<{ products: bigint; people: bigint; in_stock: bigint }[]>`
+      this.prisma.$queryRaw<{ products: bigint; people: bigint; in_stock: bigint; no_supply: bigint }[]>`
         SELECT COUNT(DISTINCT w.product_id) AS products, COUNT(*) AS people,
-          COUNT(DISTINCT w.product_id) FILTER (WHERE COALESCE((SELECT SUM(i.actual_qty - i.reserved_qty) FROM inventory i WHERE i.product_id = w.product_id), 0) > 0) AS in_stock
+          COUNT(DISTINCT w.product_id) FILTER (WHERE COALESCE((SELECT SUM(i.actual_qty - i.reserved_qty) FROM inventory i WHERE i.product_id = w.product_id), 0) > 0) AS in_stock,
+          -- people wait, nothing on the shelf and nothing in an open purchase («уже едет»): someone has to buy it
+          COUNT(DISTINCT w.product_id) FILTER (
+            WHERE COALESCE((SELECT SUM(i.actual_qty - i.reserved_qty) FROM inventory i WHERE i.product_id = w.product_id), 0) <= 0
+              AND NOT EXISTS (SELECT 1 FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id
+                              WHERE l.product_id = w.product_id AND pu.status = 'EXPECTED'
+                                AND l.ordered_qty - l.cancelled_qty - l.received_qty > 0)
+          ) AS no_supply
         FROM product_waitlist w
         WHERE w.notified_at IS NULL AND w.cancelled_at IS NULL`,
+      // «Синхронизация Яндекса»: open «требует внимания» — the same filter as the page
+      this.prisma.marketplace_external_orders.count({ where: { attention_kind: { not: null }, closed_at: null } }),
+      // a receiving started more than a day ago and still not finished
+      this.prisma.receiving_sessions.count({ where: { status: 'OPEN', created_at: { lt: dayAgo } } }),
+      // Mini App: waiting for an online payment (the reserve is still on)
+      this.prisma.orders.count({ where: { is_test: false, status: 'awaiting_payment' } }),
     ]);
     return {
       awaiting_confirmation: awaitingConfirmation,
@@ -193,7 +211,15 @@ export class DashboardService {
       ai_red: aiRed,
       compat_pending: compatPending,
       expiring_units: expiring,
-      waitlist: { products: Number(waitlist[0]?.products ?? 0), people: Number(waitlist[0]?.people ?? 0), in_stock: Number(waitlist[0]?.in_stock ?? 0) },
+      waitlist: {
+        products: Number(waitlist[0]?.products ?? 0),
+        people: Number(waitlist[0]?.people ?? 0),
+        in_stock: Number(waitlist[0]?.in_stock ?? 0),
+        no_supply: Number(waitlist[0]?.no_supply ?? 0),
+      },
+      yandex_sync_attention: yandexSync,
+      stale_receiving: staleReceiving,
+      awaiting_payment: awaitingPayment,
     };
   }
 

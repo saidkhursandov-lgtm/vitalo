@@ -482,6 +482,15 @@ describe('Admin panel operations (e2e)', () => {
       expect(body.statuses.delivered).toBeGreaterThanOrEqual(1);
       expect(body.top_products.length).toBeGreaterThan(0);
       expect(body.low_stock.map((p: { sku: string }) => p.sku)).toContain('VTL-ZINC-25');
+      // аудит 10.11, п. 1.1: минимум 0 — за остатком не следим, в «Низкие остатки» не попадает
+      expect(body.low_stock.every((p: { min_stock: number }) => p.min_stock > 0)).toBe(true);
+      // п. 1.2: новые строки «Требует внимания»
+      expect(body.attention).toMatchObject({
+        yandex_sync_attention: expect.any(Number),
+        stale_receiving: expect.any(Number),
+        awaiting_payment: expect.any(Number),
+        waitlist: { no_supply: expect.any(Number) },
+      });
       await as(t.manager).get('/staff/dashboard?days=5').expect(400);
     });
   });

@@ -45,7 +45,10 @@ export interface DashboardData {
     ai_red: number;
     compat_pending: number;
     expiring_units: number;
-    waitlist: { products: number; people: number; in_stock: number };
+    waitlist: { products: number; people: number; in_stock: number; no_supply?: number };
+    yandex_sync_attention?: number;
+    stale_receiving?: number;
+    awaiting_payment?: number;
   };
   ai_spend?: { month_usd: number; budget_usd: number };
 }
@@ -234,6 +237,15 @@ function Attention({ a, can }: { a: DashboardData['attention']; can: (p: Permiss
       to: '/waitlist',
       perm: 'customers.view',
     },
+    {
+      n: a.waitlist.no_supply ?? 0,
+      text: 'товаров ждут покупатели, а на складе ноль и закупки нет',
+      to: '/waitlist',
+      perm: 'customers.view',
+    },
+    { n: a.awaiting_payment ?? 0, text: 'заказов Mini App ожидают оплаты', to: '/orders?status=awaiting_payment', perm: 'orders.view' },
+    { n: a.yandex_sync_attention ?? 0, text: 'заказов Яндекса требуют разбора в синхронизации', to: '/yandex-sync', perm: 'yandex.sync' },
+    { n: a.stale_receiving ?? 0, text: 'приёмок начаты больше суток назад и не завершены', to: '/inventory?tab=receiving', perm: 'receiving.perform' },
   ];
   const shown = rows.filter((r) => r.n > 0);
   return (
