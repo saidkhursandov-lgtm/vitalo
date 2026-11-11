@@ -311,10 +311,13 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
 
   it('first seen already shipped / cancelled: no order, attention, ONE summary message per run', async () => {
     const p = await stocked(['2028-01-01']);
-    const late = [yOrder([{ sku: p.sku, count: 1 }], { status: 'DELIVERED', substatus: null }), yOrder([{ sku: p.sku, count: 1 }], { status: 'CANCELLED', substatus: 'USER_CHANGED_MIND' })];
+    const late = [yOrder([{ sku: p.sku, count: 1 }], { status: 'DELIVERED', substatus: null }), yOrder([{ sku: p.sku, count: 1 }], { status: 'CANCELLED', substatus: 'SHOP_FAILED' })];
+    // аудит 10.11, п. 1.3: отменён самим покупателем ещё до нас — не «требует внимания»
+    const byCustomer = yOrder([{ sku: p.sku, count: 1 }], { status: 'CANCELLED', substatus: 'USER_CHANGED_MIND' });
     const before = await prisma.notifications.count({ where: { template: 'staff.yandex_late_summary' } });
     expect(await runSync()).toMatchObject({ created: 0, attention: 2 });
     for (const o of late) expect(await external(o)).toMatchObject({ attention_kind: 'FIRST_SEEN_LATE', order_id: null });
+    expect(await external(byCustomer)).toMatchObject({ attention_kind: null, order_id: null });
     expect(await prisma.notifications.count({ where: { template: 'staff.yandex_late_summary' } })).toBe(before + activeAdmins);
     await runSync(); // seen again: no new summary
     expect(await prisma.notifications.count({ where: { template: 'staff.yandex_late_summary' } })).toBe(before + activeAdmins);
@@ -326,7 +329,7 @@ describe('Stage 2D: Yandex orders arrive by themselves (e2e, fake Yandex)', () =
     const late = [
       yOrder([{ sku: p.sku, count: 1 }], { status: 'DELIVERED', substatus: null }),
       yOrder([{ sku: p.sku, count: 1 }], { status: 'PICKUP', substatus: null }),
-      yOrder([{ sku: p.sku, count: 1 }], { status: 'CANCELLED', substatus: 'USER_CHANGED_MIND' }),
+      yOrder([{ sku: p.sku, count: 1 }], { status: 'CANCELLED', substatus: 'SHOP_FAILED' }),
     ];
     const reserved = yOrder([{ sku: p.sku, count: 1 }]); // created with a unit
     const shortage = yOrder([{ sku: p.sku, count: 5 }]); // created without units, in «Требует внимания»

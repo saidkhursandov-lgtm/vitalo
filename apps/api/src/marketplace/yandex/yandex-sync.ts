@@ -407,6 +407,12 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
     }
     if (ext?.closed_at) return { type: 'closed' };
     if (WAIT_STATUSES.includes(o.status)) return { type: 'skip', reason: `ещё не подтверждён (${o.status}) — ждём` };
+    // Аудит 10.11, п. 1.3: впервые увиден уже отменённым самим покупателем (подстатусы Яндекса USER_*: передумал,
+    // не оплатил, отказался…) — банки не резервировались, денег нет, разбирать нечего. Отмены по вине магазина
+    // (SHOP_FAILED, PROCESSING_EXPIRED и др.) и отгруженные заказы по-прежнему требуют внимания.
+    if (o.status === 'CANCELLED' && o.substatus?.startsWith('USER_')) {
+      return { type: 'skip', reason: `впервые увиден уже отменённым покупателем (${yandexStatusRu(o.status, o.substatus)}) — делать нечего` };
+    }
     if (LATE_STATUSES.includes(o.status)) {
       return { type: 'attention', kind: 'FIRST_SEEN_LATE', reason: `впервые увиден в статусе «${yandexStatusRu(o.status, o.substatus)}»; банки автоматически не резервируются` };
     }
@@ -473,11 +479,18 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
 
   async status() {
     const cfg = this.cfg();
-    const [runs, attention] = await Promise.all([
+    const [runs, busyRuns, attention] = await Promise.all([
       this.prisma.yandex_sync_runs.findMany({ orderBy: { started_at: 'desc' }, take: 20, omit: { details: true } }),
+      // аудит 10.11, п. 1.4: запуски, где что-то произошло (пустые «2 / 0 / 0 / 0 / 0» каждые 5 минут — шум)
+      this.prisma.yandex_sync_runs.findMany({
+        where: { OR: [{ created: { gt: 0 } }, { updated: { gt: 0 } }, { attention: { gt: 0 } }, { errors: { gt: 0 } }, { error: { not: null } }] },
+        orderBy: { started_at: 'desc' },
+        take: 20,
+        omit: { details: true },
+      }),
       this.attentionList(),
     ]);
-    return { config: cfg, running: this.active > 0, rate_limit: this.rateLimit, runs, attention };
+    return { config: cfg, running: this.active > 0, rate_limit: this.rateLimit, runs, busy_runs: busyRuns, attention };
   }
 
   attentionList() {

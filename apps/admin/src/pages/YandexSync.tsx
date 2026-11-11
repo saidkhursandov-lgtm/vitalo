@@ -52,8 +52,12 @@ interface SyncStatus {
   running: boolean;
   rate_limit: { limit: number | null; remaining: number | null; until: string | null } | null;
   runs: Run[];
+  /** runs where something was created, updated, raised or failed (the latest 20) */
+  busy_runs?: Run[];
   attention: Attention[];
 }
+
+const isEmptyRun = (r: Run) => !r.created && !r.updated && !r.attention && !r.errors && !r.error;
 
 const TRIGGER: Record<Run['trigger'], string> = { schedule: 'по расписанию', manual: 'вручную', webhook: 'уведомление' };
 const ACTION: Record<string, string> = {
@@ -83,6 +87,7 @@ export function YandexSync() {
   const [closing, setClosing] = useState<Attention | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [closingMany, setClosingMany] = useState(false);
+  const [allRuns, setAllRuns] = useState(false);
   const run = useMutation({
     mutationFn: () => api<Run | { skipped: string }>('/staff/yandex-sync/run', { method: 'POST' }),
     onSettled: () => void client.invalidateQueries({ queryKey: ['yandex-sync'] }),
@@ -91,6 +96,8 @@ export function YandexSync() {
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const { config: c, runs, attention } = q.data;
   const last = runs[0];
+  const lastEmpty = runs.find(isEmptyRun);
+  const shownRuns = allRuns || !q.data.busy_runs ? runs : q.data.busy_runs;
   // only entries without our order (no units can be held) are closed in a batch
   const selectable = attention.filter((a) => !a.order_id);
   const chosen = selectable.filter((a) => selected.has(a.id));
@@ -232,7 +239,19 @@ export function YandexSync() {
       <section className="card flush">
         <div className="section-head pad">
           <h2>Журнал запусков</h2>
+          <label className="check">
+            <input type="checkbox" checked={allRuns} onChange={(e) => setAllRuns(e.target.checked)} />
+            Показать все
+          </label>
         </div>
+        {!allRuns && lastEmpty && (
+          <p className="muted small pad">
+            Последний запуск без изменений: {dateTime(lastEmpty.started_at)}, {TRIGGER[lastEmpty.trigger]}. Такие запуски скрыты — включите «Показать все».
+          </p>
+        )}
+        {shownRuns.length === 0 ? (
+          <p className="muted pad">Запусков с изменениями пока не было.</p>
+        ) : (
         <table className="table table-hover">
           <thead>
             <tr>
@@ -247,7 +266,7 @@ export function YandexSync() {
             </tr>
           </thead>
           <tbody>
-            {runs.map((r) => (
+            {shownRuns.map((r) => (
               <tr key={r.id} onClick={() => setOpen(r.id)} style={{ cursor: 'pointer' }} className={r.error ? 'row-bad' : ''}>
                 <td>
                   {dateTime(r.started_at)}
@@ -264,6 +283,7 @@ export function YandexSync() {
             ))}
           </tbody>
         </table>
+        )}
       </section>
 
       {open && <RunModal id={open} onClose={() => setOpen(null)} />}
