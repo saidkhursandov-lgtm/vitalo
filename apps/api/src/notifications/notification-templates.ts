@@ -28,6 +28,8 @@ export type TemplateName =
   | 'staff.yandex_new_order'
   | 'staff.yandex_attention'
   | 'staff.yandex_late_summary'
+  | 'staff.receiving_auto_cancelled'
+  | 'staff.receiving_open_reminder'
   | 'staff.finance_before_due'
   | 'staff.finance_due_day'
   | 'staff.waitlist_new'
@@ -62,6 +64,9 @@ export interface TemplatePayload {
   open_path?: string;
   /** Admin panel page for the button under a staff message, e.g. "/orders/<id>" */
   admin_path?: string;
+  /** аудит 10.11, п. 1.14: the receiving session (also used to remind at most once a day) and its source name */
+  session_id?: string;
+  source?: string;
   /** Whole hours since the customer pressed «Я оплатил(а)» */
   hours?: number;
   /** Stage 2D: «OZN-A001 × 2, OZN-A023 × 1» */
@@ -415,6 +420,16 @@ const TEXTS: Record<TemplateName, Record<Lang, (p: TemplatePayload) => string>> 
     ru: (p: TemplatePayload) =>
       `ℹ️ Синхронизация Яндекса: ${p.count ?? 0} заказ(ов) впервые увидены уже отгруженными или отменёнными. Автоматически они не создаются — посмотрите «Требует внимания» и закройте неактуальные.`,
     uz: (p: TemplatePayload) => `ℹ️ Yandex: ${p.count ?? 0} ta buyurtma.`,
+  },
+  // аудит 10.11, п. 1.14: receiving sessions left open (staff only). order_number is not used.
+  'staff.receiving_auto_cancelled': {
+    ru: (p: TemplatePayload) =>
+      `Приёмка «${p.source ?? ''}» отменена автоматически: начата больше суток назад, ни одной банки не принято. Если товар пришёл — начните приёмку заново.`,
+    uz: (p: TemplatePayload) => `«${p.source ?? ''}» qabuli avtomatik bekor qilindi: bir kundan ortiq ochiq turdi, birorta ham mahsulot qabul qilinmadi.`,
+  },
+  'staff.receiving_open_reminder': {
+    ru: (p: TemplatePayload) => `Приёмка «${p.source ?? ''}» не завершена уже больше суток (принято банок: ${p.count ?? 0}). Завершите её или отмените в «Склад → Приёмка».`,
+    uz: (p: TemplatePayload) => `«${p.source ?? ''}» qabuli bir kundan ortiq tugallanmagan (qabul qilingan: ${p.count ?? 0}).`,
   },
   // 2.4: a customer pressed «Сообщить о поступлении» (staff only, Russian). order_number is not used.
   'staff.waitlist_new': {

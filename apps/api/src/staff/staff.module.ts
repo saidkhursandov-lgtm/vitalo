@@ -37,6 +37,7 @@ import { BotStaffLoginController, CsrfHeaderGuard, StaffDevicesController, Staff
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { AdminReceivingController, AdminReceivingService } from '../receiving/admin-receiving';
+import { ReceivingExpiryService } from '../receiving/receiving-expiry.service';
 import { AdminUnitsController, AdminUnitsService, PrintLabelsController } from '../receiving/admin-units';
 import { UnitActionsController, UnitActionsService } from '../marketplace/unit-actions';
 import { YandexOrdersController, YandexOrdersService } from '../marketplace/yandex-orders';
@@ -131,6 +132,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminDictionariesService,
     AdminPurchasesService,
     AdminReceivingService,
+    ReceivingExpiryService,
     AdminUnitsService,
     UnitActionsService,
     YandexOrdersService,
