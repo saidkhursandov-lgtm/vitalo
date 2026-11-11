@@ -58,6 +58,13 @@ const EXTRA_NAMES: Record<string, string> = {
   campaign_view: 'Открыли страницу акции',
   campaign_banner_click: 'Нажали на слайд акции',
   campaign_add_to_cart: 'Добавили в корзину товар акции',
+  // аудит 10.11, п. 1.12: подписи для событий, которые раньше показывались сырыми ключами
+  support_ask_sent: 'Отправили вопрос специалисту',
+  ai_consent: 'Согласились на ответы VITALO AI',
+  compat_ai_request: 'Спросили VITALO AI о совместимости',
+  compat_ai_cached: 'Получили готовый ответ VITALO AI',
+  compat_ai_limit: 'Упёрлись в лимит вопросов VITALO AI',
+  compat_ai_fallback: 'VITALO AI не ответил — вопрос ушёл специалисту',
 };
 /** Sub-rows: payment systems of «Скоро» and (3.3) reasons a promo code did not fit. */
 const SYSTEM_NAMES: Record<string, string> = {

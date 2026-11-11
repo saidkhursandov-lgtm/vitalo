@@ -223,22 +223,11 @@ function Report({ d, channel }: { d: AnalyticsData; channel: Channel }) {
         </section>
       </div>
 
-      <section className="card">
-        <h2>Топ товаров</h2>
-        {d.top_products.length ? (
-          <ol className="plain-list">
-            {d.top_products.map((p) => (
-              <li key={p.sku}>
-                <span className="strong">{p.sku}</span> {p.name} — {p.qty} шт., {money(p.revenue)}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="muted">За период продаж нет.</p>
-        )}
-      </section>
-
+      {/* аудит 10.11, п. 1.11: один блок «Топ товаров» — таблица с прибылью и маржой (список-дубль убран) */}
       <section className="card flush">
+        <div className="section-head pad">
+          <h2>Топ товаров</h2>
+        </div>
         <table className="table table-hover">
           <thead>
             <tr>

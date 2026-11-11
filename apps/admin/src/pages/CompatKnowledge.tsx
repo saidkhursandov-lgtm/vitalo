@@ -101,7 +101,8 @@ export function RulesTab({
     queryKey: ["compat", "rules"],
     queryFn: () => api<Rule[]>("/staff/compat/rules"),
   });
-  const [filter, setFilter] = useState<RuleStatus | "all">("draft");
+  // аудит 10.11, п. 1.10: пока вкладку не выбрали — «Черновик», если черновики есть, иначе «Одобрено» (не пустой список)
+  const [chosen, setFilter] = useState<RuleStatus | "all" | null>(null);
   const [editing, setEditing] = useState<Rule | "new" | null>(null);
   const status = useMutation({
     mutationFn: (v: { ids: string[]; status: RuleStatus }) =>
@@ -112,6 +113,7 @@ export function RulesTab({
   if (q.isError)
     return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const count = (s: RuleStatus) => q.data.filter((r) => r.status === s).length;
+  const filter: RuleStatus | "all" = chosen ?? (count("draft") > 0 ? "draft" : "approved");
   const rows =
     filter === "all" ? q.data : q.data.filter((r) => r.status === filter);
   const drafts = q.data.filter((r) => r.status === "draft");
