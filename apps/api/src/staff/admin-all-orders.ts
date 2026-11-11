@@ -66,6 +66,15 @@ export class AllOrdersService {
 
     const vIds = rows.filter((r) => r.channel === 'vitalo').map((r) => r.id);
     const yIds = rows.filter((r) => r.channel === 'yandex').map((r) => r.id);
+    // Аудит 10.11, п. 1.6: who cancelled — the last «→ cancelled» record of the history (stored as is, translated in the admin)
+    const cancels = vIds.length
+      ? await this.prisma.$queryRaw<{ order_id: string; changed_by_type: 'system' | 'staff' | 'customer'; reason: string | null; staff_name: string | null }[]>`
+          SELECT DISTINCT ON (h.order_id) h.order_id, h.changed_by_type, h.reason, s.name AS staff_name
+          FROM order_status_history h
+          LEFT JOIN staff_users s ON s.id = h.changed_by_id AND h.changed_by_type = 'staff'
+          WHERE h.order_id::text = ANY(${vIds}) AND h.to_status = 'cancelled'
+          ORDER BY h.order_id, h.created_at DESC`
+      : [];
     const [vRows, yRows] = await Promise.all([
       vIds.length
         ? this.prisma.orders.findMany({
@@ -93,6 +102,7 @@ export class AllOrdersService {
           total_uzs: Number(o.total_uzs),
           ship_by: null,
           is_test: o.is_test,
+          cancel: o.status === 'cancelled' ? cancelOf(cancels.find((c) => c.order_id === o.id)) : null,
         };
       }
       const m = yRows.find((x) => x.id === r.id)!;
@@ -109,6 +119,7 @@ export class AllOrdersService {
         total_uzs: m.lines.reduce((s, l) => s + Number(l.unit_price_uzs) * l.qty, 0),
         ship_by: m.ship_by_date ? { date: day(m.ship_by_date), time: m.ship_by_time } : null,
         is_test: m.is_test,
+        cancel: m.status === 'CANCELLED' ? { by: 'yandex' as const, reason: m.cancel_reason, staff_name: null } : null,
       };
     });
     const count = Number(total);
@@ -125,6 +136,12 @@ export class AllOrdersService {
     ]);
     return v + y;
   }
+}
+
+/** Who cancelled a Mini App order: system (e.g. the reserve expired), the customer or an employee (with the name). */
+function cancelOf(h: { changed_by_type: 'system' | 'staff' | 'customer'; reason: string | null; staff_name: string | null } | undefined) {
+  if (!h) return null;
+  return { by: h.changed_by_type, reason: h.reason, staff_name: h.staff_name };
 }
 
 @ApiTags('staff: orders')

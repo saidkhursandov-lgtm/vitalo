@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ChannelTabs } from '../components/ChannelTabs';
 import { Badge, ErrorBox, Loading, OrderStatus, PageHead, Pagination } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { dateTime, money, YANDEX_STATUS } from '../lib/format';
+import { cancelLabel, dateTime, money, YANDEX_STATUS, type CancelInfo } from '../lib/format';
 import { ShipBy } from './YandexOrders';
 
 type Channel = 'vitalo' | 'yandex';
@@ -20,6 +20,8 @@ interface Row {
   total_uzs: number;
   ship_by: { date: string; time: string | null } | null;
   is_test: boolean;
+  /** who cancelled (аудит 10.11, п. 1.6) */
+  cancel?: CancelInfo | null;
 }
 interface Page {
   items: Row[];
@@ -34,7 +36,9 @@ export const CHANNEL_LABEL: Record<Channel, string> = { vitalo: 'Mini App', yand
 /** Orders of both channels in one list (newest first); the row opens the card of its channel. */
 export function AllOrders() {
   const [params, setParams] = useSearchParams();
-  const f = { ship_today: params.get('ship_today') ?? '', hide_test: params.get('hide_test') ?? '', q: params.get('q') ?? '' };
+  // аудит 10.11, п. 1.7: тестовые скрыты по умолчанию; ?show_test=true — показать
+  const showTest = params.get('show_test') === 'true';
+  const f = { ship_today: params.get('ship_today') ?? '', hide_test: showTest ? '' : 'true', q: params.get('q') ?? '' };
   const page = Number(params.get('page')) || 1;
   const [text, setText] = useState(f.q);
   const set = (k: string, v: string) => {
@@ -66,8 +70,8 @@ export function AllOrders() {
           Отгрузить сегодня{q.data ? ` (${q.data.ship_today})` : ''}
         </label>
         <label className="check">
-          <input type="checkbox" checked={f.hide_test === 'true'} onChange={(e) => set('hide_test', e.target.checked ? 'true' : '')} />
-          Скрыть тестовые
+          <input type="checkbox" checked={showTest} onChange={(e) => set('show_test', e.target.checked ? 'true' : '')} />
+          Показать тестовые
         </label>
       </div>
       {f.ship_today === 'true' && (
@@ -111,7 +115,10 @@ export function AllOrders() {
                   </td>
                   <td className="small">{dateTime(o.created_at)}</td>
                   <td>{o.customer ?? '—'}</td>
-                  <td>{o.channel === 'vitalo' ? <OrderStatus status={o.status} cod={o.payment_method === 'cod'} /> : <YandexStatus status={o.status} />}</td>
+                  <td>
+                    {o.channel === 'vitalo' ? <OrderStatus status={o.status} cod={o.payment_method === 'cod'} /> : <YandexStatus status={o.status} />}
+                    {o.cancel && <div className="muted small">{cancelLabel(o.cancel)}</div>}
+                  </td>
                   <td className="small">{o.channel === 'yandex' ? <ShipBy value={o.ship_by} status={o.status} /> : '—'}</td>
                   <td className="num">{o.qty}</td>
                   <td className="num">{money(o.total_uzs)}</td>

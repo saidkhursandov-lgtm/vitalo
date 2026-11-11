@@ -254,3 +254,35 @@ export function orderStatusLabel(status: string, cod = false): string {
   if (cod && status === 'paid') return 'Подтверждён';
   return ORDER_STATUS[status] ?? status;
 }
+
+/** System reasons of the order history are stored in English (as written by the API); the admin shows them in Russian. */
+const HISTORY_REASON: Record<string, string> = {
+  'Reservation expired: not paid in time': 'Истёк резерв: заказ не оплачен вовремя',
+  'Cancelled by customer': 'Отменил клиент',
+  'Online payment confirmed by the payment system': 'Онлайн-оплата подтверждена платёжной системой',
+  'Order created': 'Заказ создан',
+};
+export function historyReason(reason: string | null): string | null {
+  if (!reason) return reason;
+  return HISTORY_REASON[reason] ?? reason;
+}
+
+export interface CancelInfo {
+  by: 'system' | 'staff' | 'customer' | 'yandex';
+  reason: string | null;
+  staff_name: string | null;
+}
+
+/**
+ * Аудит 10.11, п. 1.6: who cancelled the order, in one short phrase — «истёк резерв» (the system, not paid in time),
+ * «отменил клиент», «отменил сотрудник Имя», «отменён в Яндексе: причина».
+ */
+export function cancelLabel(c: CancelInfo | null | undefined): string | null {
+  if (!c) return null;
+  // the sync writes «Отменён в Яндексе (подстатус)»; a cancel in the admin keeps the employee's reason
+  if (c.by === 'yandex') return !c.reason ? 'отменён' : /^Отменён в Яндексе/.test(c.reason) ? c.reason.replace(/^Отменён/, 'отменён') : `отменён: ${c.reason}`;
+  if (c.by === 'customer') return 'отменил клиент';
+  if (c.by === 'staff') return c.staff_name ? `отменил сотрудник ${c.staff_name}` : 'отменил сотрудник';
+  if (c.reason?.startsWith('Reservation expired')) return 'истёк резерв';
+  return 'отменён системой';
+}

@@ -78,6 +78,24 @@ describe('All orders: Mini App and Yandex in one list (e2e)', () => {
     expect(hidden.total).toBe(0);
   });
 
+  it('аудит 10.11, п. 1.6: a cancelled order says who cancelled it (expired reserve / Yandex)', async () => {
+    const o = await prisma.orders.findUniqueOrThrow({ where: { id: vitaloId } });
+    await prisma.orders.update({ where: { id: vitaloId }, data: { status: 'cancelled' } });
+    await prisma.order_status_history.create({ data: { order_id: vitaloId, from_status: o.status, to_status: 'cancelled', reason: 'Reservation expired: not paid in time', changed_by_type: 'system' } });
+    await prisma.marketplace_orders.update({ where: { id: shipLater }, data: { status: 'CANCELLED', cancel_reason: 'Отменён в Яндексе (USER_CHANGED_MIND)' } });
+    try {
+      const v = (await list('admin', `?q=${vitaloNumber}`).expect(200)).body.items[0];
+      expect(v.cancel).toEqual({ by: 'system', reason: 'Reservation expired: not paid in time', staff_name: null });
+      const y = (await list('admin', `?q=ALL-${run}-2`).expect(200)).body.items[0];
+      expect(y.cancel).toEqual({ by: 'yandex', reason: 'Отменён в Яндексе (USER_CHANGED_MIND)', staff_name: null });
+      const active = (await list('admin', `?q=ALL-${run}-1`).expect(200)).body.items[0];
+      expect(active.cancel).toBeNull();
+    } finally {
+      await prisma.orders.update({ where: { id: vitaloId }, data: { status: o.status } });
+      await prisma.marketplace_orders.update({ where: { id: shipLater }, data: { status: 'NEW', cancel_reason: null } });
+    }
+  });
+
   it('who sees what: warehouse and manager see both, marketer nothing', async () => {
     for (const r of ['warehouse', 'manager'] as Role[]) {
       const ids = (await list(r, `?q=${vitaloNumber}`).expect(200)).body.items.map((i: { id: string }) => i.id);

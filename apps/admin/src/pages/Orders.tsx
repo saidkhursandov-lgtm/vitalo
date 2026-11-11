@@ -34,7 +34,7 @@ interface Page<T> {
   attention_count?: number;
 }
 
-const FILTER_KEYS = ['q', 'status', 'payment_status', 'date_from', 'date_to', 'awaiting_confirmation', 'hide_test', 'units_attention', 'page'] as const;
+const FILTER_KEYS = ['q', 'status', 'payment_status', 'date_from', 'date_to', 'awaiting_confirmation', 'show_test', 'units_attention', 'page'] as const;
 
 /** Filters only the Mini App list has: a link with any of them (e.g. from the dashboard) opens that list. */
 const VITALO_ONLY = ['status', 'payment_status', 'date_from', 'date_to', 'awaiting_confirmation', 'units_attention'] as const;
@@ -71,7 +71,8 @@ function VitaloOrders() {
 
   const q = useQuery({
     queryKey: ['orders', filters],
-    queryFn: () => api<Page<OrderRow>>(`/staff/orders${qs({ ...filters, page })}`),
+    // аудит 10.11, п. 1.7: тестовые скрыты по умолчанию; ?show_test=true — показать
+    queryFn: () => api<Page<OrderRow>>(`/staff/orders${qs({ ...filters, show_test: undefined, hide_test: filters.show_test !== 'true', page })}`),
     refetchInterval: 30_000,
   });
 
@@ -105,8 +106,8 @@ function VitaloOrders() {
           Ждут подтверждения оплаты
         </label>
         <label className="check">
-          <input type="checkbox" checked={filters.hide_test === 'true'} onChange={(e) => set({ hide_test: e.target.checked ? 'true' : '' })} />
-          Скрыть тестовые
+          <input type="checkbox" checked={filters.show_test === 'true'} onChange={(e) => set({ show_test: e.target.checked ? 'true' : '' })} />
+          Показать тестовые
         </label>
       </div>
       {q.data && (q.data.attention_count ?? 0) > 0 && (

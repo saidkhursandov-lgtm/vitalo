@@ -36,6 +36,8 @@ export interface DashboardData {
   margin?: { gross_uzs: number; percent: number | null; revenue_with_cost_uzs: number; revenue_without_cost_uzs: number };
   orders_created: Record<Channel, number>;
   statuses: Record<string, number>;
+  /** of «Отменён»: cancelled because the reserve expired (аудит 10.11, п. 1.6) */
+  cancelled_expired?: number;
   top_products: { product_id: string; sku: string; name_ru: string; qty: number; revenue_uzs?: number }[];
   low_stock: { id: string; sku: string; name_ru: string; min_stock: number; available: number; incoming: number }[];
   attention: {
@@ -176,7 +178,10 @@ export function DashboardView({ data, can }: { data: DashboardData; can: (p: Per
                       <OrderStatus status={st} />
                     )}
                   </td>
-                  <td className="num">{data.statuses[st] ?? 0}</td>
+                  <td className="num">
+                    {data.statuses[st] ?? 0}
+                    {st === 'cancelled' && (data.cancelled_expired ?? 0) > 0 && <div className="muted small">из них истёк резерв: {data.cancelled_expired}</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>

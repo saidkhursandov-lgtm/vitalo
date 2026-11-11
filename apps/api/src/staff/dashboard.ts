@@ -104,13 +104,18 @@ export class DashboardService {
     const revenue = channels.vitalo.revenue_uzs + channels.yandex.revenue_uzs;
     const top = [...products.values()].filter((r) => r.qty > 0).sort((a, b) => b.qty - a.qty || b.revenue_uzs - a.revenue_uzs).slice(0, 5);
 
-    const [createdVitalo, createdYandex, byStatus, lowStock, attention, aiSpend] = await Promise.all([
+    const [createdVitalo, createdYandex, byStatus, lowStock, attention, aiSpend, expired] = await Promise.all([
       this.prisma.orders.count({ where: { is_test: false, created_at: { gte: fromTs } } }),
       this.prisma.marketplace_orders.count({ where: { is_test: false, created_at: { gte: fromTs } } }),
       this.prisma.orders.groupBy({ by: ['status'], where: { is_test: false }, _count: { _all: true } }),
       this.lowStock(),
       this.attention(to),
       viewer.ai ? this.aiSpend(now) : null,
+      // аудит 10.11, п. 1.6: cancelled because the reserve expired (not paid in time) — not the customer's refusal
+      this.prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(*) AS n FROM orders o
+        WHERE NOT o.is_test AND o.status = 'cancelled'
+          AND (SELECT h.reason FROM order_status_history h WHERE h.order_id = o.id AND h.to_status = 'cancelled' ORDER BY h.created_at DESC LIMIT 1) LIKE 'Reservation expired%'`,
     ]);
 
     return {
@@ -138,6 +143,7 @@ export class DashboardService {
       }),
       orders_created: { vitalo: createdVitalo, yandex: createdYandex },
       statuses: Object.fromEntries(byStatus.map((s) => [s.status, s._count._all])),
+      cancelled_expired: Number(expired[0]?.n ?? 0),
       top_products: top.map(({ revenue_uzs, ...r }) => ({ ...r, ...(viewer.revenue && { revenue_uzs }) })),
       low_stock: lowStock,
       attention,

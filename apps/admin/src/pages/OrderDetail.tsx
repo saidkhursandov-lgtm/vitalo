@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
-import { dateTime, money, ORDER_STATUS, orderStatusLabel, PAYMENT_METHOD, prettyPhone, yandexMapsLink } from '../lib/format';
+import { cancelLabel, dateTime, historyReason, money, ORDER_STATUS, orderStatusLabel, PAYMENT_METHOD, prettyPhone, yandexMapsLink } from '../lib/format';
 import { CheckIcon, ForwardIcon } from '../components/Icons';
 import { OrderAssembly, ReturnOrderModal, type Assembly } from './OrderAssembly';
 import { OrderFinance, TestBadge } from '../components/OrderFinance';
@@ -112,6 +112,9 @@ export function OrderDetail() {
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   const o = q.data;
   const a = o.actions;
+  // аудит 10.11, п. 1.6: who cancelled — the last «→ cancelled» record of the history
+  const lastCancel = [...o.history].reverse().find((h) => h.to_status === 'cancelled');
+  const cancelNote = lastCancel ? cancelLabel({ by: lastCancel.changed_by_type as 'system' | 'staff' | 'customer', reason: lastCancel.reason, staff_name: null }) : null;
 
   return (
     <>
@@ -119,6 +122,7 @@ export function OrderDetail() {
         title={
           <>
             Заказ {o.order_number} <OrderStatus status={o.status} cod={o.payment?.method === 'cod'} /> <PaymentStatus status={o.payment_status} /> <TestBadge show={o.is_test} />
+            {o.status === 'cancelled' && cancelNote && <span className="muted small"> {cancelNote}</span>}
           </>
         }
       >
@@ -310,7 +314,7 @@ export function OrderDetail() {
             {o.history.map((h, i) => (
               <li key={i}>
                 <strong>{orderStatusLabel(h.to_status, o.payment?.method === 'cod')}</strong> <span className="muted small">{dateTime(h.created_at)} · {ACTOR[h.changed_by_type]}</span>
-                {h.reason && <div className="small">{h.reason}</div>}
+                {h.reason && <div className="small">{historyReason(h.reason)}</div>}
               </li>
             ))}
           </ol>

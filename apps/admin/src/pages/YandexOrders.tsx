@@ -95,7 +95,7 @@ export function YandexOrders() {
   const { can } = useSession();
   const [params, setParams] = useSearchParams();
   const page = Number(params.get('page')) || 1;
-  const f = { status: params.get('status') ?? '', from: params.get('from') ?? '', to: params.get('to') ?? '', q: params.get('q') ?? '', hide_test: params.get('hide_test') ?? '' };
+  const f = { status: params.get('status') ?? '', from: params.get('from') ?? '', to: params.get('to') ?? '', q: params.get('q') ?? '', hide_test: params.get('show_test') === 'true' ? '' : 'true' }; // аудит 10.11, п. 1.7
   const [text, setText] = useState(f.q);
   const list = useQuery({
     queryKey: ['yandex-orders', f, page],
@@ -141,8 +141,8 @@ export function YandexOrders() {
           по <input type="date" value={f.to} onChange={(e) => set('to', e.target.value)} aria-label="Дата по" />
         </label>
         <label className="check">
-          <input type="checkbox" checked={f.hide_test === 'true'} onChange={(e) => set('hide_test', e.target.checked ? 'true' : '')} />
-          Скрыть тестовые
+          <input type="checkbox" checked={f.hide_test !== 'true'} onChange={(e) => set('show_test', e.target.checked ? 'true' : '')} />
+          Показать тестовые
         </label>
       </form>
       {list.isPending ? (
