@@ -108,10 +108,12 @@ export function PromoCodes() {
           </button>
         )}
       </PageHead>
+      {/* аудит 4.4: the numbers, not «…» — an error loading them is said plainly */}
       <Help id="promo-codes">
         Один промокод на заказ. Код не действует на товары с видимой скидкой больше 15%. Защита маржи: цена строки после
-        скидки не ниже закупки + {guard.data?.min_markup_pct ?? '…'}%, а без закупочной цены скидка не больше{' '}
-        {guard.data?.max_discount_pct ?? '…'}%.{' '}
+        скидки не ниже закупки + {guard.data ? guard.data.min_markup_pct : guard.isError ? '?' : '…'}%, а без закупочной цены скидка не больше{' '}
+        {guard.data ? guard.data.max_discount_pct : guard.isError ? '?' : '…'}%.{' '}
+        {guard.isError && <span className="text-bad">Не удалось загрузить настройки защиты маржи. </span>}
         {can('settings.manage') && (
           <button className="btn btn-ghost btn-sm" onClick={() => setGuardOpen(true)}>
             Изменить защиту маржи

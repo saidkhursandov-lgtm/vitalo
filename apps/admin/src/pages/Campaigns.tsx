@@ -93,6 +93,11 @@ export function problemText(c: ItemCheck, guardMaxPct: number): string | null {
 const TZ_MS = 5 * 3600_000;
 export const toLocal = (iso: string) => new Date(new Date(iso).getTime() + TZ_MS).toISOString().slice(0, 16);
 export const fromLocal = (v: string) => `${v}:00+05:00`;
+/** Аудит 4.4: a running campaign with no orders for 7 days or more — worth a look (price, products, the banner). */
+export function noSales(c: Pick<Campaign, 'state' | 'start_at' | 'orders'>, now = Date.now()): boolean {
+  return c.state === 'running' && !c.orders && now - new Date(c.start_at).getTime() >= 7 * 86_400_000;
+}
+
 export function periodLabel(c: Pick<Campaign, 'start_at' | 'end_at'>): string {
   const f = (iso: string) => toLocal(iso).replace(/^(\d{4})-(\d\d)-(\d\d)T/, '$3.$2.$1 ');
   return `${f(c.start_at)} — ${c.end_at ? f(c.end_at) : 'без даты окончания'}`;
@@ -142,7 +147,7 @@ export function Campaigns() {
             </thead>
             <tbody>
               {q.data.map((c) => (
-                <tr key={c.id} className={c.state === 'disabled' || c.state === 'ended' ? 'muted' : ''}>
+                <tr key={c.id} className={c.state === 'disabled' || c.state === 'ended' ? 'muted' : noSales(c) ? 'row-warn' : ''}>
                   <td>
                     <button type="button" className="link-btn" onClick={() => setEditing(c)}>
                       {c.title_ru}
@@ -161,6 +166,7 @@ export function Campaigns() {
                   <td className="num nowrap">
                     {c.orders ?? 0}
                     <div className="muted small">{c.discount_total_uzs ? `−${money(c.discount_total_uzs)}` : '—'}</div>
+                    {noSales(c) && <Badge tone="warn">нет продаж 7+ дней</Badge>}
                   </td>
                 </tr>
               ))}
