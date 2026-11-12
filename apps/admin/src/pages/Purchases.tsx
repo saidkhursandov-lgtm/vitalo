@@ -69,9 +69,26 @@ const ruDate = (d: string) => d.split('-').reverse().join('.');
 const today = () => new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10); // Tashkent
 const unitCost = (u: { min: number; max: number } | null | undefined) => (!u ? '—' : u.min === u.max ? money(u.min) : `${money(u.min)} – ${money(u.max)}`);
 
-function StatusBadge({ p }: { p: Pick<Purchase, 'status' | 'progress'> }) {
+/** Аудит 2.7: a purchase still waited for after this many days is «просрочена» (same number as the API filter). */
+const OVERDUE_DAYS = 14;
+const waitingDays = (p: Pick<Purchase, 'purchase_date' | 'progress'>) =>
+  p.progress.remaining > 0 && !p.progress.fully_cancelled ? Math.floor((Date.parse(`${today()}T00:00:00Z`) - Date.parse(`${p.purchase_date}T00:00:00Z`)) / 86_400_000) : 0;
+
+function StatusBadge({ p }: { p: Pick<Purchase, 'status' | 'progress' | 'purchase_date'> }) {
   if (p.progress.fully_cancelled) return <Badge tone="bad">Отменена полностью</Badge>;
-  return p.status === 'RECEIVED' ? <Badge tone="ok">Получено</Badge> : <Badge tone="warn">Ожидается</Badge>;
+  if (p.status === 'RECEIVED') return <Badge tone="ok">Получено</Badge>;
+  const days = waitingDays(p);
+  return (
+    <>
+      {p.progress.received > 0 ? <Badge tone="info">Частично</Badge> : <Badge tone="warn">Ожидается</Badge>}
+      {days > OVERDUE_DAYS && (
+        <>
+          {' '}
+          <Badge tone="bad">Просрочена: {days} дн.</Badge>
+        </>
+      )}
+    </>
+  );
 }
 const progressText = (p: Progress) => `${p.received} / ${p.expected}`;
 
@@ -91,6 +108,7 @@ export function Purchases() {
     ozon_account_id: params.get('ozon_account_id'),
     supplier_id: params.get('supplier_id'),
     status: params.get('status'),
+    state: params.get('state'),
     date_from: params.get('date_from'),
     date_to: params.get('date_to'),
     q: params.get('q'),
@@ -151,10 +169,27 @@ export function Purchases() {
             </option>
           ))}
         </select>
-        <select value={filters.status ?? ''} onChange={(e) => set('status', e.target.value)} aria-label="Статус">
+        {/* аудит 2.7: two stored statuses plus three states computed from the lines — one list for the user */}
+        <select
+          value={filters.state ?? filters.status ?? ''}
+          onChange={(e) => {
+            const v = e.target.value;
+            const next = new URLSearchParams(params);
+            next.delete('page');
+            next.delete('status');
+            next.delete('state');
+            if (v === 'EXPECTED' || v === 'RECEIVED') next.set('status', v);
+            else if (v) next.set('state', v);
+            setParams(next, { replace: true });
+          }}
+          aria-label="Статус"
+        >
           <option value="">Все статусы</option>
           <option value="EXPECTED">Ожидается</option>
+          <option value="partial">Частично получена</option>
+          <option value="overdue">Просрочена (ждём больше {OVERDUE_DAYS} дн.)</option>
           <option value="RECEIVED">Получено</option>
+          <option value="cancelled">Отменена полностью</option>
         </select>
         <input type="date" value={filters.date_from ?? ''} onChange={(e) => set('date_from', e.target.value)} aria-label="С даты" />
         <input type="date" value={filters.date_to ?? ''} onChange={(e) => set('date_to', e.target.value)} aria-label="По дату" />
@@ -202,7 +237,11 @@ export function Purchases() {
                   </td>
                   {costs && (
                     <td className="num">
-                      {p.final_actual_total_uzs != null ? money(p.final_actual_total_uzs) : <span className="muted">{money(p.lines_total_uzs ?? 0)} по строкам</span>}
+                      {p.final_actual_total_uzs != null ? money(p.final_actual_total_uzs) : (
+                        <span className="muted" title="Итоговая фактическая сумма ещё не введена — показана сумма строк закупки">
+                          {money(p.lines_total_uzs ?? 0)} по строкам
+                        </span>
+                      )}
                     </td>
                   )}
                 </tr>

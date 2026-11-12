@@ -24,6 +24,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -103,7 +104,15 @@ export class OzonFindQuery {
   @ApiProperty() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(100) ozon_order_number!: string;
 }
 
+/** Аудит 2.7: a purchase still waited for after this many days is «просрочена». */
+export const PURCHASE_OVERDUE_DAYS = 14;
+export type PurchaseState = 'partial' | 'cancelled' | 'overdue';
+
 export class PurchasesQuery extends PageQuery {
+  @ApiPropertyOptional({ enum: ['partial', 'cancelled', 'overdue'], description: 'Аудит 2.7: частично получена / отменена полностью / ждём дольше 14 дней' })
+  @IsOptional()
+  @IsIn(['partial', 'cancelled', 'overdue'])
+  state?: PurchaseState;
   @ApiPropertyOptional({ enum: PurchaseSourceType }) @IsOptional() @IsEnum(PurchaseSourceType) source_type?: PurchaseSourceType;
   @ApiPropertyOptional() @IsOptional() @IsUUID() ozon_account_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() supplier_id?: string;
@@ -213,6 +222,20 @@ export class AdminPurchasesService {
     private readonly audit: AuditService,
   ) {}
 
+  /** Аудит 2.7: the purchases in a state computed from their lines (there is no column for it). */
+  private async idsInState(state: PurchaseState): Promise<string[]> {
+    const remaining = Prisma.sql`SUM(GREATEST(0, l.ordered_qty - l.cancelled_qty - l.received_qty))`;
+    const having = {
+      partial: Prisma.sql`SUM(l.received_qty) > 0 AND ${remaining} > 0`,
+      cancelled: Prisma.sql`BOOL_AND(l.cancelled_qty >= l.ordered_qty)`,
+      overdue: Prisma.sql`${remaining} > 0 AND MIN(p.purchase_date) < (now() AT TIME ZONE 'Asia/Tashkent')::date - ${PURCHASE_OVERDUE_DAYS}::int`,
+    }[state];
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT p.id FROM purchases p JOIN purchase_lines l ON l.purchase_id = p.id
+      GROUP BY p.id HAVING ${having}`;
+    return rows.map((r) => r.id);
+  }
+
   async list(q: PurchasesQuery, costs: boolean) {
     const and: Prisma.purchasesWhereInput[] = [];
     if (q.source_type) and.push({ source_type: q.source_type });
@@ -223,6 +246,7 @@ export class AdminPurchasesService {
     if (q.date_to) and.push({ purchase_date: { lte: new Date(`${q.date_to}T00:00:00Z`) } });
     if (q.q) and.push({ ozon_order_number: { contains: q.q, mode: 'insensitive' } });
     if (q.hide_test) and.push({ is_test: false });
+    if (q.state) and.push({ id: { in: await this.idsInState(q.state) } });
     const where: Prisma.purchasesWhereInput = { AND: and };
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.purchases.count({ where }),

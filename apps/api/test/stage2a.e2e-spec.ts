@@ -189,6 +189,25 @@ describe('Stage 2A: purchases (e2e)', () => {
     expect(created.id).toBeTruthy();
   });
 
+  it('аудит 2.7: filters «частично», «отменена полностью», «просрочена» are computed from the lines', async () => {
+    const ids = async (state: string) =>
+      (await as('admin').get(`/staff/purchases?state=${state}&q=${RUN}`).expect(200)).body.items.map((i: { id: string }) => i.id);
+    const make = async (n: string, date: string) =>
+      (await as('admin').post('/staff/purchases', ozon(`${n}-${RUN}`, [{ product_id: p2.id, ordered_qty: 3, unit_price_original_uzs: 1_000 }], { purchase_date: date }), randomUUID()).expect(201)).body;
+    const old = await make('OLD', '2026-09-01'); // nothing arrived, waited for months
+    const half = await make('HALF', '2026-10-08');
+    await prisma.purchase_lines.updateMany({ where: { purchase_id: half.id }, data: { received_qty: 1 } });
+    const full = (await as('admin').get(`/staff/purchases?q=FULL-${RUN}`).expect(200)).body.items[0];
+
+    expect(await ids('overdue')).toEqual(expect.arrayContaining([old.id, half.id]));
+    expect(await ids('overdue')).not.toContain(full.id); // fully cancelled: nothing to wait for
+    expect(await ids('partial')).toContain(half.id);
+    expect(await ids('partial')).not.toContain(old.id);
+    expect(await ids('cancelled')).toContain(full.id);
+    expect(await ids('cancelled')).not.toContain(half.id);
+    await as('admin').get('/staff/purchases?state=lost').expect(400);
+  });
+
   // ------------------------------------------------------------------ history and permissions
   it('the history is append-only and a purchase is never deleted', async () => {
     const e = await prisma.purchase_events.findFirstOrThrow({ where: { purchase_id: purchaseId } });
