@@ -643,7 +643,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
           >
             {input('servings_per_day', { inputMode: 'numeric' })}
           </Field>
-          <Field label="Выгоднее Маркета, %" hint="0–50, только если правда. Пусто — плашки нет">
+          <Field label="Выгоднее Маркета, %" hint="Не показывается покупателям (D-67: Яндекс Маркет закрыт)">
             {input('market_advantage_percent', { inputMode: 'numeric' })}
           </Field>
           <Field label="Оболочка (RU)" hint="Строка «Оболочка: …»">{input('shell_ru', { maxLength: 100, placeholder: 'Например: говяжий желатин' })}</Field>

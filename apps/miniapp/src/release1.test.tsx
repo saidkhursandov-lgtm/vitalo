@@ -79,8 +79,9 @@ describe('top bar (release 1, item 2)', () => {
 describe('home (release 1, item 3)', () => {
   it('carousel, 2nd slide: a new customer sees the first-order offer', () => {
     const { container } = wrap('ru', <HomeCarousel firstOrderFree freeFromUzs={250_000} />);
-    expect(container.textContent).toContain('Отбор врачом');
-    expect(container.textContent).toContain('4,9');
+    expect(container.textContent).toContain('Проверенный врачебный отбор');
+    expect(container.textContent).toContain('Доставка по Узбекистану');
+    expect(container.textContent).not.toContain('Маркет'); // D-67
     expect(container.textContent).toContain('Первый заказ — бесплатная доставка');
     expect(container.textContent).toContain('Доставка по всему Узбекистану');
     expect(plain(container)).not.toContain('от 250 000');

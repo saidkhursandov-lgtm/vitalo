@@ -6,7 +6,7 @@ import { track as trackEvent } from '../lib/analytics';
 import { CampaignSlideBody } from './Campaign';
 import type { HomeContent, Lang, LocalizedText, ShopBanner, ShopInfo } from '../lib/types';
 import { generalTerms } from './Delivery';
-import { BadgeIcon, StarIcon, SupportIcon, TRUST_ICONS } from './Icons';
+import { BadgeIcon, SupportIcon, TRUST_ICONS } from './Icons';
 import { useSheets } from './Sheets';
 
 const pick = (t: LocalizedText, lang: Lang) => (lang === 'uz' ? t.uz : t.ru);
@@ -24,7 +24,7 @@ function HeroArt() {
 }
 
 /**
- * Home banner (navy, about 116 px): two slides — «Отбор врачом • 4,9★ на Яндекс Маркете» and the delivery offer. The offer is
+ * Home banner (navy, about 116 px): two slides — «Проверенный врачебный отбор • Доставка по Узбекистану» (D-67) and the delivery offer. The offer is
  * what is true for this customer (the server decides): the first order is free, or delivery is free from the tariff's threshold.
  */
 /** The two slides the shop always had: used until the admin list arrives, and in tests. */
@@ -97,13 +97,8 @@ export function HomeCarousel({
       b.kind === 'doctor'
         ? {
             title: t('home.slide1.title'),
-            sub: (
-              <>
-                <strong>4,9</strong>
-                <StarIcon filled className="hero-star" width={15} height={15} aria-label="★" />
-                {t('home.slide1.sub')}
-              </>
-            ),
+            // D-67: Яндекс Маркет закрыт — без «4,9 ★ на Яндекс Маркете»; позже — наш рейтинг из отзывов
+            sub: <>{t('home.slide1.sub')}</>,
           }
         : firstOrderFree
           ? { title: t('home.slide2.title'), sub: <>{t('home.slide2.sub')}</> }

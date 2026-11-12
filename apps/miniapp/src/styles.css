@@ -1055,10 +1055,6 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 .price-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .price-line .stock { margin: 0; }
 .lasts { margin: 6px 0 0; font-size: 13.5px; line-height: 1.35; color: var(--text); }
-.market-badge {
-  display: inline-flex; align-items: center; margin-top: 8px; padding: 3px 10px; border-radius: 8px;
-  background: var(--primary-soft); color: var(--primary-text); font-size: 12.5px; font-weight: 700;
-}
 /* 2.3 fixes: a 2-column grid instead of a scrolling strip; text in 1–2 lines, never cut; an odd last one stays left */
 .std-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
 .std-chip {

@@ -53,7 +53,7 @@ describe('Stage 2.3 (e2e)', () => {
       std_original: false,
       halal_vege: 'vege',
       shell_ru: 'без капсулы',
-      market_advantage_percent: 15,
+      market_advantage_percent: null, // D-67: плашка выключена, число хранится только в админке
       doctor_verdict_uz: 'Magniy sitrat yaxshi oʻzlashtiriladi.',
     });
     for (const hidden of ['halal_vege_source', 'intake_memo_ru', 'intake_memo_uz', 'admin_note', 'servings_per_day']) expect(card).not.toHaveProperty(hidden);

@@ -111,7 +111,6 @@ export function Product() {
           {t('card.lasts', { n: p.course_days, d: dayWord(p.course_days), price: money(pricePerDay(p.price_uzs, p.course_days), lang) })}
         </p>
       ) : null}
-      {p.market_advantage_percent ? <span className="market-badge">{t('card.market', { n: p.market_advantage_percent })}</span> : null}
       <StandardStrip product={p} />
       {verdict && (
         <section className="verdict">

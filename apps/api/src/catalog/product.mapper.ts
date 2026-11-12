@@ -180,7 +180,8 @@ export function toProductCard(p: ProductForCard) {
     halal_vege: p.halal_vege as HalalVege | null,
     shell_ru: p.shell_ru,
     shell_uz: p.shell_uz,
-    market_advantage_percent: p.market_advantage_percent || null,
+    // D-67: плашка «На X% выгоднее Маркета» выключена везде — Яндекс Маркет закрыт (число в базе остаётся)
+    market_advantage_percent: null,
     doctor_verdict_ru: p.doctor_verdict_ru,
     doctor_verdict_uz: p.doctor_verdict_uz,
     manufacturer: p.manufacturer,
