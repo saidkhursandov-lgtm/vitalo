@@ -267,7 +267,7 @@ export class CompatService {
 
   /** Saved combination: one per set of products and language; saving again replaces the text and switches it on. */
   private saveAnswer(db: Prisma.TransactionClient | PrismaService, staffId: string, r: Pick<compat_requests, 'id' | 'set_key' | 'product_ids' | 'items' | 'lang' | 'verdict' | 'answer_text'>) {
-    const data = { verdict: r.verdict!, text: r.answer_text!, enabled: true, source_request_id: r.id, created_by: staffId };
+    const data = { verdict: r.verdict!, text: r.answer_text!, enabled: true, source_request_id: r.id, created_by: staffId, review_needed_at: null, review_ai_verdict: null };
     return db.compat_answers.upsert({
       where: { set_key_lang: { set_key: r.set_key, lang: r.lang } },
       create: { set_key: r.set_key, product_ids: r.product_ids, items: r.items as Prisma.InputJsonValue, lang: r.lang, ...data },
@@ -334,7 +334,11 @@ export class CompatService {
   }
 
   async answers() {
-    const rows = await this.prisma.compat_answers.findMany({ orderBy: [{ enabled: 'desc' }, { updated_at: 'desc' }], include: { author: { select: { name: true } }, _count: { select: { requests: true } } } });
+    // Шаг 0а-3: «пересмотреть» first
+    const rows = await this.prisma.compat_answers.findMany({
+      orderBy: [{ enabled: 'desc' }, { review_needed_at: { sort: 'desc', nulls: 'last' } }, { updated_at: 'desc' }],
+      include: { author: { select: { name: true } }, _count: { select: { requests: true } } },
+    });
     return rows.map((a) => ({
       id: a.id,
       lang: a.lang,
@@ -345,16 +349,21 @@ export class CompatService {
       author: a.author?.name ?? null,
       used: a._count.requests,
       updated_at: a.updated_at,
+      review_needed_at: a.review_needed_at,
+      review_ai_verdict: a.review_ai_verdict as Verdict | null,
     }));
   }
 
-  async updateAnswer(me: staff_users, id: string, dto: { verdict?: Verdict; text?: string; enabled?: boolean }) {
+  /** Шаг 0а-3: a new label or text, or «Ответ верен» (reviewed), clears «пересмотреть». */
+  async updateAnswer(me: staff_users, id: string, dto: { verdict?: Verdict; text?: string; enabled?: boolean; reviewed?: boolean }) {
     const before = await this.prisma.compat_answers.findUnique({ where: { id } });
     if (!before) throw new NotFoundException('Saved answer not found');
     const text = dto.text?.trim();
     if (dto.text !== undefined && !text) throw new BadRequestException({ code: 'EMPTY_TEXT', message: 'The answer cannot be empty' });
     await this.prisma.$transaction(async (tx) => {
-      const after = await tx.compat_answers.update({ where: { id }, data: { ...(dto.verdict && { verdict: dto.verdict }), ...(text && { text }), ...(dto.enabled !== undefined && { enabled: dto.enabled }) } });
+      // «Ответ верен» keeps the AI label it was checked against, so the same label does not mark it again
+      const review = dto.verdict || text ? { review_needed_at: null, review_ai_verdict: null } : dto.reviewed ? { review_needed_at: null } : {};
+      const after = await tx.compat_answers.update({ where: { id }, data: { ...(dto.verdict && { verdict: dto.verdict }), ...(text && { text }), ...(dto.enabled !== undefined && { enabled: dto.enabled }), ...review } });
       await this.audit.log({ staffId: me.id, action: 'compat.saved_updated', entityType: 'compat_answer', entityId: id, before, after }, tx);
     });
     return this.answers();
@@ -436,6 +445,7 @@ export class CompatSavedPatch {
   @ApiPropertyOptional({ enum: VERDICTS }) @IsOptional() @IsIn(VERDICTS) verdict?: Verdict;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(ANSWER_MAX) text?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() enabled?: boolean;
+  @ApiPropertyOptional({ description: 'Шаг 0а-3: «Ответ верен» — снять отметку «пересмотреть»' }) @IsOptional() @IsBoolean() reviewed?: boolean;
 }
 
 export class CompatTemplatesDto {

@@ -2107,6 +2107,12 @@ model compat_answers {
   created_by        String?             @db.Uuid
   created_at        DateTime            @default(now())
   updated_at        DateTime            @default(now()) @updatedAt
+  /// Шаг 0а-3: VITALO AI gave another label for this set by the current rules — «пересмотреть — правила изменились»;
+  /// cleared when the answer is saved again, edited or marked «Ответ верен» (then review_ai_verdict stays: the same AI
+  /// label does not mark it again)
+  review_needed_at  DateTime?
+  /// the AI label at that moment: compatible | spread | consult
+  review_ai_verdict String?
   author            staff_users?        @relation(fields: [created_by], references: [id], onDelete: SetNull)
   requests          compat_requests[]
   ai_answers        ai_compat_answers[]

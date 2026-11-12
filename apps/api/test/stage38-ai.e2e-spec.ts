@@ -231,6 +231,35 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     await prisma.compat_answers.update({ where: { id: saved.id }, data: { enabled: false } });
   });
 
+  it('Шаг 0а-3: the AI label differs from the saved specialist answer — the customer gets the AI answer, the saved one is marked «пересмотреть»', async () => {
+    await prisma.settings.deleteMany({ where: { key: 'vitalo_ai' } });
+    const set = [p.a.id, p.d.id].sort().join(',');
+    const items = [p.a, p.d].map((x) => ({ product_id: x.id, sku: x.sku, name_ru: x.sku, name_uz: x.sku }));
+    const saved = await prisma.compat_answers.create({ data: { set_key: set, product_ids: set.split(','), items, lang: 'ru', verdict: 'consult', text: 'Старый ответ: нужна консультация.' } });
+    await prisma.ai_compat_answers.deleteMany({ where: { set_key: set } });
+    const token = await customer();
+    await add(token, p.a.id);
+    await add(token, p.d.id);
+    fake.reply = goodReply('compatible');
+    const res = (await check(token).expect(200)).body;
+    expect(res).toMatchObject({ result: 'ai', answer: { verdict: 'compatible' }, specialist: { verdict: 'consult', conflict: true } });
+    const flagged = await prisma.compat_answers.findUniqueOrThrow({ where: { id: saved.id } });
+    expect(flagged.review_needed_at).not.toBeNull();
+    expect(flagged.review_ai_verdict).toBe('compatible');
+
+    const list = (await http().get('/api/staff/compat/answers').set(bearer(tokens.manager)).expect(200)).body as { id: string; review_needed_at: string | null; review_ai_verdict: string | null }[];
+    expect(list.find((a) => a.id === saved.id)).toMatchObject({ review_ai_verdict: 'compatible' });
+    // «Ответ верен» clears the mark; a second AI answer with the same label does not mark it again until something changes
+    await http().patch(`/api/staff/compat/answers/${saved.id}`).set(bearer(tokens.admin)).send({ reviewed: true }).expect(200);
+    expect((await prisma.compat_answers.findUniqueOrThrow({ where: { id: saved.id } })).review_needed_at).toBeNull();
+    const again = await customer();
+    await add(again, p.a.id);
+    await add(again, p.d.id);
+    expect((await check(again).expect(200)).body).toMatchObject({ result: 'ai_cache', specialist: { conflict: true } });
+    expect((await prisma.compat_answers.findUniqueOrThrow({ where: { id: saved.id } })).review_needed_at).toBeNull();
+    await prisma.compat_answers.update({ where: { id: saved.id }, data: { enabled: false } });
+  });
+
   it('the home banner has the VITALO AI slide after the built-in ones (migration 20261110100000, safe to repeat)', async () => {
     // the test database is truncated and seeded before the run: the migration's own SQL is applied here, twice
     const sql = readFileSync(join(__dirname, '../prisma/migrations/20261110100000_stage38_ai_banner/migration.sql'), 'utf8');

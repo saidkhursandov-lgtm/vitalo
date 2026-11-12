@@ -103,3 +103,53 @@ describe('3.4 Совместимость', () => {
     expect(await screen.findByText('удалён через 90 дней')).toBeTruthy();
   });
 });
+
+describe('Шаг 0а-3: «Сохранённые сочетания» — «пересмотреть», когда у VITALO AI другая метка', () => {
+  const saved = (over: Record<string, unknown> = {}) => ({
+    id: 'a1',
+    lang: 'ru',
+    verdict: 'consult',
+    text: 'Нужна консультация.',
+    enabled: true,
+    products: row().products,
+    author: 'Мадина',
+    used: 3,
+    updated_at: '2026-11-01T10:00:00Z',
+    review_needed_at: '2026-11-12T10:00:00Z',
+    review_ai_verdict: 'compatible',
+    ...over,
+  });
+
+  it('the mark, the AI label, the filter and «Ответ верен»', async () => {
+    const patched: { url: string; body: unknown }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      const json = (v: unknown) => new Response(JSON.stringify(v), { headers: { 'content-type': 'application/json' } });
+      if (url.includes('/staff/auth/me')) return json({ staff: { id: 's1', name: 'Мадина', role: 'admin' }, permissions: ['compat.view', 'compat.answer'] });
+      if (init.method === 'PATCH') {
+        patched.push({ url, body: JSON.parse(init.body as string) });
+        return json([saved({ review_needed_at: null }), saved({ id: 'a2', review_needed_at: null, text: 'Другое.' })]);
+      }
+      if (url.includes('/staff/compat/answers')) return json([saved(), saved({ id: 'a2', review_needed_at: null, text: 'Другое.' })]);
+      return json([]);
+    });
+    setToken('t');
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <StaffAuthProvider>
+          <MemoryRouter initialEntries={['/compat?tab=saved']}>
+            <Compat />
+          </MemoryRouter>
+        </StaffAuthProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('Пересмотреть — правила изменились')).toBeTruthy();
+    expect(screen.getByText(/Пересмотреть: 1\./)).toBeTruthy();
+    expect(screen.getByText(/VITALO AI сейчас: Совместимы/)).toBeTruthy();
+    expect(screen.getByText('Другое.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Только «пересмотреть»/ }));
+    expect(screen.queryByText('Другое.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ответ верен' }));
+    await waitFor(() => expect(patched).toEqual([{ url: '/api/staff/compat/answers/a1', body: { reviewed: true } }]));
+    await waitFor(() => expect(screen.queryByText('Пересмотреть — правила изменились')).toBeNull());
+  });
+});

@@ -194,6 +194,7 @@ export class AiService {
         this.answeredRequest(userId, items, lang, 'ai_cache', cached, now),
       ]);
       await this.analytics.track(userId, 'compat_ai_cached', { products: items.length, verdict: cached.verdict, lang });
+      await this.flagSpecialistReview(setKey, lang, cached.verdict as Verdict);
       return { result: 'ai_cache' as const, ...(await this.state(userId, now)) };
     }
 
@@ -263,7 +264,20 @@ export class AiService {
       return row;
     });
     await this.analytics.track(userId, 'compat_ai_request', { products: items.length, verdict: answer.verdict, lang, latency_ms: req.latency_ms, model: s.model });
+    await this.flagSpecialistReview(setKey, lang, answer.verdict as Verdict);
     return { result: 'ai' as const, ...(await this.state(userId, now)) };
+  }
+
+  /**
+   * Шаг 0а-3 (архитектура 3.3): the customer sees the AI answer; a saved specialist answer for the set with another label
+   * is marked «пересмотреть — правила изменились» in «Совместимость → Сохранённые сочетания» (once, until reviewed).
+   */
+  private flagSpecialistReview(setKey: string, lang: Lang, verdict: Verdict) {
+    return this.prisma.compat_answers.updateMany({
+      // «Ответ верен» keeps review_ai_verdict: the same AI label does not mark the answer again, another one does
+      where: { set_key: setKey, lang, enabled: true, verdict: { not: verdict }, review_needed_at: null, OR: [{ review_ai_verdict: null }, { review_ai_verdict: { not: verdict } }] },
+      data: { review_needed_at: new Date(), review_ai_verdict: verdict },
+    });
   }
 
   /** An AI answer for the set that is still good: not hidden and newer than the latest change of rules and substances. */

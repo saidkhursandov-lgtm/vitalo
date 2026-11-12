@@ -57,6 +57,9 @@ interface SavedAnswer {
   author: string | null;
   used: number;
   updated_at: string;
+  /** Шаг 0а-3: VITALO AI gives another label by the current rules — «пересмотреть» */
+  review_needed_at?: string | null;
+  review_ai_verdict?: Verdict | null;
 }
 
 export const VERDICT: Record<Verdict, [string, "ok" | "warn" | "bad"]> = {
@@ -390,6 +393,16 @@ function Saved({ canEdit }: { canEdit: boolean }) {
       }),
     onSuccess: (list) => client.setQueryData(["compat", "answers"], list),
   });
+  // Шаг 0а-3: «Ответ верен» — the mark «пересмотреть» goes away, the answer stays as it is
+  const reviewed = useMutation({
+    mutationFn: (a: SavedAnswer) =>
+      api<SavedAnswer[]>(`/staff/compat/answers/${a.id}`, {
+        method: "PATCH",
+        body: { reviewed: true },
+      }),
+    onSuccess: (list) => client.setQueryData(["compat", "answers"], list),
+  });
+  const [onlyReview, setOnlyReview] = useState(false);
   if (q.isPending) return <Loading />;
   if (q.isError)
     return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
@@ -400,9 +413,28 @@ function Saved({ canEdit }: { canEdit: boolean }) {
         при ответе.
       </p>
     );
+  const toReview = q.data.filter((a) => a.enabled && a.review_needed_at).length;
+  const rows = onlyReview ? q.data.filter((a) => a.enabled && a.review_needed_at) : q.data;
   return (
     <div className="card flush table-scroll">
-      <ErrorBox error={toggle.error} />
+      <ErrorBox error={toggle.error ?? reviewed.error} />
+      {toReview > 0 && (
+        <div className="alert alert-warn compat-review-bar">
+          <span>
+            Пересмотреть: {toReview}. У VITALO AI по текущим правилам другая
+            метка — покупатель видит ответ AI, а ваш ответ не показывается.
+            Исправьте ответ или нажмите «Ответ верен».
+          </span>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={onlyReview}
+              onChange={(e) => setOnlyReview(e.target.checked)}
+            />{" "}
+            Только «пересмотреть»
+          </label>
+        </div>
+      )}
       <table className="table compat-table">
         <thead>
           <tr>
@@ -414,7 +446,7 @@ function Saved({ canEdit }: { canEdit: boolean }) {
           </tr>
         </thead>
         <tbody>
-          {q.data.map((a) => (
+          {rows.map((a) => (
             <tr key={a.id} className={a.enabled ? "" : "muted"}>
               <td>
                 <ProductsCell products={a.products} />
@@ -430,6 +462,16 @@ function Saved({ canEdit }: { canEdit: boolean }) {
                 <div className="muted small">
                   {a.author ?? "—"}, {dateTime(a.updated_at)}
                 </div>
+                {a.enabled && a.review_needed_at && (
+                  <div className="compat-review">
+                    <Badge tone="warn">Пересмотреть — правила изменились</Badge>
+                    <span className="small">
+                      VITALO AI сейчас:{" "}
+                      {a.review_ai_verdict ? VERDICT[a.review_ai_verdict][0] : "—"}
+                      , {dateTime(a.review_needed_at)}
+                    </span>
+                  </div>
+                )}
               </td>
               <td className="num">{a.used}</td>
               <td className="ops">
@@ -446,6 +488,15 @@ function Saved({ canEdit }: { canEdit: boolean }) {
                     >
                       Изменить
                     </button>
+                    {a.enabled && a.review_needed_at && (
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        disabled={reviewed.isPending}
+                        onClick={() => reviewed.mutate(a)}
+                      >
+                        Ответ верен
+                      </button>
+                    )}
                     <button
                       className="btn btn-sm btn-ghost"
                       disabled={toggle.isPending}
