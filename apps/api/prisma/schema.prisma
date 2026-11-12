@@ -343,6 +343,8 @@ model users {
   marketing_opt_in Boolean    @default(true)
   /// 3.8: one consent for every VITALO AI scenario (D-45); null = not asked yet
   ai_consent_at    DateTime?
+  /// D-70: the consent to VITALO AI that says the conversation is kept (12 months); asked once more from those who agreed before
+  ai_chat_consent_at DateTime?
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
   deleted_at       DateTime?
@@ -366,6 +368,7 @@ model users {
   compat_requests   compat_requests[]
   support_threads   support_threads[]
   notes             customer_notes[]
+  ai_chats          ai_chats[]
 
   @@index([status])
 }
@@ -469,6 +472,7 @@ model staff_users {
   unit_events           physical_unit_events[]
   compat_rules_approved compat_rules[]                 @relation("RuleApprover")
   goals_approved        goal_evidence[]                @relation("GoalEvidenceApprover")
+  ai_chats_reviewed     ai_chats[]                     @relation("AiChatReviewer")
   ai_answers_reviewed   ai_compat_answers[]
   customer_notes        customer_notes[]
   marketplace_orders    marketplace_orders[]
@@ -2208,6 +2212,67 @@ model ai_requests {
 
   @@index([created_at])
   @@index([user_id, scenario, created_at])
+}
+
+/// D-70: a conversation of a customer with VITALO AI about the cart. number — AI-ГГГГММДД-NNNN (Tashkent date). The text
+/// lives 12 months (settings «VITALO AI»), then it is wiped and the numbers stay; the customer may delete it at once.
+/// Staff: «VITALO AI → Переписки» — the admin and the specialist; every opening is in the audit log.
+model ai_chats {
+  id          String            @id @default(uuid()) @db.Uuid
+  number      String            @unique
+  user_id     String            @db.Uuid
+  lang        String
+  /// the cart when the conversation started: [{product_id, sku, name}]
+  cart        Json              @default("[]")
+  empty_cart  Boolean           @default(false)
+  /// sleep | stress | energy | joints | immunity | sport | compat | other — of the latest answer
+  topic       String?
+  /// answered | clarify | off_topic | red_flag | failed | limit — of the latest message
+  outcome     String?
+  questions   Int               @default(0)
+  cost_usd    Decimal           @default(0) @db.Decimal(12, 6)
+  model       String?
+  /// the specialist's mark: ok | wrong
+  review      String?
+  review_note String?
+  reviewed_by String?           @db.Uuid
+  reviewed_at DateTime?
+  /// the customer deleted it: the texts are wiped at once
+  deleted_at  DateTime?
+  /// the texts were wiped after the retention period
+  purged_at   DateTime?
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @default(now()) @updatedAt
+  user        users             @relation(fields: [user_id], references: [id])
+  reviewer    staff_users?      @relation("AiChatReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  messages    ai_chat_messages[]
+
+  @@index([created_at])
+  @@index([user_id, created_at])
+}
+
+/// D-70: a message of a conversation. text — the customer's question (phones and e-mails cut out) or the AI answer;
+/// payload — the AI answer as the app shows it (products, tips, follow-up questions, clarifying options).
+model ai_chat_messages {
+  id            String    @id @default(uuid()) @db.Uuid
+  chat_id       String    @db.Uuid
+  /// user | ai
+  role          String
+  /// question | answer | clarify | off_topic | red_flag | failed
+  kind          String
+  text          String?
+  payload       Json?
+  model         String?
+  input_tokens  Int       @default(0)
+  output_tokens Int       @default(0)
+  cost_usd      Decimal   @default(0) @db.Decimal(12, 6)
+  latency_ms    Int?
+  /// why the answer was not shown: a check name or an error code
+  error         String?
+  created_at    DateTime  @default(now())
+  chat          ai_chats  @relation(fields: [chat_id], references: [id])
+
+  @@index([chat_id, created_at])
 }
 
 /// 3.8: VITALO AI answers of the cart, cached by product set (no quantities, no order) and language. A new answer is

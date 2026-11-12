@@ -22,6 +22,10 @@ export interface AiSettings {
   chat_daily_limit: number;
   /** Шаг 0б: the model of «Поможет ли этот набор для моей цели?» (the compatibility check stays on `model`); 0в compares */
   goal_model: string;
+  /** D-70: the conversation «Спросить VITALO AI»: the longest question, questions in one conversation, days the text is kept */
+  chat_max_chars: number;
+  chat_max_turns: number;
+  chat_retention_days: number;
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -31,6 +35,9 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   cart_daily_limit: 1,
   chat_daily_limit: 20,
   goal_model: 'claude-haiku-5-5',
+  chat_max_chars: 300,
+  chat_max_turns: 6,
+  chat_retention_days: 365,
 };
 
 export const AI_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'] as const;
@@ -46,6 +53,9 @@ export function mergeAiSettings(saved: unknown): AiSettings {
     cart_daily_limit: Math.round(num(s.cart_daily_limit, DEFAULT_AI_SETTINGS.cart_daily_limit, 0, 50)),
     chat_daily_limit: Math.round(num(s.chat_daily_limit, DEFAULT_AI_SETTINGS.chat_daily_limit, 0, 500)),
     goal_model: typeof s.goal_model === 'string' && (AI_MODELS as readonly string[]).includes(s.goal_model) ? s.goal_model : DEFAULT_AI_SETTINGS.goal_model,
+    chat_max_chars: Math.round(num(s.chat_max_chars, DEFAULT_AI_SETTINGS.chat_max_chars, 50, 1000)),
+    chat_max_turns: Math.round(num(s.chat_max_turns, DEFAULT_AI_SETTINGS.chat_max_turns, 1, 20)),
+    chat_retention_days: Math.round(num(s.chat_retention_days, DEFAULT_AI_SETTINGS.chat_retention_days, 30, 3650)),
   };
 }
 

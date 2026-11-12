@@ -676,6 +676,51 @@ export interface AiGoalAnswer {
   left_today: number;
 }
 
+/** D-70: «Спросить VITALO AI о корзине» — GET /api/compat/ai/chat, POST …/message. */
+export type AiChatTopic = AiGoalAnswer['goal'] | 'compat' | 'other';
+export interface AiChatProduct {
+  product_id: string;
+  name: string;
+  /** null — a question of compatibility: no label */
+  fit: AiGoalFit | null;
+  level: 'A' | 'B' | 'C' | null;
+  level_text: string | null;
+  text: string;
+  /** false — a product of the catalogue for an empty cart («В корзину») */
+  in_cart: boolean;
+}
+export interface AiChatMessage {
+  id: string;
+  role: 'user' | 'ai';
+  /** question | answer | clarify | off_topic | red_flag | failed */
+  kind: string;
+  text: string | null;
+  created_at: string;
+  topic?: AiChatTopic;
+  products?: AiChatProduct[];
+  steps?: string[];
+  followups?: string[];
+  options?: string[];
+  doctor?: string | null;
+  specialist?: boolean;
+}
+export interface AiChat {
+  id: string;
+  /** AI-20261112-0001 */
+  number: string;
+  questions: number;
+  messages: AiChatMessage[];
+}
+export interface AiChatState {
+  available: boolean;
+  consent: boolean;
+  left_today: number;
+  max_chars: number;
+  max_turns: number;
+  topics: AiGoalAnswer['goal'][];
+  chat: AiChat | null;
+}
+
 /** 6а-В (D-62): the manual promo label of a product, chosen in the admin product card. */
 export type PromoLabel = 'eleven_eleven' | 'black_friday' | 'hit' | 'new';
 

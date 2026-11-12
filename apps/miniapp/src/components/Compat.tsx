@@ -5,7 +5,7 @@ import { track } from '../lib/analytics';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useAiCompat, useCompat } from '../lib/queries';
 import { AiCompat, SpecialistBox, type AiCartItem } from './AiCompat';
-import { AiGoalBlock } from './AiGoal';
+import { AiChatSheet } from './AiChat';
 import type { CompatRequest, CompatState, CompatVerdict } from '../lib/types';
 import { AlertIcon, CheckIcon, CloseIcon, ShieldIcon } from './Icons';
 
@@ -47,6 +47,7 @@ export function CompatBlock({ productIds, items = [] }: { productIds: string[]; 
   const ai = useAiCompat(setKey, lang);
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [chat, setChat] = useState(false);
   const [refused, setRefused] = useState(readRefused);
   const [askConsent, setAskConsent] = useState(false);
   const s = compat.data;
@@ -83,7 +84,7 @@ export function CompatBlock({ productIds, items = [] }: { productIds: string[]; 
           setKey={setKey}
           items={items}
           onAsk={() => setOpen(true)}
-          below={<AiGoalBlock canAskSpecialist={canAsk} onAsk={() => setOpen(true)} />}
+          onChat={() => setChat(true)}
           onRefuse={() => {
             setAskConsent(false);
             writeRefused(true);
@@ -111,6 +112,20 @@ export function CompatBlock({ productIds, items = [] }: { productIds: string[]; 
         )
       )}
       {showAi && pending}
+      {chat && (
+        <AiChatSheet
+          items={items}
+          onClose={() => setChat(false)}
+          onAsk={
+            canAsk
+              ? () => {
+                  setChat(false);
+                  setOpen(true);
+                }
+              : undefined
+          }
+        />
+      )}
       {open && <CompatSheet state={s} onClose={() => setOpen(false)} onDone={(next) => client.setQueryData(['compat', setKey, lang], next)} />}
     </div>
   );

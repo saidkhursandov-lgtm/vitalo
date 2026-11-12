@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_CACHED_MS, AI_MIN_MS } from './components/AiCompat';
 import { CompatBlock } from './components/Compat';
 import { I18nProvider } from './lib/i18n';
-import type { AiAnswer, AiGoalAnswer, AiState, CompatState, Lang } from './lib/types';
+import type { AiAnswer, AiChat, AiChatState, AiState, CompatState, Lang } from './lib/types';
 
 const compat: CompatState = { eligible: true, products: ['Магний B6', 'Витамин D3'], left_today: 5, request: null };
 const answer: AiAnswer = {
@@ -20,27 +20,51 @@ const answer: AiAnswer = {
   reasons: { synergy: false, spread: false, avoid: false, overlap: false },
 };
 const ai = (over: Partial<AiState> = {}): AiState => ({ available: true, consent: true, eligible: true, left_today: 1, cached: false, answer: null, ...over });
-const goal: AiGoalAnswer = {
-  goal: 'sleep',
-  duration: '2to4w',
-  kind: 'fall_asleep',
-  summary: 'Для сна в этом наборе может помочь магний, витамин D3 для этой цели можно не брать.',
-  products: [
-    { product_id: 'p1', name: 'Магний B6', fit: 'maybe', level: 'B', level_text: 'Есть данные исследований', text: 'Может помочь, если мешает напряжение.' },
-    { product_id: 'p2', name: 'Витамин D3', fit: 'no_data', level: null, level_text: null, text: 'Данных немного: может помочь, если его мало в рационе.' },
+const chatAnswer: AiChat = {
+  id: 'c1',
+  number: 'AI-20261112-0001',
+  questions: 1,
+  messages: [
+    { id: 'm1', role: 'user', kind: 'question', text: 'Мне трудно заснуть — что из этого поможет?', created_at: '2026-11-12T10:00:00Z' },
+    {
+      id: 'm2',
+      role: 'ai',
+      kind: 'answer',
+      text: 'Для сна из вашей корзины может помочь магний.',
+      created_at: '2026-11-12T10:00:05Z',
+      topic: 'sleep',
+      products: [
+        { product_id: 'p1', name: 'Магний B6', fit: 'maybe', level: 'B', level_text: 'Есть данные исследований', text: 'Может помочь, если мешает напряжение.', in_cart: true },
+        { product_id: 'p2', name: 'Витамин D3', fit: 'no_data', level: null, level_text: null, text: 'Для сна его обычно не берут.', in_cart: true },
+      ],
+      steps: ['Уберите телефон за час до сна.'],
+      followups: ['Как принимать их вместе?'],
+      doctor: 'Если проблема держится дольше 3–4 недель — обратитесь к врачу.',
+      specialist: true,
+    },
   ],
-  steps: ['Ложитесь в одно и то же время.', 'Уберите телефон за час до сна.'],
-  doctor: 'Если проблема держится дольше 3–4 недель — обратитесь к врачу.',
-  left_today: 19,
 };
+const chatState = (over: Partial<AiChatState> = {}): AiChatState => ({
+  available: true,
+  consent: true,
+  left_today: 20,
+  max_chars: 300,
+  max_turns: 6,
+  topics: ['sleep', 'stress', 'energy', 'joints', 'immunity', 'sport'],
+  chat: null,
+  ...over,
+});
 
 let posted: { url: string; body: unknown }[];
-function mock(goalReply: { status: number; body: object } = { status: 200, body: goal }) {
+function mock(opts: { state?: AiChatState; reply?: { status: number; body: object } } = {}) {
   posted = [];
+  const reply = opts.reply ?? { status: 200, body: { chat: chatAnswer, left_today: 19 } };
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     if (url.includes('/analytics/events')) return new Response('{}', { status: 202 });
     if (init.method === 'POST') posted.push({ url, body: init.body ? JSON.parse(init.body as string) : null });
-    if (url.includes('/compat/ai/goal')) return new Response(JSON.stringify(goalReply.body), { status: goalReply.status });
+    if (url.includes('/compat/ai/chat/consent')) return new Response(JSON.stringify(chatState()));
+    if (url.includes('/compat/ai/chat/message')) return new Response(JSON.stringify(reply.body), { status: reply.status });
+    if (url.includes('/compat/ai/chat')) return new Response(JSON.stringify(opts.state ?? chatState()));
     if (url.includes('/compat/ai/check')) return new Response(JSON.stringify(ai({ result: 'ai', answer })));
     if (url.includes('/compat/ai')) return new Response(JSON.stringify(ai()));
     return new Response(JSON.stringify(compat));
@@ -68,7 +92,7 @@ async function openAnswer(lang: Lang = 'ru') {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
   await screen.findByRole('region', { name: lang === 'uz' ? 'VITALO AI moslik tahlili' : 'Разбор совместимости VITALO AI' });
 }
 
@@ -101,60 +125,97 @@ describe('D-70: VITALO AI at the top of the cart', () => {
   });
 });
 
-describe('Шаг 0б: «Задать вопрос VITALO AI по корзине» (D-68, D-69)', () => {
-  it('appears only under the AI answer and is folded; no text field anywhere', async () => {
+const items = [
+  { product_id: 'p1', name: 'Магний B6', image_url: null },
+  { product_id: 'p2', name: 'Витамин D3', image_url: null },
+];
+function showCart(lang: Lang = 'ru') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <I18nProvider lang={lang} setLang={() => undefined}>
+          <CompatBlock productIds={['p1', 'p2']} items={items} />
+        </I18nProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe('D-70: «Спросить VITALO AI о корзине» — the conversation', () => {
+  it('the window: the cart in short, questions in the customer voice by groups, the text field, the beta line', async () => {
     mock();
-    await openAnswer();
-    const toggle = screen.getByRole('button', { name: 'Задать вопрос VITALO AI по корзине' });
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByText('Поможет ли этот набор для моей цели?')).toBeNull();
-    fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Поможет ли этот набор для моей цели?' })).toBeTruthy();
-    expect(screen.queryByRole('textbox')).toBeNull();
+    showCart();
+    fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Спросить VITALO AI о корзине' });
+    expect(sheet.textContent).toContain('Магний B6, Витамин D3');
+    expect(await within(sheet).findByText('О корзине')).toBeTruthy();
+    expect(within(sheet).getByText('Что беспокоит')).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: 'Можно ли принимать их вместе?' })).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: 'Болят и хрустят суставы — что из этого поможет?' })).toBeTruthy();
+    expect((within(sheet).getByRole('textbox') as HTMLTextAreaElement).maxLength).toBe(300);
+    expect(sheet.textContent).toContain('VITALO AI работает в бета-режиме и пополняет свою базу знаний. Не заменяет консультацию врача.');
   });
 
-  it('goal → how long → what exactly; only the chips are sent; the answer: levels in words, steps, the doctor, the specialist', async () => {
+  it('a suggested question → the answer: labels in words, tips, the doctor, the specialist, follow-ups that continue the conversation', async () => {
     mock();
-    await openAnswer();
-    fireEvent.click(screen.getByRole('button', { name: 'Задать вопрос VITALO AI по корзине' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Поможет ли этот набор для моей цели?' }));
-    for (const g of ['Сон', 'Стресс', 'Энергия', 'Суставы', 'Иммунитет', 'Спорт']) expect(screen.getByRole('button', { name: g })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Сон' }));
-    expect(screen.getByText('Как давно беспокоит?')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '2–4 недели' }));
-    expect(screen.getByText('Что именно?')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Трудно заснуть' }));
-
-    const card = await screen.findByRole('region', { name: 'Ответ VITALO AI' });
-    expect(posted.filter((p) => p.url.includes('/compat/ai/goal'))).toEqual([{ url: '/api/compat/ai/goal', body: { goal: 'sleep', duration: '2to4w', kind: 'fall_asleep' } }]);
-    expect(card.textContent).toContain('Ответ VITALO AI: сон');
-    expect(within(card).getByText('Поможет при условии')).toBeTruthy();
-    expect(within(card).getByText('Данных немного')).toBeTruthy();
-    expect(within(card).getByText('Есть данные исследований')).toBeTruthy();
-    expect(card.textContent).not.toMatch(/уровень|\bB\b/);
-    expect(within(card).getByText('Уберите телефон за час до сна.')).toBeTruthy();
-    expect(card.textContent).toContain('Если проблема держится дольше 3–4 недель — обратитесь к врачу.');
-    fireEvent.click(within(card).getByRole('button', { name: /Спросить специалиста VITALO/ }));
+    showCart();
+    fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Спросить VITALO AI о корзине' });
+    fireEvent.click(await within(sheet).findByRole('button', { name: 'Мне трудно заснуть — что из этого поможет?' }));
+    expect(await within(sheet).findByText('Для сна из вашей корзины может помочь магний.')).toBeTruthy();
+    expect(posted.filter((p) => p.url.includes('/chat/message'))).toEqual([{ url: '/api/compat/ai/chat/message', body: { text: 'Мне трудно заснуть — что из этого поможет?', suggestion: 'concern' } }]);
+    expect(within(sheet).getByText('Поможет при условии')).toBeTruthy();
+    expect(within(sheet).getByText('Данных немного')).toBeTruthy();
+    expect(within(sheet).getByText('Есть данные исследований')).toBeTruthy();
+    expect(within(sheet).getByText('Уберите телефон за час до сна.')).toBeTruthy();
+    expect(sheet.textContent).toContain('Если проблема держится дольше 3–4 недель — обратитесь к врачу.');
+    expect(sheet.textContent).toContain('AI-20261112-0001');
+    expect(sheet.textContent).toContain('Осталось вопросов: 5');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Как принимать их вместе?' }));
+    await waitFor(() => expect(posted.filter((p) => p.url.includes('/chat/message')).at(-1)!.body).toEqual({ text: 'Как принимать их вместе?', chat_id: 'c1', suggestion: 'followup' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: /Спросить специалиста VITALO/ }));
     expect(screen.getByRole('dialog', { name: 'Проверить совместимость у специалиста' })).toBeTruthy();
   });
 
-  it('the limit and a failure: a plain message and the way to the specialist', async () => {
-    mock({ status: 429, body: { code: 'AI_DAILY_LIMIT' } });
-    await openAnswer();
-    fireEvent.click(screen.getByRole('button', { name: 'Задать вопрос VITALO AI по корзине' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Поможет ли этот набор для моей цели?' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Энергия' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Дольше месяца' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Спад после обеда' }));
-    expect(await screen.findByText(/Сегодня вопросов больше нет/)).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /Спросить специалиста VITALO/ }).length).toBeGreaterThan(0);
+  it('own text; the limit: a plain message and the specialist', async () => {
+    mock({ reply: { status: 429, body: { code: 'AI_DAILY_LIMIT' } } });
+    showCart();
+    fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Спросить VITALO AI о корзине' });
+    fireEvent.change(await within(sheet).findByRole('textbox'), { target: { value: 'Можно пить магний с кофе?' } });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Отправить' }));
+    expect(await within(sheet).findByText(/Сегодня вопросов больше нет/)).toBeTruthy();
+    expect(posted.at(-1)!.body).toEqual({ text: 'Можно пить магний с кофе?' });
+    expect(within(sheet).getByRole('button', { name: /Спросить специалиста VITALO/ })).toBeTruthy();
   });
 
-  it('Uzbek: the toggle and the chips', async () => {
+  it('the consent of D-70 is asked in the window; 6 questions used — «Новый разговор»', async () => {
+    mock({ state: chatState({ consent: false }) });
+    showCart();
+    fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Спросить VITALO AI о корзине' });
+    expect(await within(sheet).findByText(/хранится у VITALO 12 месяцев/)).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Я согласен' }));
+    expect(await within(sheet).findByText('О корзине')).toBeTruthy();
+    cleanup();
+
+    mock({ state: chatState({ chat: { ...chatAnswer, questions: 6 } }) });
+    showCart();
+    fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
+    const full = await screen.findByRole('dialog', { name: 'Спросить VITALO AI о корзине' });
+    expect(await within(full).findByText('В этом разговоре вопросов больше нет. Начните новый.')).toBeTruthy();
+    expect(within(full).queryByRole('textbox')).toBeNull();
+    fireEvent.click(within(full).getAllByRole('button', { name: 'Новый разговор' }).at(-1)!);
+    expect(within(full).getByRole('textbox')).toBeTruthy();
+    expect(within(full).getByText('О корзине')).toBeTruthy();
+  });
+
+  it('Uzbek: the button and the questions', async () => {
     mock();
-    await openAnswer('uz');
-    fireEvent.click(screen.getByRole('button', { name: 'VITALO AI ga savat boʻyicha savol berish' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Bu toʻplam maqsadimga yordam beradimi?' }));
-    expect(screen.getByRole('button', { name: 'Boʻgʻimlar' })).toBeTruthy();
+    showCart('uz');
+    fireEvent.click(await screen.findByRole('button', { name: 'VITALO AI dan savat haqida soʻrash' }));
+    const sheet = await screen.findByRole('dialog', { name: 'VITALO AI dan savat haqida soʻrash' });
+    expect(await within(sheet).findByRole('button', { name: 'Boʻgʻimlarim ogʻriydi va qisirlaydi — bulardan qaysi biri yordam beradi?' })).toBeTruthy();
   });
 });

@@ -29,6 +29,7 @@ import { AdminSupportController, SupportController, SupportService } from '../su
 import { AdminKnowledgeController, KnowledgeService } from '../compat/knowledge.service';
 import { AdminAiController, AiController, AiService } from '../compat/ai.service';
 import { AdminGoalEvidenceController, AiGoalController, AiGoalService, GoalEvidenceService } from '../compat/ai-goal.service';
+import { AdminAiChatsController, AiChatAdminService, AiChatController, AiChatService } from '../compat/ai-chat.service';
 import { AI_MODEL, AnthropicModel } from '../compat/ai-client';
 import { AdminSettingsController, AdminSettingsService, AuditController, StaffUsersController } from './admin-settings';
 import { AuditService } from './audit.service';
@@ -112,6 +113,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AiController,
     AdminAiController,
     AiGoalController,
+    AiChatController,
+    AdminAiChatsController,
     AdminGoalEvidenceController,
     AdminKnowledgeController,
     IherbPricesController,
@@ -165,6 +168,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     KnowledgeService,
     AiService,
     AiGoalService,
+    AiChatService,
+    AiChatAdminService,
     GoalEvidenceService,
     { provide: AI_MODEL, useClass: AnthropicModel },
     BotSecretGuard,

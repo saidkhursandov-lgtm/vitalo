@@ -77,7 +77,8 @@ describe('3.8 VITALO AI in the cart', () => {
     show();
     const main = await screen.findByRole('button', { name: /Сверить совместимость \d+ товаров с помощью VITALO AI/ });
     expect(main.textContent).toContain('Получите разбор совместимости и режим приёма за несколько секунд');
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+    // D-70: the second button — «Спросить VITALO AI о корзине»
+    expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toEqual([expect.stringContaining('Сверить совместимость'), 'Спросить VITALO AI о корзине']);
     expect(screen.queryByText(/у специалиста|специалиста лично/)).toBeNull();
   });
 
@@ -142,7 +143,7 @@ describe('3.8 VITALO AI in the cart', () => {
   it('a repeated substance is named once, by the app, in one short line', async () => {
     mock(compat(), ai({ cached: true, answer: answer() }), { check: { status: 200, body: ai({ result: 'ai_cache', cached: true, answer: answer() }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     const card = await screen.findByRole('region', { name: 'Разбор совместимости VITALO AI' });
     expect(card.querySelectorAll('.ai-overlap')).toHaveLength(1);
     expect(card.querySelector('.ai-overlap')!.textContent!.trim()).toBe('Повтор: Витамин B6 — проверьте суммарную дозировку');
@@ -160,7 +161,7 @@ describe('3.8 VITALO AI in the cart', () => {
     const dose = ai({ result: 'ai_cache', cached: true, answer: answer({ reasons: { ...no, overlap: true } }) });
     mock(compat(), dose, { check: { status: 200, body: dose } });
     show('uz');
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     const card = await screen.findByRole('region', { name: 'VITALO AI moslik tahlili' });
     expect(card.querySelector('.ai-verdict')!.textContent).toBe('Dozani tekshiring');
   });
@@ -169,7 +170,7 @@ describe('3.8 VITALO AI in the cart', () => {
     AI_MIN_MS.value = 400;
     mock(compat(), ai(), { check: { status: 200, body: ai({ result: 'ai', answer: answer({ overlaps: [], overlap_text: null, drugs: [] }) }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     expect(await screen.findByText('Сверяю 2 товара…')).toBeTruthy();
     for (const step of ['Сверяем вещества и формы в товарах…', 'Ищем повторы веществ в разных товарах…', 'Проверяем правила сочетаний VITALO…', 'Составляем режим приёма: утро / вечер…']) {
       expect(screen.getByText(step)).toBeTruthy();
@@ -193,7 +194,7 @@ describe('3.8 VITALO AI in the cart', () => {
     AI_MIN_MS.value = 5000;
     mock(compat(), ai({ left_today: 0 }), { check: { status: 429, body: { code: 'AI_DAILY_LIMIT' } } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     expect(screen.getByText(/Бесплатная AI-проверка доступна 1 раз в день/)).toBeTruthy();
     expect(screen.queryByText('Сверяю 2 товара…')).toBeNull();
     expect(posts('/compat/ai/check')).toBe(0);
@@ -205,7 +206,7 @@ describe('3.8 VITALO AI in the cart', () => {
     AI_MIN_MS.value = 5000;
     mock(compat(), ai({ left_today: 0, cached: true }), { check: { status: 200, body: ai({ result: 'ai_cache', left_today: 0, cached: true, answer: answer() }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     expect(await screen.findByRole('region', { name: 'Разбор совместимости VITALO AI' })).toBeTruthy();
     expect(posts('/compat/ai/check')).toBe(1);
   });
@@ -213,7 +214,7 @@ describe('3.8 VITALO AI in the cart', () => {
   it('an error: the message and «Спросить специалиста лично»', async () => {
     mock(compat(), ai(), { check: { status: 500, body: { code: 'X' } } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     expect(await screen.findByText(/Не удалось проверить/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Спросить специалиста лично' })).toBeTruthy();
   });
@@ -221,7 +222,7 @@ describe('3.8 VITALO AI in the cart', () => {
   it('the AI could not answer: «Ответ готовит специалист VITALO — пришлём в бот»', async () => {
     mock(compat(), ai(), { check: { status: 200, body: ai({ result: 'specialist', reason: 'invalid' }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     expect(await screen.findByText('Ответ готовит специалист VITALO — пришлём в бот')).toBeTruthy();
   });
 
@@ -251,7 +252,7 @@ describe('Шаг 0а: VITALO AI first, the result only by the tap, the specialis
   it('under the AI answer: «Есть ответ специалиста VITALO» opens the text without a second badge; «Спросить специалиста лично» stays', async () => {
     mock(compat(), ai(), { check: { status: 200, body: ai({ result: 'ai', answer: answer(), specialist: spec }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     const card = await screen.findByRole('region', { name: 'Разбор совместимости VITALO AI' });
     expect(card.textContent).not.toContain(spec.text);
     fireEvent.click(within(card).getByRole('button', { name: /Есть ответ специалиста VITALO/ }));
@@ -265,7 +266,7 @@ describe('Шаг 0а: VITALO AI first, the result only by the tap, the specialis
   it('the labels differ: only the AI answer, no link to the specialist answer', async () => {
     mock(compat(), ai(), { check: { status: 200, body: ai({ result: 'ai', answer: answer({ verdict: 'consult' }), specialist: { ...spec, conflict: true } }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     const card = await screen.findByRole('region', { name: 'Разбор совместимости VITALO AI' });
     expect(screen.queryByText(/Есть ответ специалиста VITALO/)).toBeNull();
     expect(card.textContent).not.toContain(spec.text);
@@ -274,7 +275,7 @@ describe('Шаг 0а: VITALO AI first, the result only by the tap, the specialis
   it('the AI could not answer and a saved specialist answer was given at once: it is shown by the tap', async () => {
     mock(compat(), ai(), { check: { status: 200, body: ai({ result: 'instant', answer: null, specialist: spec }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     expect(await screen.findByText(spec.text)).toBeTruthy();
     expect(screen.getByText('Разнести по времени')).toBeTruthy();
   });
@@ -283,7 +284,7 @@ describe('Шаг 0а: VITALO AI first, the result only by the tap, the specialis
     const pending = { id: 'r1', status: 'pending' as const, source: 'specialist' as const, verdict: null, text: null, created_at: '', answered_at: null, changed: false, products: [] };
     mock(compat({ request: pending }), ai());
     const { container } = show();
-    await screen.findByRole('button', { name: /VITALO AI/ });
+    await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s });
     const kids = [...container.querySelector('.compat')!.children].map((e) => e.className);
     expect(kids.indexOf('ai-compat')).toBeLessThan(kids.indexOf('compat-pending'));
   });

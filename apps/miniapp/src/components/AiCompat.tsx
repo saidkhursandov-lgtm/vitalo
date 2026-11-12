@@ -81,7 +81,7 @@ export const isEvening = (when: string) => /вечер|ноч|сн[ае]|пер�
  * and on an error.
  * Шаг 0а (D-66, D-68): the block is folded until it is tapped — no answer opens by itself, a cached one too. Under the
  * AI answer — «Есть ответ специалиста VITALO» (when there is one with the same label) and «Спросить специалиста».
- * `below` — what goes under the answer (Шаг 0б: «Задать вопрос VITALO AI по корзине»).
+ * D-70: «Спросить VITALO AI о корзине» (`onChat`) — under the answer and in the folded block.
  */
 export function AiCompat({
   state,
@@ -91,7 +91,6 @@ export function AiCompat({
   onChange,
   onRefuse,
   askConsent = false,
-  below,
   setKey = '',
   items = [],
   onChat,
@@ -105,7 +104,6 @@ export function AiCompat({
   onRefuse: () => void;
   /** open the consent at once («Проверить с VITALO AI» after a refusal) */
   askConsent?: boolean;
-  below?: ReactNode;
   /** D-70: the set of the cart — «Корзина изменилась — сверить снова» and the answer kept for the same set */
   setKey?: string;
   /** D-70: thumbnails in the block and in the analysis */
@@ -177,7 +175,6 @@ export function AiCompat({
         <>
           <AiAnswerCard answer={state.answer} ask={ask} specialist={specialist} />
           {chat}
-          {below}
         </>
       ) : shown && state.specialist ? (
         // the AI could not answer and a saved specialist answer was given at once
