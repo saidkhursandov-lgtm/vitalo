@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dateTime, discountPercent, money, nameOf, normalizePhone, prettyPhone, textOf } from './format';
 import { dictionaries, errorText, pluralForm, statusKey, translate } from './i18n';
-import { createIdempotencyKeys } from './idempotency';
+import { createIdempotencyKeys, REUSE_MS } from './idempotency';
 import { qs } from './api';
 
 describe('i18n', () => {
@@ -101,6 +101,22 @@ describe('idempotency keys', () => {
     const first = keys.keyFor(body);
     expect(keys.keyFor({ ...body })).toBe(first);
     expect(keys.keyFor({ ...body, city_id: 'c2' })).not.toBe(first);
+  });
+
+  it('аудит 2.2: the checkout opened anew (back, reload) reuses the key for a short while; later the same cart is a new order', () => {
+    const store = new Map<string, string>();
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) } as unknown as Storage;
+    let now = 1_000_000;
+    const body = { source: 'cart', city_id: 'c1' };
+    const first = createIdempotencyKeys(storage, () => now).keyFor(body);
+    now += 60_000; // a minute later, a new checkout screen
+    expect(createIdempotencyKeys(storage, () => now).keyFor({ ...body })).toBe(first);
+    now += REUSE_MS + 1;
+    expect(createIdempotencyKeys(storage, () => now).keyFor({ ...body })).not.toBe(first);
+    // storage that throws (private mode) still works in memory
+    const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } } as unknown as Storage;
+    const k = createIdempotencyKeys(broken);
+    expect(k.keyFor(body)).toBe(k.keyFor({ ...body }));
   });
 });
 

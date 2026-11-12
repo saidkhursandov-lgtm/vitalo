@@ -60,6 +60,8 @@ export function Checkout() {
   const [cartPick] = useCartMapPick();
   const { create: saveAddress } = useAddressActions();
   const keys = useRef(createIdempotencyKeys()).current;
+  // аудит 2.2: a second tap before React re-renders the disabled button must not send the order again
+  const sending = useRef(false);
   useEffect(() => track('checkout_start', { source: params.get('buy') ? 'buy_now' : 'cart' }), [params]);
   const [sharing, setSharing] = useState(false);
 
@@ -223,6 +225,8 @@ export function Checkout() {
       promo_code: preview.data.promo?.code ?? '',
       expected_total_uzs: preview.data.totals.total_uzs,
     };
+    if (sending.current) return;
+    sending.current = true;
     try {
       const order = await placeOrder.mutateAsync({ body, key: keys.keyFor(body) });
       haptic('success');
@@ -248,6 +252,8 @@ export function Checkout() {
         void preview.refetch();
         void client.invalidateQueries({ queryKey: ['cart'] });
       }
+    } finally {
+      sending.current = false;
     }
   }
 
