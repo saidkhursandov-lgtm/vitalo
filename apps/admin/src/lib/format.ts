@@ -213,6 +213,9 @@ export const AUDIT_ACTION: Record<string, string> = {
   'compat.ai_approved': 'Ответ VITALO AI одобрен',
   'compat.ai_fixed': 'Ответ VITALO AI исправлен',
   'compat.ai_hidden': 'Ответ VITALO AI скрыт от покупателей',
+  // D-70: «Переписки VITALO AI»
+  'ai_chat.viewed': 'Открыта переписка покупателя с VITALO AI',
+  'ai_chat.reviewed': 'Отмечена проверка переписки VITALO AI',
   'competitor_price.added': 'Добавлена цена конкурента',
   'competitor_price.hidden': 'Скрыта цена конкурента',
   'dictionary.created': 'Добавлена запись справочника',

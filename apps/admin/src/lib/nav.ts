@@ -34,6 +34,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
       // 3.4: questions from the cart — admin and «специалист» answer, manager only looks
       { to: '/compat', label: 'Вопросы о совместимости', permission: 'compat.view' },
+      // D-70: conversations of customers with VITALO AI — admin and «специалист» only, each opening is audited
+      { to: '/ai-chats', label: 'Переписки VITALO AI', permission: 'compat.answer' },
       // 6а-Д: questions from «Спросить специалиста» in the Mini App
       { to: '/support', label: 'Обращения', permission: 'support.view' },
     ],

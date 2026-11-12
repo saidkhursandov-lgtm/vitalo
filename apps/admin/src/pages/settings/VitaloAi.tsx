@@ -13,6 +13,10 @@ export interface AiSettings {
   chat_daily_limit: number;
   /** Шаг 0б: the model of «Поможет ли этот набор для моей цели?» */
   goal_model?: string;
+  /** D-70: the conversation «Спросить VITALO AI» */
+  chat_max_chars?: number;
+  chat_max_turns?: number;
+  chat_retention_days?: number;
 }
 export interface AiSettingsView {
   settings: AiSettings;
@@ -98,7 +102,7 @@ export function VitaloAiSettings() {
               ))}
             </select>
           </Field>
-          <Field label="Модель для вопроса по корзине" hint="«Поможет ли этот набор для моей цели?». Проверка совместимости всегда на модели выше.">
+          <Field label="Модель для переписки" hint="«Спросить VITALO AI о корзине» и «Поможет ли этот набор для моей цели?». Проверка совместимости всегда на модели выше.">
             <select value={form.goal_model ?? 'claude-haiku-5-5'} onChange={(e) => set('goal_model', e.target.value)}>
               {s.models.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -113,8 +117,17 @@ export function VitaloAiSettings() {
           <Field label="Новых AI-проверок корзины в день на покупателя" hint="Ответы из кэша и сохранённые ответы специалиста — без лимита.">
             <input type="number" min={0} max={50} step="1" value={form.cart_daily_limit} onChange={(e) => set('cart_daily_limit', Math.round(num(e.target.value)))} />
           </Field>
-          <Field label="Вопросов VITALO AI в день на покупателя" hint="Вопрос по корзине «Поможет ли этот набор для моей цели?» и чат (он появится позже).">
+          <Field label="Вопросов VITALO AI в день на покупателя" hint="Все вопросы в переписке «Спросить VITALO AI» за день. Вопросы, на которые VITALO AI сразу советует врача, не считаются.">
             <input type="number" min={0} max={500} step="1" value={form.chat_daily_limit} onChange={(e) => set('chat_daily_limit', Math.round(num(e.target.value)))} />
+          </Field>
+          <Field label="Длина вопроса в переписке, символов" hint="От 50 до 1000. Покупатель видит счётчик у поля.">
+            <input type="number" min={50} max={1000} step="10" value={form.chat_max_chars ?? 300} onChange={(e) => set('chat_max_chars', Math.round(num(e.target.value)))} />
+          </Field>
+          <Field label="Вопросов в одном разговоре" hint="От 1 до 20. Потом — «Новый разговор».">
+            <input type="number" min={1} max={20} step="1" value={form.chat_max_turns ?? 6} onChange={(e) => set('chat_max_turns', Math.round(num(e.target.value)))} />
+          </Field>
+          <Field label="Хранить текст переписки, дней" hint="От 30 до 3650. Затем текст стирается, номер и итог остаются. В согласии покупателя сказано: 12 месяцев.">
+            <input type="number" min={30} max={3650} step="1" value={form.chat_retention_days ?? 365} onChange={(e) => set('chat_retention_days', Math.round(num(e.target.value)))} />
           </Field>
           <ErrorBox error={save.error} />
           <div className="modal-actions">
