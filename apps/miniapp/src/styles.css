@@ -1142,6 +1142,18 @@ html.has-action .app.kb-open .content { padding-bottom: 0; }
 }
 .ai-badge svg { flex: none; }
 .ai-text { margin: 0; font-size: 14px; line-height: 1.5; }
+/* D-70: the two actions of the centre «VITALO AI» */
+.ai-actions { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.ai-action { width: 100%; min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--ai-box-border); border-radius: var(--radius); background: var(--ai-box-bg); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.ai-action > svg:first-child { flex: none; color: var(--primary); }
+.ai-action > svg:last-child { flex: none; color: var(--muted); }
+.ai-action > span { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ai-action strong { font-size: 15px; color: var(--primary-text); }
+.ai-action > span > span { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.ai-sheet-warn { width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--warning-soft); color: var(--text); text-align: left; font-size: 13.5px; line-height: 1.4; }
+.ai-sheet-warn p { margin: 0 0 8px; }
+.ai-sheet-warn-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-sheet-warn-actions .btn { flex: 1 1 140px; }
 .ai-chips { list-style: none; margin: 4px 0 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .ai-chip {
   width: 100%; min-height: var(--tap); display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-sm);

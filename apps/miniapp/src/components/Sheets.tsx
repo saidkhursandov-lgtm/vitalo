@@ -1,10 +1,13 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { track } from '../lib/analytics';
+import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../lib/i18n';
-import { useShopTexts } from '../lib/queries';
+import { shortNameOf } from '../lib/format';
+import { useCart, useShopTexts } from '../lib/queries';
 import type { LocalizedText } from '../lib/types';
 import { AcceptIcon, ChevronIcon, CloseIcon, LockIcon, RejectIcon, ShieldIcon, SparkIcon, SupportIcon } from './Icons';
 import { AskSheet, type AskOptions } from './AskSheet';
+import { AiChatSheet } from './AiChat';
 
 type ManifestSource = 'home' | 'ai_sheet';
 
@@ -23,7 +26,7 @@ export const useSheets = () => useContext(Ctx);
  * «Подбор» sheet of the centre menu button. One at a time: opening the manifest from «Подбор» replaces it.
  */
 export function SheetsProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState<'manifest' | 'ai' | 'ask' | null>(null);
+  const [open, setOpen] = useState<'manifest' | 'ai' | 'ask' | 'chat' | null>(null);
   const [ask, setAsk] = useState<AskOptions>({});
   const openManifest = useCallback((source: ManifestSource) => {
     track('manifest_open', { source });
@@ -43,7 +46,8 @@ export function SheetsProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={value}>
       {children}
       {open === 'manifest' && <ManifestSheet onClose={close} />}
-      {open === 'ai' && <AiSheet onClose={close} onManifest={() => openManifest('ai_sheet')} />}
+      {open === 'ai' && <AiSheet onClose={close} onManifest={() => openManifest('ai_sheet')} onChat={() => setOpen('chat')} />}
+      {open === 'chat' && <CartChat onClose={close} onAsk={() => openAsk()} />}
       {open === 'ask' && <AskSheet options={ask} onClose={close} />}
     </Ctx.Provider>
   );
@@ -140,7 +144,7 @@ function ManifestSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-const AI_CHIPS = ['ai.chipGoals', 'ai.chipCart', 'ai.chipQuick'] as const;
+const AI_CHIPS = ['ai.chipGoals'] as const;
 
 /** A «Скоро» preview chip: does nothing, only shakes a little (not with reduced motion). */
 function SoonChip({ label }: { label: string }) {
@@ -157,10 +161,39 @@ function SoonChip({ label }: { label: string }) {
   );
 }
 
-/** «AI-подбор» until release 5 (D-37): what is coming, three locked previews and two ways to get help now. */
-function AiSheet({ onClose, onManifest }: { onClose: () => void; onManifest: () => void }) {
+/** The cart of the customer in short, for «Спросить VITALO AI» from the centre button (D-70). */
+function useCartItems() {
+  const { lang } = useI18n();
+  const cart = useCart();
+  const items = (cart.data?.items ?? []).map((l) => ({ product_id: l.product_id, name: shortNameOf(l, lang), image_url: l.image_url ?? null }));
+  return { items, loaded: !!cart.data };
+}
+
+function CartChat({ onClose, onAsk }: { onClose: () => void; onAsk: () => void }) {
+  const { items } = useCartItems();
+  return <AiChatSheet items={items} onClose={onClose} onAsk={onAsk} />;
+}
+
+/**
+ * The centre «VITALO AI» (D-70): «Спросить VITALO AI» (the conversation; with an empty cart it suggests products of the
+ * catalogue) and «Проверить совместимость корзины» (2+ products → the cart, where the check is at the top; an empty cart
+ * or one product — a plain warning and the way to the catalogue). «Подбор курса по целям» is still «Скоро» (D-37).
+ */
+function AiSheet({ onClose, onManifest, onChat }: { onClose: () => void; onManifest: () => void; onChat: () => void }) {
   const { t, lang } = useI18n();
+  const navigate = useNavigate();
   const manifest = useShopTexts().data?.manifest;
+  const { items, loaded } = useCartItems();
+  const [warn, setWarn] = useState<'empty' | 'one' | null>(null);
+  const go = (to: string) => {
+    onClose();
+    navigate(to);
+  };
+  const check = () => {
+    if (!loaded) return;
+    if (items.length >= 2) go('/cart');
+    else setWarn(items.length === 0 ? 'empty' : 'one');
+  };
   return (
     <SheetFrame label={t('nav.ai')} onClose={onClose} className="ai-sheet">
       <div className="sheet-body ai-sheet-body">
@@ -170,6 +203,39 @@ function AiSheet({ onClose, onManifest }: { onClose: () => void; onManifest: () 
         </span>
         <h2>{t('ai.title')}</h2>
         <p className="ai-text">{t('ai.text')}</p>
+        <div className="ai-actions">
+          <button type="button" className="ai-action" onClick={onChat}>
+            <SparkIcon width={20} height={20} aria-hidden />
+            <span>
+              <strong>{t('aisheet.ask')}</strong>
+              <span>{t('aisheet.askSub')}</span>
+            </span>
+            <ChevronIcon width={18} height={18} aria-hidden />
+          </button>
+          <button type="button" className="ai-action" onClick={check}>
+            <ShieldIcon width={20} height={20} aria-hidden />
+            <span>
+              <strong>{t('aisheet.check')}</strong>
+              <span>{t('aisheet.checkSub')}</span>
+            </span>
+            <ChevronIcon width={18} height={18} aria-hidden />
+          </button>
+        </div>
+        {warn && (
+          <div className="ai-sheet-warn" role="alert">
+            <p>{t(warn === 'empty' ? 'aisheet.empty' : 'aisheet.one')}</p>
+            <div className="ai-sheet-warn-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => go('/catalog')}>
+                <span>{t('aisheet.catalog')}</span>
+              </button>
+              {warn === 'empty' && (
+                <button type="button" className="btn" onClick={onChat}>
+                  <span>{t('aisheet.ask')}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <ul className="ai-chips">
           {AI_CHIPS.map((k) => (
             <SoonChip key={k} label={t(k)} />

@@ -41,6 +41,7 @@ let waiting: string[];
 let puts: string[];
 let deletes: string[];
 let events: string[];
+let cartItems: { product_id: string; name_ru: string; image_url: null }[];
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.stubGlobal('scrollTo', () => undefined);
@@ -51,6 +52,7 @@ beforeEach(() => {
   puts = [];
   deletes = [];
   events = [];
+  cartItems = [];
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
     const json = (b: unknown) => new Response(JSON.stringify(b));
@@ -72,6 +74,8 @@ beforeEach(() => {
       return json({ status: 'cancelled' });
     }
     if (url.endsWith('/cart/count')) return json({ items_count: 0, goods_total_uzs: 0 });
+    if (/\/cart(\?|$)/.test(url)) return json({ items: cartItems, warnings: [] });
+    if (url.includes('/compat/ai/chat')) return json({ available: true, consent: true, left_today: 20, max_chars: 300, max_turns: 6, topics: ['sleep', 'stress', 'energy', 'joints', 'immunity', 'sport'], chat: null });
     if (url.includes('/catalog/texts')) return json({ support_url: 'https://t.me/VITALO_support', manifest });
     return json([]);
   });
@@ -178,10 +182,12 @@ describe('2.4: the centre «VITALO AI» (3.8, was «AI-подбор»)', () => {
     expect(within(nav).getAllByText(/^(Главная|Каталог|VITALO AI|Избранное|Профиль)$/).map((x) => x.textContent)).toEqual(['Главная', 'Каталог', 'VITALO AI', 'Избранное', 'Профиль']);
     fireEvent.click(within(nav).getByRole('button', { name: 'VITALO AI' }));
     const sheet = await screen.findByRole('dialog');
-    expect(within(sheet).getByText('Персональный AI-подбор курса витаминов')).toBeTruthy();
+    expect(within(sheet).getByText('VITALO AI — помощник по добавкам')).toBeTruthy();
     expect(within(sheet).getByText('VITALO AI • по правилам отбора VITALO')).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: /Спросить VITALO AI/ })).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: /Проверить совместимость корзины/ })).toBeTruthy();
     const chips = within(sheet).getAllByRole('button', { name: /Скоро/ });
-    expect(chips).toHaveLength(3);
+    expect(chips).toHaveLength(1);
     fireEvent.click(chips[0]); // does nothing: no navigation, no request, the sheet stays
     expect(chips[0].getAttribute('aria-disabled')).toBe('true');
     expect(screen.getByRole('dialog')).toBe(sheet);
@@ -190,6 +196,66 @@ describe('2.4: the centre «VITALO AI» (3.8, was «AI-подбор»)', () => {
     await vi.waitFor(() => expect(events).toContain('ai_tab_click'));
     fireEvent.click(await within(sheet).findByRole('button', { name: 'Как VITALO отбирает добавки' }));
     expect(await screen.findByText('Вступление')).toBeTruthy();
+  });
+});
+
+describe('D-70: the centre «VITALO AI» — two actions', () => {
+  function showLayout() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <I18nProvider lang="ru" setLang={() => undefined}>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route path="/" element={<p>Главная</p>} />
+                <Route path="/cart" element={<p>Экран корзины</p>} />
+                <Route path="/catalog" element={<p>Экран каталога</p>} />
+              </Route>
+            </Routes>
+          </I18nProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+  const openSheet = async () => {
+    fireEvent.click(within(await screen.findByRole('navigation')).getByRole('button', { name: 'VITALO AI' }));
+    return screen.findByRole('dialog');
+  };
+
+  it('an empty cart: «Корзина пуста…» with «В каталог» and «Спросить VITALO AI»; the chat suggests products of the catalogue', async () => {
+    showLayout();
+    const sheet = await openSheet();
+    await vi.waitFor(() => expect(events).toContain('ai_tab_click'));
+    fireEvent.click(within(sheet).getByRole('button', { name: /Проверить совместимость корзины/ }));
+    expect((await within(sheet).findByRole('alert')).textContent).toBe('Корзина пуста. Сначала добавьте нужные товары. Не знаете, что выбрать? Спросите VITALO AI.В каталогСпросить VITALO AI');
+    fireEvent.click(within(within(sheet).getByRole('alert')).getByRole('button', { name: 'Спросить VITALO AI' }));
+    const chat = await screen.findByRole('dialog', { name: 'Спросить VITALO AI' });
+    expect(await within(chat).findByRole('button', { name: 'Мне трудно заснуть — что выбрать?' })).toBeTruthy();
+    expect(chat.textContent).toContain('Корзина пуста');
+  });
+
+  it('one product: «нужно хотя бы 2 товара» and «В каталог»; two products: to the cart', async () => {
+    cartItems = [{ product_id: 'p1', name_ru: 'Магний', image_url: null }];
+    showLayout();
+    let sheet = await openSheet();
+    fireEvent.click(within(sheet).getByRole('button', { name: /Проверить совместимость корзины/ }));
+    await vi.waitFor(() => expect(within(sheet).getByRole('alert').textContent).toContain('Для проверки совместимости нужно хотя бы 2 товара в корзине.'));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'В каталог' }));
+    expect(await screen.findByText('Экран каталога')).toBeTruthy();
+    cleanup();
+
+    cartItems = [
+      { product_id: 'p1', name_ru: 'Магний', image_url: null },
+      { product_id: 'p2', name_ru: 'Витамин D3', image_url: null },
+    ];
+    showLayout();
+    sheet = await openSheet();
+    await vi.waitFor(() => {
+      fireEvent.click(within(sheet).getByRole('button', { name: /Проверить совместимость корзины/ }));
+      expect(screen.getByText('Экран корзины')).toBeTruthy();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 
