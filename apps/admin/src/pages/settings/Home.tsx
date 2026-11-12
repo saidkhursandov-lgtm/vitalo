@@ -40,6 +40,8 @@ export function HomeSettings() {
   const q = useQuery({ queryKey: ['settings', 'home'], queryFn: () => api<HomeContent>('/staff/settings/home') });
   const [f, setF] = useState<HomeContent | null>(null);
   const [saved, setSaved] = useState(false);
+  // аудит 4.3: preview of the blocks as the customer sees them, RU or UZ, from the unsaved form
+  const [lang, setLang] = useState<'ru' | 'uz'>('ru');
   useEffect(() => {
     if (q.data) setF(q.data);
   }, [q.data]);
@@ -89,6 +91,39 @@ export function HomeSettings() {
         {f.steps.items.map((s, i) => (
           <TextPair key={i} label={`Шаг ${i + 1}`} value={s} onChange={(v) => set({ ...f, steps: { ...f.steps, items: f.steps.items.map((x, j) => (j === i ? v : x)) } })} />
         ))}
+      </section>
+
+      <section className="card narrow">
+        <div className="section-head">
+          <h2>Как увидит покупатель</h2>
+          <div className="segmented">
+            {(['ru', 'uz'] as const).map((l) => (
+              <button key={l} type="button" className={lang === l ? 'is-on' : ''} onClick={() => setLang(l)}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="muted small">Предпросмотр ещё не сохранённого текста. {'{delivery}'}, {'{from}'}, {'{to}'} магазин заменит сроками и часами.</p>
+        <div className="home-preview">
+          <div className="home-preview-tiles">
+            {f.trust
+              .filter((t) => t.enabled)
+              .map((t) => (
+                <div key={t.key} className="home-preview-tile">
+                  <strong>{t.title[lang] || <span className="text-bad">нет текста</span>}</strong>
+                  <span>{t.text[lang] || <span className="text-bad">нет текста</span>}</span>
+                </div>
+              ))}
+          </div>
+          {f.steps.enabled && (
+            <ol className="home-preview-steps">
+              {f.steps.items.map((s, i) => (
+                <li key={i}>{s[lang] || <span className="text-bad">нет текста</span>}</li>
+              ))}
+            </ol>
+          )}
+        </div>
       </section>
 
       <ErrorBox error={save.error} />

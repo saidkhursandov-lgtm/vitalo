@@ -75,6 +75,24 @@ export class AdminBannersService {
     return this.prisma.home_banners.findMany({ orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }] });
   }
 
+  /** Аудит 4.3: shows and taps of each banner over the last 30 days (customers who saw it / tapped, once per session). */
+  async stats(now = new Date()): Promise<Map<string, { views: number; clicks: number }>> {
+    const since = new Date(now.getTime() - 30 * 86_400_000);
+    const rows = await this.prisma.$queryRaw<{ banner_id: string; event: string; n: bigint }[]>`
+      SELECT props->>'banner_id' AS banner_id, event, COUNT(*) AS n
+      FROM analytics_events
+      WHERE event IN ('home_banner_view', 'home_banner_click') AND created_at >= ${since} AND props ? 'banner_id'
+      GROUP BY 1, 2`;
+    const out = new Map<string, { views: number; clicks: number }>();
+    for (const x of rows) {
+      const s = out.get(x.banner_id) ?? { views: 0, clicks: 0 };
+      if (x.event === 'home_banner_view') s.views = Number(x.n);
+      else s.clicks = Number(x.n);
+      out.set(x.banner_id, s);
+    }
+    return out;
+  }
+
   private async get(id: string): Promise<home_banners> {
     const b = await this.prisma.home_banners.findUnique({ where: { id } });
     if (!b) throw new NotFoundException('Banner not found');
@@ -197,7 +215,11 @@ export class AdminBannersController {
 
   @Get()
   list() {
-    return this.banners.list().then((items) => ({ items, max: MAX_BANNERS, recommended: { width: BANNER_WIDTH, height: BANNER_HEIGHT } }));
+    return Promise.all([this.banners.list(), this.banners.stats()]).then(([items, stats]) => ({
+      items: items.map((b) => ({ ...b, stats: stats.get(b.id) ?? { views: 0, clicks: 0 } })),
+      max: MAX_BANNERS,
+      recommended: { width: BANNER_WIDTH, height: BANNER_HEIGHT },
+    }));
   }
 
   @Post()

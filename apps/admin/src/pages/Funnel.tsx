@@ -60,6 +60,8 @@ const EXTRA_NAMES: Record<string, string> = {
   campaign_add_to_cart: 'Добавили в корзину товар акции',
   // аудит 10.11, п. 1.12: подписи для событий, которые раньше показывались сырыми ключами
   support_ask_sent: 'Отправили вопрос специалисту',
+  home_banner_view: 'Увидели баннер на главной',
+  home_banner_click: 'Нажали на баннер на главной',
   ai_consent: 'Согласились на ответы VITALO AI',
   compat_ai_request: 'Спросили VITALO AI о совместимости',
   compat_ai_cached: 'Получили готовый ответ VITALO AI',
