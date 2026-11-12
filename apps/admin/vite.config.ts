@@ -15,7 +15,18 @@ export default defineConfig({
     allowedHosts: TUNNEL_HOSTS,
     proxy: { '/api': API, '/uploads': API },
   },
+  // аудит 2.16: the libraries (React, router, React Query) are a chunk of their own — it does not change between
+  // releases, so the browser keeps it cached and after an update downloads only the panel's own code
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => (/node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler|@tanstack)[\\/]/.test(id) ? 'vendor' : undefined),
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
+    setupFiles: ['./src/test-setup.ts'],
+    testTimeout: 20_000,
   },
 });

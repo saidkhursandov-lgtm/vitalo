@@ -1,15 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { App } from './App';
 import { ApiError } from './lib/api';
 import { StaffAuthProvider } from './lib/auth';
-import { PrintLabels, TestPrint } from './pages/Labels';
-import { PrintOrderLabel, TestOrderLabel } from './pages/OrderLabel';
+// аудит 2.16: the print pages (QR and barcode code) are their own chunks
+const PrintLabels = lazy(() => import('./pages/Labels').then((m) => ({ default: m.PrintLabels })));
+const TestPrint = lazy(() => import('./pages/Labels').then((m) => ({ default: m.TestPrint })));
+const PrintOrderLabel = lazy(() => import('./pages/OrderLabel').then((m) => ({ default: m.PrintOrderLabel })));
+const TestOrderLabel = lazy(() => import('./pages/OrderLabel').then((m) => ({ default: m.TestOrderLabel })));
 import './styles.css';
 
-window.Telegram?.WebApp?.ready();
+// аудит 2.16: telegram-web-app.js loads only inside Telegram, see lib/telegram-webapp.ts (it calls WebApp.ready())
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +28,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <Suspense fallback={null}>
         <Routes>
           {/* Label printing: full page without the menu, outside the Telegram sign-in so that it opens in Chrome.
               /print/labels authorises with a print ticket from the admin panel; /print/test has only fake data. */}
@@ -42,6 +46,7 @@ createRoot(document.getElementById('root')!).render(
             }
           />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

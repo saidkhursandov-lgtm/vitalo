@@ -1,35 +1,51 @@
-import type { ReactNode } from 'react';
+import { lazy, type ComponentType, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { NoAccess } from './components/ui';
 import { useSession, type Permission } from './lib/auth';
 import { homeFor } from './lib/nav';
-import { Analytics } from './pages/Analytics';
-import { Audit } from './pages/Audit';
-import { CustomerDetail, Customers } from './pages/Customers';
-import { Waitlist, WaitlistProductPage } from './pages/Waitlist';
-import { Iherb } from './pages/Iherb';
-import { CrossBorder, CrossBorderBatch } from './pages/CrossBorder';
-import { AiAnalyst } from './pages/AiAnalyst';
-import { Promo } from './pages/Promo';
-import { PromoCodes } from './pages/PromoCodes';
-import { Storefront } from './pages/Storefront';
-import { Campaigns } from './pages/Campaigns';
-import { Compat } from './pages/Compat';
-import { SupportList, SupportThread } from './pages/Support';
 import { Dashboard } from './pages/Dashboard';
-import { Devices } from './pages/Devices';
-import { Finance } from './pages/Finance';
-import { Inventory } from './pages/Inventory';
-import { OrderDetail } from './pages/OrderDetail';
-import { Orders } from './pages/Orders';
-import { ProductEdit } from './pages/ProductEdit';
-import { Products } from './pages/Products';
-import { Brands } from './pages/Brands';
-import { PurchaseDetail, PurchaseNew, Purchases } from './pages/Purchases';
-import { Settings } from './pages/Settings';
-import { YandexOrderDetail, YandexOrderNew, YandexOrders } from './pages/YandexOrders';
-import { YandexSync } from './pages/YandexSync';
+
+/**
+ * Аудит админки 2.16: pages load on first opening (their own JS chunk), so the first screen does not wait for the
+ * whole panel. Only the dashboard stays in the main chunk — the first screen of most employees.
+ */
+function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
+  return lazy(() => load().then((m) => ({ default: m[name] })));
+}
+const Orders = page(() => import('./pages/Orders'), 'Orders');
+const Analytics = page(() => import('./pages/Analytics'), 'Analytics');
+const Audit = page(() => import('./pages/Audit'), 'Audit');
+const CustomerDetail = page(() => import('./pages/Customers'), 'CustomerDetail');
+const Customers = page(() => import('./pages/Customers'), 'Customers');
+const Waitlist = page(() => import('./pages/Waitlist'), 'Waitlist');
+const WaitlistProductPage = page(() => import('./pages/Waitlist'), 'WaitlistProductPage');
+const Iherb = page(() => import('./pages/Iherb'), 'Iherb');
+const CrossBorder = page(() => import('./pages/CrossBorder'), 'CrossBorder');
+const CrossBorderBatch = page(() => import('./pages/CrossBorder'), 'CrossBorderBatch');
+const AiAnalyst = page(() => import('./pages/AiAnalyst'), 'AiAnalyst');
+const Promo = page(() => import('./pages/Promo'), 'Promo');
+const PromoCodes = page(() => import('./pages/PromoCodes'), 'PromoCodes');
+const Storefront = page(() => import('./pages/Storefront'), 'Storefront');
+const Campaigns = page(() => import('./pages/Campaigns'), 'Campaigns');
+const Compat = page(() => import('./pages/Compat'), 'Compat');
+const SupportList = page(() => import('./pages/Support'), 'SupportList');
+const SupportThread = page(() => import('./pages/Support'), 'SupportThread');
+const Devices = page(() => import('./pages/Devices'), 'Devices');
+const Finance = page(() => import('./pages/Finance'), 'Finance');
+const Inventory = page(() => import('./pages/Inventory'), 'Inventory');
+const OrderDetail = page(() => import('./pages/OrderDetail'), 'OrderDetail');
+const ProductEdit = page(() => import('./pages/ProductEdit'), 'ProductEdit');
+const Products = page(() => import('./pages/Products'), 'Products');
+const Brands = page(() => import('./pages/Brands'), 'Brands');
+const PurchaseDetail = page(() => import('./pages/Purchases'), 'PurchaseDetail');
+const PurchaseNew = page(() => import('./pages/Purchases'), 'PurchaseNew');
+const Purchases = page(() => import('./pages/Purchases'), 'Purchases');
+const Settings = page(() => import('./pages/Settings'), 'Settings');
+const YandexOrderDetail = page(() => import('./pages/YandexOrders'), 'YandexOrderDetail');
+const YandexOrderNew = page(() => import('./pages/YandexOrders'), 'YandexOrderNew');
+const YandexOrders = page(() => import('./pages/YandexOrders'), 'YandexOrders');
+const YandexSync = page(() => import('./pages/YandexSync'), 'YandexSync');
 
 /** Hides a page from roles without the permission (the API would answer 403 anyway). */
 function Guard({ perm, children }: { perm: Permission; children: ReactNode }) {

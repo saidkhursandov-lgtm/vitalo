@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/auth';
 import { ROLE } from '../lib/format';
@@ -6,6 +6,7 @@ import { activeItem, groupsFor, type NavGroup, type NavItem } from '../lib/nav';
 import { GlobalSearch } from './GlobalSearch';
 import { CloseIcon, MenuIcon, NextIcon } from './Icons';
 import { Logo } from './Logo';
+import { Loading } from './ui';
 
 /**
  * Admin frame. The menu scrolls on its own (low screens, admin inside Telegram), and on narrow screens
@@ -94,7 +95,10 @@ export function Layout() {
         </div>
       </aside>
       <main className="main">
-        <Outlet />
+        {/* аудит 2.16: a page opened for the first time loads its chunk; the menu stays */}
+        <Suspense fallback={<Loading />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

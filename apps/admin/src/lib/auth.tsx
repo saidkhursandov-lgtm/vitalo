@@ -4,6 +4,7 @@ import { DevLogin } from '../pages/DevLogin';
 import { WebLogin } from '../pages/WebLogin';
 import { api, ApiError, errorText, setToken, setUnauthorizedHandler } from './api';
 import { Logo } from '../components/Logo';
+import { loadTelegramWebApp } from './telegram-webapp';
 
 export type Permission =
   | 'dashboard.view'
@@ -116,6 +117,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
     ready.current = false;
     setState({ status: 'loading' });
     try {
+      await loadTelegramWebApp();
       const initData = telegramInitData();
       if (initData) return await signIn(initData);
       // a Telegram token from this tab, or the browser's cookie session
