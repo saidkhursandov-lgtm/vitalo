@@ -2193,6 +2193,8 @@ model ai_requests {
   latency_ms    Int?
   /// why it failed: a check name or an error code, never the customer's text
   error         String?
+  /// аудит 4.5: the model's answer that a check rejected (staff only, for the log of refusals)
+  rejected_text String?
   created_at    DateTime @default(now())
 
   @@index([created_at])

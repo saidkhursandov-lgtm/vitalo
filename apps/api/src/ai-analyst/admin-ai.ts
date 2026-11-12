@@ -149,6 +149,34 @@ export interface FeedRow extends FeedRowRaw {
   match: MatchResult | null;
   /** why the row cannot be saved, in plain words; null = can be saved */
   problem: string | null;
+  /** аудит 4.5: a SKU that looks like another of ours (VTL-HG001 / VTL-GH001) — check before saving */
+  sku_warning: string | null;
+}
+
+/** Damerau–Levenshtein distance (a swap of two neighbours counts as one), case ignored. */
+export function skuDistance(a: string, b: string): number {
+  const s = a.toLowerCase();
+  const t = b.toLowerCase();
+  const d: number[][] = Array.from({ length: s.length + 1 }, (_, i) => Array.from({ length: t.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= s.length; i++)
+    for (let j = 1; j <= t.length; j++) {
+      const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && s[i - 1] === t[j - 2] && s[i - 2] === t[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  return d[s.length][t.length];
+}
+
+/** Аудит 4.5: our SKUs one typo away (a swap, a wrong or missing character), at most 3; swapsOnly — only two neighbours swapped (VTL-HG001 / VTL-GH001). */
+export function similarSkus(sku: string, products: { sku: string; name_ru: string }[], except?: string, swapsOnly = false): { sku: string; name_ru: string }[] {
+  const letters = (x: string) => [...x.toLowerCase()].sort().join('');
+  return products
+    .filter((p) => p.sku !== except)
+    .map((p) => ({ p, d: skuDistance(sku, p.sku) }))
+    .filter((x) => x.d === 1 && (!swapsOnly || (x.p.sku.length === sku.length && letters(x.p.sku) === letters(sku))))
+    .sort((a, b) => a.d - b.d || a.p.sku.localeCompare(b.p.sku))
+    .slice(0, 3)
+    .map((x) => ({ sku: x.p.sku, name_ru: x.p.name_ru }));
 }
 
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -189,7 +217,15 @@ export function checkFeedRows(raw: unknown, products: FeedProduct[], today: stri
       product: p ? { id: p.id, sku: p.sku, name_ru: p.name_ru } : null,
       match: null,
       problem: null,
+      sku_warning: null,
     };
+    if (sku) {
+      const near = similarSkus(sku, products, p?.sku, !!p);
+      if (near.length) {
+        const list = near.map((n) => `${n.sku} (${n.name_ru})`).join(', ');
+        row.sku_warning = p ? `Похожий артикул: ${list} — проверьте, тот ли товар` : `Может быть, ${list}?`;
+      }
+    }
     // a dose without its unit or «на что» is no dose at all (the same rule as DOSE_INCOMPLETE in the form)
     if (!row.dose_unit || !row.dose_per) row.dose_amount = null;
     if (kind === 'competitor_price') {

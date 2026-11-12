@@ -207,6 +207,8 @@ export class AiService {
         cost_usd: new Prisma.Decimal(cost.toFixed(6)),
         latency_ms: Date.now() - started,
         error: checked.ok ? null : checked.error,
+        // аудит 4.5: what the model wrote, so the specialist sees why it was not shown
+        rejected_text: checked.ok ? null : rejectedText(completion.json),
       },
     });
     if (!checked.ok) return this.fallback(userId, items, lang, 'invalid', now);
@@ -534,6 +536,15 @@ export class AiService {
       month: await sum(tashkentMonthStart(now)),
       // the model was asked but its answer was not shown (a check failed, an error, a timeout): the specialist answered
       month_failed: await this.prisma.ai_requests.count({ where: { created_at: { gte: tashkentMonthStart(now) }, status: { not: 'ok' } } }),
+      // аудит 4.5: the last answers not shown, with the reason and the model's text
+      refusals: (
+        await this.prisma.ai_requests.findMany({
+          where: { status: { not: 'ok' } },
+          orderBy: { created_at: 'desc' },
+          take: 30,
+          select: { id: true, created_at: true, scenario: true, lang: true, status: true, error: true, rejected_text: true },
+        })
+      ).map((x) => ({ ...x, reason: REFUSAL_REASON[x.error ?? x.status] ?? x.error ?? x.status })),
     };
   }
 }
@@ -606,4 +617,27 @@ export class AdminAiController {
   save(@CurrentStaff() me: StaffContext, @Body() dto: AiSettingsDto) {
     return this.ai.saveSettings(me.staff, dto.settings);
   }
+}
+
+/** Аудит 4.5: why an answer was not shown — in words for the log of refusals. */
+export const REFUSAL_REASON: Record<string, string> = {
+  not_json: 'ответ не в нужном формате',
+  verdict: 'нет вывода «можно / разнести / консультация»',
+  text_length: 'текст слишком короткий или длинный',
+  timing: 'время приёма не для всех товаров',
+  timing_amount: 'в расписании дозировка, которой нет в карточке',
+  forbidden_words: 'запрещённые слова (лечение, диагноз и т. п.)',
+  language: 'не на языке покупателя',
+  refusal: 'модель отказалась отвечать',
+  max_tokens: 'ответ оборвался (слишком длинный)',
+  timeout: 'модель не ответила вовремя',
+  error: 'ошибка связи с моделью',
+};
+
+/** The model's text (and timing) when a check rejected it; at most 2000 characters. */
+export function rejectedText(json: unknown): string | null {
+  if (!json || typeof json !== 'object') return null;
+  const j = json as { text?: unknown; timing?: unknown };
+  const parts = [typeof j.text === 'string' ? j.text : '', Array.isArray(j.timing) ? JSON.stringify(j.timing) : ''].filter(Boolean);
+  return parts.length ? parts.join('\n').slice(0, 2000) : JSON.stringify(json).slice(0, 2000);
 }

@@ -1,4 +1,4 @@
-import { adminCostUsd, checkFeedRows, FEED_SCHEMA, mergeAdminAiSettings, type FeedProduct } from './admin-ai';
+import { adminCostUsd, checkFeedRows, FEED_SCHEMA, mergeAdminAiSettings, similarSkus, type FeedProduct } from './admin-ai';
 
 const ours: FeedProduct = { id: 'p1', sku: 'VTL-H001', name_ru: 'Магний', brand: 'NOW Foods', match_form: 'бисглицинат', dose_amount: 200, dose_unit: 'mg', dose_per: 'capsule', pack_count: 90 };
 const row = (o: Record<string, unknown>) => ({
@@ -24,6 +24,19 @@ const row = (o: Record<string, unknown>) => ({
 
 describe('AI analyst: checking what the model read (D-57, узел 5)', () => {
   const today = '2026-11-09';
+
+  it('аудит 4.5: a SKU one typo away from another of ours is flagged; an unknown one gets a suggestion', () => {
+    const gh: FeedProduct = { ...ours, id: 'p2', sku: 'VTL-GH001', name_ru: 'Омега' };
+    const hg: FeedProduct = { ...ours, id: 'p3', sku: 'VTL-HG001', name_ru: 'Цинк' };
+    expect(similarSkus('VTL-HG001', [gh, hg, ours], 'VTL-HG001', true).map((x) => x.sku)).toEqual(['VTL-GH001']);
+    const found = checkFeedRows({ rows: [row({ sku: 'VTL-HG001' })] }, [gh, hg, ours], today).rows[0]; // VTL-H001 is a neighbour, not a swap: no noise
+    expect(found.product?.id).toBe('p3');
+    expect(found.sku_warning).toBe('Похожий артикул: VTL-GH001 (Омега) — проверьте, тот ли товар');
+    const unknown = checkFeedRows({ rows: [row({ sku: 'VTL-GH01' })] }, [gh], today).rows[0];
+    expect(unknown.problem).toContain('не найден');
+    expect(unknown.sku_warning).toBe('Может быть, VTL-GH001 (Омега)?');
+    expect(checkFeedRows({ rows: [row({})] }, [ours, { ...ours, id: 'p4', sku: 'VTL-H002' }], today).rows[0].sku_warning).toBeNull();
+  });
 
   it('a competitor price: our product by SKU, «1-в-1» by our code, today when no date', () => {
     const { rows } = checkFeedRows({ rows: [row({ sku: 'vtl-h001' })], unclear: [] }, [ours], today);

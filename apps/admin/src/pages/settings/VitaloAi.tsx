@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Badge, ErrorBox, Field, Loading, Help } from '../../components/ui';
 import { api } from '../../lib/api';
+import { dateTime } from '../../lib/format';
 import { usd } from '../CompatAi';
 
 export interface AiSettings {
@@ -19,6 +20,8 @@ export interface AiSettingsView {
   today: { requests: number; cost_usd: number };
   month: { requests: number; cost_usd: number };
   month_failed: number;
+  /** аудит 4.5 */
+  refusals?: { id: string; created_at: string; scenario: string; lang: string; status: string; error: string | null; rejected_text: string | null; reason: string }[];
 }
 
 const MODEL_NAME: Record<string, string> = {
@@ -132,6 +135,38 @@ export function VitaloAiSettings() {
           специалисту. Цена модели {s.settings.model}: ${s.models.find((m) => m.id === s.settings.model)?.input ?? '—'} за миллион входных
           токенов, ${s.models.find((m) => m.id === s.settings.model)?.output ?? '—'} за миллион выходных. Месяц и день — по Ташкенту.
         </p>
+      </section>
+
+      {/* аудит 4.5: the log of refusals — why an answer was not shown and what the model wrote */}
+      <section className="card">
+        <h2>Ответы, не показанные покупателю</h2>
+        {!s.refusals?.length ? (
+          <p className="muted">Отказов не было.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Когда</th>
+                  <th>Причина</th>
+                  <th>Что написала модель</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.refusals.map((x) => (
+                  <tr key={x.id}>
+                    <td className="nowrap small">
+                      {dateTime(x.created_at)}
+                      <div className="muted">{x.lang.toUpperCase()}</div>
+                    </td>
+                    <td>{x.reason}</td>
+                    <td className="small pre-wrap">{x.rejected_text ?? <span className="muted">—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </>
   );

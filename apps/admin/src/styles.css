@@ -666,3 +666,6 @@ textarea { resize: vertical; }
 .note-form .btn { justify-self: start; }
 .note { border-top: 1px solid var(--border); padding: 8px 0; }
 .note p { margin: 0 0 2px; white-space: pre-wrap; }
+
+/* Аудит админки 4.5: the text of a refused AI answer */
+.pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
