@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useSession } from '../lib/auth';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, ErrorBox, Loading, PageHead } from '../components/ui';
@@ -49,7 +50,7 @@ interface AnalyticsData {
   top_products: { sku: string; name: string; qty: number; revenue: number }[];
   attention: {
     expiring: { id: string; physical_id: string; sku: string; name: string; expiry_date: string; expired: boolean }[];
-    stale: { product_id: string; sku: string; name: string; on_shelf: number }[];
+    stale: { product_id: string; sku: string; name: string; on_shelf: number; cost_uzs: number }[];
     orders_waiting_units: { id: string; order_number: string; reason: string | null }[];
   };
 }
@@ -82,6 +83,13 @@ export function Analytics() {
   const q = useQuery({
     queryKey: ['analytics', period, channel],
     queryFn: () => api<AnalyticsData>(`/staff/finance/analytics${qs({ ...period, channel })}`),
+    enabled: ok,
+  });
+  // аудит 4.9: «месяц к месяцу» — the same report for the period before (the month before, or as many days before)
+  const prev = previousPeriod(period, preset);
+  const p = useQuery({
+    queryKey: ['analytics', prev, channel],
+    queryFn: () => api<AnalyticsData>(`/staff/finance/analytics${qs({ ...prev, channel })}`),
     enabled: ok,
   });
 
@@ -124,14 +132,16 @@ export function Analytics() {
       ) : q.isError ? (
         <ErrorBox error={q.error} onRetry={() => void q.refetch()} />
       ) : (
-        <Report d={q.data} channel={channel} />
+        <Report d={q.data} prev={p.data} prevLabel={`${ruDate(prev.from)} — ${ruDate(prev.to)}`} channel={channel} />
       )}
     </>
   );
 }
 
-function Report({ d, channel }: { d: AnalyticsData; channel: Channel }) {
+function Report({ d, prev, prevLabel, channel }: { d: AnalyticsData; prev?: AnalyticsData; prevLabel: string; channel: Channel }) {
   const s = d.sales;
+  const { can } = useSession();
+  const frozen = d.attention.stale.reduce((t, x) => t + x.cost_uzs, 0);
   const shared = d.shared_expenses_included;
   return (
     <>
@@ -141,12 +151,17 @@ function Report({ d, channel }: { d: AnalyticsData; channel: Channel }) {
         </div>
       )}
       <div className="kpis">
-        <Kpi label="Выручка" value={money(s.revenue)} hint={`заказов: ${s.orders}, банок: ${s.units}`} />
+        <Kpi label="Выручка" value={money(s.revenue)} hint={`заказов: ${s.orders}, банок: ${s.units}`} delta={change(s.revenue, prev?.sales.revenue)} />
         <Kpi label="Себестоимость" value={money(s.cost)} hint={d.incomplete ? 'без товаров с неизвестной себестоимостью' : undefined} />
-        <Kpi label={shared ? 'ЧИСТАЯ ПРИБЫЛЬ' : 'Прибыль канала'} value={money(d.net_profit)} hint={d.incomplete ? 'неполная' : shared ? undefined : 'до общих расходов и зарплат'} />
+        <Kpi label={shared ? 'ЧИСТАЯ ПРИБЫЛЬ' : 'Прибыль канала'} value={money(d.net_profit)} hint={d.incomplete ? 'неполная' : shared ? undefined : 'до общих расходов и зарплат'} delta={change(d.net_profit, prev?.net_profit)} />
         <Kpi label="Вложено в закупки" value={money(d.purchases_invested_uzs)} hint="за период, для сведения" />
       </div>
 
+      {prev && (
+        <p className="muted small">
+          Проценты — сравнение с периодом {prevLabel}: выручка {money(prev.sales.revenue)}, заказов {prev.sales.orders}, прибыль {money(prev.net_profit)}.
+        </p>
+      )}
       <div className="grid-2">
         <section className="card">
           <h2>Сводка</h2>
@@ -298,17 +313,35 @@ function Report({ d, channel }: { d: AnalyticsData; channel: Channel }) {
         <section className="card">
           <h2>Залежалые: есть на полке, нет продаж 60 дней ({d.attention.stale.length})</h2>
           {d.attention.stale.length ? (
-            <ul className="plain-list">
-              {d.attention.stale.slice(0, 30).map((p) => (
-                <li key={p.product_id}>
-                  <Link to={`/products/${p.product_id}`} className="strong">
-                    {p.sku}
-                  </Link>{' '}
-                  {p.name} — {p.on_shelf} шт.
-                </li>
-              ))}
-              {d.attention.stale.length > 30 && <li className="muted small">…и ещё {d.attention.stale.length - 30}</li>}
-            </ul>
+            <>
+              <p className="small">
+                Заморожено денег: <strong>{money(frozen)}</strong> (себестоимость банок на полке)
+              </p>
+              <table className="table">
+                <tbody>
+                  {d.attention.stale.slice(0, 30).map((p) => (
+                    <tr key={p.product_id}>
+                      <td>
+                        <Link to={`/products/${p.product_id}`} className="strong">
+                          {p.sku}
+                        </Link>{' '}
+                        {p.name}
+                      </td>
+                      <td className="num nowrap">{p.on_shelf} шт.</td>
+                      <td className="num nowrap">{money(p.cost_uzs)}</td>
+                      {can('promo.manage') && (
+                        <td>
+                          <Link to={`/campaigns?product=${p.product_id}`} className="btn btn-sm btn-ghost">
+                            В акцию
+                          </Link>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {d.attention.stale.length > 30 && <p className="muted small">…и ещё {d.attention.stale.length - 30}</p>}
+            </>
           ) : (
             <p className="muted">Залежалых товаров нет.</p>
           )}
@@ -366,11 +399,30 @@ const Line = ({ label, value, muted }: { label: string; value: number; muted?: b
   </tr>
 );
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** The period to compare with: the month before for the month presets, otherwise as many days right before. */
+export function previousPeriod(period: { from: string; to: string }, preset: 'this' | 'last' | 'custom'): { from: string; to: string } {
+  if (preset === 'this') return monthRange(tashkentToday(), -1);
+  if (preset === 'last') return monthRange(tashkentToday(), -2);
+  const day = 86_400_000;
+  const from = Date.parse(period.from + 'T00:00:00Z');
+  const len = Date.parse(period.to + 'T00:00:00Z') - from + day;
+  const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
+  return { from: iso(from - len), to: iso(from - day) };
+}
+
+/** «+12 % к прошлому»; nothing when there is nothing to compare with. */
+export function change(now: number, before: number | undefined): { text: string; up: boolean } | undefined {
+  if (before == null || before === 0) return undefined;
+  const pct = Math.round(((now - before) / Math.abs(before)) * 100);
+  return { text: `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct)} % к прошлому`, up: pct >= 0 };
+}
+
+function Kpi({ label, value, hint, delta }: { label: string; value: string; hint?: string; delta?: { text: string; up: boolean } }) {
   return (
     <div className="kpi">
       <div className="muted small">{label}</div>
       <div className="kpi-value">{value}</div>
+      {delta && <div className={`small ${delta.up ? 'text-ok' : 'text-bad'}`}>{delta.text}</div>}
       {hint && <div className="muted small">{hint}</div>}
     </div>
   );

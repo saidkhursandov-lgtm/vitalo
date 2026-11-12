@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt, Help } from '../components/ui';
 import { api, ApiError, errorText } from '../lib/api';
 import { useSession } from '../lib/auth';
+import { useSearchParams } from 'react-router-dom';
 import { money } from '../lib/format';
 
 export type Skin = 'none' | 'black_friday' | 'eleven_eleven' | 'sale';
@@ -101,8 +102,11 @@ export function periodLabel(c: Pick<Campaign, 'start_at' | 'end_at'>): string {
 export function Campaigns() {
   const { can } = useSession();
   const q = useQuery({ queryKey: ['campaigns'], queryFn: () => api<Campaign[]>('/staff/campaigns') });
-  const [editing, setEditing] = useState<Campaign | 'new' | null>(null);
   const manage = can('promo.manage');
+  // аудит 4.9: «В акцию» from the stale products in «Аналитике» — a new campaign with this product
+  const [params, setParams] = useSearchParams();
+  const startWith = manage ? params.get('product') : null;
+  const [editing, setEditing] = useState<Campaign | 'new' | null>(startWith ? 'new' : null);
   return (
     <>
       <PageHead title="Акции">
@@ -165,7 +169,18 @@ export function Campaigns() {
         </div>
       )}
       <p className="muted small">«Заказы / скидки» — заказы с ценой акции (кроме отменённых и тестовых) и сумма скидок по акции в них.</p>
-      {editing && <CampaignEditor key={editing === 'new' ? 'new' : editing.id} id={editing === 'new' ? null : editing.id} manage={manage} onClose={() => setEditing(null)} />}
+      {editing && (
+        <CampaignEditor
+          key={editing === 'new' ? 'new' : editing.id}
+          id={editing === 'new' ? null : editing.id}
+          manage={manage}
+          startWith={editing === 'new' ? startWith : null}
+          onClose={() => {
+            setEditing(null);
+            if (startWith) setParams({}, { replace: true });
+          }}
+        />
+      )}
     </>
   );
 }
@@ -204,14 +219,14 @@ export function CardPreview({ skin, title, item }: { skin: Skin; title: string; 
   );
 }
 
-function CampaignEditor({ id, manage, onClose }: { id: string | null; manage: boolean; onClose: () => void }) {
+function CampaignEditor({ id, manage, startWith, onClose }: { id: string | null; manage: boolean; startWith?: string | null; onClose: () => void }) {
   const loaded = useQuery({ queryKey: ['campaigns', id], enabled: !!id, queryFn: () => api<Campaign & { items: Item[]; checks: ItemCheck[] }>(`/staff/campaigns/${id}`) });
   if (id && loaded.isPending) return <Modal title="Акция" onClose={onClose}><Loading /></Modal>;
   if (id && loaded.isError) return <Modal title="Акция" onClose={onClose}><ErrorBox error={loaded.error} /></Modal>;
-  return <CampaignForm campaign={loaded.data ?? null} manage={manage} onClose={onClose} />;
+  return <CampaignForm campaign={loaded.data ?? null} manage={manage} startWith={startWith} onClose={onClose} />;
 }
 
-function CampaignForm({ campaign, manage, onClose }: { campaign: (Campaign & { items: Item[] }) | null; manage: boolean; onClose: () => void }) {
+function CampaignForm({ campaign, manage, startWith, onClose }: { campaign: (Campaign & { items: Item[] }) | null; manage: boolean; startWith?: string | null; onClose: () => void }) {
   const client = useQueryClient();
   const now = toLocal(new Date().toISOString());
   const [f, setF] = useState({
@@ -224,7 +239,7 @@ function CampaignForm({ campaign, manage, onClose }: { campaign: (Campaign & { i
     active: campaign?.active ?? true,
     notify_start: campaign?.notify_start ?? false,
   });
-  const [items, setItems] = useState<Item[]>(campaign?.items ?? []);
+  const [items, setItems] = useState<Item[]>(campaign?.items ?? (startWith ? [{ product_id: startWith, discount_pct: 20, campaign_price_uzs: null }] : []));
   const [defaultPct, setDefaultPct] = useState('20');
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF({ ...f, [k]: v });
   const picker = useQuery({ queryKey: ['campaigns', 'products'], queryFn: () => api<PickerData>('/staff/campaigns/products') });

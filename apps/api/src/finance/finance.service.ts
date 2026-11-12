@@ -431,13 +431,19 @@ export class FinanceService {
     });
     const since = dateOnly(new Date(asDate(today).getTime() - 60 * 86_400_000));
     const soldRecently = new Set(events.filter((e) => e.sign === 1 && e.day >= since).flatMap((e) => e.lines.map((l) => l.product_id)));
-    const onShelf = await this.prisma.physical_units.groupBy({ by: ['product_id'], where: { status: 'IN_STOCK' }, _count: { _all: true } });
+    // аудит 4.9: the money frozen on the shelf — the actual cost of the jars
+    const onShelf = await this.prisma.physical_units.groupBy({ by: ['product_id'], where: { status: 'IN_STOCK' }, _count: { _all: true }, _sum: { actual_cost_uzs: true } });
     const staleIds = onShelf.filter((r) => !soldRecently.has(r.product_id));
     const staleProducts = await this.prisma.products.findMany({ where: { id: { in: staleIds.map((r) => r.product_id) }, status: { not: 'archived' }, is_test: false }, select: { id: true, sku: true, name_ru: true } });
     const waiting = await this.prisma.orders.findMany({ where: { units_attention: { not: null }, status: { in: ['paid', 'picking'] } }, select: { id: true, order_number: true, units_attention: true }, orderBy: { paid_at: 'asc' } });
     return {
       expiring: expiring.map((u) => ({ id: u.id, physical_id: u.physical_id, sku: u.product.sku, name: u.product.name_ru, expiry_date: dateOnly(u.expiry_date), expired: dateOnly(u.expiry_date) < today })),
-      stale: staleProducts.map((p) => ({ product_id: p.id, sku: p.sku, name: p.name_ru, on_shelf: staleIds.find((r) => r.product_id === p.id)!._count._all })).sort((a, b) => b.on_shelf - a.on_shelf),
+      stale: staleProducts
+        .map((p) => {
+          const g = staleIds.find((r) => r.product_id === p.id)!;
+          return { product_id: p.id, sku: p.sku, name: p.name_ru, on_shelf: g._count._all, cost_uzs: Number(g._sum.actual_cost_uzs ?? 0) };
+        })
+        .sort((a, b) => b.cost_uzs - a.cost_uzs || b.on_shelf - a.on_shelf),
       orders_waiting_units: waiting.map((o) => ({ id: o.id, order_number: o.order_number, reason: o.units_attention })),
     };
   }
