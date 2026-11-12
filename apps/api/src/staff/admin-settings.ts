@@ -4,8 +4,11 @@ import {
   ConflictException,
   Controller,
   Get,
+  ForbiddenException,
   HttpCode,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -28,6 +31,8 @@ import { OnlinePaymentsService } from '../payments/online/online-payments.servic
 import { customerModes, ONLINE_MODES, onlineModes, type OnlineMode, type OnlineModes } from '../payments/online/online-providers';
 import { MapsService } from '../maps/maps.service';
 import { AuditService } from './audit.service';
+import { createHash, randomInt } from 'crypto';
+import { TELEGRAM_SENDER, type TelegramSender } from '../notifications/telegram-sender';
 import { CurrentStaff, RequirePermission, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -63,7 +68,17 @@ export class CardTransferDto {
 
   /** Release 1 (D-04): the card holder's name is never shown to customers, so it is optional (kept only for staff). */
   @ApiPropertyOptional({ example: 'ALISHER KARIMOV' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100) recipient?: string;
+
+  /** D-65 / аудит 4.8: a new card number only with the code sent to the admin's Telegram */
+  @ApiPropertyOptional({ example: '123456' }) @IsOptional() @Matches(/^\d{6}$/, { message: 'code: 6 digits' }) code?: string;
 }
+
+/** D-65 / аудит 4.8: the code for a new card number — 6 digits, 10 minutes, 5 tries. Kept in memory, hashed. */
+const CARD_CODE_TTL_MS = 10 * 60_000;
+const CARD_CODE_TRIES = 5;
+const hashCode = (code: string) => createHash('sha256').update(code).digest('hex');
+/** «**** 9012» — a card number is never written in full into messages. */
+export const maskCard = (n: string) => `**** ${n.slice(-4)}`;
 
 /** Customer-facing texts editable by the admin. */
 export class ShopTextsDto {
@@ -300,7 +315,35 @@ export class AdminSettingsService {
     private readonly settings: SettingsService,
     private readonly online: OnlinePaymentsService,
     private readonly maps: MapsService,
+    @Inject(TELEGRAM_SENDER) private readonly sender: TelegramSender,
   ) {}
+
+  private readonly log = new Logger('AdminSettings');
+  private readonly cardCodes = new Map<string, { hash: string; expires: number; tries: number }>();
+
+  /** D-65 / аудит 4.8: a code to the admin's own Telegram before the card number may change. */
+  async sendCardCode(staffId: string, now = Date.now()) {
+    const me = await this.prisma.staff_users.findUniqueOrThrow({ where: { id: staffId }, select: { telegram_user_id: true } });
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    this.cardCodes.set(staffId, { hash: hashCode(code), expires: now + CARD_CODE_TTL_MS, tries: 0 });
+    await this.sender.sendMessage(me.telegram_user_id, `Код для смены номера карты в админке VITALO: ${code}\nДействует 10 минут. Никому его не сообщайте. Если вы не меняете карту — ничего не делайте и скажите владельцу.`);
+    await this.audit.log({ staffId, action: 'settings.card_code_sent', entityType: 'settings', entityId: null });
+    return { sent: true, expires_in_minutes: CARD_CODE_TTL_MS / 60_000 };
+  }
+
+  private checkCardCode(staffId: string, code: string | undefined, now = Date.now()) {
+    const c = this.cardCodes.get(staffId);
+    if (!code) throw new ForbiddenException({ code: 'CARD_CODE_REQUIRED', message: 'Новый номер карты сохраняется только с кодом из бота: нажмите «Получить код»' });
+    if (!c || c.expires < now || c.tries >= CARD_CODE_TRIES) {
+      this.cardCodes.delete(staffId);
+      throw new ForbiddenException({ code: 'CARD_CODE_EXPIRED', message: 'Код устарел — получите новый' });
+    }
+    if (c.hash !== hashCode(code)) {
+      c.tries++;
+      throw new ForbiddenException({ code: 'CARD_CODE_WRONG', message: `Неверный код. Осталось попыток: ${CARD_CODE_TRIES - c.tries}` });
+    }
+    this.cardCodes.delete(staffId);
+  }
 
   /** Saves one settings row and writes before/after to the audit log. */
   private async saveSetting(staffId: string, key: string, value: object, action: string) {
@@ -317,7 +360,17 @@ export class AdminSettingsService {
   }
 
   async setCardTransfer(staffId: string, dto: CardTransferDto) {
+    const before = await this.cardTransfer();
+    const changed = before.card_number !== dto.card_number;
+    if (changed) this.checkCardCode(staffId, dto.code);
     await this.saveSetting(staffId, SETTING_KEYS.cardTransferDetails, { card_number: dto.card_number, recipient: dto.recipient ?? '' }, 'settings.card_transfer_updated');
+    if (changed) {
+      // every admin learns about it at once (the one who changed it too: a sign if the session was not theirs)
+      const who = await this.prisma.staff_users.findUnique({ where: { id: staffId }, select: { name: true } });
+      const admins = await this.prisma.staff_users.findMany({ where: { role: 'admin', status: 'active' }, select: { telegram_user_id: true } });
+      const text = `Номер карты для переводов в VITALO изменён: ${before.card_number ? maskCard(before.card_number) : 'не было'} → ${maskCard(dto.card_number)}. Изменил: ${who?.name ?? '—'}. Если это не вы и не по вашему поручению — сразу верните карту в «Настройки → Оплата» и завершите чужие сессии.`;
+      for (const a of admins) await this.sender.sendMessage(a.telegram_user_id, text).catch((e: Error) => this.log.warn(`card notice not sent: ${e.message}`));
+    }
     return this.cardTransfer();
   }
 
@@ -749,6 +802,13 @@ export class AdminSettingsController {
   @Get('card-transfer')
   cardTransfer() {
     return this.settings.cardTransfer();
+  }
+
+  /** D-65 / аудит 4.8: the code for a new card number, to the admin's Telegram. */
+  @Post('card-transfer/code')
+  @HttpCode(200)
+  cardCode(@CurrentStaff() me: StaffContext) {
+    return this.settings.sendCardCode(me.staff.id);
   }
 
   @Put('card-transfer')

@@ -1,10 +1,10 @@
-import { Body, Controller, Get, HttpCode, Post, Res, UseGuards } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { TelegramLoginDto } from '../auth/auth.controller';
 import { permissionsOf } from './permissions';
 import { CurrentStaff, StaffAuthService, StaffContext, StaffGuard } from './staff-auth';
-import { clearAuthCookies } from './staff-web-auth';
+import { clearAuthCookies, clientIp } from './staff-web-auth';
 
 @ApiTags('staff: auth')
 @Controller('staff/auth')
@@ -13,8 +13,8 @@ export class StaffAuthController {
 
   @Post('telegram')
   @HttpCode(200)
-  async login(@Body() dto: TelegramLoginDto) {
-    const res = await this.auth.login(dto.initData);
+  async login(@Body() dto: TelegramLoginDto, @Req() req: Request) {
+    const res = await this.auth.login(dto.initData, clientIp(req)); // аудит 4.8: «Мои устройства» shows the IP
     return { ...res, permissions: permissionsOf(res.staff.role, res.staff.is_specialist) };
   }
 

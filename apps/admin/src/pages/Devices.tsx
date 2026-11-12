@@ -67,6 +67,7 @@ export function Devices() {
                   <th>Устройство</th>
                   <th>Вход</th>
                   <th>Последняя активность</th>
+                  <th title="Сессия завершится сама в этот день или после 30 дней без активности">Действует до</th>
                   <th>IP</th>
                   <th />
                 </tr>
@@ -80,6 +81,7 @@ export function Devices() {
                     </td>
                     <td>{dateTime(s.created_at)}</td>
                     <td>{dateTime(s.last_seen_at)}</td>
+                    <td>{dateTime(s.expires_at)}</td>
                     <td>{s.ip ?? '—'}</td>
                     <td className="num">
                       <button className="btn btn-sm btn-ghost" disabled={revoke.isPending} onClick={() => revoke.mutate(s)}>

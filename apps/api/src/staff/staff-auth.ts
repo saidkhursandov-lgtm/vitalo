@@ -47,6 +47,8 @@ export function readCookie(req: Request, name: string): string | null {
 }
 
 const SEEN_EVERY_MS = 5 * 60_000;
+/** D-65 / аудит 4.8: auto sign-out after 30 days without activity. */
+export const STAFF_IDLE_MS = 30 * 86_400_000;
 
 /** Staff login: same Telegram initData as customers, then the Telegram id must be an active staff_users row. */
 @Injectable()
@@ -57,7 +59,7 @@ export class StaffAuthService {
     private readonly initData: InitDataVerifier,
   ) {}
 
-  async login(initData: string) {
+  async login(initData: string, ip: string | null = null) {
     const { user } = this.initData.verify(initData);
     const staff = await this.prisma.staff_users.findUnique({ where: { telegram_user_id: BigInt(user.id) } });
     if (!staff || staff.status !== 'active') throw new ForbiddenException('Not a staff member');
@@ -66,7 +68,7 @@ export class StaffAuthService {
     const ttlHours = Number(this.config.get('STAFF_SESSION_TTL_HOURS') ?? 12);
     const expiresAt = new Date(Date.now() + ttlHours * 3600_000);
     await this.prisma.staff_sessions.create({
-      data: { staff_user_id: staff.id, token_hash: hashSessionToken(token), expires_at: expiresAt, kind: 'telegram', device_name: 'Telegram', last_seen_at: new Date() },
+      data: { staff_user_id: staff.id, token_hash: hashSessionToken(token), expires_at: expiresAt, kind: 'telegram', device_name: 'Telegram', last_seen_at: new Date(), ip },
     });
     return { token, expires_at: expiresAt.toISOString(), staff: { id: staff.id, name: staff.name, role: staff.role, is_specialist: staff.is_specialist } };
   }
@@ -91,6 +93,11 @@ export class StaffAuthService {
     });
     // A blocked employee loses access immediately, whatever sessions they still hold (TZ §23).
     if (!session || session.revoked_at || session.expires_at <= new Date() || session.staff_user.status !== 'active') return null;
+    // D-65 / аудит 4.8: a session not used for 30 days signs out by itself
+    if (Date.now() - (session.last_seen_at ?? session.created_at).getTime() > STAFF_IDLE_MS) {
+      await this.prisma.staff_sessions.update({ where: { id: session.id }, data: { revoked_at: new Date() } }).catch(() => undefined);
+      return null;
+    }
     // «Мои устройства» shows when a session was last used; written at most once per 5 minutes.
     if (!session.last_seen_at || Date.now() - session.last_seen_at.getTime() > SEEN_EVERY_MS) {
       await this.prisma.staff_sessions.update({ where: { id: session.id }, data: { last_seen_at: new Date() } }).catch(() => undefined);

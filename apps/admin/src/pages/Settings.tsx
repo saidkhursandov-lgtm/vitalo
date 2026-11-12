@@ -67,14 +67,20 @@ function CardTransfer() {
   const q = useQuery({ queryKey: ['settings', 'card'], queryFn: () => api<Card>('/staff/settings/card-transfer') });
   const [f, setF] = useState<Card>({ card_number: '' });
   const [saved, setSaved] = useState(false);
+  // D-65 / аудит 4.8: a new number only with the code from the bot; every admin gets a message about the change
+  const [code, setCode] = useState('');
   useEffect(() => {
     if (q.data) setF({ card_number: q.data.card_number.replace(/(\d{4})(?=\d)/g, '$1 ') });
   }, [q.data]);
+  const changed = !!q.data && f.card_number.replace(/\s/g, '') !== q.data.card_number;
+  const sendCode = useMutation({ mutationFn: () => api<{ sent: boolean }>('/staff/settings/card-transfer/code', { method: 'POST' }) });
   const save = useMutation({
-    mutationFn: () => api<Card>('/staff/settings/card-transfer', { method: 'PUT', body: f }),
+    mutationFn: () => api<Card>('/staff/settings/card-transfer', { method: 'PUT', body: { ...f, ...(changed && { code }) } }),
     onSuccess: (c) => {
       client.setQueryData(['settings', 'card'], c);
       setSaved(true);
+      setCode('');
+      sendCode.reset();
     },
   });
   if (q.isPending) return <Loading />;
@@ -94,9 +100,24 @@ function CardTransfer() {
           <input value={f.card_number} inputMode="numeric" onChange={(e) => (setF({ ...f, card_number: e.target.value }), setSaved(false))} required />
         </Field>
       </div>
+      {changed && (
+        <div className="card-code">
+          <p className="small">
+            Новый номер сохраняется только с кодом: он придёт вам в Telegram от бота. После смены все администраторы получат сообщение.
+          </p>
+          <div className="row">
+            <button type="button" className="btn btn-ghost btn-sm" disabled={sendCode.isPending} onClick={() => sendCode.mutate()}>
+              {sendCode.isSuccess ? 'Отправить код ещё раз' : 'Получить код'}
+            </button>
+            <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="Код из бота" aria-label="Код из бота" className="input-sm" />
+          </div>
+          {sendCode.isSuccess && <p className="muted small">Код отправлен, действует 10 минут.</p>}
+          <ErrorBox error={sendCode.error} />
+        </div>
+      )}
       <ErrorBox error={save.error} />
       {saved && <div className="alert alert-ok">Сохранено</div>}
-      <button className="btn" disabled={save.isPending}>
+      <button className="btn" disabled={save.isPending || (changed && code.length !== 6)}>
         Сохранить
       </button>
     </form>

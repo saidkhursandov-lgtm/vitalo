@@ -130,6 +130,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'customer.unblocked': 'Клиент разблокирован',
   'settings.bank_transfer_updated': 'Изменены реквизиты',
   'settings.card_transfer_updated': 'Изменены данные карты',
+  'settings.card_code_sent': 'Запрошен код для смены карты',
   'settings.checkout_options_updated': 'Изменены настройки оплаты (при получении, Payme / Click / Uzum, бесплатная доставка)',
   'settings.texts_updated': 'Изменены тексты магазина',
   'settings.maps_updated': 'Включена или выключена карта (Яндекс) в Mini App',

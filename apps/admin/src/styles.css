@@ -676,3 +676,7 @@ textarea { resize: vertical; }
 .home-preview-tile { background: var(--panel); border-radius: 10px; padding: 10px; display: grid; gap: 4px; font-size: 13px; }
 .home-preview-tile strong { color: var(--primary); }
 .home-preview-steps { background: var(--panel); border-radius: 10px; padding: 10px 10px 10px 28px; margin: 8px 0 0; font-size: 13px; }
+
+/* D-65 / аудит 4.8: the code for a new card number */
+.card-code { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px; }
+.card-code .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
