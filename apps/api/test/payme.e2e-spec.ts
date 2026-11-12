@@ -89,6 +89,30 @@ describe('Payme Merchant API (e2e)', () => {
     expect(list.items[0]).toMatchObject({ category: 'order', path: '/orders/' + order.id });
   });
 
+  // D-64 (аудит 2.3): a Payme order confirmed by hand — only with a reason, its own audit action; the reserve can be extended
+  it('manual confirmation of a Payme order needs a reason and is written as a manual override', async () => {
+    const { order } = await paymeOrder();
+    const card = (await http().get(`/api/staff/orders/${order.id}`).set(bearer(admin)).expect(200)).body;
+    expect(card.actions).toMatchObject({ confirm_payment: true, confirm_payment_manual: true, extend_reserve: true });
+
+    // «Продлить резерв на 30 мин»: from the old end (or from now)
+    const before = Date.parse(card.reserved_until);
+    const extended = (await http().post(`/api/staff/orders/${order.id}/extend-reserve`).set(bearer(admin)).expect(200)).body;
+    expect(Date.parse(extended.reserved_until) - Math.max(before, Date.now())).toBeGreaterThan(29 * 60_000);
+    expect(await prisma.audit_logs.count({ where: { action: 'order.reserve_extended', entity_id: order.id } })).toBe(1);
+
+    const confirm = (comment?: string) => http().post(`/api/staff/orders/${order.id}/confirm-payment`).set(bearer(admin)).send(comment ? { comment } : {});
+    expect((await confirm().expect(400)).body.code).toBe('REASON_REQUIRED');
+    expect((await confirm('ок').expect(400)).body.code).toBe('REASON_REQUIRED');
+    const paid = (await confirm('Деньги видны в кабинете Payme').expect(200)).body;
+    expect(paid).toMatchObject({ status: 'paid', payment_status: 'payment_success' });
+    const audit = await prisma.audit_logs.findFirstOrThrow({ where: { action: 'order.payment_manual_override', entity_id: order.id } });
+    expect(audit.after_json).toMatchObject({ manual_override: true, payment_method: 'payme', comment: 'Деньги видны в кабинете Payme' });
+    expect(paid.history.at(-1).reason).toBe('Online payment confirmed manually: Деньги видны в кабинете Payme');
+    // a paid order: no reserve to extend
+    await http().post(`/api/staff/orders/${order.id}/extend-reserve`).set(bearer(admin)).expect(409);
+  });
+
   describe('access and settings', () => {
     it('wrong or missing key: -32504, nothing is touched', async () => {
       const { account, amount, order } = await paymeOrder();

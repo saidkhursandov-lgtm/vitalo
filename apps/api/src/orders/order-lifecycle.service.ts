@@ -83,7 +83,14 @@ export class OrderLifecycleService {
    * Release 1, «Оплата при получении»: the same step is the manager's confirmation of the order (the customer pays the
    * courier); the order becomes «Оплачен» («Подтверждён» for the customer) and goes to the warehouse like a transfer.
    */
-  async confirmBankTransfer(tx: Tx, order: LockedOrder, staffId: string, comment?: string): Promise<'paid' | 'already_paid'> {
+  async confirmBankTransfer(
+    tx: Tx,
+    order: LockedOrder,
+    staffId: string,
+    comment?: string,
+    /** D-64 (аудит 2.3): an online payment (Payme …) confirmed by hand — only with a reason, its own audit action */
+    opts: { onlineOverride?: boolean } = {},
+  ): Promise<'paid' | 'already_paid'> {
     // D-53: a confirmed cash-on-delivery order is «Оплачен» by status but its payment waits for the courier — the status
     // (not only payment_success) says it was already confirmed, so a second click never deducts stock twice.
     if (order.payment_status === 'payment_success' || CONFIRMED_STATUSES.includes(order.status)) return 'already_paid';
@@ -93,7 +100,7 @@ export class OrderLifecycleService {
     assertTransition(order.status, 'paid');
 
     const payment = await tx.payments.findFirst({
-      where: { order_id: order.id, status: 'payment_pending', method: { code: { in: [...CONFIRMABLE_PAYMENT_METHODS] } } },
+      where: { order_id: order.id, status: 'payment_pending', method: { code: opts.onlineOverride ? { notIn: [...CONFIRMABLE_PAYMENT_METHODS] } : { in: [...CONFIRMABLE_PAYMENT_METHODS] } } },
       include: { manual: true, method: { select: { code: true } } },
     });
     if (!payment) throw new ConflictException({ code: 'NO_BANK_TRANSFER_PAYMENT', message: 'Order has no pending bank transfer' });
@@ -129,16 +136,28 @@ export class OrderLifecycleService {
       data: { status: 'done', done_at: now, assigned_to: staffId },
     });
     await this.crossBorder.onPaid(tx, order.id, now); // D-60: the promised window counted from the payment
-    await this.addHistory(tx, order.id, order.status, 'paid', { type: 'staff', id: staffId }, cod ? 'Order confirmed by the manager (cash on delivery)' : 'Bank transfer confirmed');
+    const historyReason = opts.onlineOverride
+      ? `Online payment confirmed manually: ${comment ?? ''}`
+      : cod
+        ? 'Order confirmed by the manager (cash on delivery)'
+        : 'Bank transfer confirmed';
+    await this.addHistory(tx, order.id, order.status, 'paid', { type: 'staff', id: staffId }, historyReason);
     const units = await this.units.reserveOnPayment(tx, { id: order.id, order_number: order.order_number, status: 'paid' }, staffId);
     await tx.audit_logs.create({
       data: {
         staff_user_id: staffId,
-        action: cod ? 'order.cod_confirmed' : 'order.bank_transfer_confirmed',
+        action: opts.onlineOverride ? 'order.payment_manual_override' : cod ? 'order.cod_confirmed' : 'order.bank_transfer_confirmed',
         entity_type: 'order',
         entity_id: order.id,
         before_json: { status: order.status, payment_status: order.payment_status },
-        after_json: { status: 'paid', payment_status: cod ? 'payment_pending' : 'payment_success', comment: comment ?? null, units_reserved: units.reserved, units_shortage: units.shortage },
+        after_json: {
+          status: 'paid',
+          payment_status: cod ? 'payment_pending' : 'payment_success',
+          comment: comment ?? null,
+          ...(opts.onlineOverride && { manual_override: true, payment_method: payment.method.code }),
+          units_reserved: units.reserved,
+          units_shortage: units.shortage,
+        },
       },
     });
     return 'paid';

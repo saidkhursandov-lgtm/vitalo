@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -27,7 +28,7 @@ import { CrossBorderService } from '../orders/cross-border.service';
 import { orderViewInclude, toOrderView } from '../orders/order-view';
 import { normalizeUzPhone } from '../orders/orders.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { SettingsService } from '../settings/settings.service';
+import { CONFIRMABLE_PAYMENT_METHODS, SettingsService } from '../settings/settings.service';
 import { auditJson, AuditService } from './audit.service';
 import { renderCentre, type TemplatePayload } from '../notifications/notification-templates';
 import { can, type Permission } from './permissions';
@@ -37,6 +38,8 @@ import { PricingSnapshot, promoFreeDelivery } from '../promo/promo.service';
 
 const PAGE_SIZE = 50;
 const TX = { maxWait: 10_000, timeout: 20_000 };
+/** Аудит 2.3: «Продлить резерв» adds this much time. */
+const RESERVE_EXTENSION_MS = 30 * 60_000;
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 /** Forward steps after payment and who may make them (Master TZ §11, Flow §10). */
@@ -251,6 +254,10 @@ export class AdminOrdersService {
       // What the current employee may do now (the server re-checks on every action).
       actions: {
         confirm_payment: can(role, 'orders.payment') && order.payment_status === 'payment_pending' && ['new', 'awaiting_payment'].includes(order.status),
+        // D-64 (аудит 2.3): an online payment (Payme …) is confirmed by the payment system; by hand only with a reason
+        confirm_payment_manual: !!order.payments[0] && !(CONFIRMABLE_PAYMENT_METHODS as readonly string[]).includes(order.payments[0].method.code),
+        // аудит 2.3: «Продлить резерв на 30 минут» while the customer is paying
+        extend_reserve: can(role, 'orders.payment') && order.status === 'awaiting_payment' && !!order.reserved_until,
         next_status: step && can(role, step.permission) ? step.next : null,
         cancel: can(role, 'orders.cancel') && EDITABLE_STATUSES.includes(order.status),
         edit: can(role, 'orders.edit') && EDITABLE_STATUSES.includes(order.status),
@@ -267,7 +274,13 @@ export class AdminOrdersService {
   async confirmPayment(staff: StaffContext, id: string, comment?: string) {
     let confirmedFor: string | null = null;
     const view = await this.inOrderTx(id, async (tx, order) => {
-      if ((await this.lifecycle.confirmBankTransfer(tx, order, staff.staff.id, comment)) === 'paid') {
+      // D-64 (аудит 2.3): an online payment confirmed by hand needs a reason; it gets its own audit action
+      const pending = await tx.payments.findFirst({ where: { order_id: id, status: 'payment_pending' }, select: { method: { select: { code: true } } } });
+      const onlineOverride = !!pending && !(CONFIRMABLE_PAYMENT_METHODS as readonly string[]).includes(pending.method.code);
+      if (onlineOverride && (comment?.trim().length ?? 0) < 5) {
+        throw new BadRequestException({ code: 'REASON_REQUIRED', message: 'Онлайн-оплату подтверждают вручную только с причиной (не короче 5 знаков)' });
+      }
+      if ((await this.lifecycle.confirmBankTransfer(tx, order, staff.staff.id, comment?.trim(), { onlineOverride })) === 'paid') {
         confirmedFor = order.user_id;
         // 3.1: receipts sent to the bot are settled by the same confirmation, wherever it was pressed
         await tx.payment_receipts.updateMany({ where: { order_id: id, status: 'pending' }, data: { status: 'confirmed', reviewed_by: staff.staff.id, reviewed_at: new Date() } });
@@ -426,6 +439,22 @@ export class AdminOrdersService {
     });
   }
 
+  /** Аудит 2.3: the customer asked for more time to pay — the reserve lasts 30 minutes longer (from now if it ran out). */
+  extendReserve(staff: StaffContext, id: string) {
+    return this.inOrderTx(id, async (tx, order) => {
+      if (order.status !== 'awaiting_payment' || !order.reserved_until) {
+        throw new ConflictException({ code: 'RESERVE_NOT_EXTENDABLE', message: 'Резерв продлевают только у заказа, который ждёт оплаты' });
+      }
+      const base = Math.max(Date.now(), order.reserved_until.getTime());
+      const until = new Date(base + RESERVE_EXTENSION_MS);
+      await tx.orders.update({ where: { id }, data: { reserved_until: until } });
+      await this.audit.log(
+        { staffId: staff.staff.id, action: 'order.reserve_extended', entityType: 'order', entityId: id, before: { reserved_until: order.reserved_until }, after: { reserved_until: until } },
+        tx,
+      );
+    });
+  }
+
   private async inOrderTx(
     id: string,
     fn: (tx: Prisma.TransactionClient, order: Awaited<ReturnType<OrderLifecycleService['lockOrder']>>) => Promise<void>,
@@ -458,6 +487,14 @@ export class AdminOrdersController {
   @RequirePermission('orders.payment')
   async confirmPayment(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ConfirmPaymentDto) {
     await this.orders.confirmPayment(me, id, dto.comment);
+    return this.orders.get(id, me);
+  }
+
+  @Post(':id/extend-reserve')
+  @HttpCode(200)
+  @RequirePermission('orders.payment')
+  async extendReserve(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string) {
+    await this.orders.extendReserve(me, id);
     return this.orders.get(id, me);
   }
 

@@ -1,6 +1,6 @@
 import { OrderReceipts } from '../components/OrderReceipts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, PaymentStatus } from '../components/ui';
 import { api } from '../lib/api';
@@ -52,7 +52,12 @@ export interface AdminOrder {
   customer: { id: string; name: string; username: string | null; telegram_user_id: number; status: string };
   edits: { reason: string; before: Record<string, unknown>; after: Record<string, unknown>; staff_name: string; created_at: string }[];
   tasks: { type: string; status: string; note: string | null; created_at: string }[];
-  actions: { confirm_payment: boolean; next_status: string | null; cancel: boolean; edit: boolean; locked: boolean; units: boolean; return_order: boolean; print_label?: boolean; waybill?: boolean };
+  actions: {
+    confirm_payment: boolean;
+    /** D-64: an online payment (Payme …) — by hand only with a reason */
+    confirm_payment_manual?: boolean;
+    extend_reserve?: boolean;
+    next_status: string | null; cancel: boolean; edit: boolean; locked: boolean; units: boolean; return_order: boolean; print_label?: boolean; waybill?: boolean };
   is_test?: boolean;
   /** waybill number of the delivery service, printed on the label */
   delivery_waybill?: string | null;
@@ -127,8 +132,8 @@ export function OrderDetail() {
         }
       >
         {a.confirm_payment && (
-          <button className="btn" onClick={() => setModal('confirm')}>
-            {o.payment?.method === 'cod' ? 'Подтвердить заказ' : 'Подтвердить оплату'}
+          <button className={a.confirm_payment_manual ? 'btn btn-ghost' : 'btn'} onClick={() => setModal('confirm')}>
+            {a.confirm_payment_manual ? 'Подтвердить вручную' : o.payment?.method === 'cod' ? 'Подтвердить заказ' : 'Подтвердить оплату'}
           </button>
         )}
         {a.next_status && (
@@ -300,7 +305,10 @@ export function OrderDetail() {
             {o.reserved_until && (
               <>
                 <dt>Резерв до</dt>
-                <dd>{dateTime(o.reserved_until)}</dd>
+                <dd>
+                  {dateTime(o.reserved_until)} <ReserveLeft until={o.reserved_until} />
+                  {a.extend_reserve && <ExtendReserve order={o} onDone={done} />}
+                </dd>
               </>
             )}
           </dl>
@@ -414,13 +422,59 @@ function CustomerNotifications({ rows }: { rows: CustomerNotification[] }) {
   );
 }
 
+/** Аудит 2.3: minutes left of the reserve, updated every 30 seconds. */
+function ReserveLeft({ until }: { until: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const min = Math.ceil((Date.parse(until) - now) / 60_000);
+  return min > 0 ? <span className="muted small">(осталось {min} мин)</span> : <span className="text-warn small">(истёк)</span>;
+}
+
+function ExtendReserve({ order, onDone }: { order: AdminOrder; onDone: (o: AdminOrder) => void }) {
+  const m = useMutation({ mutationFn: () => api<AdminOrder>(`/staff/orders/${order.id}/extend-reserve`, { method: 'POST' }), onSuccess: onDone });
+  return (
+    <div>
+      <button type="button" className="btn btn-ghost btn-sm" disabled={m.isPending} onClick={() => m.mutate()}>
+        Продлить резерв на 30 мин
+      </button>
+      <ErrorBox error={m.error} />
+    </div>
+  );
+}
+
 function ConfirmPayment({ order, onDone, onClose }: ModalProps) {
   const [comment, setComment] = useState('');
   const cod = order.payment?.method === 'cod';
+  // D-64: an online payment (Payme …) is confirmed by the payment system; by hand — only with a reason
+  const manual = !!order.actions.confirm_payment_manual;
   const m = useMutation({
-    mutationFn: () => api<AdminOrder>(`/staff/orders/${order.id}/confirm-payment`, { method: 'POST', body: { comment: comment || undefined } }),
+    mutationFn: () => api<AdminOrder>(`/staff/orders/${order.id}/confirm-payment`, { method: 'POST', body: { comment: comment.trim() || undefined } }),
     onSuccess: onDone,
   });
+  if (manual)
+    return (
+      <Modal title="Подтвердить онлайн-оплату вручную" onClose={onClose}>
+        <p>
+          {PAYMENT_METHOD[order.payment?.method ?? ''] ?? 'Онлайн-оплата'} обычно подтверждается сама. Подтверждайте вручную, только если деньги точно пришли —{' '}
+          <strong>{money(order.payment?.amount_uzs)}</strong> за заказ {order.order_number}. Причина попадёт в журнал аудита и историю заказа.
+        </p>
+        <Field label="Причина (обязательно)">
+          <input value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} placeholder="Например: деньги видны в кабинете Payme, уведомление не пришло" />
+        </Field>
+        <ErrorBox error={m.error} />
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>
+            Отмена
+          </button>
+          <button className="btn" disabled={m.isPending || comment.trim().length < 5} onClick={() => m.mutate()}>
+            Подтвердить вручную
+          </button>
+        </div>
+      </Modal>
+    );
   return (
     <Modal title={cod ? 'Подтвердить заказ' : 'Подтвердить оплату'} onClose={onClose}>
       {cod ? (

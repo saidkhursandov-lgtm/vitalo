@@ -229,6 +229,8 @@ export const AUDIT_ACTION: Record<string, string> = {
   'promo_code.enabled': 'Промокод включён',
   'promo_code.disabled': 'Промокод выключен',
   'order.cod_confirmed': 'Заказ с оплатой при получении подтверждён',
+  'order.payment_manual_override': 'Онлайн-оплата подтверждена вручную',
+  'order.reserve_extended': 'Резерв заказа продлён',
   'support.reply': 'Ответ покупателю в обращении',
   'support.close': 'Обращение закрыто',
 };
@@ -316,10 +318,21 @@ const HISTORY_REASON: Record<string, string> = {
   'Cancelled by customer': 'Отменил клиент',
   'Online payment confirmed by the payment system': 'Онлайн-оплата подтверждена платёжной системой',
   'Order created': 'Заказ создан',
+  'Order confirmed by the manager (cash on delivery)': 'Менеджер подтвердил заказ (оплата при получении)',
+  'Bank transfer confirmed': 'Перевод подтверждён',
+  'Paid order cancelled': 'Оплаченный заказ отменён',
 };
+/** аудит 2.3: reasons with a variable tail («Payment method: payme»): the start translated, the tail as is or as a word */
+const HISTORY_PREFIX: [string, (rest: string) => string][] = [
+  ['Order created. Payment method: ', (m) => `Заказ создан. Способ оплаты: ${PAYMENT_METHOD[m] ?? m}`],
+  ['Payment method: ', (m) => `Способ оплаты: ${PAYMENT_METHOD[m] ?? m}`],
+  ['Online payment confirmed manually: ', (why) => `Онлайн-оплата подтверждена вручную: ${why}`],
+];
 export function historyReason(reason: string | null): string | null {
   if (!reason) return reason;
-  return HISTORY_REASON[reason] ?? reason;
+  if (HISTORY_REASON[reason]) return HISTORY_REASON[reason];
+  const prefix = HISTORY_PREFIX.find(([p]) => reason.startsWith(p));
+  return prefix ? prefix[1](reason.slice(prefix[0].length)) : reason;
 }
 
 export interface CancelInfo {
