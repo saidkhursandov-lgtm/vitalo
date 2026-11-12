@@ -206,7 +206,8 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     expect(list[0].cost_usd).toBeGreaterThan(0);
     await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.manager)).send({ action: 'hide' }).expect(403);
 
-    // «Исправить»: the specialist's text and label become the saved answer of the set; the next customer gets it at once
+    // «Исправить»: the specialist's text and label become the saved answer of the set; Шаг 0а: the AI is first, the fixed
+    // answer is not given again, and the saved answer is the link «Есть ответ специалиста VITALO» under the new AI answer
     await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.admin)).send({ action: 'fix', verdict: 'spread', text: '' }).expect(400);
     const after = (await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.admin)).send({ action: 'fix', verdict: 'spread', text: 'Разнесите C и D на 2 часа.' }).expect(200)).body as { id: string; review: string }[];
     expect(after.find((a) => a.id === id)).toMatchObject({ review: 'fixed' });
@@ -216,7 +217,10 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     const next = await customer();
     await add(next, p.d.id);
     await add(next, p.c.id);
-    expect((await check(next).expect(200)).body.result).toBe('instant');
+    fake.reply = goodReply('spread');
+    const nextRes = (await check(next).expect(200)).body;
+    expect(nextRes).toMatchObject({ result: 'ai', answer: { verdict: 'spread' }, specialist: { verdict: 'spread', text: 'Разнесите C и D на 2 часа.', conflict: false } });
+    expect(nextRes.answer.answer_id).not.toBe(id);
 
     // «Скрыть»: out of the cache; «Одобрить» — the AI text as is
     await http().post(`/api/staff/ai/answers/${id}/review`).set(bearer(tokens.admin)).send({ action: 'hide' }).expect(200);

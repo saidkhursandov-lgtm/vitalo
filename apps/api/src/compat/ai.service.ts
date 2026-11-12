@@ -64,8 +64,10 @@ interface Knowledge {
 }
 
 /**
- * 3.8: VITALO AI in the cart (D-45, D-47). The answer comes from, in this order: a saved specialist answer for the same
- * set and language → a cached AI answer for it (made after the latest change of the rules) → a new request to the model.
+ * 3.8: VITALO AI in the cart (D-45, D-47). Шаг 0а (D-66, архитектура 3.3): VITALO AI is first — the answer comes from a
+ * cached AI answer for the same set and language (made after the latest change of the rules) → a new request to the
+ * model. A saved specialist answer is not given instead of it: the cart shows it as a link under the AI answer
+ * (`specialist` in the state). It is used only when the AI cannot answer (a failure, a spent budget).
  * The model gets products and approved rules only, never the customer's data. Its answer is checked before anyone sees
  * it; a failure, no key, a switched-off assistant or a spent budget hand the cart to the specialist («ai_fallback»).
  */
@@ -101,8 +103,11 @@ export class AiService {
 
   /**
    * The cart block: whether VITALO AI works now, whether the customer agreed, new checks left today, the latest answer.
-   * cached — an answer for this set is ready without a new check (a saved specialist answer or the AI cache): the app
-   * then plays the short animation and does not show the daily limit (3.8 fix).
+   * cached — an AI answer for this set is ready without a new check: the app then plays the short animation and does not
+   * show the daily limit (3.8 fix).
+   * Шаг 0а: the app shows `answer` only after «Проверить совместимость» is tapped on the screen. `specialist` — a
+   * specialist answer for this set (this customer's own or a saved one) for the link «Есть ответ специалиста VITALO»;
+   * conflict — its label differs from the AI answer: the app then shows the AI answer only.
    */
   async state(userId: string, now = new Date()) {
     const s = await this.settings();
@@ -115,15 +120,31 @@ export class AiService {
       include: { ai_answer: true },
     });
     const lang = langOf(user.language);
-    const saved = items.length >= 2 ? await this.prisma.compat_answers.findUnique({ where: { set_key_lang: { set_key: setKey, lang } } }) : null;
+    const answer = latest?.ai_answer && latest.ai_answer.review !== 'hidden' && latest.ai_answer.review !== 'fixed' && latest.ai_answer.lang === lang ? await this.view(latest.ai_answer, items, lang) : null;
+    const specialist = items.length >= 2 ? await this.specialistAnswer(userId, setKey, lang) : null;
     return {
       available: s.enabled && this.model.ready(),
       consent: !!user.ai_consent_at,
       eligible: items.length >= 1,
       left_today: Math.max(0, s.cart_daily_limit - (await this.newToday(userId, now))),
-      cached: !!saved?.enabled || (s.enabled && items.length > 0 && !!(await this.cached(setKey, lang))),
-      answer: latest?.ai_answer && latest.ai_answer.review !== 'hidden' && latest.ai_answer.lang === lang ? await this.view(latest.ai_answer, items, lang) : null,
+      cached: s.enabled && items.length > 0 && !!(await this.cached(setKey, lang)),
+      answer,
+      specialist: specialist && { ...specialist, conflict: !!answer && answer.verdict !== specialist.verdict },
     };
+  }
+
+  /**
+   * Шаг 0а: the specialist answer for this set and language — this customer's latest answered request (a personal answer
+   * or a saved one given at once), else the saved answer for the set. Null — there is none.
+   */
+  private async specialistAnswer(userId: string, setKey: string, lang: Lang): Promise<{ verdict: Verdict; text: string } | null> {
+    const own = await this.prisma.compat_requests.findFirst({
+      where: { user_id: userId, set_key: setKey, lang, status: 'answered', source: { in: ['specialist', 'instant'] }, verdict: { not: null }, answer_text: { not: null } },
+      orderBy: { answered_at: 'desc' },
+    });
+    if (own) return { verdict: own.verdict as Verdict, text: own.answer_text! };
+    const saved = await this.prisma.compat_answers.findUnique({ where: { set_key_lang: { set_key: setKey, lang } } });
+    return saved?.enabled ? { verdict: saved.verdict as Verdict, text: saved.text } : null;
   }
 
   /** «Я согласен» (D-47): once; the date is kept on the customer. */
@@ -138,7 +159,8 @@ export class AiService {
 
   /**
    * «Проверить с VITALO AI». 403 CONSENT_REQUIRED, 400 NOT_ENOUGH_ITEMS (empty cart), 409 BUSY, 429 AI_DAILY_LIMIT.
-   * result: instant (saved specialist answer) | ai | ai_cache | specialist (handed over) | unavailable (one product, no AI).
+   * result: ai | ai_cache | instant (the AI could not answer, a saved specialist answer was given) | specialist (handed
+   * over) | unavailable (one product, no AI).
    */
   async check(userId: string, now = new Date()) {
     if (this.busy.has(userId)) throw new HttpException({ code: 'BUSY', message: 'The check is already running' }, HttpStatus.CONFLICT);
@@ -158,14 +180,13 @@ export class AiService {
     if (!items.length) throw new BadRequestException({ code: 'NOT_ENOUGH_ITEMS', message: 'The cart is empty' });
     const setKey = setKeyOf(items.map((i) => i.product_id));
 
-    // 1. a specialist's saved answer always wins
-    if (items.length >= 2 && (await this.compat.answerFromSaved(userId, items, lang, now))) return { result: 'instant' as const, ...(await this.state(userId, now)) };
+    // Шаг 0а: VITALO AI is first — a saved specialist answer no longer wins here; it is a link under the AI answer
 
     // switched off in «Настройки → VITALO AI»: no AI answers at all, cached ones too
     const s = await this.settings();
     if (!s.enabled) return this.fallback(userId, items, lang, 'disabled', now);
 
-    // 2. the same set was answered by the AI after the latest change of the knowledge base
+    // 1. the same set was answered by the AI after the latest change of the knowledge base
     const cached = await this.cached(setKey, lang);
     if (cached) {
       await this.prisma.$transaction([
@@ -176,7 +197,7 @@ export class AiService {
       return { result: 'ai_cache' as const, ...(await this.state(userId, now)) };
     }
 
-    // 3. a new request
+    // 2. a new request
     if (!this.model.ready()) return this.fallback(userId, items, lang, 'no_key', now);
     if ((await this.newToday(userId, now)) >= s.cart_daily_limit) {
       await this.analytics.track(userId, 'compat_ai_limit', { scenario: 'cart', limit: s.cart_daily_limit });
@@ -252,7 +273,8 @@ export class AiService {
       this.prisma.product_substances.aggregate({ _max: { created_at: true } }),
     ]);
     const after = [rules._max.updated_at, links._max.created_at].filter((d): d is Date => !!d).reduce((m, d) => (d > m ? d : m), new Date(0));
-    return this.prisma.ai_compat_answers.findFirst({ where: { set_key: setKey, lang, review: { not: 'hidden' }, created_at: { gt: after } }, orderBy: { created_at: 'desc' } });
+    // Шаг 0а: an answer the specialist «Исправил» is not given again — the AI is first now, so a wrong answer must not come back
+    return this.prisma.ai_compat_answers.findFirst({ where: { set_key: setKey, lang, review: { notIn: ['hidden', 'fixed'] }, created_at: { gt: after } }, orderBy: { created_at: 'desc' } });
   }
 
   private answeredRequest(userId: string, items: Item[], lang: Lang, source: 'ai' | 'ai_cache', a: ai_compat_answers, now: Date, db: Prisma.TransactionClient | PrismaService = this.prisma) {
@@ -273,10 +295,14 @@ export class AiService {
     });
   }
 
-  /** The AI could not answer: 2+ products go to the specialist (no daily limit for this), one product — nothing to do. */
+  /**
+   * The AI could not answer: 2+ products — a saved specialist answer for the set at once, else to the specialist (no
+   * daily limit for this); one product — nothing to do.
+   */
   private async fallback(userId: string, items: Item[], lang: Lang, reason: Fallback, now: Date) {
     await this.analytics.track(userId, 'compat_ai_fallback', { reason, products: items.length, lang });
     if (items.length < 2) return { result: 'unavailable' as const, reason, ...(await this.state(userId, now)) };
+    if (await this.compat.answerFromSaved(userId, items, lang, now)) return { result: 'instant' as const, reason, ...(await this.state(userId, now)) };
     const setKey = setKeyOf(items.map((i) => i.product_id));
     const pending = await this.prisma.compat_requests.findFirst({ where: { user_id: userId, status: 'pending', set_key: setKey } });
     if (!pending) await this.compat.queue(userId, items, lang, null, 'ai_fallback');

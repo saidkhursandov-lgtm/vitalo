@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import type { AiAnswer, AiState } from '../lib/types';
+import type { AiAnswer, AiState, CompatVerdict } from '../lib/types';
 import { AlertIcon, CheckIcon, ChevronIcon, CloseIcon, InfoIcon, MoonIcon, ShieldIcon, SparkIcon, SunIcon } from './Icons';
 
 /** The analysis animation is shown at least this long (spec 2.3: 2–3 s). Tests set 0. */
@@ -38,6 +38,9 @@ export const isEvening = (when: string) => /вечер|ноч|сн[ае]|пер�
  * совместимость (VITALO AI)» (one product — «С чем сочетать этот препарат?»). The consent and the daily limit are checked
  * before the animation; then the 4 steps and the answer card. «Спросить специалиста лично» — in the answer, on the limit
  * and on an error.
+ * Шаг 0а (D-66, D-68): the block is folded until it is tapped — no answer opens by itself, a cached one too. Under the
+ * AI answer — «Есть ответ специалиста VITALO» (when there is one with the same label) and «Спросить специалиста».
+ * `below` — what goes under the answer (Шаг 0б: «Задать вопрос VITALO AI по корзине»).
  */
 export function AiCompat({
   state,
@@ -47,6 +50,7 @@ export function AiCompat({
   onChange,
   onRefuse,
   askConsent = false,
+  below,
 }: {
   state: AiState;
   products: string[];
@@ -57,11 +61,14 @@ export function AiCompat({
   onRefuse: () => void;
   /** open the consent at once («Проверить с VITALO AI» after a refusal) */
   askConsent?: boolean;
+  below?: ReactNode;
 }) {
   const { t } = useI18n();
   const [phase, setPhase] = useState<'idle' | 'consent' | 'checking'>(askConsent ? 'consent' : 'idle');
   const [note, setNote] = useState<Note | null>(null);
   const [ms, setMs] = useState(AI_MIN_MS.value);
+  // Шаг 0а: the result appears only after the tap, on this screen
+  const [shown, setShown] = useState(false);
 
   const run = async (next0: AiState = state) => {
     setNote(null);
@@ -86,6 +93,7 @@ export function AiCompat({
     if (failed) setNote(failed);
     if (next) {
       onChange(next);
+      if (next.answer || (next.result === 'instant' && next.specialist)) setShown(true);
       if (next.result === 'specialist') setNote('fallback');
       if (next.result === 'unavailable') setNote('unavailable');
     }
@@ -97,12 +105,20 @@ export function AiCompat({
       {t('ai.askLive')}
     </button>
   );
+  // two different labels side by side — never (архитектура 3.3): on a conflict only the AI answer is shown
+  const specialist = state.specialist && !state.specialist.conflict ? state.specialist : null;
   return (
     <div className="ai-compat">
       {phase === 'checking' ? (
         <AiProgress ms={ms} />
-      ) : state.answer ? (
-        <AiAnswerCard answer={state.answer} ask={ask} />
+      ) : shown && state.answer ? (
+        <>
+          <AiAnswerCard answer={state.answer} ask={ask} specialist={specialist} />
+          {below}
+        </>
+      ) : shown && state.specialist ? (
+        // the AI could not answer and a saved specialist answer was given at once
+        <SpecialistAnswer answer={state.specialist} />
       ) : (
         <section className="ai-box">
           <button type="button" className="ai-box-main" onClick={() => (state.consent ? void run() : setPhase('consent'))}>
@@ -198,7 +214,46 @@ function AiProgress({ ms }: { ms: number }) {
   );
 }
 
-function AiAnswerCard({ answer, ask }: { answer: AiAnswer; ask: ReactNode }) {
+const VERDICT_KEY: Record<CompatVerdict, MessageKey> = { compatible: 'compat.v.compatible', spread: 'compat.v.spread', consult: 'compat.v.consult' };
+
+/** Шаг 0а: the specialist answer itself — under the link, or alone when the AI could not answer. */
+function SpecialistAnswer({ answer, withLabel = true }: { answer: { verdict: CompatVerdict; text: string }; withLabel?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <section className={`compat-answer is-${answer.verdict}`} aria-label={t('compat.instant')}>
+      <div className="compat-answer-head">
+        {withLabel && <span className={`compat-label is-${answer.verdict}`}>{t(VERDICT_KEY[answer.verdict])}</span>}
+        <span className="compat-answer-title">{t('compat.instant')}</span>
+      </div>
+      <p className="compat-answer-text">{answer.text}</p>
+      <p className="compat-disclaimer">{t('compat.disclaimer')}</p>
+    </section>
+  );
+}
+
+/** Шаг 0а: «Есть ответ специалиста VITALO» — a link that opens the answer under the AI one (no second badge). */
+function SpecialistLink({ answer }: { answer: { verdict: CompatVerdict; text: string } }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="ai-specialist">
+      <button
+        type="button"
+        className="link ai-specialist-link"
+        aria-expanded={open}
+        onClick={() => {
+          if (!open) track('compat_view', { verdict: answer.verdict, source: 'specialist_link', changed: false });
+          setOpen(!open);
+        }}
+      >
+        <ShieldIcon width={14} height={14} aria-hidden /> {t(open ? 'ai.specialistHide' : 'ai.specialistLink')}
+      </button>
+      {open && <SpecialistAnswer answer={answer} withLabel={false} />}
+    </div>
+  );
+}
+
+function AiAnswerCard({ answer, ask, specialist }: { answer: AiAnswer; ask: ReactNode; specialist: { verdict: CompatVerdict; text: string } | null }) {
   const { t } = useI18n();
   const seen = useRef('');
   useEffect(() => {
@@ -257,9 +312,10 @@ function AiAnswerCard({ answer, ask }: { answer: AiAnswer; ask: ReactNode }) {
         ))}
         <div className="ai-meds">
           <span>{t('ai.drugs')}</span>
-          {ask}
         </div>
         <p className="compat-disclaimer">{t('compat.disclaimer')}</p>
+        {specialist && <SpecialistLink answer={specialist} />}
+        {ask}
       </div>
     </section>
   );

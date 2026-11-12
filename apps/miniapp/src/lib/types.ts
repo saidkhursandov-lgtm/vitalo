@@ -653,8 +653,10 @@ export interface AiState {
   left_today: number;
   /** an answer for this set is ready without a new check: no daily limit, the short animation */
   cached: boolean;
-  /** the latest AI answer for the cart as it is now */
+  /** the latest AI answer for the cart as it is now; Шаг 0а: shown only after the tap on «Проверить совместимость» */
   answer: AiAnswer | null;
+  /** Шаг 0а: a specialist answer for this set — the link «Есть ответ специалиста VITALO»; conflict — another label than the AI */
+  specialist?: { verdict: CompatVerdict; text: string; conflict: boolean } | null;
   result?: 'instant' | 'ai' | 'ai_cache' | 'specialist' | 'unavailable';
   reason?: string;
 }

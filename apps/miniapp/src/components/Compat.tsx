@@ -32,6 +32,8 @@ const writeRefused = (on: boolean) => {
 };
 
 /**
+ * Шаг 0а: VITALO AI first; its result only by the tap; with it the specialist answer is a link under the AI answer and
+ * «ждём ответа» goes under the block.
  * 3.8 fix: one block. VITALO AI (from one product, AiCompat) — «Спросить специалиста лично» only inside it (the answer,
  * the limit, an error). The AI is off, has no key or the customer closed the consent — the same block leads to the
  * specialist (3.4, 2+ different products). Above it — the specialist's answer for the latest request (with «Состав
@@ -52,26 +54,27 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
   if (!s || (!s.eligible && !aiOn)) return null;
   const r = s.request;
   const waiting = r?.status === 'pending' && !r.changed;
-  // an AI answer is shown by its own card
-  const answered = r?.status === 'answered' && r.source !== 'ai' && r.source !== 'ai_cache' ? r : null;
-  const canAsk = s.eligible && !waiting && (!answered || answered.changed);
   // a refusal counts only while there is no consent; with one product the specialist cannot help, the AI block stays
   const showAi = aiOn && !(refused && !ai.data!.consent && s.eligible);
+  // Шаг 0а: with VITALO AI the specialist answer is a link under the AI answer; without it — shown above, as in 3.4
+  const answered = !showAi && r?.status === 'answered' && r.source !== 'ai' && r.source !== 'ai_cache' ? r : null;
+  const canAsk = s.eligible && !waiting && (!answered || answered.changed);
+  const pending = s.eligible && waiting && (
+    <div className="compat-pending" role="status">
+      <ShieldIcon width={20} height={20} aria-hidden />
+      <span>
+        <strong>{t('compat.pending')}</strong>
+        <span>{t('compat.hours')}</span>
+      </span>
+    </div>
+  );
   return (
     <div className="compat">
       {answered && <CompatAnswer request={answered} />}
-      {s.eligible && waiting && (
-        <div className="compat-pending" role="status">
-          <ShieldIcon width={20} height={20} aria-hidden />
-          <span>
-            <strong>{t('compat.pending')}</strong>
-            <span>{t('compat.hours')}</span>
-          </span>
-        </div>
-      )}
+      {!showAi && pending}
       {showAi ? (
         <AiCompat
-          key={askConsent ? 'consent' : 'idle'}
+          key={`${setKey}|${askConsent ? 'consent' : 'idle'}`}
           state={ai.data!}
           products={s.products}
           canAskSpecialist={canAsk}
@@ -103,6 +106,7 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
           />
         )
       )}
+      {showAi && pending}
       {open && <CompatSheet state={s} onClose={() => setOpen(false)} onDone={(next) => client.setQueryData(['compat', setKey, lang], next)} />}
     </div>
   );

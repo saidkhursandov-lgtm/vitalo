@@ -1459,6 +1459,11 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .ai-meds { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; margin: 8px 0 0; padding-top: 6px; border-top: 1px solid var(--ai-body-border); }
 .ai-meds > span { flex: 1 1 100%; font-size: 12.5px; line-height: 1.35; font-weight: 600; color: var(--text); }
 .ai-answer .compat-disclaimer { margin: 2px 0 0; font-size: 11.5px; line-height: 1.35; }
+/* Шаг 0а: «Есть ответ специалиста VITALO» under the AI answer, then «Спросить специалиста» */
+.ai-specialist { margin: 6px 0 0; padding-top: 4px; border-top: 1px solid var(--ai-body-border); }
+.ai-specialist .ai-specialist-link { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--primary-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.ai-specialist .compat-answer { margin: 4px 0 6px; }
+.ai-answer-body > .ai-ask { display: flex; }
 .ai-consent p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
 /* 3.8: the VITALO AI slide has a longer sentence */
 .hero-slide h2.hero-ai-title { font-size: clamp(14px, 4.3vw, 17px); line-height: 1.25; max-width: 86%; }

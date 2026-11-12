@@ -594,6 +594,8 @@ const ru = {
   'ai.overlap': 'Повтор: {names} — проверьте суммарную дозировку',
   'ai.askLive': 'Спросить специалиста лично',
   'ai.tryAi': 'Проверить с VITALO AI',
+  'ai.specialistLink': 'Есть ответ специалиста VITALO',
+  'ai.specialistHide': 'Скрыть ответ специалиста',
 };
 
 export type MessageKey = keyof typeof ru;
@@ -1179,6 +1181,8 @@ const uz: Record<MessageKey, string> = {
   'ai.overlap': 'Takrorlanadi: {names} — umumiy dozani tekshiring',
   'ai.askLive': 'Mutaxassisdan shaxsan soʻrash',
   'ai.tryAi': 'VITALO AI bilan tekshirish',
+  'ai.specialistLink': 'VITALO mutaxassisining javobi bor',
+  'ai.specialistHide': 'Mutaxassis javobini yashirish',
 };
 
 export const dictionaries: Record<Lang, Record<MessageKey, string>> = { ru, uz };
