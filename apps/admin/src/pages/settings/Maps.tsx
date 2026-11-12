@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Badge, ErrorBox, Loading } from '../../components/ui';
+import { Badge, ErrorBox, Loading, Help } from '../../components/ui';
 import { api } from '../../lib/api';
 
 interface Limit {
@@ -43,10 +43,10 @@ export function MapsSettings() {
   return (
     <section className="card narrow">
       <h2>Карта (Яндекс)</h2>
-      <p className="muted">
+      <Help id="maps">
         Кнопка «Выбрать на карте» в корзине, при оформлении и в «Профиль → Адреса». Ручной ввод адреса работает всегда. Точку на карте сотрудники
         видят в карточке заказа и в сообщении о новом заказе («Открыть в Яндекс Картах»).
-      </p>
+      </Help>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
         <input type="checkbox" checked={s.enabled} disabled={save.isPending} onChange={(e) => save.mutate(e.target.checked)} /> Показывать карту в Mini App
       </label>

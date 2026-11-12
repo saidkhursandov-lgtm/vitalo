@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { Badge, ErrorBox, Field, Loading, Modal, toInt } from '../../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, toInt, Help } from '../../components/ui';
 import { api } from '../../lib/api';
 import { money } from '../../lib/format';
 import { MapsSettings } from './Maps';
@@ -54,10 +54,10 @@ function Tariffs() {
   return (
     <section className="card flush">
       <div className="card-head">
-        <p className="muted">
+        <Help id="delivery">
           Тариф города важнее тарифа региона. Порог — сумма товаров после скидок, с которой доставка бесплатна. Срок — рабочих дней; у города без своего срока
           берётся срок региона.
-        </p>
+        </Help>
         <button className="btn" onClick={() => setEdit('new')}>
           + Тариф
         </button>

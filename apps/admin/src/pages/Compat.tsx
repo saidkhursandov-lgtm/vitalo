@@ -1,3 +1,4 @@
+import { Help } from '../components/ui';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -125,7 +126,7 @@ export function Compat() {
         <ProductSubstancesTab canEdit={answer} />
       ) : (
         <>
-          <p className="muted">
+          <Help id="compat">
             Покупатель отправляет корзину (2+ разных товара) с необязательным
             комментарием. Ответ приходит ему в бот, в уведомления и в корзину.
             Комментарий может содержать сведения о здоровье: его видят только
@@ -133,7 +134,7 @@ export function Compat() {
             ответ остаются).
             {!answer &&
               " Отвечать может администратор или сотрудник с отметкой «специалист»."}
-          </p>
+          </Help>
           {tab === "pending" || tab === "answered" ? (
             <Requests status={tab} canAnswer={answer} />
           ) : tab === "saved" ? (

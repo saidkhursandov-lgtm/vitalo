@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { ErrorBox, Field, Loading } from '../../components/ui';
+import { ErrorBox, Field, Loading, Help } from '../../components/ui';
 import { api } from '../../lib/api';
 
 interface Method {
@@ -25,9 +25,9 @@ export function PaymentTimeouts() {
   return (
     <section className="card narrow">
       <h2>Срок резерва неоплаченного заказа</h2>
-      <p className="muted">
+      <Help id="payment-timeouts">
         Сколько товар держится за заказом, пока клиент не оплатил. Потом заказ отменяется автоматически. Новый срок действует только для новых заказов. Payme обычно 30 минут; до 3 суток — только пока Payme проверяет тестовые заказы.
-      </p>
+      </Help>
       {/* «Перевод по реквизитам» is no longer offered to customers (D-06): its reserve time is not edited any more */}
       {q.data.filter((m) => m.code !== 'bank_transfer').map((m) => (
         <TimeoutRow key={m.code} method={m} />

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt, Help } from '../components/ui';
 import { api, ApiError, errorText } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { money } from '../lib/format';
@@ -112,11 +112,11 @@ export function Campaigns() {
           </button>
         )}
       </PageHead>
-      <p className="muted">
+      <Help id="campaigns">
         Акция включается и выключается сама по датам (время Ташкента); после окончания цены возвращаются. Скидка до 35% —
         только с датой окончания, без неё — до 25%. Цена не ниже границы маржи. Один товар — только в одной акции в одно
         время. Промокод не действует на товары со скидкой акции больше 15%.
-      </p>
+      </Help>
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { ErrorBox, Field, Loading } from '../../components/ui';
+import { ErrorBox, Field, Loading, Help } from '../../components/ui';
 import { api } from '../../lib/api';
 
 type Text = { ru: string; uz: string };
@@ -60,11 +60,11 @@ export function ManifestSettings() {
       }}
     >
       <h2>Манифест «Как VITALO отбирает добавки»</h2>
-      <p className="muted">
+      <Help id="manifest">
         Строка на главной под «Популярным» открывает окно: одна фраза и три карточки «Не берём» (красный крестик) и «Стандарт
         VITALO» (зелёная галочка), внизу кнопка «Спросить специалиста». То же окно открывается из кнопки «AI-подбор». Без
         процентов усвоения и без слова Halal.
-      </p>
+      </Help>
       <label className="check">
         <input type="checkbox" checked={f.enabled} onChange={(e) => set({ ...f, enabled: e.target.checked })} />
         Показывать блок на главной

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { PLATFORM_LABELS } from '../components/Competitors';
-import { Badge, ErrorBox, Loading, PageHead } from '../components/ui';
+import { Badge, ErrorBox, Loading, PageHead, Help } from '../components/ui';
 import { api, errorText } from '../lib/api';
 import { dateTime, money, ruDate } from '../lib/format';
 
@@ -229,11 +229,11 @@ function FeedCard() {
   return (
     <section className="card">
       <h2>Загрузить данные</h2>
-      <p className="muted">
+      <Help id="ai-analyst-upload">
         Вставьте сырой текст или таблицу: ответ ChatGPT, свои заметки, цены конкурентов, число заказов на Uzum, места в бестселлерах iHerb. Claude
         разберёт текст, программа строго сверит «1-в-1» (бренд, форма, доза, количество в банке), а в базу запишется только то, что вы отметите и
         сохраните.
-      </p>
+      </Help>
       <form onSubmit={submit} className="iherb-form">
         <label className="field">
           <span className="field-label">Текст или таблица</span>

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Badge, ErrorBox, Field, Loading } from '../../components/ui';
+import { Badge, ErrorBox, Field, Loading, Help } from '../../components/ui';
 import { api } from '../../lib/api';
 import { usd } from '../CompatAi';
 
@@ -61,10 +61,10 @@ export function VitaloAiSettings() {
     <>
       <section className="card narrow">
         <h2>VITALO AI</h2>
-        <p className="muted">
+        <Help id="vitalo-ai">
           Проверка совместимости корзины (чат появится позже). Когда AI выключен, нет ключа или кончился бюджет, покупатель видит «Ответ
           готовит специалист VITALO», а запрос уходит специалисту.
-        </p>
+        </Help>
         <p>
           Сейчас у покупателей:{' '}
           {!s.key_set ? (

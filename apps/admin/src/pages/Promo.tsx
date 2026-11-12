@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { ErrorBox, Field, PageHead } from '../components/ui';
+import { ErrorBox, Field, PageHead, Help } from '../components/ui';
 import { api } from '../lib/api';
 import { dateTime } from '../lib/format';
 
@@ -51,11 +51,11 @@ export function Promo() {
     <>
       <PageHead title="Рассылки" />
       <section className="card">
-        <p className="muted">
+        <Help id="promo">
           Сообщение придёт в бот и в «Уведомления» Mini App только клиентам, у которых включено «Получать акции и новости»
           {audience.data ? <> — сейчас таких <strong>{audience.data.recipients}</strong></> : null}. С 22:00 до 08:00 по Ташкенту
           акции не отправляются: отправка переносится на 08:00. Сообщения о заказах это правило не затрагивает.
-        </p>
+        </Help>
         <form onSubmit={onSubmit} className="form-grid">
           <Field label="Заголовок (RU)">
             <input value={form.title_ru} onChange={set('title_ru')} maxLength={80} required minLength={2} />

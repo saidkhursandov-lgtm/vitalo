@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt, Help } from '../components/ui';
 import { api, errorText, qs } from '../lib/api';
 import { TestFlag, useShowTest } from '../components/TestFlag';
 import { useSession } from '../lib/auth';
@@ -78,10 +78,10 @@ export function Brands() {
           + Добавить бренд
         </button>
       </PageHead>
-      <p className="muted">
+      <Help id="brands">
         Лента «Проверенные бренды» в Mini App показывает включённые бренды, у которых есть товар в наличии.
         Переименование — в «Настройки → Справочники»: название у товаров меняется вместе с ним.
-      </p>
+      </Help>
       <SupplierTabs value={supplier} onChange={setSupplier} />
       <div className="filters">{testToggle}</div>
       {remove.isError && <p className="alert alert-error">{errorText(remove.error)}</p>}

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { Link, useSearchParams } from 'react-router-dom';
 import { BackIcon } from '../components/Icons';
 import { REASONS, ReasonPicker } from '../components/Reason';
-import { Badge, ErrorBox, Field, Loading, Modal, Pagination } from '../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, Pagination, Help } from '../components/ui';
 import { api, ApiError, errorText, newKey, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, money, ruDate, UNIT_EVENT, UNIT_STATUS } from '../lib/format';
@@ -544,9 +544,9 @@ function AcceptModal({ sessionId, item, onClose, onDone }: { sessionId: string; 
 
   return (
     <Modal title={`Принять: ${item.product.sku}`} onClose={onClose} wide>
-      <p className="muted">
+      <Help id="receiving">
         {item.product.name_ru} · ожидается {item.remaining_qty} шт.{item.accepted_qty ? `, уже принято ${item.accepted_qty}` : ''}
-      </p>
+      </Help>
       <form onSubmit={submit}>
         <Field label="Сколько банок пришло фактически">
           <input className="scan-input" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, ''))} autoFocus required />

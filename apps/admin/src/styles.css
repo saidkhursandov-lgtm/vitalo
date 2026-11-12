@@ -601,3 +601,8 @@ textarea { resize: vertical; }
 .support-stars { color: var(--orange); letter-spacing: 1px; white-space: nowrap; }
 .support-stars .muted { color: var(--border); }
 .support-head p { margin: 4px 0; }
+
+/* Аудит админки 2.11: «Как это работает» — folded explanation at the top of a page */
+.help { margin: 0 0 12px; }
+.help > summary { cursor: pointer; color: var(--primary-text); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
+.help > p { margin: 4px 0 0; }

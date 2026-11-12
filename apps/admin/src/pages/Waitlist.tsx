@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { BackIcon } from '../components/Icons';
-import { Badge, ErrorBox, Loading, PageHead } from '../components/ui';
+import { Badge, ErrorBox, Loading, PageHead, Help } from '../components/ui';
 import { api } from '../lib/api';
 import { dateTime, prettyPhone } from '../lib/format';
 
@@ -32,11 +32,11 @@ export function Waitlist() {
   return (
     <>
       <PageHead title="Лист ожидания" />
-      <p className="muted">
+      <Help id="waitlist">
         Когда остаток товара станет больше нуля, бот сам напишет ожидающим «… снова в наличии» с кнопкой «Открыть товар» —
         один раз на каждую заявку. «Ждут» — только действующие заявки; кто сам выключил колокольчик, считается отдельно в
         «Отменили» и сообщения не получит.
-      </p>
+      </Help>
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (

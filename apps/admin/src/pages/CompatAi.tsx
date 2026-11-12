@@ -1,3 +1,4 @@
+import { Help } from '../components/ui';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Badge, ErrorBox, Field, Loading, Modal } from "../components/ui";
@@ -63,13 +64,13 @@ export function AiAnswersTab({ canEdit }: { canEdit: boolean }) {
   });
   return (
     <>
-      <p className="muted">
+      <Help id="compat-ai">
         Ответы VITALO AI покупателям показываются сразу и ждут здесь проверки.
         «Одобрить и сохранить» — ответ становится сохранённым ответом
         специалиста для этого набора. «Исправить» — свой текст и метка.
         «Скрыть» — ответ больше не используется, следующий покупатель получит
         новый.
-      </p>
+      </Help>
       <div className="segmented" style={{ marginBottom: 12 }}>
         <button
           className={filter === "new" ? "is-on" : ""}

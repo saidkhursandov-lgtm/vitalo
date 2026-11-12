@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { BackIcon } from '../components/Icons';
-import { Badge, ErrorBox, Field, Loading, PageHead } from '../components/ui';
+import { Badge, ErrorBox, Field, Loading, PageHead, Help } from '../components/ui';
 import { api, errorText, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { dateTime, ORDER_STATUS, ruDate } from '../lib/format';
@@ -158,13 +158,13 @@ export function CrossBorder() {
   return (
     <>
       <PageHead title="Поставки под заказ" />
-      <p className="muted">
+      <Help id="cross-border">
         Здесь товары «под заказ»: покупатель оплатил (у местного поставщика — или менеджер подтвердил заказ с оплатой при получении), а на
         складе в Ташкенте их не было. Закажите их у поставщика, отметьте строки одного поставщика и нажмите «Создать поставку» — покупатели
         получат сообщение «Заказан…». У зарубежной поставки двигайте этапы «Отправлена» и «Прибыла»; когда поставку примут на складе по
         выбранной закупке, банки сами закрепятся за заказами, и заказы можно собирать. Сроки и гарантия — у каждого поставщика: «Настройки →
         Справочники → Поставщики».
-      </p>
+      </Help>
 
       <section className="card flush">
         <div className="card-head">

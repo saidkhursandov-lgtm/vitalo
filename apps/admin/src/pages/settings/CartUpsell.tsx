@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Badge, ErrorBox, Loading } from '../../components/ui';
+import { Badge, ErrorBox, Loading, Help } from '../../components/ui';
 import { api } from '../../lib/api';
 import { money } from '../../lib/format';
 
@@ -71,10 +71,10 @@ export function CartUpsellSettings() {
   return (
     <form className="card narrow" onSubmit={submit}>
       <h2>Допродажа в корзине</h2>
-      <p className="muted">
+      <Help id="cart-upsell">
         Под полоской «Добавьте ещё X сум — доставка бесплатна» клиент видит 2–3 товара с кнопкой [+]. Блок не показывается, когда порог уже набран
         или у клиента бесплатная доставка первого заказа. Показы и добавления считаются в «Аналитика → Воронка».
-      </p>
+      </Help>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
         <input type="checkbox" checked={enabled} onChange={(e) => (setEnabled(e.target.checked), changed())} /> Показывать товары в корзине
       </label>

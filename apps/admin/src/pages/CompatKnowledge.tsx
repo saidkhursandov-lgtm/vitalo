@@ -1,3 +1,4 @@
+import { Help } from '../components/ui';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Badge, ErrorBox, Field, Loading, Modal } from "../components/ui";
@@ -119,12 +120,12 @@ export function RulesTab({
   const drafts = q.data.filter((r) => r.status === "draft");
   return (
     <>
-      <p className="muted">
+      <Help id="compat-knowledge">
         Правила связывают два вещества из справочника. VITALO AI видит{" "}
         <strong>только одобренные</strong> правила; одобряет администратор.
         Правило действует, когда вещества A и B в <strong>разных</strong>{" "}
         товарах корзины.
-      </p>
+      </Help>
       <div className="compat-toolbar">
         <div className="segmented">
           {(["draft", "approved", "off", "all"] as const).map((s) => (
@@ -445,12 +446,12 @@ export function SubstancesTab({ canEdit }: { canEdit: boolean }) {
     return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <>
-      <p className="muted">
+      <Help id="compat-substances">
         Справочник веществ для проверки совместимости. Синонимы — как вещество
         пишут на этикетках и в составе («D3», «холекальциферол»). Форма вещества
         получает его правила: P-5-P — форма B6. Группы лекарств — только для
         правил «Осторожно с лекарствами». Вещества не удаляются, а выключаются.
-      </p>
+      </Help>
       {canEdit && (
         <div className="compat-toolbar">
           <button className="btn btn-ghost" onClick={() => setEditing("new")}>
@@ -678,11 +679,11 @@ export function ProductSubstancesTab({ canEdit }: { canEdit: boolean }) {
   const empty = q.data.filter((p) => !p.substances.length).length;
   return (
     <>
-      <p className="muted">
+      <Help id="compat-products">
         Вещества товара для проверки совместимости — выбираются из справочника.
         Без веществ товар в проверке не участвует.
         {empty > 0 && <strong> Без веществ: {empty}.</strong>}
-      </p>
+      </Help>
       <div className="card flush table-scroll">
         <table className="table compat-table">
           <thead>

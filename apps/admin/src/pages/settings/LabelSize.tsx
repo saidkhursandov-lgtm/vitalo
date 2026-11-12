@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { ErrorBox, Field, Loading } from '../../components/ui';
+import { ErrorBox, Field, Loading, Help } from '../../components/ui';
 import { api } from '../../lib/api';
 
 interface Size {
@@ -40,10 +40,10 @@ function LabelSizeForm({ size }: { size: Size }) {
   return (
     <section className="card narrow">
       <h2>Размер этикетки Physical ID</h2>
-      <p className="muted">
+      <Help id="label-size">
         Бумага в принтере XP-365B. По умолчанию 58×40 мм. Этот же размер нужно выбрать в драйвере принтера и в окне печати Chrome
         (подробно — в инструкции по печати этикеток).
-      </p>
+      </Help>
       <form onSubmit={submit}>
         <div className="form-grid">
           <Field label="Ширина, мм" hint="30–76 мм">

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ReasonPicker } from '../components/Reason';
-import { Badge, ErrorBox, Loading, Modal, PageHead } from '../components/ui';
+import { Badge, ErrorBox, Loading, Modal, PageHead, Help } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { dateTime } from '../lib/format';
 
@@ -381,10 +381,10 @@ function CloseModal({ row, onClose }: { row: Attention; onClose: () => void }) {
   });
   return (
     <Modal title={`Закрыть заказ ${row.external_number} как неактуальный?`} onClose={onClose}>
-      <p className="muted">
+      <Help id="yandex-sync">
         Заказ уйдёт из «Требует внимания» навсегда: следующие опросы его не поднимут и уведомлений по нему не будет. Причина пишется в журнал
         аудита.
-      </p>
+      </Help>
       <ReasonPicker options={CLOSE_REASONS} onChange={setReason} />
       <ErrorBox error={m.error} />
       <div className="modal-actions">

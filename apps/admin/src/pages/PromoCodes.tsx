@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
+import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt, Help } from '../components/ui';
 import { api, errorText, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
 import { money, ruDate } from '../lib/format';
@@ -108,7 +108,7 @@ export function PromoCodes() {
           </button>
         )}
       </PageHead>
-      <p className="muted">
+      <Help id="promo-codes">
         Один промокод на заказ. Код не действует на товары с видимой скидкой больше 15%. Защита маржи: цена строки после
         скидки не ниже закупки + {guard.data?.min_markup_pct ?? '…'}%, а без закупочной цены скидка не больше{' '}
         {guard.data?.max_discount_pct ?? '…'}%.{' '}
@@ -117,7 +117,7 @@ export function PromoCodes() {
             Изменить защиту маржи
           </button>
         )}
-      </p>
+      </Help>
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { errorText } from '../lib/api';
 import { orderStatusLabel, PAYMENT_STATUS } from '../lib/format';
 import { CloseIcon, NextIcon, PrevIcon } from './Icons';
@@ -124,3 +124,36 @@ export const NoAccess = () => (
 
 /** Integer input that keeps "" while typing; returns undefined for empty. */
 export const toInt = (v: string): number | undefined => (v.trim() === '' ? undefined : Number(v.replace(/\s/g, '')));
+
+/**
+ * Аудит админки 2.11: the «how it works» paragraph of a page, folded by default so the first screen shows data.
+ * Whether it is open is remembered per page in this browser.
+ */
+export function Help({ id, children }: { id: string; children: ReactNode }) {
+  const key = 'help:' + id;
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(key) === '1';
+    } catch {
+      return false;
+    }
+  });
+  return (
+    <details
+      className="help"
+      open={open}
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpen(now);
+        try {
+          localStorage.setItem(key, now ? '1' : '0');
+        } catch {
+          /* private mode: just not remembered */
+        }
+      }}
+    >
+      <summary>Как это работает</summary>
+      <p className="muted">{children}</p>
+    </details>
+  );
+}
