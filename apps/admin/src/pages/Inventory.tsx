@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '../components/ui';
 import { api, qs } from '../lib/api';
+import { useTab } from '../lib/useTab';
 import { useSession } from '../lib/auth';
 import { CONDITION, dateTime, money, MOVEMENT } from '../lib/format';
 import { CloseIcon } from '../components/Icons';
@@ -37,10 +38,11 @@ const TABS = [
 
 export function Inventory() {
   const { can } = useSession();
-  const [params, setParams] = useSearchParams();
   const tabs = TABS.filter(([, , perm]) => !perm || can(perm));
-  const tab = tabs.find(([t]) => t === params.get('tab'))?.[0] ?? 'stock';
-  const setTab = (t: string) => setParams(t === 'stock' ? {} : { tab: t }, { replace: true });
+  const [tab, setTab] = useTab(
+    tabs.map(([t]) => t),
+    'stock',
+  );
 
   return (
     <>

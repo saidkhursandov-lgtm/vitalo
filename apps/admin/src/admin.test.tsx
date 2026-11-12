@@ -37,13 +37,18 @@ describe('menu in 7 groups (генплан, этап 2)', () => {
     expect(at('/')).toBe('Дашборд');
     expect(at('/orders/123')).toBe('Заказы');
     expect(at('/yandex-orders/5')).toBe('Заказы'); // генплан, этап 2: one «Заказы» for both channels
-    expect(at('/inventory')).toBe('Остатки');
-    expect(at('/inventory?tab=units')).toBe('Банки');
-    expect(at('/settings')).toBe('Оплата');
-    expect(at('/settings?tab=dicts')).toBe('Справочники');
+    // аудит 2.9 (D-64): tabs of one page are one item; «Приёмка» stays its own item
+    expect(at('/inventory')).toBe('Склад');
+    expect(at('/inventory?tab=units')).toBe('Склад');
+    expect(at('/inventory?tab=movements')).toBe('Склад');
+    expect(at('/inventory?tab=receiving')).toBe('Приёмка');
+    expect(at('/settings')).toBe('Настройки');
+    expect(at('/settings?tab=dicts')).toBe('Настройки');
+    expect(at('/settings?tab=staff')).toBe('Настройки');
     expect(at('/compat?tab=substances')).toBe('База знаний AI');
     expect(at('/compat?tab=answered')).toBe('Вопросы о совместимости');
-    expect(at('/finance?tab=tax')).toBe('Налог');
+    expect(at('/finance?tab=tax')).toBe('Финансы');
+    expect(all.length).toBeLessThanOrEqual(25);
   });
 });
 
@@ -51,7 +56,7 @@ describe('menu by role', () => {
   const labels = (role: string) => navFor(PERMS[role]).map((n) => n.label);
 
   it('warehouse: orders, Yandex orders, products, stock — no settings, customers, audit', () => {
-    expect(labels('warehouse')).toEqual(['Заказы', 'Товары', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений']);
+    expect(labels('warehouse')).toEqual(['Заказы', 'Товары', 'Приёмка', 'Склад']);
     expect(groupsFor(PERMS.warehouse).map((g) => g.label)).toEqual(['Продажи', 'Каталог', 'Закупки и склад']);
     expect(homeFor(PERMS.warehouse)).toBe('/orders');
   });
@@ -69,7 +74,7 @@ describe('menu by role', () => {
   });
 
   it('manager: everything except settings and audit; Yandex orders to view (stage 2C)', () => {
-    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Клиенты', 'Лист ожидания', 'Вопросы о совместимости', 'Товары', 'База знаний AI', 'Закупки', 'Приёмка', 'Остатки', 'Банки', 'Сверка', 'История движений', 'Акции', 'Промокоды']);
+    expect(labels('manager')).toEqual(['Дашборд', 'Заказы', 'Клиенты', 'Лист ожидания', 'Вопросы о совместимости', 'Товары', 'База знаний AI', 'Закупки', 'Приёмка', 'Склад', 'Акции', 'Промокоды']);
   });
 });
 
@@ -239,7 +244,7 @@ describe('stage 3: money is for the admin only', () => {
       expect(navFor(PERMS[role]).map((n) => n.label)).not.toEqual(expect.arrayContaining(['Аналитика']));
       expect(navFor(PERMS[role]).map((n) => n.label)).not.toEqual(expect.arrayContaining(['Финансы']));
     }
-    expect(navFor(['finance.manage']).map((n) => n.to)).toEqual(['/analytics', '/finance', '/finance?tab=tax', '/finance?tab=payroll']);
+    expect(navFor(['finance.manage']).map((n) => n.to)).toEqual(['/analytics', '/finance']);
   });
 
   it('periods and month names', () => {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useTab } from '../lib/useTab';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { money, ruDate } from '../lib/format';
@@ -13,7 +13,6 @@ const TABS = [
   ['tax', 'Налог'],
   ['payroll', 'Сотрудники и зарплаты'],
 ] as const;
-type Tab = (typeof TABS)[number][0];
 
 const tashkentToday = () => new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10);
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
@@ -27,14 +26,16 @@ const STATUS: Record<'paid' | 'due' | 'overdue', [string, 'ok' | 'warn' | 'bad']
 const PAY_STATUS: Record<'paid' | 'due' | 'overdue', string> = { paid: 'выплачено', due: 'к выплате', overdue: 'просрочено' };
 
 export function Finance() {
-  const [params, setParams] = useSearchParams();
-  const tab = (TABS.find(([t]) => t === params.get('tab'))?.[0] ?? 'expenses') as Tab;
+  const [tab, setTab] = useTab(
+    TABS.map(([t]) => t),
+    'expenses',
+  );
   return (
     <>
       <PageHead title="Финансы">
         <div className="segmented">
           {TABS.map(([t, label]) => (
-            <button key={t} className={tab === t ? 'is-on' : ''} onClick={() => setParams(t === 'expenses' ? {} : { tab: t }, { replace: true })}>
+            <button key={t} className={tab === t ? 'is-on' : ''} onClick={() => setTab(t)}>
               {label}
             </button>
           ))}

@@ -638,3 +638,6 @@ textarea { resize: vertical; }
 /* Аудит админки 2.13: «Отдельные действия» grouped, each group collapsed */
 .funnel-group { border-top: 1px solid var(--border); }
 .funnel-group > summary { min-height: 44px; display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; }
+
+/* Аудит админки 2.9: many tabs (Настройки) wrap onto a second line instead of hiding off the edge */
+.segmented.segmented-wrap { flex-wrap: wrap; overflow-x: visible; }

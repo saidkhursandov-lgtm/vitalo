@@ -19,7 +19,8 @@ export interface NavGroup {
 
 /**
  * Генплан, этап 2 (аудит, п. 6): the menu in 7 groups. Each item appears only with its permission (the API enforces
- * the same rules); a group without items is hidden. Several items may open tabs of one page (Склад, Настройки …).
+ * the same rules); a group without items is hidden. Аудит админки 2.9 (D-64): tabs of one page are one item
+ * («Склад», «Финансы», «Настройки»); only «Приёмка» stays a separate item — the warehouse opens it every day.
  */
 export const NAV_GROUPS: NavGroup[] = [
   { id: 'dashboard', label: 'Дашборд', items: [{ to: '/', label: 'Дашборд', permission: 'dashboard.view' }] },
@@ -43,7 +44,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/products', label: 'Товары', permission: 'products.view' },
       { to: '/brands', label: 'Бренды', permission: 'settings.dictionaries' },
-      { to: '/settings?tab=dicts', label: 'Справочники', permission: 'settings.manage' },
       // the knowledge of VITALO AI: substances, rules, which substance is in which product
       { to: '/compat?tab=rules', label: 'База знаний AI', permission: 'compat.view', also: ['substances', 'products'] },
     ],
@@ -54,11 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/purchases', label: 'Закупки', permission: 'purchases.view' },
       { to: '/inventory?tab=receiving', label: 'Приёмка', permission: 'receiving.perform' },
-      { to: '/inventory', label: 'Остатки', permission: 'inventory.view' },
-      { to: '/inventory?tab=units', label: 'Банки', permission: 'units.view' },
-      { to: '/inventory?tab=reconcile', label: 'Сверка', permission: 'units.view' },
-      { to: '/inventory?tab=movements', label: 'История движений', permission: 'inventory.view' },
-      { to: '/settings?tab=print', label: 'Печать этикеток', permission: 'settings.manage' },
+      { to: '/inventory', label: 'Склад', permission: 'inventory.view', also: ['units', 'reconcile', 'movements'] },
       // D-57: iHerb wishlist prices, history and auto price — admin only (margins)
       { to: '/iherb', label: 'iHerb и цены', permission: 'iherb.prices' },
       // D-60: «Под заказ из США» — what to order on iHerb, parcels and their stages
@@ -85,23 +81,17 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // Stage 3: money — admin only
       { to: '/analytics', label: 'Аналитика', permission: 'finance.manage' },
-      { to: '/finance', label: 'Расходы', permission: 'finance.manage' },
-      { to: '/finance?tab=tax', label: 'Налог', permission: 'finance.manage' },
-      { to: '/finance?tab=payroll', label: 'Зарплаты', permission: 'finance.manage' },
+      { to: '/finance', label: 'Финансы', permission: 'finance.manage', also: ['tax', 'payroll'] },
     ],
   },
   {
     id: 'system',
     label: 'Система',
     items: [
-      { to: '/settings', label: 'Оплата', permission: 'settings.manage' },
-      { to: '/settings?tab=tariffs', label: 'Доставка', permission: 'settings.manage' },
-      { to: '/settings?tab=texts', label: 'Тексты и контакты', permission: 'settings.manage' },
-      { to: '/settings?tab=docs', label: 'Документы', permission: 'settings.manage' },
-      { to: '/settings?tab=ai', label: 'VITALO AI', permission: 'settings.manage' },
+      // payment, delivery, texts, dictionaries, label printing, documents, VITALO AI, staff — tabs of one page
+      { to: '/settings', label: 'Настройки', permission: 'settings.manage', also: ['texts', 'tariffs', 'dicts', 'print', 'docs', 'ai', 'staff'] },
       // D-57 узел 5: the admin AI analyst (its own key and budget) — admin only
       { to: '/ai-analyst', label: 'AI-аналитик', permission: 'ai_analyst.use' },
-      { to: '/settings?tab=staff', label: 'Сотрудники', permission: 'settings.manage' },
       { to: '/yandex-sync', label: 'Синхронизация Яндекса', permission: 'yandex.sync' },
       { to: '/audit', label: 'Журнал аудита', permission: 'audit.view' },
     ],

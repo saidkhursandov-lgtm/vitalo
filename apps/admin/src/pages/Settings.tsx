@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui';
 import { api } from '../lib/api';
 import { useSession } from '../lib/auth';
+import { useTab } from '../lib/useTab';
 import { dateTime, ROLE } from '../lib/format';
 import { CheckoutOptions } from './settings/CheckoutOptions';
 import { ContactsForm } from './settings/Contacts';
@@ -18,14 +18,13 @@ const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', 
 type Tab = keyof typeof TABS;
 
 export function Settings() {
-  const [params, setParams] = useSearchParams();
-  const tab = (Object.keys(TABS).includes(params.get('tab') ?? '') ? params.get('tab') : 'bank') as Tab;
+  const [tab, setTab] = useTab(Object.keys(TABS) as Tab[], 'bank');
   return (
     <>
       <PageHead title="Настройки">
-        <div className="segmented">
+        <div className="segmented segmented-wrap">
           {(Object.keys(TABS) as Tab[]).map((t) => (
-            <button key={t} className={tab === t ? 'is-on' : ''} onClick={() => setParams({ tab: t }, { replace: true })}>
+            <button key={t} className={tab === t ? 'is-on' : ''} onClick={() => setTab(t)}>
               {TABS[t]}
             </button>
           ))}
