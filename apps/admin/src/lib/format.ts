@@ -202,6 +202,12 @@ export const AUDIT_ACTION: Record<string, string> = {
   'compat.rule_draft': 'Правило базы знаний AI возвращено в черновики',
   'compat.rule_approved': 'Правило базы знаний AI одобрено',
   'compat.rule_off': 'Правило базы знаний AI выключено',
+  // Шаг 0б: «База знаний AI → Цели»
+  'compat.goal_created': 'Добавлена строка «вещество → цель»',
+  'compat.goal_updated': 'Изменена строка «вещество → цель»',
+  'compat.goal_draft': 'Строка «вещество → цель» возвращена в черновики',
+  'compat.goal_approved': 'Строка «вещество → цель» одобрена',
+  'compat.goal_off': 'Строка «вещество → цель» выключена',
   'compat.ai_new': 'Ответ VITALO AI возвращён на проверку',
   'compat.ai_approved': 'Ответ VITALO AI одобрен',
   'compat.ai_fixed': 'Ответ VITALO AI исправлен',

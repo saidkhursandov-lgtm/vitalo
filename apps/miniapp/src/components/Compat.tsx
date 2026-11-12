@@ -5,6 +5,7 @@ import { track } from '../lib/analytics';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useAiCompat, useCompat } from '../lib/queries';
 import { AiCompat, SpecialistBox } from './AiCompat';
+import { AiGoalBlock } from './AiGoal';
 import type { CompatRequest, CompatState, CompatVerdict } from '../lib/types';
 import { AlertIcon, CheckIcon, CloseIcon, ShieldIcon } from './Icons';
 
@@ -80,6 +81,7 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
           canAskSpecialist={canAsk}
           askConsent={askConsent}
           onAsk={() => setOpen(true)}
+          below={<AiGoalBlock canAskSpecialist={canAsk} onAsk={() => setOpen(true)} />}
           onRefuse={() => {
             setAskConsent(false);
             writeRefused(true);

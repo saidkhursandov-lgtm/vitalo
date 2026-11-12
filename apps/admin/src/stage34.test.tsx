@@ -153,3 +153,65 @@ describe('Шаг 0а-3: «Сохранённые сочетания» — «пе
     await waitFor(() => expect(screen.queryByText('Пересмотреть — правила изменились')).toBeNull());
   });
 });
+
+describe('Шаг 0б: «База знаний AI → Цели» (D-69)', () => {
+  const goalRow = (over: Record<string, unknown> = {}) => ({
+    id: 'g1',
+    substance: { id: 's1', name_ru: 'Магний' },
+    goal: 'sleep',
+    level: 'B',
+    helps_ru: 'при напряжении',
+    helps_uz: 'zoʻriqishda',
+    not_helps_ru: 'если мешает кофеин',
+    not_helps_uz: 'kofein xalaqit bersa',
+    source: 'обзор',
+    status: 'draft',
+    approved_by: null,
+    approved_at: null,
+    updated_at: '2026-11-12T10:00:00Z',
+    ...over,
+  });
+
+  function showGoals(permissions: Permission[]) {
+    const posts: { url: string; body: unknown }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      const json = (v: unknown) => new Response(JSON.stringify(v), { headers: { 'content-type': 'application/json' } });
+      if (url.includes('/staff/auth/me')) return json({ staff: { id: 's1', name: 'Мадина', role: 'admin' }, permissions });
+      if (init.method === 'POST') {
+        posts.push({ url, body: JSON.parse(init.body as string) });
+        return json([goalRow({ status: 'approved', approved_by: 'Мадина', approved_at: '2026-11-12T11:00:00Z' })]);
+      }
+      if (url.includes('/staff/compat/goals')) return json([goalRow(), goalRow({ id: 'g2', goal: 'energy', substance: { id: 's2', name_ru: 'Железо' } })]);
+      return json([]);
+    });
+    setToken('t');
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <StaffAuthProvider>
+          <MemoryRouter initialEntries={['/compat?tab=goals']}>
+            <Compat />
+          </MemoryRouter>
+        </StaffAuthProvider>
+      </QueryClientProvider>,
+    );
+    return posts;
+  }
+
+  it('the rows with the level, the goal filter; an admin approves', async () => {
+    const posts = showGoals(['compat.view', 'compat.answer', 'compat.rules.approve']);
+    expect(await screen.findByText('Магний')).toBeTruthy();
+    expect(screen.getAllByText('B — Есть данные исследований').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /^Энергия/ }));
+    expect(screen.queryByText('Магний')).toBeNull();
+    expect(screen.getByText('Железо')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Одобрить' }));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/staff/compat/goals/g2/status', body: { status: 'approved' } }]));
+  });
+
+  it('a manager only looks', async () => {
+    showGoals(['compat.view']);
+    expect(await screen.findByText('Магний')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Одобрить' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '+ Строка' })).toBeNull();
+  });
+});

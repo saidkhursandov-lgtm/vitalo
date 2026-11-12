@@ -1680,3 +1680,31 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .chat-rated { display: inline-flex; align-items: center; gap: 4px; }
 @media (prefers-reduced-motion: reduce) { .ask-topic-row svg { transition: none; } }
 .support-row-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Шаг 0б: «Задать вопрос VITALO AI по корзине» — folded under the AI answer, chips only */
+.ai-goal { margin-top: 8px; border: 1px solid var(--ai-box-border); border-radius: var(--radius); background: var(--ai-box-bg); overflow: hidden; }
+.ai-goal-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--tap); padding: 10px 12px; border: 0; background: none;
+  font: inherit; font-size: 14px; font-weight: 700; color: var(--primary-text); text-align: left; cursor: pointer;
+}
+.ai-goal-toggle > span { flex: 1 1 auto; min-width: 0; }
+.ai-goal-toggle svg { flex: none; color: var(--primary); }
+.ai-goal-chevron { transform: rotate(90deg); transition: transform 0.15s; }
+.ai-goal-chevron.is-open { transform: rotate(-90deg); }
+.ai-goal-body { padding: 0 12px 12px; }
+.ai-goal-q { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text); }
+.ai-goal-chips { margin: 0; }
+.ai-goal-chips .chip { white-space: normal; text-align: left; line-height: 1.25; font-size: 13.5px; }
+.ai-goal-loading { margin: 4px 0; font-size: 13px; color: var(--muted); }
+.ai-goal-answer { padding: 10px 12px; border: 1px solid var(--ai-body-border); border-radius: var(--radius-sm); background: var(--surface); font-size: 13px; line-height: 1.35; }
+.ai-goal-answer .ai-sub:first-child { margin-top: 0; }
+.ai-goal-products, .ai-goal-steps { margin: 8px 0 0; padding: 0; list-style: none; }
+.ai-goal-products li { padding: 8px 0; border-top: 1px solid var(--ai-body-border); }
+.ai-goal-product-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ai-goal-name { min-width: 0; font-weight: 600; color: var(--text); }
+.ai-verdict.is-grey { background: var(--neutral-soft); color: var(--text); }
+.ai-goal-level { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--primary-text); }
+.ai-goal-text { margin: 4px 0 0; color: var(--text); }
+.ai-goal-steps li { position: relative; padding-left: 14px; margin: 4px 0; color: var(--text); }
+.ai-goal-steps li::before { content: ''; position: absolute; left: 2px; top: 0.55em; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+.ai-goal-doctor { margin: 10px 0 0; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.ai-goal-answer .ai-ask { display: flex; }

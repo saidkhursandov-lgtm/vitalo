@@ -25,14 +25,14 @@ export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];
  * compat_request (props.products, props.has_comment, props.lang), compat_instant_answer (props.verdict), compat_answered
  * (props.verdict, props.via = bot | admin, props.minutes) — server only. The comment itself never goes to analytics (D-40).
  * 3.8 (VITALO AI, D-45): ai_consent; compat_ai_request (props.products, props.lang, props.verdict), compat_ai_cached
- * (props.verdict), compat_ai_limit, compat_ai_fallback (props.reason = invalid | error | budget | disabled) — server only.
+ * (props.verdict), compat_ai_limit, compat_ai_fallback (props.reason = invalid | error | budget | disabled) — server only. Шаг 0б: compat_ai_goal (props: goal, duration, kind, unlikely, no_data — доля «можно не брать», архитектура 3.4).
  * 3.6: map_open (props.place = checkout | profile | cart), map_locate_me (props.result = ok | denied | unavailable),
  * map_confirm (props.place), map_district_auto (props.matched = true | false) — from the app. No coordinates in analytics.
  * 3.7: campaign_view (props.campaign_id, props.source = banner | link), campaign_banner_click (props.campaign_id),
  * campaign_add_to_cart (props.campaign_id, props.product_id, props.place = grid | product | campaign) — from the app.
  */
 export const APP_EXTRA_EVENTS = ['language_change', 'cod_selected', 'payment_soon_click', 'manifest_open', 'ai_tab_click', 'upsell_shown', 'upsell_add', 'notification_open', 'notification_read_all', 'active_order_click', 'promo_apply_success', 'promo_apply_fail', 'promo_remove', 'compat_view', 'map_open', 'map_locate_me', 'map_confirm', 'map_district_auto', 'campaign_view', 'campaign_banner_click', 'campaign_add_to_cart', 'support_ask_sent'] as const;
-export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent', 'compat_request', 'compat_instant_answer', 'compat_answered', 'ai_consent', 'compat_ai_request', 'compat_ai_cached', 'compat_ai_limit', 'compat_ai_fallback'] as const;
+export const SERVER_EXTRA_EVENTS = ['waitlist_subscribe', 'waitlist_unsubscribe', 'waitlist_notified', 'receipt_sent', 'receipt_confirmed', 'receipt_rejected', 'intake_guide_sent', 'compat_request', 'compat_instant_answer', 'compat_answered', 'ai_consent', 'compat_ai_request', 'compat_ai_cached', 'compat_ai_limit', 'compat_ai_fallback', 'compat_ai_goal'] as const;
 export const EXTRA_EVENTS = [...APP_EXTRA_EVENTS, ...SERVER_EXTRA_EVENTS] as const;
 export const CLIENT_EVENTS = ['app_open', 'product_view', 'add_to_cart', 'checkout_start', ...APP_EXTRA_EVENTS] as const;
 

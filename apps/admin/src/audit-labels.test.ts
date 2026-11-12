@@ -29,6 +29,7 @@ function apiActions(): string[] {
   // template keys: `compat.ai_${review}` and `compat.rule_${status}`
   for (const r of ['new', 'approved', 'fixed', 'hidden']) keys.add(`compat.ai_${r}`);
   for (const s of ['draft', 'approved', 'off']) keys.add(`compat.rule_${s}`);
+  for (const s of ['draft', 'approved', 'off']) keys.add(`compat.goal_${s}`);
   return [...keys].sort();
 }
 

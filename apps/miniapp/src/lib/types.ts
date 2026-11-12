@@ -661,6 +661,21 @@ export interface AiState {
   reason?: string;
 }
 
+/** Шаг 0б: POST /api/compat/ai/goal — «Поможет ли этот набор для моей цели?» (D-69). */
+export type AiGoalFit = 'helps' | 'maybe' | 'unlikely' | 'no_data';
+export interface AiGoalAnswer {
+  goal: 'sleep' | 'stress' | 'energy' | 'joints' | 'immunity' | 'sport';
+  duration: string;
+  kind: string;
+  summary: string;
+  /** level_text — the level of evidence in words from our base; null — no approved row («данных немного») */
+  products: { product_id: string; name: string; fit: AiGoalFit; level: 'A' | 'B' | 'C' | null; level_text: string | null; text: string }[];
+  steps: string[];
+  /** «Если проблема держится дольше 3–4 недель — обратитесь к врачу.» */
+  doctor: string;
+  left_today: number;
+}
+
 /** 6а-В (D-62): the manual promo label of a product, chosen in the admin product card. */
 export type PromoLabel = 'eleven_eleven' | 'black_friday' | 'hit' | 'new';
 

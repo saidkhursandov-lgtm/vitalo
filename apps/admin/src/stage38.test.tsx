@@ -136,12 +136,15 @@ describe('3.8 Настройки → VITALO AI', () => {
     expect(screen.getByText(/\$8\.50/).closest('p')!.textContent).toContain('из $10');
     expect(screen.getByText('85%')).toBeTruthy();
     expect(screen.getByText(/в этом месяце: 2/)).toBeTruthy();
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'claude-sonnet-5-5' } });
+    // Шаг 0б: the second select is the model of the question by the cart
+    const [model, goalModel] = screen.getAllByRole('combobox');
+    fireEvent.change(model, { target: { value: 'claude-sonnet-5-5' } });
+    fireEvent.change(goalModel, { target: { value: 'claude-sonnet-5-5' } });
     fireEvent.change(screen.getByLabelText(/Бюджет на месяц/), { target: { value: '25' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
     await waitFor(() =>
       expect(sent).toEqual([
-        { url: '/api/staff/ai/settings', method: 'PUT', body: { settings: { enabled: true, model: 'claude-sonnet-5-5', monthly_budget_usd: 25, cart_daily_limit: 1, chat_daily_limit: 20 } } },
+        { url: '/api/staff/ai/settings', method: 'PUT', body: { settings: { enabled: true, model: 'claude-sonnet-5-5', monthly_budget_usd: 25, cart_daily_limit: 1, chat_daily_limit: 20, goal_model: 'claude-sonnet-5-5' } } },
       ]),
     );
   });

@@ -467,6 +467,7 @@ model staff_users {
   receiving             receiving_sessions[]
   unit_events           physical_unit_events[]
   compat_rules_approved compat_rules[]                 @relation("RuleApprover")
+  goals_approved        goal_evidence[]                @relation("GoalEvidenceApprover")
   ai_answers_reviewed   ai_compat_answers[]
   marketplace_orders    marketplace_orders[]
   reviewed_receipts     payment_receipts[]
@@ -2140,6 +2141,8 @@ model substances {
   products   product_substances[]
   rules_a    compat_rules[]       @relation("RuleA")
   rules_b    compat_rules[]       @relation("RuleB")
+  /// Шаг 0б: «вещество → цель» (D-69)
+  goals      goal_evidence[]
 }
 
 /// 3.8: active substances of a product for the compatibility rules (chosen from the dictionary).
@@ -2540,4 +2543,31 @@ model support_messages {
   staff         staff_users?    @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
 
   @@index([thread_id, created_at])
+}
+
+/// Шаг 0б (D-69, архитектура 3.6): «вещество → цель → уровень доказательности → когда помогает / когда нет». Заполняет и
+/// одобряет врач («База знаний AI → Цели»); в ответ VITALO AI «Поможет ли этот набор для моей цели?» попадают только
+/// одобренные строки. Уровень A/B/C — только здесь и в админке; покупатель видит его словами (D-67).
+model goal_evidence {
+  id           String       @id @default(uuid()) @db.Uuid
+  substance_id String       @db.Uuid
+  goal         String // sleep | stress | energy | joints | immunity | sport
+  level        String // A | B | C
+  helps_ru     String
+  helps_uz     String
+  not_helps_ru String
+  not_helps_uz String
+  /// study, «комментарий врача»; staff only
+  source       String?
+  status       String       @default("draft") // draft | approved | off
+  approved_by  String?      @db.Uuid
+  approved_at  DateTime?
+  created_by   String?      @db.Uuid
+  created_at   DateTime     @default(now())
+  updated_at   DateTime     @default(now()) @updatedAt
+  substance    substances   @relation(fields: [substance_id], references: [id])
+  approver     staff_users? @relation("GoalEvidenceApprover", fields: [approved_by], references: [id], onDelete: SetNull)
+
+  @@unique([substance_id, goal])
+  @@index([goal, status])
 }

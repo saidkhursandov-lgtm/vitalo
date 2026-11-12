@@ -19,6 +19,7 @@ import {
   SubstancesTab,
 } from "./CompatKnowledge";
 import { AiAnswersTab } from "./CompatAi";
+import { GoalsTab } from "./CompatGoals";
 
 type Verdict = "compatible" | "spread" | "consult";
 type Lang = "ru" | "uz";
@@ -78,7 +79,8 @@ type Tab =
   | "templates"
   | "rules"
   | "substances"
-  | "products";
+  | "products"
+  | "goals";
 const TABS: [Tab, string][] = [
   ["pending", "Новые"],
   ["answered", "Отвеченные"],
@@ -88,9 +90,10 @@ const TABS: [Tab, string][] = [
   ["rules", "Правила"],
   ["substances", "Вещества"],
   ["products", "Товары и вещества"],
+  ["goals", "Цели"],
 ];
 /** Tabs of «База знаний AI» (menu → Каталог); the rest are questions from customers (menu → Продажи). */
-export const KNOWLEDGE_TABS: Tab[] = ["rules", "substances", "products"];
+export const KNOWLEDGE_TABS: Tab[] = ["rules", "substances", "products", "goals"];
 
 /**
  * Админка → Совместимость (3.4, D-40). Requests from the cart (2+ products); admins and employees marked «специалист»
@@ -127,6 +130,8 @@ export function Compat() {
         <SubstancesTab canEdit={answer} />
       ) : tab === "products" ? (
         <ProductSubstancesTab canEdit={answer} />
+      ) : tab === "goals" ? (
+        <GoalsTab canEdit={answer} canApprove={can("compat.rules.approve")} />
       ) : (
         <>
           <Help id="compat">

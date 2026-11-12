@@ -10,6 +10,8 @@ export interface AiSettings {
   monthly_budget_usd: number;
   cart_daily_limit: number;
   chat_daily_limit: number;
+  /** Шаг 0б: the model of «Поможет ли этот набор для моей цели?» */
+  goal_model?: string;
 }
 export interface AiSettingsView {
   settings: AiSettings;
@@ -93,13 +95,22 @@ export function VitaloAiSettings() {
               ))}
             </select>
           </Field>
+          <Field label="Модель для вопроса по корзине" hint="«Поможет ли этот набор для моей цели?». Проверка совместимости всегда на модели выше.">
+            <select value={form.goal_model ?? 'claude-haiku-5-5'} onChange={(e) => set('goal_model', e.target.value)}>
+              {s.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {MODEL_NAME[m.id] ?? m.id}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Бюджет на месяц, $" hint="Когда расход месяца дойдёт до бюджета, новые запросы к модели не отправляются до 1-го числа (по Ташкенту).">
             <input type="number" min={0} step="1" inputMode="decimal" value={form.monthly_budget_usd} onChange={(e) => set('monthly_budget_usd', num(e.target.value))} />
           </Field>
           <Field label="Новых AI-проверок корзины в день на покупателя" hint="Ответы из кэша и сохранённые ответы специалиста — без лимита.">
             <input type="number" min={0} max={50} step="1" value={form.cart_daily_limit} onChange={(e) => set('cart_daily_limit', Math.round(num(e.target.value)))} />
           </Field>
-          <Field label="Сообщений в чате VITALO AI в день на покупателя" hint="Для чата — он появится позже.">
+          <Field label="Вопросов VITALO AI в день на покупателя" hint="Вопрос по корзине «Поможет ли этот набор для моей цели?» и чат (он появится позже).">
             <input type="number" min={0} max={500} step="1" value={form.chat_daily_limit} onChange={(e) => set('chat_daily_limit', Math.round(num(e.target.value)))} />
           </Field>
           <ErrorBox error={save.error} />

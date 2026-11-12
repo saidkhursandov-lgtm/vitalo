@@ -18,8 +18,10 @@ export interface AiSettings {
   monthly_budget_usd: number;
   /** new AI checks of the cart per customer per Tashkent day (cached and specialist answers do not count) */
   cart_daily_limit: number;
-  /** messages of the chat (3.9) per customer per day */
+  /** messages of the chat (3.9) per customer per day; Шаг 0б: also «Задать вопрос VITALO AI по корзине» */
   chat_daily_limit: number;
+  /** Шаг 0б: the model of «Поможет ли этот набор для моей цели?» (the compatibility check stays on `model`); 0в compares */
+  goal_model: string;
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -28,6 +30,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   monthly_budget_usd: 10,
   cart_daily_limit: 1,
   chat_daily_limit: 20,
+  goal_model: 'claude-haiku-5-5',
 };
 
 export const AI_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'] as const;
@@ -42,6 +45,7 @@ export function mergeAiSettings(saved: unknown): AiSettings {
     monthly_budget_usd: num(s.monthly_budget_usd, DEFAULT_AI_SETTINGS.monthly_budget_usd, 0, 10_000),
     cart_daily_limit: Math.round(num(s.cart_daily_limit, DEFAULT_AI_SETTINGS.cart_daily_limit, 0, 50)),
     chat_daily_limit: Math.round(num(s.chat_daily_limit, DEFAULT_AI_SETTINGS.chat_daily_limit, 0, 500)),
+    goal_model: typeof s.goal_model === 'string' && (AI_MODELS as readonly string[]).includes(s.goal_model) ? s.goal_model : DEFAULT_AI_SETTINGS.goal_model,
   };
 }
 

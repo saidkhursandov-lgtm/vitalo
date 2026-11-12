@@ -65,6 +65,7 @@ const EXTRA_NAMES: Record<string, string> = {
   compat_ai_cached: 'Получили готовый ответ VITALO AI',
   compat_ai_limit: 'Упёрлись в лимит вопросов VITALO AI',
   compat_ai_fallback: 'VITALO AI не ответил — вопрос ушёл специалисту',
+  compat_ai_goal: 'Спросили VITALO AI «Поможет ли набор для цели?»',
 };
 /** Sub-rows: payment systems of «Скоро» and (3.3) reasons a promo code did not fit. */
 const SYSTEM_NAMES: Record<string, string> = {
