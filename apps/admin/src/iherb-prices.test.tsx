@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { groupsFor } from './lib/nav';
-import { Chart, Iherb } from './pages/Iherb';
+import { autoIdle, Chart, Iherb } from './pages/Iherb';
 
 const preview = {
   format: 'table',
@@ -33,6 +33,12 @@ afterEach(() => {
 });
 
 describe('«iHerb и цены» (D-57)', () => {
+  it('аудит 4.7: auto pricing without any iHerb price is marked «не действует»', () => {
+    expect(autoIdle({ auto_pricing_enabled: true, last_snapshot: null })).toBe(true);
+    expect(autoIdle({ auto_pricing_enabled: false, last_snapshot: null })).toBe(false);
+    expect(autoIdle({ auto_pricing_enabled: true, last_snapshot: { price_uzs: 1, in_stock: true, bestseller: false, bestseller_rank: null, taken_at: '2026-11-01' } })).toBe(false);
+  });
+
   it('only the admin sees the menu item', () => {
     expect(groupsFor(['iherb.prices']).flatMap((g) => g.items.map((i) => i.label))).toEqual(['iHerb и цены']);
     expect(groupsFor(['purchases.view']).flatMap((g) => g.items.map((i) => i.label))).not.toContain('iHerb и цены');

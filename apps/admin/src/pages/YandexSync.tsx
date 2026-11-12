@@ -50,7 +50,7 @@ interface SyncStatus {
     webhookEnabled: boolean;
   };
   running: boolean;
-  rate_limit: { limit: number | null; remaining: number | null; until: string | null } | null;
+  rate_limit: { limit: number | null; remaining: number | null; until: string | null; at?: string; calls_today?: number } | null;
   runs: Run[];
   /** runs where something was created, updated, raised or failed (the latest 20) */
   busy_runs?: Run[];
@@ -139,11 +139,21 @@ export function YandexSync() {
           </dd>
           <dt>Уведомления Яндекса</dt>
           <dd>{c.webhookEnabled ? 'включены' : 'выключены (включаются после переезда на сервер)'}</dd>
+          {/* аудит 4.7: our own count for today; Yandex's «осталось» is for one kind of request, as of the last answer */}
+          <dt>Запросов к Яндексу сегодня</dt>
+          <dd>
+            {q.data.rate_limit?.calls_today ?? 0}
+            <div className="muted small">считает наш сервер; после перезапуска сервера счёт начинается заново</div>
+          </dd>
           {q.data.rate_limit?.remaining !== null && q.data.rate_limit?.remaining !== undefined && (
             <>
-              <dt>Лимит запросов</dt>
+              <dt>Лимит Яндекса</dt>
               <dd>
                 осталось {q.data.rate_limit.remaining} из {q.data.rate_limit.limit ?? '—'}
+                <div className="muted small">
+                  по последнему ответу Яндекса{q.data.rate_limit.at ? ` (${dateTime(q.data.rate_limit.at)})` : ''}; лимит у каждого вида запросов свой
+                  {q.data.rate_limit.until && !Number.isNaN(Date.parse(q.data.rate_limit.until)) ? `, обновится ${dateTime(q.data.rate_limit.until)}` : ''}
+                </div>
               </dd>
             </>
           )}

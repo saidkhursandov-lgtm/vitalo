@@ -67,6 +67,9 @@ interface IherbProduct {
   last_change: { old_price_uzs: number; new_price_uzs: number; big_jump: boolean; floor_applied: boolean; yandex_check: boolean; created_at: string } | null;
 }
 
+/** Аудит 4.7: auto pricing is on, but no iHerb price has ever been loaded for the product. */
+export const autoIdle = (p: Pick<IherbProduct, 'auto_pricing_enabled' | 'last_snapshot'>) => p.auto_pricing_enabled && !p.last_snapshot;
+
 interface History {
   product: { id: string; sku: string; name_ru: string; price_uzs: number; cost_uzs: number | null; markup_percent: number };
   snapshots: { taken_at: string; price_uzs: number; list_price_uzs: number | null; in_stock: boolean; bestseller: boolean }[];
@@ -338,6 +341,12 @@ function ProductsCard() {
       <div className="section-head pad">
         <h2>Товары со ссылкой iHerb</h2>
       </div>
+      {/* аудит 4.7: auto pricing switched on, but there is no iHerb price to work from */}
+      {!!q.data?.filter(autoIdle).length && (
+        <div className="alert alert-warn pad">
+          Автоцена не действует у {q.data.filter(autoIdle).length} товар(ов): нет цен iHerb. Загрузите вишлист выше — тогда цена начнёт считаться.
+        </div>
+      )}
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (
@@ -421,7 +430,8 @@ function ProductRow({ p, open, onToggle }: { p: IherbProduct; open: boolean; onT
         <td>
           {p.auto_pricing_enabled ? (
             <>
-              <Badge tone="ok">вкл</Badge> <span className="small">+{p.markup_percent}%</span>
+              {autoIdle(p) ? <Badge tone="warn">не действует</Badge> : <Badge tone="ok">вкл</Badge>} <span className="small">+{p.markup_percent}%</span>
+              {autoIdle(p) && <div className="small text-warn">нет цен iHerb</div>}
               <div className="muted small">{p.stock_price_mode === 'dynamic' ? 'меняется и при наличии' : 'при наличии не меняется'}</div>
             </>
           ) : (

@@ -8,7 +8,7 @@ import { notTrackedReason, trackingStates } from '../../receiving/unit-tracking'
 import { AuditService } from '../../staff/audit.service';
 import { findProductsBySkus } from '../../staff/sku-aliases';
 import { YandexOrdersService } from '../yandex-orders';
-import { YandexApiError, YandexMarketClient, type FetchLike } from './yandex-client';
+import { YandexApiError, YandexMarketClient, yandexCallsToday, type FetchLike } from './yandex-client';
 import {
   ATTENTION_RU,
   CREATE_STATUS,
@@ -145,7 +145,8 @@ export class YandexSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   get rateLimit() {
-    return this.lastClient?.lastRateLimit ?? null;
+    // аудит 4.7: plus our own count of requests today
+    return { ...(this.lastClient?.lastRateLimit ?? { limit: null, remaining: null, until: null }), calls_today: yandexCallsToday() };
   }
 
   /**

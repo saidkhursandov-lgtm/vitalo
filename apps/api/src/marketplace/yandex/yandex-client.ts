@@ -64,7 +64,7 @@ export class YandexMarketClient {
   private readonly delays: number[];
   private readonly sleep: (ms: number) => Promise<void>;
   /** From the last answer: what is left of the resource limit (shown on the sync screen) */
-  lastRateLimit: { limit: number | null; remaining: number | null; until: string | null } | null = null;
+  lastRateLimit: { limit: number | null; remaining: number | null; until: string | null; at?: string } | null = null;
 
   constructor(private readonly opts: YandexClientOptions) {
     this.fetch = opts.fetch ?? ((url, init) => fetch(url, init) as ReturnType<FetchLike>);
@@ -121,6 +121,7 @@ export class YandexMarketClient {
   }
 
   private async once(method: string, path: string, body: object): Promise<unknown> {
+    countYandexCall();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let res: Awaited<ReturnType<FetchLike>>;
@@ -141,7 +142,7 @@ export class YandexMarketClient {
     const limit = res.headers.get('X-RateLimit-Resource-Limit');
     const remaining = res.headers.get('X-RateLimit-Resource-Remaining');
     if (limit !== null || remaining !== null) {
-      this.lastRateLimit = { limit: limit === null ? null : Number(limit), remaining: remaining === null ? null : Number(remaining), until: res.headers.get('X-RateLimit-Resource-Until') };
+      this.lastRateLimit = { limit: limit === null ? null : Number(limit), remaining: remaining === null ? null : Number(remaining), until: res.headers.get('X-RateLimit-Resource-Until'), at: new Date().toISOString() };
     }
     const text = await res.text();
     let json: unknown = null;
@@ -176,4 +177,19 @@ export class YandexMarketClient {
     const s = key ? text.split(key).join('[скрыто]') : text;
     return s.replace(/ACMA:[A-Za-z0-9:_-]+/g, '[скрыто]').slice(0, 300);
   }
+}
+
+/**
+ * Аудит 4.7: how many requests went to Yandex today (Tashkent day), every attempt counted. Kept in memory: after a
+ * restart of the server it starts again from 0 (said so on the screen).
+ */
+const calls = { day: '', count: 0 };
+const tashkentDay = (now = new Date()) => new Date(now.getTime() + 5 * 3600_000).toISOString().slice(0, 10);
+export function countYandexCall(now = new Date()) {
+  const day = tashkentDay(now);
+  if (calls.day !== day) Object.assign(calls, { day, count: 0 });
+  calls.count++;
+}
+export function yandexCallsToday(now = new Date()): number {
+  return calls.day === tashkentDay(now) ? calls.count : 0;
 }
