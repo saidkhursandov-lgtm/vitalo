@@ -659,3 +659,10 @@ textarea { resize: vertical; }
 .product-toc .chip span { font-weight: 600; }
 .card[id^='p-'] { scroll-margin-top: 72px; }
 .sticky-save { position: sticky; bottom: 0; z-index: 15; display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--border); border-radius: 12px 12px 0 0; box-shadow: 0 -4px 16px rgb(15 23 42 / 8%); }
+
+/* Аудит админки 4.1: notes in the customer card */
+.note-form { display: grid; gap: 8px; margin-bottom: 12px; }
+.note-form textarea { width: 100%; }
+.note-form .btn { justify-self: start; }
+.note { border-top: 1px solid var(--border); padding: 8px 0; }
+.note p { margin: 0 0 2px; white-space: pre-wrap; }

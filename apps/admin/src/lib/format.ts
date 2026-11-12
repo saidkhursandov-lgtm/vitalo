@@ -231,6 +231,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'order.cod_confirmed': 'Заказ с оплатой при получении подтверждён',
   'order.payment_manual_override': 'Онлайн-оплата подтверждена вручную',
   'order.reserve_extended': 'Резерв заказа продлён',
+  'customer.note_added': 'Заметка о клиенте',
   // аудит 2.14: who exported what
   'export.orders': 'Выгрузка заказов в Excel',
   'export.stock': 'Выгрузка остатков в Excel',

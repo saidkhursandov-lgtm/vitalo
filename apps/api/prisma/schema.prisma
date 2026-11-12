@@ -365,6 +365,7 @@ model users {
   payment_receipts  payment_receipts[]
   compat_requests   compat_requests[]
   support_threads   support_threads[]
+  notes             customer_notes[]
 
   @@index([status])
 }
@@ -468,6 +469,7 @@ model staff_users {
   unit_events           physical_unit_events[]
   compat_rules_approved compat_rules[]                 @relation("RuleApprover")
   ai_answers_reviewed   ai_compat_answers[]
+  customer_notes        customer_notes[]
   marketplace_orders    marketplace_orders[]
   reviewed_receipts     payment_receipts[]
   compat_answered       compat_requests[]
@@ -2534,4 +2536,17 @@ model support_messages {
   staff         staff_users?    @relation(fields: [staff_user_id], references: [id], onDelete: SetNull)
 
   @@index([thread_id, created_at])
+}
+
+/// Аудит админки 4.1: a staff note about a customer (never deleted, like the audit log).
+model customer_notes {
+  id            String      @id @default(uuid()) @db.Uuid
+  user_id       String      @db.Uuid
+  staff_user_id String      @db.Uuid
+  text          String
+  created_at    DateTime    @default(now())
+  user          users       @relation(fields: [user_id], references: [id])
+  staff         staff_users @relation(fields: [staff_user_id], references: [id])
+
+  @@index([user_id, created_at])
 }

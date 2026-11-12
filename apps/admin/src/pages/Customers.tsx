@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, OrderStatus, PageHead, Pagination } from '../components/ui';
 import { api, qs } from '../lib/api';
@@ -21,13 +21,25 @@ interface CustomerRow {
   created_at: string;
   paid_orders: number;
   spent_uzs: number;
+  /** аудит 4.1: all orders, cancelled ones too */
+  total_orders: number;
+  last_activity_at: string;
+  marketing_opt_in: boolean;
 }
 
-interface CustomerProfile extends Omit<CustomerRow, 'paid_orders' | 'spent_uzs'> {
+interface CustomerProfile extends CustomerRow {
   bonus_balance_uzs: number;
   addresses: { id: string; label: string | null; region: string; city: string; address_text: string; is_primary: boolean }[];
-  orders: { id: string; order_number: string; created_at: string; status: string; total_uzs: number }[];
+  orders: { id: string; order_number: string; created_at: string; status: string; total_uzs: number; is_test?: boolean }[];
+  support: { id: string; number: number; topic: string; status: string; last_message_at: string }[];
+  compat: { id: string; created_at: string; status: string; verdict: string | null; source: string; products: string[] }[];
+  notes: { id: string; text: string; created_at: string; staff_name: string }[];
 }
+
+const TOPIC: Record<string, string> = { medical: 'Здоровье и приём', order: 'Заказ', promo: 'Акции и бонусы', tech: 'Техническое' };
+const SUPPORT_STATUS: Record<string, [string, 'warn' | 'ok' | 'neutral']> = { open: ['ждёт ответа', 'warn'], answered: ['ответили', 'ok'], closed: ['закрыто', 'neutral'] };
+const VERDICT: Record<string, string> = { compatible: 'можно вместе', spread: 'разнести по времени', consult: 'нужна консультация' };
+const COMPAT_STATUS: Record<string, string> = { pending: 'ждёт ответа', answered: 'отвечен', closed: 'закрыт (корзина изменилась)' };
 
 const fullName = (c: { first_name: string; last_name: string | null }) => [c.first_name, c.last_name].filter(Boolean).join(' ');
 const StatusBadge = ({ status }: { status: string }) => <Badge tone={status === 'active' ? 'ok' : 'bad'}>{status === 'active' ? 'Активен' : 'Заблокирован'}</Badge>;
@@ -79,8 +91,10 @@ export function Customers() {
                 <th>Клиент</th>
                 <th>Telegram</th>
                 <th>Регистрация</th>
-                <th className="num">Оплачено заказов</th>
+                <th>Активность</th>
+                <th className="num" title="Все заказы, с отменёнными / из них оплачено">Заказов / оплачено</th>
                 <th className="num">Сумма покупок</th>
+                <th>Язык</th>
                 <th>Статус</th>
               </tr>
             </thead>
@@ -104,8 +118,15 @@ export function Customers() {
                     <div className="muted small">ID {c.telegram_user_id}</div>
                   </td>
                   <td>{dateTime(c.created_at)}</td>
-                  <td className="num">{c.paid_orders}</td>
+                  <td>{dateTime(c.last_activity_at)}</td>
+                  <td className="num">
+                    {c.total_orders} / {c.paid_orders}
+                  </td>
                   <td className="num">{money(c.spent_uzs)}</td>
+                  <td>
+                    {c.language === 'uz' ? 'UZ' : 'RU'}
+                    {!c.marketing_opt_in && <div className="muted small">без рассылок</div>}
+                  </td>
                   <td>
                     <StatusBadge status={c.status} />
                   </td>
@@ -139,6 +160,20 @@ export function CustomerDetail() {
       setReason('');
     },
   });
+
+  // аудит 4.1: staff notes about the customer
+  const [note, setNote] = useState('');
+  const addNote = useMutation({
+    mutationFn: () => api<CustomerProfile>(`/staff/customers/${id}/notes`, { method: 'POST', body: { text: note } }),
+    onSuccess: (c) => {
+      client.setQueryData(['customer', id], c);
+      setNote('');
+    },
+  });
+  const submitNote = (e: FormEvent) => {
+    e.preventDefault();
+    if (note.trim()) addNote.mutate();
+  };
 
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
@@ -178,6 +213,14 @@ export function CustomerDetail() {
             <dd>{c.language === 'uz' ? 'Узбекский' : 'Русский'}</dd>
             <dt>Регистрация</dt>
             <dd>{dateTime(c.created_at)}</dd>
+            <dt>Последняя активность</dt>
+            <dd>{dateTime(c.last_activity_at)}</dd>
+            <dt>Рассылки</dt>
+            <dd>{c.marketing_opt_in ? 'получает акции и новости' : 'отказался от рассылок'}</dd>
+            <dt>Заказы</dt>
+            <dd>
+              всего {c.total_orders}, оплачено {c.paid_orders} на {money(c.spent_uzs)}
+            </dd>
             <dt>Бонусы</dt>
             <dd>{money(c.bonus_balance_uzs)}</dd>
           </dl>
@@ -200,7 +243,15 @@ export function CustomerDetail() {
               <tbody>
                 {c.orders.map((o) => (
                   <tr key={o.id}>
-                    <td>{can('orders.view') ? <Link to={`/orders/${o.id}`}>{o.order_number}</Link> : o.order_number}</td>
+                    <td>
+                      {can('orders.view') ? <Link to={`/orders/${o.id}`}>{o.order_number}</Link> : o.order_number}
+                      {o.is_test && (
+                        <>
+                          {' '}
+                          <Badge tone="warn">Тест</Badge>
+                        </>
+                      )}
+                    </td>
                     <td>{dateTime(o.created_at)}</td>
                     <td>
                       <OrderStatus status={o.status} />
@@ -211,6 +262,70 @@ export function CustomerDetail() {
               </tbody>
             </table>
           )}
+        </section>
+      </div>
+
+      <div className="grid-2">
+        <section className="card">
+          <h2>Обращения</h2>
+          {c.support.length === 0 ? (
+            <p className="muted">Обращений нет</p>
+          ) : (
+            <table className="table">
+              <tbody>
+                {c.support.map((t) => (
+                  <tr key={t.id}>
+                    <td>{can('support.view') ? <Link to={`/support/${t.id}`}>№{String(t.number).padStart(4, '0')}</Link> : `№${String(t.number).padStart(4, '0')}`}</td>
+                    <td>{TOPIC[t.topic] ?? t.topic}</td>
+                    <td>
+                      <Badge tone={SUPPORT_STATUS[t.status]?.[1] ?? 'neutral'}>{SUPPORT_STATUS[t.status]?.[0] ?? t.status}</Badge>
+                    </td>
+                    <td className="muted small">{dateTime(t.last_message_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <h2>Вопросы о совместимости</h2>
+          {c.compat.length === 0 ? (
+            <p className="muted">Вопросов нет</p>
+          ) : (
+            <table className="table">
+              <tbody>
+                {c.compat.map((r) => (
+                  <tr key={r.id}>
+                    <td className="small">{r.products.join(', ') || '—'}</td>
+                    <td>{r.verdict ? VERDICT[r.verdict] ?? r.verdict : COMPAT_STATUS[r.status] ?? r.status}</td>
+                    <td className="muted small">{dateTime(r.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {c.compat.length > 0 && can('compat.view') && (
+            <p className="small">
+              <Link to="/compat">Комментарии покупателя — в разделе «Вопросы о совместимости»</Link>
+            </p>
+          )}
+        </section>
+        <section className="card">
+          <h2>Заметки</h2>
+          <p className="muted small">Видят сотрудники с доступом к клиентам. Заметки не удаляются.</p>
+          <form onSubmit={submitNote} className="note-form">
+            <textarea rows={2} value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} placeholder="Например: просит звонить после 18:00" aria-label="Новая заметка" />
+            <button type="submit" className="btn btn-sm" disabled={!note.trim() || addNote.isPending}>
+              Добавить заметку
+            </button>
+          </form>
+          <ErrorBox error={addNote.error} />
+          {c.notes.map((n) => (
+            <div key={n.id} className="note">
+              <p>{n.text}</p>
+              <div className="muted small">
+                {n.staff_name} · {dateTime(n.created_at)}
+              </div>
+            </div>
+          ))}
         </section>
       </div>
 
