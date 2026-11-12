@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_CACHED_MS, AI_MIN_MS } from './components/AiCompat';
+import { AiChatSheet } from './components/AiChat';
 import { CompatBlock } from './components/Compat';
 import { I18nProvider } from './lib/i18n';
 import type { AiAnswer, AiChat, AiChatState, AiState, CompatState, Lang } from './lib/types';
@@ -62,6 +63,7 @@ function mock(opts: { state?: AiChatState; reply?: { status: number; body: objec
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     if (url.includes('/analytics/events')) return new Response('{}', { status: 202 });
     if (init.method === 'POST') posted.push({ url, body: init.body ? JSON.parse(init.body as string) : null });
+    if (url.includes('/cart/items')) return new Response(JSON.stringify({ items: [], warnings: [], items_count: 1, goods_total_uzs: 50000 }));
     if (url.includes('/compat/ai/chat/consent')) return new Response(JSON.stringify(chatState()));
     if (url.includes('/compat/ai/chat/message')) return new Response(JSON.stringify(reply.body), { status: reply.status });
     if (url.includes('/compat/ai/chat')) return new Response(JSON.stringify(opts.state ?? chatState()));
@@ -217,5 +219,36 @@ describe('D-70: «Спросить VITALO AI о корзине» — the convers
     fireEvent.click(await screen.findByRole('button', { name: 'VITALO AI dan savat haqida soʻrash' }));
     const sheet = await screen.findByRole('dialog', { name: 'VITALO AI dan savat haqida soʻrash' });
     expect(await within(sheet).findByRole('button', { name: 'Boʻgʻimlarim ogʻriydi va qisirlaydi — bulardan qaysi biri yordam beradi?' })).toBeTruthy();
+  });
+});
+
+describe('D-70: an empty cart — products of the catalogue with «В корзину»', () => {
+  it('the answer offers a product of the catalogue; «В корзину» adds it once', async () => {
+    const pick: AiChat = {
+      ...chatAnswer,
+      messages: [
+        chatAnswer.messages[0],
+        {
+          ...chatAnswer.messages[1],
+          products: [{ product_id: 'p7', name: 'Магний глицинат', fit: 'helps', level: 'B', level_text: 'Есть данные исследований', text: 'Может помочь при напряжении.', in_cart: false }],
+        },
+      ],
+    };
+    mock({ state: chatState({ chat: pick }) });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <I18nProvider lang="ru" setLang={() => undefined}>
+            <AiChatSheet items={[]} onClose={() => undefined} />
+          </I18nProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const sheet = await screen.findByRole('dialog', { name: 'Спросить VITALO AI' });
+    const add = await within(sheet).findByRole('button', { name: 'В корзину' });
+    fireEvent.click(add);
+    await waitFor(() => expect(within(sheet).getByRole('button', { name: 'В корзине' }).hasAttribute('disabled')).toBe(true));
+    expect(posted.filter((p) => p.url.includes('/cart/items'))).toEqual([{ url: '/api/cart/items', body: { product_id: 'p7', qty: 1 } }]);
   });
 });
