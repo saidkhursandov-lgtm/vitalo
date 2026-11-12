@@ -14,6 +14,7 @@ describe('Dictionary merge (e2e)', () => {
   let manager: string;
   const http = () => request(app.getHttpServer());
   const tag = `${process.pid}-${Date.now()}`;
+  const made: string[] = []; // their brand changes, so archiveTestProducts does not see them
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -23,6 +24,7 @@ describe('Dictionary merge (e2e)', () => {
   });
   afterAll(async () => {
     await archiveTestProducts(prisma);
+    await prisma.products.updateMany({ where: { id: { in: made } }, data: { status: 'archived' } });
     await app.close();
   });
 
@@ -30,6 +32,7 @@ describe('Dictionary merge (e2e)', () => {
     const keep = (await http().post('/api/staff/dictionaries/brands').set(bearer(admin)).send({ name_ru: `Merge Keep ${tag}` }).expect(201)).body;
     const dup = (await http().post('/api/staff/dictionaries/brands').set(bearer(admin)).send({ name_ru: `Merge Dup ${tag}` }).expect(201)).body;
     const p = await createTestProduct(prisma, { price: 10_000, stock: 1 });
+    made.push(p.id);
     await prisma.products.update({ where: { id: p.id }, data: { brand_id: dup.id, brand: dup.name_ru } });
     const dupSlug = (await prisma.brands.findUniqueOrThrow({ where: { id: dup.id } })).slug!;
     const keepSlug = (await prisma.brands.findUniqueOrThrow({ where: { id: keep.id } })).slug!;
@@ -53,6 +56,7 @@ describe('Dictionary merge (e2e)', () => {
     const keep = (await http().post('/api/staff/dictionaries/manufacturers').set(bearer(admin)).send({ name_ru: `Maker Keep ${tag}` }).expect(201)).body;
     const dup = (await http().post('/api/staff/dictionaries/manufacturers').set(bearer(admin)).send({ name_ru: `Maker Dup ${tag}` }).expect(201)).body;
     const p = await createTestProduct(prisma, { price: 10_000, stock: 1 });
+    made.push(p.id);
     await prisma.products.update({ where: { id: p.id }, data: { manufacturer_id: dup.id, manufacturer: dup.name_ru } });
     await http().post(`/api/staff/dictionaries/manufacturers/${dup.id}/merge`).set(bearer(admin)).send({ into_id: keep.id }).expect(200);
     expect(await prisma.products.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ manufacturer_id: keep.id, manufacturer: keep.name_ru });
