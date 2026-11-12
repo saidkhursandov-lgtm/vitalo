@@ -307,6 +307,28 @@ describe('Admin panel operations (e2e)', () => {
       const { body } = await as(t.manager).get('/staff/inventory?low_only=true&q=VTL-ZINC').expect(200);
       expect(body.items).toEqual([expect.objectContaining({ sku: 'VTL-ZINC-25', available_qty: 0, low: true })]);
     });
+
+    it('аудит 2.6: without stock and movement for 90 days — hidden unless «все»; days of stock; the shelf value for the admin only', async () => {
+      const idle = await createTestProduct(prisma, { price: 1_000, stock: 0 });
+      await prisma.inventory_movements.updateMany({ where: { product_id: idle.id }, data: { created_at: new Date(Date.now() - 100 * 86_400_000) } });
+      const sold = await createTestProduct(prisma, { price: 1_000, stock: 10 });
+      await prisma.products.update({ where: { id: sold.id }, data: { cost_uzs: 400 } });
+      await prisma.inventory_movements.create({ data: { warehouse_id: wh, product_id: sold.id, movement_type: 'deduct', qty: -6, reason: 'тест: продажи за месяц' } });
+
+      const skus = async (query: string) => (await as(t.admin).get(`/staff/inventory?${query}`).expect(200)).body.items.map((i: { sku: string }) => i.sku);
+      const all = (await as(t.admin).get('/staff/inventory').expect(200)).body;
+      expect(all.items.map((i: { sku: string }) => i.sku)).not.toContain(idle.sku);
+      expect(all.hidden_without_stock).toBeGreaterThan(0);
+      expect(await skus(`show_all=true&q=${idle.sku}`)).toEqual([idle.sku]);
+      expect(await skus(`q=${idle.sku}`)).toEqual([idle.sku]); // a search finds it anyway
+
+      // 10 on the shelf, 6 sold in 30 days → 0.2 a day → 50 days
+      const row = (await as(t.admin).get(`/staff/inventory?q=${sold.sku}`).expect(200)).body.items[0];
+      expect(row).toMatchObject({ available_qty: 10, days_of_stock: 50 });
+      expect(all.stock_value.cost_uzs).toBeGreaterThanOrEqual(4_000);
+      expect((await as(t.manager).get('/staff/inventory').expect(200)).body.stock_value).toBeNull();
+      await as(t.admin).get('/staff/inventory?sort=price').expect(400);
+    });
   });
 
   // ------------------------------------------------------------------ customers

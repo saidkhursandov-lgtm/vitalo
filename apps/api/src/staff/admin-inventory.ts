@@ -2,7 +2,7 @@ import { BadRequestException, Body, ConflictException, Controller, ForbiddenExce
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { MovementType, Prisma, ReturnCondition } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { PageQuery } from '../catalog/catalog.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
@@ -61,7 +61,20 @@ export class StockQuery extends PageQuery {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   low_only?: boolean;
+  @ApiPropertyOptional({ description: 'true — все товары; иначе только с остатком или движением за 90 дней (аудит 2.6)' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  show_all?: boolean;
+  @ApiPropertyOptional({ enum: ['name', 'shortage'], default: 'name', description: 'shortage — сначала то, чего меньше всего относительно минимума' })
+  @IsOptional()
+  @IsIn(['name', 'shortage'])
+  sort?: 'name' | 'shortage';
 }
+
+/** Аудит 2.6: a product without stock is shown by default only if it moved within these days. */
+const STOCK_RECENT_DAYS = 90;
+/** Аудит 2.6: «дней запаса» is counted from the sales of these days. */
+const SALES_WINDOW_DAYS = 30;
 
 export class MovementsQuery extends PageQuery {
   @ApiPropertyOptional() @IsOptional() @IsUUID() product_id?: string;
@@ -92,7 +105,18 @@ export class AdminInventoryService {
     return this.prisma.warehouses.findMany({ orderBy: { name: 'asc' } });
   }
 
-  async stock(q: StockQuery) {
+  async stock(q: StockQuery, costs = false) {
+    const now = Date.now();
+    // аудит 2.6: what moved lately (any movement) and what was sold (written off for orders) in the last 30 days
+    const [recent, sold] = await Promise.all([
+      this.prisma.inventory_movements.groupBy({ by: ['product_id'], where: { created_at: { gte: new Date(now - STOCK_RECENT_DAYS * 86_400_000) } } }),
+      this.prisma.inventory_movements.groupBy({
+        by: ['product_id'],
+        where: { movement_type: 'deduct', created_at: { gte: new Date(now - SALES_WINDOW_DAYS * 86_400_000) } },
+        _sum: { qty: true },
+      }),
+    ]);
+    const moved = new Set(recent.map((r) => r.product_id));
     const rows = await this.prisma.products.findMany({
       where: {
         status: { not: 'archived' },
@@ -121,7 +145,11 @@ export class AdminInventoryService {
           actual_qty: actual,
           reserved_qty: reserved,
           available_qty: actual - reserved,
-          low: actual - reserved <= p.min_stock,
+          // аудит 1.1: a minimum of 0 means «не следим», never «низкий остаток»
+          low: p.min_stock > 0 && actual - reserved <= p.min_stock,
+          days_of_stock: daysOfStock(actual - reserved, Math.abs(Number(sold.find((s) => s.product_id === p.id)?._sum?.qty ?? 0))),
+          cost_uzs: p.cost_uzs === null ? null : Number(p.cost_uzs),
+          recent: actual > 0 || moved.has(p.id),
           warehouses: p.inventory.map((i) => ({
             warehouse: i.warehouse,
             actual_qty: i.actual_qty,
@@ -130,9 +158,32 @@ export class AdminInventoryService {
           })),
         };
       })
-      .filter((i) => !q.low_only || i.low);
+      .filter((i) => !q.low_only || i.low)
+      .filter((i) => q.show_all || q.low_only || q.q || i.recent);
+    if (q.sort === 'shortage') items.sort((a, b) => a.available_qty - a.min_stock - (b.available_qty - b.min_stock) || a.name_ru.localeCompare(b.name_ru, 'ru'));
+    const hidden = rows.length - items.length;
+    // аудит 2.6: the value of the whole shelf at cost — admin only (costs.view); products without a cost are counted apart
+    const value = costs
+      ? rows.reduce(
+          (acc, p) => {
+            const qty = p.inventory.reduce((s, i) => s + i.actual_qty, 0);
+            if (qty <= 0) return acc;
+            if (p.cost_uzs === null) return { ...acc, no_cost: acc.no_cost + 1 };
+            return { ...acc, uzs: acc.uzs + qty * Number(p.cost_uzs) };
+          },
+          { uzs: 0, no_cost: 0 },
+        )
+      : null;
     const start = (q.page - 1) * PAGE_SIZE;
-    return { items: items.slice(start, start + PAGE_SIZE), page: q.page, page_size: PAGE_SIZE, total: items.length, total_pages: Math.ceil(items.length / PAGE_SIZE) };
+    return {
+      items: items.slice(start, start + PAGE_SIZE).map(({ recent: _r, cost_uzs: _c, ...i }) => i),
+      page: q.page,
+      page_size: PAGE_SIZE,
+      total: items.length,
+      total_pages: Math.ceil(items.length / PAGE_SIZE),
+      hidden_without_stock: q.show_all || q.low_only || q.q ? 0 : hidden,
+      stock_value: value && { cost_uzs: value.uzs, products_without_cost: value.no_cost },
+    };
   }
 
   async movements(q: MovementsQuery) {
@@ -308,8 +359,8 @@ export class AdminInventoryController {
 
   @Get()
   @RequirePermission('inventory.view')
-  stock(@Query() q: StockQuery) {
-    return this.inventory.stock(q);
+  stock(@CurrentStaff() me: StaffContext, @Query() q: StockQuery) {
+    return this.inventory.stock(q, can(me.staff.role, 'costs.view'));
   }
 
   @Get('movements')
@@ -345,4 +396,10 @@ export class AdminInventoryController {
   returnToStock(@CurrentStaff() me: StaffContext, @Body() dto: ReturnToStockDto) {
     return this.inventory.returnToStock(me.staff.id, overrideFor(me, dto));
   }
+}
+
+/** Аудит 2.6: how many days the available stock lasts at the pace of the last 30 days; null — nothing was sold. */
+export function daysOfStock(available: number, soldIn30Days: number): number | null {
+  if (soldIn30Days <= 0) return null;
+  return Math.max(0, Math.floor(available / (soldIn30Days / SALES_WINDOW_DAYS)));
 }

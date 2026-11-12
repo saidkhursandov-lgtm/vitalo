@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { useSession } from '../lib/auth';
-import { CONDITION, dateTime, MOVEMENT } from '../lib/format';
+import { CONDITION, dateTime, money, MOVEMENT } from '../lib/format';
 import { CloseIcon } from '../components/Icons';
 import { Receiving, Reconcile, Units } from './Receiving';
 
@@ -18,6 +18,8 @@ interface StockRow {
   reserved_qty: number;
   available_qty: number;
   low: boolean;
+  /** аудит 2.6: at the pace of the last 30 days; null — nothing sold */
+  days_of_stock: number | null;
   warehouses: { warehouse: { id: string; name: string }; actual_qty: number; reserved_qty: number; available_qty: number }[];
 }
 
@@ -71,11 +73,17 @@ function Stock({ editable }: { editable: boolean }) {
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState(params.get('q') ?? '');
   const lowOnly = params.get('low_only') === 'true';
+  // аудит 2.6: by default only what is on the shelf or moved lately; «по нехватке» — the most missing first
+  const showAll = params.get('show_all') === 'true';
+  const sort = params.get('sort') ?? '';
   const page = Number(params.get('page')) || 1;
   const [op, setOp] = useState<{ kind: Op; row: StockRow } | null>(null);
   const q = useQuery({
     queryKey: ['stock', params.toString()],
-    queryFn: () => api<{ items: StockRow[]; total: number; total_pages: number }>(`/staff/inventory${qs({ q: params.get('q'), low_only: lowOnly, page })}`),
+    queryFn: () =>
+      api<{ items: StockRow[]; total: number; total_pages: number; hidden_without_stock: number; stock_value: { cost_uzs: number; products_without_cost: number } | null }>(
+        `/staff/inventory${qs({ q: params.get('q'), low_only: lowOnly, show_all: showAll || undefined, sort: sort || undefined, page })}`,
+      ),
   });
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
@@ -99,7 +107,21 @@ function Stock({ editable }: { editable: boolean }) {
           <input type="checkbox" checked={lowOnly} onChange={(e) => set('low_only', e.target.checked ? 'true' : '')} />
           Только низкие остатки
         </label>
+        <label className="check">
+          <input type="checkbox" checked={showAll} onChange={(e) => set('show_all', e.target.checked ? 'true' : '')} />
+          Показать все товары{!showAll && q.data?.hidden_without_stock ? ` (ещё ${q.data.hidden_without_stock} без остатка и движения за 90 дней)` : ''}
+        </label>
+        <select value={sort} onChange={(e) => set('sort', e.target.value)} aria-label="Порядок">
+          <option value="">По названию</option>
+          <option value="shortage">Сначала нехватка (доступно − минимум)</option>
+        </select>
       </form>
+      {q.data?.stock_value && (
+        <p className="muted">
+          Стоимость склада по себестоимости: <strong>{money(q.data.stock_value.cost_uzs)}</strong>
+          {q.data.stock_value.products_without_cost > 0 && ` · без себестоимости: ${q.data.stock_value.products_without_cost} товаров (не учтены)`}
+        </p>
+      )}
       {!editable && <div className="alert alert-info">Только просмотр: операции со складом выполняет роль «Склад» или администратор.</div>}
       {q.isPending ? (
         <Loading />
@@ -115,7 +137,8 @@ function Stock({ editable }: { editable: boolean }) {
                 <th className="num">В резерве</th>
                 <th className="num">Доступно</th>
                 <th className="num">Минимум</th>
-                <th>Операции</th>
+                <th className="num" title="Сколько дней хватит доступного остатка при продажах как за последние 30 дней">Дней запаса</th>
+                <th aria-label="Операции" />
               </tr>
             </thead>
             <tbody>
@@ -131,18 +154,25 @@ function Stock({ editable }: { editable: boolean }) {
                   <td className="num">{r.reserved_qty}</td>
                   <td className={`num strong ${r.available_qty <= 0 ? 'text-bad' : r.low ? 'text-warn' : ''}`}>{r.available_qty}</td>
                   <td className="num">{r.min_stock}</td>
-                  <td className="ops">
-                    {editable && r.unit_tracking && !overrideAllowed && <span className="muted small">Приход — через «Приёмка» </span>}
-                    {editable &&
-                      (!r.unit_tracking || overrideAllowed) &&
-                      (Object.keys(OP_TITLE) as Op[]).map((k) => (
-                        <button key={k} className="btn btn-sm btn-ghost" onClick={() => setOp({ kind: k, row: r })}>
-                          {OP_TITLE[k].split(' ')[0]}
-                        </button>
-                      ))}
-                    <Link className="btn btn-sm btn-ghost" to={`/inventory?tab=movements&product_id=${r.product_id}`}>
-                      История
-                    </Link>
+                  <td className="num">{r.days_of_stock ?? '—'}</td>
+                  <td className="num">
+                    {/* аудит 2.6: the operations of a row in one «⋯» menu instead of five buttons */}
+                    <details className="row-menu">
+                      <summary aria-label={`Операции: ${r.name_ru}`}>⋯</summary>
+                      <div className="row-menu-list">
+                        {editable && r.unit_tracking && !overrideAllowed && <span className="muted small">Приход — через «Приёмка»</span>}
+                        {editable &&
+                          (!r.unit_tracking || overrideAllowed) &&
+                          (Object.keys(OP_TITLE) as Op[]).map((k) => (
+                            <button key={k} type="button" className="btn btn-sm btn-ghost" onClick={() => setOp({ kind: k, row: r })}>
+                              {OP_TITLE[k]}
+                            </button>
+                          ))}
+                        <Link className="btn btn-sm btn-ghost" to={`/inventory?tab=movements&product_id=${r.product_id}`}>
+                          История движений
+                        </Link>
+                      </div>
+                    </details>
                   </td>
                 </tr>
               ))}
