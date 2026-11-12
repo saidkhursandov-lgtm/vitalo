@@ -606,3 +606,9 @@ textarea { resize: vertical; }
 .help { margin: 0 0 12px; }
 .help > summary { cursor: pointer; color: var(--primary-text); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
 .help > p { margin: 4px 0 0; }
+
+/* Аудит админки 2.15: on a phone a wide table scrolls inside itself, the page never moves sideways
+   (tables in .card.flush already scroll with their card) */
+@media (max-width: 767px) {
+  .card:not(.flush) > .table, .pad > .table, main > .table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
