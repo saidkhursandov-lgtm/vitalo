@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
+import { useSession } from '../lib/auth';
+import { DeficitPurchaseButton } from './Purchases';
 import { BackIcon } from '../components/Icons';
 import { Badge, ErrorBox, Loading, PageHead, Help } from '../components/ui';
 import { api } from '../lib/api';
@@ -11,6 +13,8 @@ interface WaitlistProduct {
   name: string;
   status: string;
   available_qty: number;
+  /** аудит 2.8: still expected from open purchases */
+  incoming_qty: number;
   waiting: number;
   notified: number;
   /** 2.4 patch: switched the bell off before the product came back */
@@ -29,9 +33,14 @@ interface WaitlistDetail {
  */
 export function Waitlist() {
   const q = useQuery({ queryKey: ['waitlist'], queryFn: () => api<WaitlistProduct[]>('/staff/waitlist') });
+  const { can } = useSession();
+  // аудит 2.8: what is missing — the people waiting minus the shelf and what is already on its way
+  const deficit = (q.data ?? [])
+    .map((p) => ({ product: { id: p.product_id, sku: p.sku, name_ru: p.name }, qty: p.waiting - Math.max(0, p.available_qty) - p.incoming_qty }))
+    .filter((l) => l.qty > 0);
   return (
     <>
-      <PageHead title="Лист ожидания" />
+      <PageHead title="Лист ожидания">{can('purchases.manage') && <DeficitPurchaseButton lines={deficit} />}</PageHead>
       <Help id="waitlist">
         Когда остаток товара станет больше нуля, бот сам напишет ожидающим «… снова в наличии» с кнопкой «Открыть товар» —
         один раз на каждую заявку. «Ждут» — только действующие заявки; кто сам выключил колокольчик, считается отдельно в
@@ -55,6 +64,7 @@ export function Waitlist() {
                 <th className="num">Уже уведомлены</th>
                 <th className="num">Отменили</th>
                 <th className="num">Остаток</th>
+                <th className="num">Уже едет</th>
                 <th>Последняя заявка</th>
               </tr>
             </thead>
@@ -71,6 +81,7 @@ export function Waitlist() {
                   <td className="num">{p.notified}</td>
                   <td className="num">{p.cancelled}</td>
                   <td className="num">{p.available_qty > 0 ? p.available_qty : <Badge tone="warn">нет</Badge>}</td>
+                  <td className="num">{p.incoming_qty || '—'}</td>
                   <td>{p.last_at ? dateTime(p.last_at) : '—'}</td>
                 </tr>
               ))}

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useDictionary } from '../components/DictionarySelect';
 import { BackIcon } from '../components/Icons';
 import { TestFlag, useShowTest } from '../components/TestFlag';
@@ -385,6 +385,23 @@ interface DraftLine {
   price: string;
 }
 
+/** Аудит 2.8: what a «Создать закупку из дефицита» button hands to the new purchase (prices are typed there). */
+export interface DeficitLine {
+  product: { id: string; sku: string; name_ru: string };
+  qty: number;
+}
+
+/** Аудит 2.8: «Создать закупку из дефицита» — opens a new purchase with these products and quantities already filled in. */
+export function DeficitPurchaseButton({ lines }: { lines: DeficitLine[] }) {
+  const navigate = useNavigate();
+  if (!lines.length) return null;
+  return (
+    <button type="button" className="btn" onClick={() => navigate('/purchases/new', { state: { deficit: lines } })}>
+      Создать закупку из дефицита ({lines.length})
+    </button>
+  );
+}
+
 interface Preview {
   lines_total_uzs: number;
   final_actual_total_uzs: number | null;
@@ -407,7 +424,10 @@ export function PurchaseNew() {
   const [date, setDate] = useState(today);
   const [comment, setComment] = useState('');
   const [finalTotal, setFinalTotal] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>([]);
+  const location = useLocation();
+  const [lines, setLines] = useState<DraftLine[]>(() =>
+    ((location.state as { deficit?: DeficitLine[] } | null)?.deficit ?? []).map((l) => ({ product: l.product, qty: String(l.qty), price: '' })),
+  );
   const [key] = useState(newKey);
 
   const valid = lines.length > 0 && lines.every((l) => toInt(l.qty)! > 0 && toInt(l.price) !== undefined);

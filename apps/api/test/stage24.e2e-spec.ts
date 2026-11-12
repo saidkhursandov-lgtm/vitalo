@@ -107,7 +107,15 @@ describe('Stage 2.4 (e2e)', () => {
 
       // admin panel: the product with 2 waiting, then its customers (managers see it too: customers.view)
       const list = (await http().get('/api/staff/waitlist').set(bearer(manager)).expect(200)).body;
-      expect(list.find((x: { product_id: string }) => x.product_id === p.id)).toMatchObject({ waiting: 2, notified: 0, available_qty: 0 });
+      expect(list.find((x: { product_id: string }) => x.product_id === p.id)).toMatchObject({ waiting: 2, notified: 0, available_qty: 0, incoming_qty: 0 });
+      // аудит 2.8: «уже едет» — what an open purchase still brings
+      const purchase = await prisma.purchases.create({ data: { source_type: 'SUPPLIER', supplier: { create: { name: `Лист ожидания ${Date.now()}`, status: 'archived' } }, is_test: true, purchase_date: new Date(), lines: { create: [{ product_id: p.id, ordered_qty: 3, cancelled_qty: 1, unit_price_original_uzs: 1, position: 1 }] } } });
+      try {
+        const again = (await http().get('/api/staff/waitlist').set(bearer(manager)).expect(200)).body;
+        expect(again.find((x: { product_id: string }) => x.product_id === p.id)).toMatchObject({ incoming_qty: 2 });
+      } finally {
+        await prisma.purchase_lines.updateMany({ where: { purchase_id: purchase.id }, data: { cancelled_qty: 3 } });
+      }
       const detail = (await http().get(`/api/staff/waitlist/${p.id}`).set(bearer(admin)).expect(200)).body;
       expect(detail.customers).toHaveLength(2);
       expect(detail.customers.map((x: { phone: string | null }) => x.phone)).toContain('+998901112233');
