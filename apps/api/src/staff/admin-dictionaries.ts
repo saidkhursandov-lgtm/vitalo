@@ -5,6 +5,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  HttpCode,
   Injectable,
   NotFoundException,
   Param,
@@ -156,6 +157,11 @@ export class DictionaryPatch extends SupplierFields {
   @ApiPropertyOptional({ enum: EntityStatus }) @IsOptional() @IsEnum(EntityStatus) status?: EntityStatus;
 }
 
+/** D-65 / аудит 4.6: «Объединить» — the value that stays. */
+export class MergeInput {
+  @ApiProperty() @IsUUID() into_id!: string;
+}
+
 export class DictionaryQuery {
   @ApiPropertyOptional({ description: 'true — вместе с архивными' })
   @IsOptional()
@@ -279,6 +285,44 @@ export class AdminDictionariesService {
     });
   }
 
+  /**
+   * D-65 / аудит 4.6: a duplicate (brand, manufacturer, country, form) merged into the value that stays. Its products
+   * move there (the text column too, so the shop shows the right name), for a brand also the campaign targets and
+   * the banners; the duplicate goes to the archive — never deleted. One audit entry; admin only (settings.dictionaries).
+   */
+  async merge(staffId: string, kind: AnyDictionaryKind, id: string, intoId: string) {
+    if (isPurchaseKind(kind)) throw new BadRequestException({ code: 'MERGE_NOT_SUPPORTED', message: 'Объединять можно бренды, производителей, страны и формы' });
+    if (id === intoId) throw new BadRequestException({ code: 'MERGE_SAME', message: 'Выберите другое значение' });
+    const k = kind as DictionaryKind;
+    return this.prisma.$transaction(async (tx) => {
+      const table = dictionaryTable(tx, k);
+      const [from, into] = await Promise.all([table.findUnique({ where: { id } }), table.findUnique({ where: { id: intoId } })]);
+      if (!from || !into) throw new NotFoundException('Dictionary value not found');
+      if (into.status !== 'active') throw new ConflictException({ code: 'MERGE_INTO_ARCHIVED', message: `«${into.name_ru}» в архиве — сначала верните его` });
+      const cols = DICTIONARY_COLUMNS[k];
+      const products = (await tx.products.updateMany({ where: { [cols.id]: id }, data: { [cols.id]: intoId, [cols.text]: into.name_ru } })).count;
+      let campaigns = 0;
+      let banners = 0;
+      if (k === 'brands') {
+        campaigns = (await tx.promotion_targets.updateMany({ where: { brand_id: id }, data: { brand_id: intoId } })).count;
+        const [a, b] = await Promise.all([
+          tx.brands.findUniqueOrThrow({ where: { id }, select: { slug: true } }),
+          tx.brands.findUniqueOrThrow({ where: { id: intoId }, select: { slug: true } }),
+        ]);
+        // a banner points at a brand by its name or by its address — the same form is kept
+        const byName = await tx.home_banners.updateMany({ where: { link_type: 'brand', link_value: from.name_ru }, data: { link_value: into.name_ru } });
+        const bySlug = a.slug ? await tx.home_banners.updateMany({ where: { link_type: 'brand', link_value: a.slug }, data: { link_value: b.slug ?? into.name_ru } }) : { count: 0 };
+        banners = byName.count + bySlug.count;
+      }
+      const after = from.status === 'archived' ? from : await table.update({ where: { id }, data: { status: 'archived' } });
+      await this.audit.log(
+        { staffId, action: 'dictionary.merged', entityType: kind, entityId: id, before: from, after: { ...after, merged_into: { id: intoId, name_ru: into.name_ru }, products_moved: products, campaign_targets_moved: campaigns, banners_moved: banners } },
+        tx,
+      );
+      return { merged: toView(kind, after), into: toView(kind, into), products_moved: products, campaign_targets_moved: campaigns, banners_moved: banners };
+    });
+  }
+
   private async write<T>(kind: AnyDictionaryKind, fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
     try {
       return await this.prisma.$transaction(fn);
@@ -332,5 +376,13 @@ export class AdminDictionariesController {
   @RequirePermission('settings.dictionaries')
   update(@CurrentStaff() me: StaffContext, @Param('kind') kind: string, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: DictionaryPatch) {
     return this.dictionaries.update(me.staff.id, kindOf(kind), id, dto);
+  }
+
+  /** D-65 / аудит 4.6: merge a duplicate into another value (admin only). */
+  @Post(':kind/:id/merge')
+  @HttpCode(200)
+  @RequirePermission('settings.dictionaries')
+  merge(@CurrentStaff() me: StaffContext, @Param('kind') kind: string, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: MergeInput) {
+    return this.dictionaries.merge(me.staff.id, kindOf(kind), id, dto.into_id);
   }
 }

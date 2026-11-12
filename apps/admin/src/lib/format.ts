@@ -210,6 +210,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'competitor_price.hidden': 'Скрыта цена конкурента',
   'dictionary.created': 'Добавлена запись справочника',
   'dictionary.backfill': 'Справочник заполнен из товаров',
+  'dictionary.merged': 'Справочник: объединены дубли',
   'product.deleted': 'Товар удалён',
   'product.delete_archived': 'Товар с историей убран в архив (кнопка «Удалить»)',
   'product.sku_renamed': 'Изменён SKU товара',

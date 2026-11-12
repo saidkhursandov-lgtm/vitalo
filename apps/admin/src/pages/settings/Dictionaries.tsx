@@ -6,11 +6,13 @@ import {
   isPurchaseDictionary,
   useDictionary,
   type AnyDictionaryKind,
+  type DictionaryKind,
   type DictionaryValue,
 } from '../../components/DictionarySelect';
 import { Badge, ErrorBox, Field, Loading, Modal, toInt } from '../../components/ui';
 import { SUPPLIER_DEFAULT_TERMS, SUPPLIER_KIND_LABELS, supplierTerms, type Supplier, type SupplierKind } from '../../components/SupplierTabs';
 import { api } from '../../lib/api';
+import { Link } from 'react-router-dom';
 
 /**
  * Настройки → Справочники (admin): brands, manufacturers, countries, forms; since stage 2A also suppliers and
@@ -28,7 +30,17 @@ export function DictionariesSettings() {
           </button>
         ))}
       </div>
-      <DictionaryList key={kind} kind={kind} />
+      {kind === 'brands' ? (
+        // аудит 4.6: one page for brands — name, logo, address, the showcase, «Объединить»
+        <section className="card">
+          <p>
+            Бренды теперь в одном месте: <Link to="/brands">Каталог → Бренды</Link> — название (RU/UZ), логотип, адрес, лента брендов, «Объединить» дубли и
+            архив.
+          </p>
+        </section>
+      ) : (
+        <DictionaryList key={kind} kind={kind} />
+      )}
     </>
   );
 }
@@ -39,6 +51,7 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
   const purchase = isPurchaseDictionary(kind);
   const [name, setName] = useState('');
   const [edit, setEdit] = useState<DictionaryValue | null>(null);
+  const [merging, setMerging] = useState<DictionaryValue | null>(null);
   const refresh = () => {
     void client.invalidateQueries({ queryKey: dictionaryKey(kind) });
     void client.invalidateQueries({ queryKey: [purchase ? 'purchases' : 'products'] });
@@ -97,7 +110,7 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
               <tr key={v.id}>
                 <td className="strong">{v.name_ru}</td>
                 <td>
-                  {kind === 'suppliers' ? <SupplierSummary s={v as Supplier} /> : purchase ? null : (v.name_uz ?? <span className="muted">—</span>)}
+                  {kind === 'suppliers' ? <SupplierSummary s={v as Supplier} /> : purchase ? null : (v.name_uz ?? <span className="muted" title="Пусто — в магазине на узбекском показывается русское название">как RU</span>)}
                 </td>
                 {kind === 'suppliers' && <td className="num">{(v as Supplier).product_count}</td>}
                 <td className="num">{v.products}</td>
@@ -106,6 +119,11 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
                   <button type="button" className="btn btn-sm btn-ghost" onClick={() => setEdit(v)}>
                     {kind === 'suppliers' ? 'Изменить' : 'Переименовать'}
                   </button>
+                  {!purchase && v.status === 'active' && (
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => setMerging(v)}>
+                      Объединить
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-sm btn-ghost"
@@ -125,6 +143,7 @@ function DictionaryList({ kind }: { kind: AnyDictionaryKind }) {
         </table>
       )}
       {edit && <RenameModal kind={kind} value={edit} onClose={() => setEdit(null)} onDone={refresh} />}
+      {merging && <MergeModal kind={kind as DictionaryKind} value={merging} onClose={() => setMerging(null)} onDone={refresh} />}
     </section>
   );
 }
@@ -242,7 +261,7 @@ function SupplierModal({ value, onClose, onDone }: { value: Supplier; onClose: (
   );
 }
 
-function NameModal({ kind, value, onClose, onDone }: { kind: AnyDictionaryKind; value: DictionaryValue; onClose: () => void; onDone: () => void }) {
+export function NameModal({ kind, value, onClose, onDone }: { kind: AnyDictionaryKind; value: DictionaryValue; onClose: () => void; onDone: () => void }) {
   const purchase = isPurchaseDictionary(kind);
   const [ru, setRu] = useState(value.name_ru);
   const [uz, setUz] = useState(value.name_uz ?? '');
@@ -285,6 +304,53 @@ function NameModal({ kind, value, onClose, onDone }: { kind: AnyDictionaryKind; 
         <ErrorBox error={save.error} />
         <button className="btn" disabled={save.isPending || !ru.trim()}>
           Сохранить
+        </button>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * D-65 / аудит 4.6: «Объединить» a duplicate into the value that stays. Its products move there, for a brand also
+ * campaigns and banners; the duplicate goes to the archive (not deleted). Admin only; written to the audit log.
+ */
+export function MergeModal({ kind, value, onClose, onDone }: { kind: DictionaryKind; value: DictionaryValue; onClose: () => void; onDone: () => void }) {
+  const list = useDictionary(kind);
+  const [into, setInto] = useState('');
+  const target = list.data?.find((v) => v.id === into);
+  const merge = useMutation({
+    mutationFn: () => api<{ products_moved: number }>(`/staff/dictionaries/${kind}/${value.id}/merge`, { method: 'POST', body: { into_id: into } }),
+    onSuccess: () => {
+      onDone();
+      onClose();
+    },
+  });
+  const others = (list.data ?? []).filter((v) => v.id !== value.id && v.status === 'active');
+  return (
+    <Modal title={`Объединить «${value.name_ru}»`} onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (target && window.confirm(`Перенести ${value.products} товар(ов) из «${value.name_ru}» в «${target.name_ru}»? «${value.name_ru}» уйдёт в архив.`)) merge.mutate();
+        }}
+      >
+        <Field label="Оставить" hint={`Товары «${value.name_ru}» (${value.products}) перейдут сюда${kind === 'brands' ? ', вместе с акциями и баннерами' : ''}; «${value.name_ru}» уйдёт в архив, не удаляется.`}>
+          {list.isPending ? (
+            <Loading />
+          ) : (
+            <select value={into} onChange={(e) => setInto(e.target.value)} required aria-label="Оставить">
+              <option value="">— выберите —</option>
+              {others.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name_ru} ({v.products})
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <ErrorBox error={merge.error} />
+        <button className="btn" disabled={!target || merge.isPending}>
+          Объединить
         </button>
       </form>
     </Modal>

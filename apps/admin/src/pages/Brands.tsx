@@ -4,7 +4,8 @@ import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt, Help } from '.
 import { api, errorText, qs } from '../lib/api';
 import { TestFlag, useShowTest } from '../components/TestFlag';
 import { useSession } from '../lib/auth';
-import { dictionaryKey } from '../components/DictionarySelect';
+import { dictionaryKey, useDictionary } from '../components/DictionarySelect';
+import { MergeModal, NameModal } from './settings/Dictionaries';
 import { SupplierTabs } from '../components/SupplierTabs';
 
 interface Brand {
@@ -65,6 +66,16 @@ export function Brands() {
   const [adding, setAdding] = useState(false);
   const { can } = useSession();
   const client = useQueryClient();
+  // аудит 4.6: rename and «Объединить» live here too (one page for brands)
+  const dict = useDictionary('brands');
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [merging, setMerging] = useState<string | null>(null);
+  const dictValue = (id: string | null) => dict.data?.find((v) => v.id === id) ?? null;
+  const refreshAll = () => {
+    void client.invalidateQueries({ queryKey: ['brands'] });
+    void client.invalidateQueries({ queryKey: dictionaryKey('brands') });
+    void client.invalidateQueries({ queryKey: ['products'] });
+  };
   // D-54 «Удалить»: erases the brand everywhere; refused while the shop still has its products
   const remove = useMutation({
     mutationFn: (id: string) => api(`/staff/brands/${id}`, { method: 'DELETE' }),
@@ -80,7 +91,8 @@ export function Brands() {
       </PageHead>
       <Help id="brands">
         Лента «Проверенные бренды» в Mini App показывает включённые бренды, у которых есть товар в наличии.
-        Переименование — в «Настройки → Справочники»: название у товаров меняется вместе с ним.
+        «Переименовать» меняет название и у всех товаров бренда. «Объединить» — для дублей: товары, акции и баннеры переходят к
+        выбранному бренду, дубль уходит в архив.
       </Help>
       <SupplierTabs value={supplier} onChange={setSupplier} />
       <div className="filters">{testToggle}</div>
@@ -139,6 +151,16 @@ export function Brands() {
                       <button className="btn btn-ghost btn-sm" onClick={() => setEditing(b.id)}>
                         Изменить
                       </button>
+                      {dictValue(b.id) && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setRenaming(b.id)}>
+                          Переименовать
+                        </button>
+                      )}
+                      {b.status === 'active' && dictValue(b.id) && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setMerging(b.id)}>
+                          Объединить
+                        </button>
+                      )}
                       {can('catalog.delete') && (
                         <button
                           className="btn btn-danger btn-sm"
@@ -162,6 +184,8 @@ export function Brands() {
       )}
       {adding && <NewBrand onClose={() => setAdding(false)} onCreated={(id) => { setAdding(false); setEditing(id); }} />}
       {brand && q.data && <BrandEditor key={brand.id} brand={brand} logoSize={q.data.logo.width} onClose={() => setEditing(null)} />}
+      {dictValue(renaming) && <NameModal kind="brands" value={dictValue(renaming)!} onClose={() => setRenaming(null)} onDone={refreshAll} />}
+      {dictValue(merging) && <MergeModal kind="brands" value={dictValue(merging)!} onClose={() => setMerging(null)} onDone={refreshAll} />}
     </>
   );
 }
