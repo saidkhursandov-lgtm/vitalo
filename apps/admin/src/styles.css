@@ -653,3 +653,9 @@ textarea { resize: vertical; }
 .search-results ul { list-style: none; margin: 0; padding: 0; }
 .search-hit { width: 100%; min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: inherit; text-align: left; cursor: pointer; }
 .search-hit:hover, .search-hit:focus-visible, .search-hit.is-first { background: var(--primary-soft); }
+
+/* Аудит админки 2.4: product card — table of contents with «заполнено / пусто» and one sticky «Сохранить» */
+.product-toc .chip { text-decoration: none; min-height: 44px; }
+.product-toc .chip span { font-weight: 600; }
+.card[id^='p-'] { scroll-margin-top: 72px; }
+.sticky-save { position: sticky; bottom: 0; z-index: 15; display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--border); border-radius: 12px 12px 0 0; box-shadow: 0 -4px 16px rgb(15 23 42 / 8%); }

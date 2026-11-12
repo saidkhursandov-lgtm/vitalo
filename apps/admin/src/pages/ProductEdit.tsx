@@ -1,6 +1,6 @@
 import { SkuAliases } from './SkuAliases';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DictionarySelect, type DictionaryKind } from '../components/DictionarySelect';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
@@ -207,6 +207,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const [cats, setCats] = useState<Set<string>>(new Set(product?.category_ids ?? []));
   const [lang, setLang] = useState<'ru' | 'uz'>('ru');
   const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [askSync, setAskSync] = useState(false);
   const yandexView = can('yandex.price.view');
   const costsView = can('costs.view');
@@ -261,6 +262,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       client.setQueryData(['product', p.id], p);
       void client.invalidateQueries({ queryKey: ['products'] });
       setSaved(true);
+      setDirty(false);
       setF((x) => ({ ...x, yandex_price_uzs: p.yandex_price_uzs == null ? '' : String(p.yandex_price_uzs) }));
       if (!product) navigate(`/products/${p.id}`, { replace: true });
     },
@@ -299,7 +301,38 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const set = (k: string, v: string) => {
     setF((x) => ({ ...x, [k]: v })); // functional: several fields may change in one click (D-61 «Где берём»)
     setSaved(false);
+    setDirty(true);
   };
+  const changeCats = (next: Set<string>) => {
+    setCats(next);
+    setSaved(false);
+    setDirty(true);
+  };
+  // аудит 2.4: closing or reloading the tab with unsaved changes asks first
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const leave = (e: { preventDefault(): void }) => {
+    if (dirty && !window.confirm('Есть несохранённые изменения. Уйти без сохранения?')) e.preventDefault();
+  };
+  // аудит 2.4: the table of contents — each block with «заполнено / пусто»
+  const uzTexts = TEXTS.filter(([k]) => k !== 'doctor_verdict' && k !== 'intake_memo').every(([k]) => String(f[`${k}_uz`] ?? '').trim());
+  const images = product?.media.filter((m) => m.type === 'image').length ?? 0;
+  const toc: [string, string, boolean | null][] = [
+    ['p-main', 'Основное', !!f.name_ru.trim() && !!f.name_uz.trim()],
+    ['p-price', 'Цены', !!toInt(f.price_uzs)],
+    ['p-payme', 'ИКПУ', !!f.ikpu_code.trim() && !!f.package_code.trim()],
+    ['p-cats', 'Категории', cats.size > 0],
+    ['p-texts', 'Тексты UZ', uzTexts],
+    ['p-supply', 'Где берём', null],
+    ['p-photo', 'Фото', product ? images > 0 : null],
+  ];
   /** The VITALO price is applied in the shop at once; only a changed Yandex price asks about Yandex Market. */
   // D-09: a discount above 25% is not shown to customers; saving is still allowed
   const bigDiscount = discountAboveLimit(toInt(f.price_uzs), toInt(f.old_price_uzs));
@@ -325,24 +358,28 @@ function ProductForm({ product }: { product?: AdminProduct }) {
     <>
     <form onSubmit={submit}>
       <PageHead title={product ? `Товар: ${product.name_ru as string}` : 'Новый товар'}>
-        <Link to="/products" className="btn btn-ghost">
+        <Link to="/products" className="btn btn-ghost" onClick={leave}>
           <BackIcon /> К списку
         </Link>
         {product && <TestFlag entity="product" id={product.id} value={!!product.is_test} invalidate={['product', product.id]} />}
-        {editable && product && product.status !== 'archived' && (
+        {product && ((editable && product.status !== 'archived') || can('catalog.delete')) && (
+          <details className="row-menu">
+            <summary aria-label="Ещё действия с товаром">Ещё</summary>
+            <div className="row-menu-list">
+        {editable && product.status !== 'archived' && (
           <button
             type="button"
-            className="btn btn-danger"
+            className="btn btn-ghost"
             disabled={archive.isPending}
             onClick={() => window.confirm('Убрать товар в архив? Он перестанет показываться в магазине.') && archive.mutate()}
           >
             В архив
           </button>
         )}
-        {can('catalog.delete') && product && (
+        {can('catalog.delete') && (
           <button
             type="button"
-            className="btn btn-danger"
+            className="btn btn-ghost text-bad"
             disabled={remove.isPending}
             onClick={() =>
               window.confirm(
@@ -353,12 +390,18 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             {remove.isPending ? 'Удаление…' : 'Удалить'}
           </button>
         )}
-        {(editable || (contentOnly && product)) && (
-          <button type="submit" className="btn" disabled={save.isPending}>
-            {save.isPending ? 'Сохранение…' : 'Сохранить'}
-          </button>
+            </div>
+          </details>
         )}
       </PageHead>
+      <nav className="chips product-toc" aria-label="Блоки карточки">
+        {toc.map(([id, label, filled]) => (
+          <a key={id} href={`#${id}`} className="chip">
+            {label}
+            {filled !== null && <span className={filled ? 'text-ok small' : 'text-warn small'}>{filled ? 'заполнено' : 'пусто'}</span>}
+          </a>
+        ))}
+      </nav>
       {!editable && !contentOnly && <div className="alert alert-info">Только просмотр: менять товары может администратор.</div>}
       {contentOnly && <div className="alert alert-info">Вы можете менять названия, краткое описание, слова для поиска, категории, промо-метку и фото. Цены, состав и остальное меняет администратор.</div>}
       {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине.</div>}
@@ -384,7 +427,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       )}
 
       <div className="grid-2">
-        <section className="card">
+        <section className="card" id="p-main">
           <h2>Основное</h2>
           <div className="form-grid">
             <Field label="SKU">{input('sku', { required: true })}</Field>
@@ -428,7 +471,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
           </Field>
         </section>
 
-        <section className="card">
+        <section className="card" id="p-price">
           <h2>Цены и остатки</h2>
           <div className="form-grid">
             <Field label="Цена, сум">{input('price_uzs', { inputMode: 'numeric', required: true })}</Field>
@@ -481,7 +524,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         </section>
       </div>
 
-      <section className="card">
+      <section className="card" id="p-payme">
         <div className="section-head">
           <h2>Чек для Payme</h2>
           {product && (product.ikpu_code && product.package_code ? <Badge tone="ok">Заполнено</Badge> : <Badge tone="warn">Без кодов Payme недоступен</Badge>)}
@@ -504,7 +547,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       <IherbCard f={f} set={set} input={input} editable={editable} costsView={costsView} price={toInt(f.price_uzs)} />
 
       {yandexView && (
-        <section className="card">
+        <section className="card" id="p-yandex">
           <div className="section-head">
             <h2>Яндекс Маркет</h2>
             {product?.yandex_price_sync_needed ? (
@@ -533,7 +576,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         </section>
       )}
 
-      <section className="card">
+      <section className="card" id="p-cats">
         <h2>Категории</h2>
         {/* 2.2: one level; several needs, exactly one type (the server checks it too) */}
         {categories.data && (
@@ -551,7 +594,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
                       const next = new Set(cats);
                       if (next.has(n.id)) next.delete(n.id);
                       else next.add(n.id);
-                      setCats(next);
+                      changeCats(next);
                       setSaved(false);
                     }}
                   />
@@ -571,7 +614,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
                     disabled={!canEdit('category_ids')}
                     onChange={() => {
                       const types = new Set(categories.data.product_type.map((c) => c.id));
-                      setCats(new Set([...cats].filter((id) => !types.has(id)).concat(n.id)));
+                      changeCats(new Set([...cats].filter((id) => !types.has(id)).concat(n.id)));
                       setSaved(false);
                     }}
                   />
@@ -583,7 +626,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         )}
       </section>
 
-      <section className="card">
+      <section className="card" id="p-expert">
         <h2>Карточка в магазине: экспертиза</h2>
         <p className="muted small">Пустые поля покупатель не видит — блок просто не показывается.</p>
         <div className="form-grid">
@@ -650,7 +693,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         </Field>
       </section>
 
-      <section className="card">
+      <section className="card" id="p-texts">
         <div className="section-head">
           <h2>Тексты карточки</h2>
           <div className="segmented">
@@ -669,6 +712,14 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         ))}
       </section>
 
+      {(editable || (contentOnly && product)) && (
+        <div className="sticky-save">
+          <span className={dirty ? 'text-warn' : 'muted'}>{dirty ? 'Есть несохранённые изменения' : saved ? 'Сохранено' : 'Изменений нет'}</span>
+          <button type="submit" className="btn" disabled={save.isPending}>
+            {save.isPending ? 'Сохранение…' : 'Сохранить'}
+          </button>
+        </div>
+      )}
     </form>
     {/* Own forms and buttons: outside the product form, so their submit never saves the whole product too. */}
     {product && <LabelCard product={product} />}
@@ -706,7 +757,7 @@ function SupplyCard({ f, set, editable, isNew }: { f: Form; set: (k: string, v: 
   };
   const onZero = all.find((s) => s.id === f.on_zero_supplier_id);
   return (
-    <section className="card">
+    <section className="card" id="p-supply">
       <div className="section-head">
         <h2>Где берём</h2>
         {onZero ? <Badge tone="info">Ноль → под заказ: {onZero.name_ru}</Badge> : null}
@@ -766,7 +817,7 @@ function IherbCard({
   // 6а-В: to the nearest step (270 254 → 270 000, 386 773 → 387 000), the same as autoPrice on the server
   const exampleOut = Math.max(round, Math.round((example * (1 + markup / 100)) / round) * round);
   return (
-    <section className="card">
+    <section className="card" id="p-iherb">
       <div className="section-head">
         <h2>iHerb и сверка «1-в-1»</h2>
         {f.iherb_url ? <Badge tone="info">iHerb</Badge> : null}
@@ -914,7 +965,7 @@ function Photos({ product, editable }: { product: AdminProduct; editable: boolea
   const images = product.media.filter((m) => m.type === 'image');
 
   return (
-    <section className="card">
+    <section className="card" id="p-photo">
       <div className="section-head">
         <h2>Фото</h2>
         {editable && (
