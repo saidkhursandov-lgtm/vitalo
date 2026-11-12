@@ -16,6 +16,7 @@ import {
   Min,
   ValidateIf,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { MAX_LINE_QTY } from '../cart/cart-reconcile';
 import { PageQuery } from '../catalog/catalog.dto';
@@ -91,10 +92,15 @@ export class CheckoutDto {
   @IsString()
   @MaxLength(64)
   promo_code?: string;
+
+  @ApiPropertyOptional({ description: '3.10-А: списать бонусы. Не передан — для корзины берётся переключатель корзины' })
+  @IsOptional()
+  @IsBoolean()
+  use_bonus?: boolean;
 }
 
 /** The confirmation screen recalculates as soon as the city is chosen, before name/phone are typed. */
-export class OrderPreviewDto extends PickType(CheckoutDto, ['source', 'buy_now', 'region_id', 'city_id', 'payment_method', 'promo_code'] as const) {}
+export class OrderPreviewDto extends PickType(CheckoutDto, ['source', 'buy_now', 'region_id', 'city_id', 'payment_method', 'promo_code', 'use_bonus'] as const) {}
 
 export class CreateOrderDto extends CheckoutDto {
   @ApiPropertyOptional({

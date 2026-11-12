@@ -7,6 +7,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { assertTransition, CONFIRMED_STATUSES, CUSTOMER_CANCELLABLE } from './order-state';
 import { OrderUnitsService } from './order-units.service';
 import { CrossBorderService } from './cross-border.service';
+import { BonusService } from '../bonus/bonus.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -36,6 +37,7 @@ export class OrderLifecycleService {
     private readonly notifications: NotificationsService,
     private readonly units: OrderUnitsService,
     private readonly crossBorder: CrossBorderService,
+    private readonly bonus: BonusService,
   ) {}
 
   async lockOrder(tx: Tx, orderId: string): Promise<LockedOrder> {
@@ -273,6 +275,8 @@ export class OrderLifecycleService {
       },
     });
     await this.settlePromo(tx, orderId, to);
+    // 3.10-А: cashback after «Доставлен», spent bonuses back after a cancellation, both reversed by a return
+    await this.bonus.onOrderStatus(tx, orderId, to);
     const shownReason = shown ?? (actor.type === 'staff' ? reason : actor.type === 'system' ? EXPIRED_REASON_CODE : null);
     await this.notifications.orderStatusChanged(tx, orderId, to, shownReason);
   }

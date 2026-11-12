@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { BonusSettings, normalizeBonusSettings } from '../bonus/bonus-rules';
 import { customerModes, onlineModes } from '../payments/online/online-providers';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -95,6 +96,11 @@ export class CatalogService {
     return { cod_max_total_uzs: saved.cod_max_total_uzs, first_order_free_delivery: saved.first_order_free_delivery, online, show_online_soon: Object.values(online).includes('soon') };
   }
 
+  private async bonusRules() {
+    const s = normalizeBonusSettings(await this.settings.get<Partial<BonusSettings>>('bonus'));
+    return { enabled: s.enabled, cashback_pct: s.enabled ? s.cashback_pct : 0, max_spend_pct: s.max_spend_pct };
+  }
+
   /** Everything the Mini App shows from settings: texts, support contact, payment hours, delivery terms. */
   async texts() {
     const support = await this.settings.getOrDefault('support_contact');
@@ -107,6 +113,8 @@ export class CatalogService {
       delivery_terms: await this.delivery.terms(),
       home_content: await this.settings.getOrDefault('home_content'),
       bonus_teaser: await this.settings.getOrDefault('bonus_teaser'),
+      // 3.10-А: «+N сум на бонусный счёт» on the product card (the server counts the real cashback after the delivery)
+      bonus: await this.bonusRules(),
       manifest: manifestOrDefault(await this.settings.get('home_manifest')),
       // Release 1: what checkout and the home page may show (the server re-checks everything on order creation)
       checkout: await this.checkoutForApp(),

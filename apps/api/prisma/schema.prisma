@@ -175,6 +175,10 @@ enum BonusOp {
   manual_subtract
   redemption
   reversal
+  /// 3.10-А: the balance burnt after the lifetime (bonus_accounts.last_activity_at + lifetime_days)
+  expire
+  /// 3.10-Б: a published review
+  review
 }
 
 enum ReferralStatus {
@@ -1558,6 +1562,8 @@ model carts {
   status     CartStatus   @default(active)
   /// 3.3: the promo code typed in the cart (checked again on every cart read; removed when it stops fitting)
   promo_code String?
+  /// 3.10-А: «Списать бонусы» is on (the amount is computed on every read)
+  use_bonus  Boolean      @default(false)
   created_at DateTime     @default(now())
   updated_at DateTime     @updatedAt
   user       users        @relation(fields: [user_id], references: [id])
@@ -1922,10 +1928,16 @@ model bonus_accounts {
   id          String         @id @default(uuid()) @db.Uuid
   user_id     String         @unique @db.Uuid
   balance_uzs BigInt         @default(0)
+  /// 3.10-А: the last accrual (purchase, review, manual +): the balance burns lifetime_days after it
+  last_activity_at    DateTime?
+  /// 3.10-А: «Через 7 дней сгорят» was sent for this last_activity_at
+  expiry_notified_for DateTime?
   updated_at  DateTime       @updatedAt
   user        users          @relation(fields: [user_id], references: [id])
   ledger      bonus_ledger[]
   // CHECK (balance_uzs >= 0): constraints.sql
+
+  @@index([last_activity_at])
 }
 
 // Immutable: UPDATE/DELETE blocked by trigger (constraints.sql)
@@ -1946,6 +1958,8 @@ model bonus_ledger {
   staff             staff_users?   @relation(fields: [created_by], references: [id])
 
   @@index([bonus_account_id, created_at])
+  @@index([order_id])
+  @@index([created_at])
 }
 
 model referrals {

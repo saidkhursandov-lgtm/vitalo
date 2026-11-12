@@ -5,6 +5,8 @@ import { DeliveryQuote } from '../delivery/delivery-quote';
 import { DeliveryService } from '../delivery/delivery.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { BonusService } from '../bonus/bonus.service';
+import { BonusBlock, bonusSpend, cashbackOf } from '../bonus/bonus-rules';
 import { purchaseCosts } from './purchase-costs';
 import { eligibleLines, goodsDiscount, GoodsDiscount, normalizePromoCode, PricingLine, PROMO_CODE_RE, PromoGuard, PromoKind, PromoTargets } from './pricing';
 
@@ -81,6 +83,7 @@ export class PromoCodesService {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly delivery: DeliveryService,
+    private readonly bonusService: BonusService,
   ) {}
 
   async guard(): Promise<PromoGuard> {
@@ -157,23 +160,24 @@ export class PromoCodesService {
   /**
    * THE order calculation (cart, checkout preview, order creation): goods at their prices (3.7: a line in a running sale
    * already at its sale price — the difference to the regular price is the «Акция …» line) → promo code → (bonuses,
-   * release 4) → delivery → total. The free-delivery threshold uses goods AFTER the promo (Master TZ §9). A code that
+   * D-71) → delivery → total. The free-delivery threshold uses goods AFTER the promo (Master TZ §9). A code that
    * does not fit comes back as `promo_rejection` and the totals are computed without it.
    */
-  async calculate(db: Db, userId: string, priced: PricedInput[], opts: { address?: { region_id: string; city_id: string } | null; code?: string | null; lock?: boolean }): Promise<Calculation> {
+  async calculate(db: Db, userId: string, priced: PricedInput[], opts: { address?: { region_id: string; city_id: string } | null; code?: string | null; lock?: boolean; useBonus?: boolean }): Promise<Calculation> {
     const goods = priced.reduce((s, l) => s + l.unit_price_uzs * l.qty, 0);
     const campaigns = campaignLines(priced);
     const campaignDiscount = campaigns.reduce((s, c) => s + c.amount_uzs, 0);
     let applied: PromoApplied | null = null;
     let rejection: PromoRejection | null = null;
+    let pricing: PricingLine[] | null = null;
+    const pricingOnce = async () => (pricing ??= await this.pricingLines(db, priced));
     if (opts.code) {
-      const r = await this.evaluate(db, userId, opts.code, await this.pricingLines(db, priced), { lock: opts.lock });
+      const r = await this.evaluate(db, userId, opts.code, await pricingOnce(), { lock: opts.lock });
       if (r.ok) applied = r;
       else rejection = r;
     }
 
     const discount = applied?.goods.total_uzs ?? 0;
-    const bonus = 0; // release 4: VITALO Bonus goes here, after the promo code
     let delivery: DeliveryQuote | null = opts.address ? await this.delivery.quote(opts.address.region_id, opts.address.city_id, goods - discount, db, { userId }) : null;
     let deliverySaved = 0;
     if (applied?.kind === 'free_delivery' && delivery) {
@@ -186,8 +190,27 @@ export class PromoCodesService {
       }
     }
 
+    // 3.10-А (D-71): bonuses — after the promo code (never together with one); the delivery is always money.
+    // The order transaction locks the account row, so two orders never spend the same bonuses.
+    const settings = await this.bonusService.settings();
+    const balance = priced.length ? await this.bonusService.balance(db, userId, { lock: opts.lock }) : 0;
+    const needLines = settings.enabled && balance > 0 && !applied && priced.length > 0;
+    const spend = bonusSpend({ balance_uzs: balance, lines: needLines ? await pricingOnce() : [], guard: await this.guard(), settings, promoApplied: !!applied, use: !!opts.useBonus });
+    const bonus = spend.used_uzs;
+
     const deliveryCost = delivery?.cost_uzs ?? 0;
     const goodsPaid = goods - discount - bonus;
+    const cashbackPct = settings.enabled ? settings.cashback_pct : 0;
+    const bonusView: BonusView = {
+      balance_uzs: balance,
+      available_uzs: spend.available_uzs,
+      use: !!opts.useBonus && spend.used_uzs > 0,
+      used_uzs: bonus,
+      blocked: spend.blocked,
+      cashback_pct: cashbackPct,
+      cashback_uzs: cashbackOf(goodsPaid, cashbackPct),
+      max_spend_pct: settings.max_spend_pct,
+    };
     const byLine = new Map((applied?.goods.lines ?? []).map((l) => [l.product_id, l]));
     const promo: PromoView | null = applied && {
       code: applied.code,
@@ -215,7 +238,9 @@ export class PromoCodesService {
           line_total_uzs: l.unit_price_uzs * l.qty,
           promo_discount_uzs: d?.discount_uzs ?? 0,
           promo_capped: d?.capped ?? false,
-          paid_line_total_uzs: l.unit_price_uzs * l.qty - (d?.discount_uzs ?? 0),
+          bonus_uzs: spend.lines.get(l.product_id) ?? 0,
+          // the basis of a refund and of the fiscal receipt: what the customer really paid (bonuses are a discount too)
+          paid_line_total_uzs: l.unit_price_uzs * l.qty - (d?.discount_uzs ?? 0) - (spend.lines.get(l.product_id) ?? 0),
         };
       }),
       goods_total_uzs: goods,
@@ -225,6 +250,7 @@ export class PromoCodesService {
         ? [{ kind: 'promo', promotion_id: applied.promotion_id, code: applied.code, type: applied.kind, value: applied.value, target: applied.kind === 'free_delivery' ? 'delivery' : 'goods', amount_uzs: promo!.discount_uzs, capped: applied.goods.capped }]
         : [],
       bonus_used_uzs: bonus,
+      cashback_pct: cashbackPct,
       delivery: {
         tariff_uzs: delivery?.tariff_uzs ?? 0,
         cost_uzs: deliveryCost,
@@ -241,6 +267,7 @@ export class PromoCodesService {
       promo_rejection: rejection,
       applied,
       snapshot,
+      bonus: bonusView,
     };
   }
 }
@@ -308,13 +335,15 @@ export interface PromoView {
  */
 export interface PricingSnapshot {
   version: 1 | 2;
-  lines: { product_id: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; campaign_id?: string | null; campaign_discount_uzs?: number; line_total_uzs: number; promo_discount_uzs: number; promo_capped: boolean; paid_line_total_uzs: number }[];
+  lines: { product_id: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; campaign_id?: string | null; campaign_discount_uzs?: number; line_total_uzs: number; promo_discount_uzs: number; promo_capped: boolean; bonus_uzs?: number; paid_line_total_uzs: number }[];
   goods_total_uzs: number;
   /** 3.7: goods at regular prices (goods_total_uzs + the sales) */
   goods_list_total_uzs?: number;
   campaigns?: CampaignLine[];
   discounts: { kind: 'promo'; promotion_id: string; code: string; type: PromoKind; value: number; target: 'goods' | 'delivery'; amount_uzs: number; capped: boolean }[];
   bonus_used_uzs: number;
+  /** 3.10-А: the cashback percent of the order (0 — VITALO Bonus off) */
+  cashback_pct?: number;
   delivery: { tariff_uzs: number; cost_uzs: number; free_reason: 'threshold' | 'first_order' | 'promo' | null };
   total_uzs: number;
   guard: PromoGuard;
@@ -327,6 +356,22 @@ export interface Calculation {
   promo_rejection: PromoRejection | null;
   applied: PromoApplied | null;
   snapshot: PricingSnapshot;
+  bonus: BonusView;
+}
+
+/** 3.10-А: VITALO Bonus of the cart / checkout. */
+export interface BonusView {
+  balance_uzs: number;
+  /** The most that may be spent on this order now (0 — see blocked). */
+  available_uzs: number;
+  /** «Списать бонусы» is on and something is spent. */
+  use: boolean;
+  used_uzs: number;
+  blocked: BonusBlock | null;
+  /** «+N сум на бонусный счёт» after the delivery. */
+  cashback_pct: number;
+  cashback_uzs: number;
+  max_spend_pct: number;
 }
 
 /** «Промокод VITALO10 применён (−20 000 сум)»; free delivery without a district yet: «(доставка бесплатно)». */

@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { AuthContext } from '../auth/auth.types';
 import { CurrentAuth, SessionGuard } from '../auth/session.guard';
 import { MAX_LINE_QTY } from './cart-reconcile';
@@ -25,6 +25,11 @@ export class CartQuery {
   @ValidateIf((q: CartQuery) => q.city_id !== undefined || q.region_id !== undefined)
   @IsUUID()
   city_id?: string;
+}
+
+/** 3.10-А: the switch «Списать бонусы». */
+export class UseBonusDto extends CartQuery {
+  @ApiProperty() @IsBoolean() use!: boolean;
 }
 
 export class ApplyPromoDto extends CartQuery {
@@ -82,6 +87,13 @@ export class CartController {
   removePromo(@CurrentAuth() auth: AuthContext, @Query() q: CartQuery) {
     const address = q.region_id && q.city_id ? { region_id: q.region_id, city_id: q.city_id } : undefined;
     return this.cart.removePromo(auth.user.id, address);
+  }
+
+  /** 3.10-А (D-71): «Списать N бонусных сум» on / off; the amount is computed on every read of the cart. */
+  @Post('bonus')
+  useBonus(@CurrentAuth() auth: AuthContext, @Body() dto: UseBonusDto) {
+    const address = dto.region_id && dto.city_id ? { region_id: dto.region_id, city_id: dto.city_id } : undefined;
+    return this.cart.useBonus(auth.user.id, dto.use, address);
   }
 
   @Delete('items/:productId')

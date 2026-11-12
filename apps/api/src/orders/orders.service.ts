@@ -31,6 +31,7 @@ import { AnalyticsService } from '../analytics/analytics.module';
 import { BotInfoService } from './receipts';
 import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
 import { PromoCodesService } from '../promo/promo.service';
+import { BonusService } from '../bonus/bonus.service';
 import { isStaffCustomer, paymeReceiptGaps, paymeSwitchedOn, paymeUnavailable } from '../payments/payme/payme-availability';
 import { onlineModes } from '../payments/online/online-providers';
 
@@ -101,11 +102,12 @@ export class OrdersService {
     private readonly botInfo: BotInfoService,
     private readonly promo: PromoCodesService,
     private readonly campaigns: CampaignsService,
+    private readonly bonus: BonusService,
   ) {}
 
   /** Confirmation screen: the same calculation as order creation, without reserving anything. */
   async preview(userId: string, dto: OrderPreviewDto) {
-    const { lines, skipped, cartId, cartPromo } = await this.resolveLines(this.prisma, userId, dto);
+    const { lines, skipped, cartId, cartPromo, cartBonus } = await this.resolveLines(this.prisma, userId, dto);
     const priced = await this.priceLines(this.prisma, lines);
     const available = await this.stock.orderable(lines.map((l) => l.product_id), MAX_LINE_QTY);
     const problems = lines
@@ -116,7 +118,7 @@ export class OrdersService {
     const foreign = underTerms.some((t) => t.kind === 'foreign');
     await this.resolvePaymentMethod(this.prisma, dto.payment_method, userId);
     const code = this.promoCodeOf(dto, cartPromo);
-    const calc = await this.promo.calculate(this.prisma, userId, priced, { address: dto, code });
+    const calc = await this.promo.calculate(this.prisma, userId, priced, { address: dto, code, useBonus: this.useBonusOf(dto, cartBonus) });
     // the code saved in the cart stopped fitting: it is removed there too (the customer sees the hint)
     if (calc.promo_rejection && cartId && dto.promo_code === undefined) await this.prisma.carts.update({ where: { id: cartId }, data: { promo_code: null } });
     const totals = calc.totals;
@@ -142,6 +144,7 @@ export class OrdersService {
       delivery: calc.delivery,
       promo: calc.promo,
       promo_rejection: calc.promo_rejection,
+      bonus: calc.bonus,
       // 3.7: «Акция 11.11: −X сум», the same lines the order will freeze
       campaigns: calc.snapshot.campaigns ?? [],
       problems,
@@ -151,6 +154,12 @@ export class OrdersService {
   }
 
   /** 3.3: the code of this checkout — sent by the app, else (cart checkout) the one saved in the cart; '' = none. */
+  /** 3.10-А: «Списать бонусы» — sent by the app, else (cart checkout) the switch of the cart. */
+  private useBonusOf(dto: OrderPreviewDto, cartBonus: boolean): boolean {
+    if (dto.use_bonus !== undefined) return dto.use_bonus;
+    return dto.source === 'cart' && cartBonus;
+  }
+
   private promoCodeOf(dto: OrderPreviewDto, cartPromo: string | null): string | null {
     if (dto.promo_code !== undefined) return dto.promo_code.trim() || null;
     return dto.source === 'cart' ? cartPromo : null;
@@ -460,7 +469,7 @@ export class OrdersService {
   }
 
   private async createInTx(tx: Tx, userId: string, dto: CreateOrderDto): Promise<OrderView> {
-    const { lines, cartId, cartPromo } = await this.resolveLines(tx, userId, dto);
+    const { lines, cartId, cartPromo, cartBonus } = await this.resolveLines(tx, userId, dto);
     const method = await this.resolvePaymentMethod(tx, dto.payment_method, userId);
     const orderId = randomUUID();
 
@@ -476,7 +485,7 @@ export class OrdersService {
     //    3.3: the promo row is locked here, so parallel orders never exceed its limits.
     const priced = await this.priceLines(tx, lines);
     const code = this.promoCodeOf(dto, cartPromo);
-    const calc = await this.promo.calculate(tx, userId, priced, { address: dto, code, lock: true });
+    const calc = await this.promo.calculate(tx, userId, priced, { address: dto, code, lock: true, useBonus: this.useBonusOf(dto, cartBonus) });
     const totals = calc.totals;
     if (calc.promo_rejection) {
       const r = calc.promo_rejection;
@@ -541,6 +550,8 @@ export class OrdersService {
         goods_total_uzs: BigInt(totals.goods_total_uzs),
         discount_total_uzs: BigInt(totals.discount_total_uzs),
         bonus_used_uzs: BigInt(totals.bonus_used_uzs),
+        // 3.10-А: the cashback percent is frozen with the prices (accrued after «Доставлен»)
+        bonus_rate_snapshot: calc.bonus.cashback_pct > 0 ? new Prisma.Decimal(calc.bonus.cashback_pct).div(100) : null,
         goods_paid_uzs: BigInt(totals.goods_paid_uzs),
         total_uzs: BigInt(totals.total_uzs),
         promo_id: calc.applied?.promotion_id ?? null,
@@ -578,6 +589,9 @@ export class OrdersService {
       },
     });
 
+    // 3.10-А: the spent bonuses leave the account with the order; a cancellation or a return gives them back
+    await this.bonus.redeem(tx, userId, orderId, totals.bonus_used_uzs, orderNumber);
+
     // 3.3: the activation is held by the order; any cancellation gives it back (OrderLifecycleService.addHistory)
     if (calc.promo && calc.applied) {
       await tx.promotion_usages.create({
@@ -606,7 +620,7 @@ export class OrdersService {
   /** Cart checkout takes sellable lines only; out-of-stock / archived lines stay in the cart (TZ §6). */
   private async resolveLines(db: Tx | PrismaService, userId: string, dto: OrderPreviewDto) {
     if (dto.source === 'buy_now') {
-      return { lines: [{ product_id: dto.buy_now!.product_id, qty: dto.buy_now!.qty }] as StockLine[], skipped: [] as string[], cartId: null, cartPromo: null };
+      return { lines: [{ product_id: dto.buy_now!.product_id, qty: dto.buy_now!.qty }] as StockLine[], skipped: [] as string[], cartId: null, cartPromo: null, cartBonus: false };
     }
     const cart = await db.carts.findFirst({
       where: { user_id: userId, status: 'active' },
@@ -623,6 +637,7 @@ export class OrdersService {
       skipped: items.filter((i) => !sellable.includes(i)).map((i) => i.product_id),
       cartId: cart!.id,
       cartPromo: cart!.promo_code,
+      cartBonus: cart!.use_bonus,
     };
   }
 

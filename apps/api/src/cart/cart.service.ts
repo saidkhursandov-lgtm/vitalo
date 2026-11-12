@@ -6,7 +6,7 @@ import { DeliveryQuote } from '../delivery/delivery-quote';
 import { StockService } from '../inventory/stock.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
-import { CampaignLine, PromoCodesService, PromoView } from '../promo/promo.service';
+import { BonusView, CampaignLine, PromoCodesService, PromoView } from '../promo/promo.service';
 import { SettingsService } from '../settings/settings.service';
 import { underOrderMark, windowView, type SupplyTerms, type UnderOrderMark, type WindowView } from '../orders/cross-border';
 import { CartWarning, MAX_LINE_QTY, reconcileCartLine } from './cart-reconcile';
@@ -50,6 +50,9 @@ export interface CartView {
   delivery: DeliveryQuote | null;
   /** 3.3: the applied promo code (null — none or it stopped fitting, see warnings `promo_removed`). */
   promo: PromoView | null;
+  /** 3.10-А: VITALO Bonus — the balance, what may be spent, the switch, «+N сум» after the delivery */
+  bonus: BonusView;
+  bonus_used_uzs: number;
   /** D-60: the cart has lines from the USA — the promised delivery window counted from today (YYYY-MM-DD) */
   cross_border: WindowView | null;
 }
@@ -160,7 +163,7 @@ export class CartService {
 
     const sellable = lines.filter((l) => l.status === 'available');
     // 3.3: the same calculation as the checkout; a saved code that stopped fitting is removed with a hint
-    const calc = await this.promo.calculate(this.prisma, userId, sellable, { address: sellable.length ? address : null, code: cart?.promo_code });
+    const calc = await this.promo.calculate(this.prisma, userId, sellable, { address: sellable.length ? address : null, code: cart?.promo_code, useBonus: !!cart?.use_bonus });
     if (cart?.promo_code && calc.promo_rejection) {
       await this.prisma.carts.update({ where: { id: cart.id }, data: { promo_code: null } });
       const r = calc.promo_rejection;
@@ -178,6 +181,8 @@ export class CartService {
       can_checkout: sellable.length > 0,
       delivery: calc.delivery,
       promo: calc.promo,
+      bonus: calc.bonus,
+      bonus_used_uzs: calc.totals.bonus_used_uzs,
       // D-60/D-61: «Ожидаемая доставка: 18–25 ноября» for «под заказ» lines, counted from today (the longest supplier)
       cross_border: windowView(sellable.filter((l) => l.cross_border).map((l) => available.get(l.product_id)?.terms).filter((t): t is SupplyTerms => !!t)),
     };
@@ -196,6 +201,13 @@ export class CartService {
       throw new UnprocessableEntityException({ code: 'PROMO_REJECTED', promo_code: r.code, reason: r.reason, message_ru: r.message_ru, message_uz: r.message_uz });
     }
     await this.prisma.carts.update({ where: { id: cart.id }, data: { promo_code: calc.promo.code } });
+    return this.getCart(userId, address);
+  }
+
+  /** 3.10-А: «Списать бонусы» — kept on the cart; with a promo code nothing is spent (the cart shows why). */
+  async useBonus(userId: string, use: boolean, address?: { region_id: string; city_id: string }): Promise<CartView> {
+    const cart = await this.getOrCreateActiveCart(userId);
+    await this.prisma.carts.update({ where: { id: cart.id }, data: { use_bonus: use } });
     return this.getCart(userId, address);
   }
 

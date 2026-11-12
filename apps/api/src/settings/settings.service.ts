@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BONUS_TEASER_DEFAULT, HOME_CONTENT_DEFAULT, MANIFEST_DEFAULT } from './home-content';
 import { CART_UPSELL_DEFAULT } from '../cart/upsell';
 import { PROMO_GUARD_DEFAULT } from '../promo/pricing';
+import { BONUS_DEFAULT } from '../bonus/bonus-rules';
 
 /** Business settings editable by admins (table `settings`, JSON values). */
 export const SETTING_KEYS = {
@@ -22,6 +23,8 @@ export const SETTING_KEYS = {
   manifest: 'home_manifest',
   cartUpsell: 'cart_upsell',
   promoGuard: 'promo_guard',
+  /** 3.10-А: «Настройки → VITALO Bonus» */
+  bonus: 'bonus',
   /** 3.6: «Настройки → Доставка» — the map switch; the daily counter of Yandex geocoder requests (not edited by hand) */
   maps: 'maps',
   mapsUsage: 'maps_usage',
@@ -98,6 +101,8 @@ export const SETTING_DEFAULTS = {
   cart_upsell: CART_UPSELL_DEFAULT,
   /** 3.3: «Настройки → Промокоды» — margin protection (min markup over the purchase cost, max discount without a cost). Not inserted by a migration. */
   promo_guard: PROMO_GUARD_DEFAULT,
+  /** 3.10-А (D-71): «Настройки → VITALO Bonus». Not inserted by a migration. */
+  bonus: BONUS_DEFAULT,
 };
 
 /** "@VITALO_support" / "t.me/VITALO_support" / a full URL -> https://t.me/VITALO_support (null if not a Telegram handle). */

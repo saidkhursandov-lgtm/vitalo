@@ -1,6 +1,6 @@
 /**
  * 3.3: the one discount calculation (D-39). Pure functions: no database, so every rule is covered by unit tests.
- * Order of the calculation: product price (already the selling price) → promo code → (bonuses, release 4) → delivery → total.
+ * Order of the calculation: product price (already the selling price) → promo code → bonuses (3.10-А, D-71) → delivery → total.
  */
 
 /** D-09: a crossed-out price is shown only for discounts up to this many percent (D-28: up to 35% later, in a sale). */

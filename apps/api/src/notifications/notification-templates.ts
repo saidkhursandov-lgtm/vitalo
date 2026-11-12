@@ -49,6 +49,9 @@ export type TemplateName =
   | 'order.cb_delay'
   | 'staff.cb_overdue'
   | 'waitlist.back_in_stock'
+  | 'bonus.accrued'
+  | 'bonus.returned'
+  | 'bonus.expiring'
   | 'promo.message';
 
 export interface TemplatePayload {
@@ -85,7 +88,11 @@ export interface TemplatePayload {
   /** 2.4: product name for waiting-list messages */
   product?: string;
   /** 2.4: which page the button opens (text of the button); default: the order. 3.2: 'pay', 'link' */
-  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart' | 'support';
+  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart' | 'support' | 'bonus';
+  /** 3.10-А: VITALO Bonus — the amount of the operation, the balance after it, the day the balance burns («12.02.2027») */
+  bonus_uzs?: number;
+  balance_uzs?: number;
+  burn_date?: string;
   /** 3.3: the order's promo code — one more line under the total */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   /** 3.7: «Акция 11.11: −X сум» lines of the order */
@@ -150,6 +157,8 @@ export const CART_BUTTON: Record<Lang, string> = { ru: 'Открыть корз�
 export const SUPPORT_BUTTON: Record<Lang, string> = { ru: 'Спросить специалиста', uz: 'Mutaxassisdan so‘rash' };
 /** 6а-Д: button under the shop's reply to a question. */
 export const REPLY_BUTTON: Record<Lang, string> = { ru: 'Открыть и ответить', uz: 'Ochish va javob berish' };
+/** 3.10-А: button under the bonus messages. */
+export const BONUS_BUTTON: Record<Lang, string> = { ru: 'Мои бонусы', uz: 'Mening bonuslarim' };
 
 export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang): string {
   if (kind === 'product') return OPEN_PRODUCT_BUTTON[lang];
@@ -157,6 +166,7 @@ export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang)
   if (kind === 'link') return LINK_BUTTON[lang];
   if (kind === 'cart') return CART_BUTTON[lang];
   if (kind === 'support') return REPLY_BUTTON[lang];
+  if (kind === 'bonus') return BONUS_BUTTON[lang];
   return OPEN_BUTTON[lang];
 }
 
@@ -495,6 +505,23 @@ ${p.question ?? ''}
     ru: (p: TemplatePayload) => `${p.product ?? ''} снова в наличии`,
     uz: (p: TemplatePayload) => `${p.product ?? ''} yana sotuvda`,
   },
+  // 3.10-А: VITALO Bonus (order_number — the order of a cashback or a return, may be empty)
+  'bonus.accrued': {
+    ru: (p: TemplatePayload) => `VITALO Bonus: начислено +${formatUzs(p.bonus_uzs ?? 0)} сум${p.order_number ? ` за заказ №${p.order_number}` : ''}.
+На счёте: ${formatUzs(p.balance_uzs ?? 0)} сум. Ими можно оплатить часть следующего заказа.`,
+    uz: (p: TemplatePayload) => `VITALO Bonus: +${formatUzs(p.bonus_uzs ?? 0)} so‘m qo‘shildi${p.order_number ? ` (№${p.order_number} buyurtma uchun)` : ''}.
+Hisobda: ${formatUzs(p.balance_uzs ?? 0)} so‘m. Ular bilan keyingi buyurtmaning bir qismini to‘lash mumkin.`,
+  },
+  'bonus.returned': {
+    ru: (p: TemplatePayload) => `VITALO Bonus: ${formatUzs(p.bonus_uzs ?? 0)} сум вернулись на счёт (заказ №${p.order_number}).
+На счёте: ${formatUzs(p.balance_uzs ?? 0)} сум.`,
+    uz: (p: TemplatePayload) => `VITALO Bonus: ${formatUzs(p.bonus_uzs ?? 0)} so‘m hisobga qaytdi (№${p.order_number} buyurtma).
+Hisobda: ${formatUzs(p.balance_uzs ?? 0)} so‘m.`,
+  },
+  'bonus.expiring': {
+    ru: (p: TemplatePayload) => `VITALO Bonus: ${p.burn_date ?? ''} сгорят ${formatUzs(p.bonus_uzs ?? 0)} сум. Оплатите ими часть заказа до этого дня.`,
+    uz: (p: TemplatePayload) => `VITALO Bonus: ${p.burn_date ?? ''} kuni ${formatUzs(p.bonus_uzs ?? 0)} so‘m kuyadi. Shu kungacha ular bilan buyurtmaning bir qismini to‘lang.`,
+  },
   // D-57: 09:00 / 15:00 / 21:00 — nobody uploaded the iHerb wishlist yet (admins, Russian; switched on in «iHerb и цены»).
   'staff.iherb_upload_due': {
     ru: (p: TemplatePayload) => `Пора загрузить вишлист iHerb: товаров со ссылкой iHerb — ${p.count ?? 0}. Сохраните страницу вишлиста и загрузите её в «iHerb и цены».`,
@@ -523,7 +550,7 @@ export function renderNotification(template: string, payload: TemplatePayload): 
   return TEXTS[template][lang](payload);
 }
 
-/** 3.2: sections of the Mini App notification centre. «bonus» is reserved for release 4 and not shown yet. */
+/** 3.2: sections of the Mini App notification centre. 3.10-А: «bonus» is shown in the «Акции» tab (centreTab). */
 export const CENTRE_CATEGORIES = ['order', 'waitlist', 'promo', 'compat', 'personal'] as const;
 export type CentreCategory = (typeof CENTRE_CATEGORIES)[number] | 'bonus';
 
@@ -548,6 +575,9 @@ const CENTRE_LINES: Partial<Record<TemplateName, Record<Lang, (p: TemplatePayloa
   },
   'order.cb_delay': { ru: (p) => `Задерживается, новая дата — до ${dmy(p.expected_to)}`, uz: (p) => `Kechikmoqda, yangi sana — ${dmy(p.expected_to)} gacha` },
   'waitlist.back_in_stock': { ru: () => 'Снова в наличии', uz: () => 'Yana sotuvda' },
+  'bonus.accrued': { ru: (p) => `Начислено +${formatUzs(p.bonus_uzs ?? 0)} сум${p.order_number ? ` за заказ №${p.order_number}` : ''}`, uz: (p) => `+${formatUzs(p.bonus_uzs ?? 0)} so‘m qo‘shildi${p.order_number ? ` (№${p.order_number})` : ''}` },
+  'bonus.returned': { ru: (p) => `${formatUzs(p.bonus_uzs ?? 0)} сум вернулись на счёт (заказ №${p.order_number})`, uz: (p) => `${formatUzs(p.bonus_uzs ?? 0)} so‘m hisobga qaytdi (№${p.order_number})` },
+  'bonus.expiring': { ru: (p) => `${p.burn_date ?? ''} сгорят ${formatUzs(p.bonus_uzs ?? 0)} сум`, uz: (p) => `${p.burn_date ?? ''} kuni ${formatUzs(p.bonus_uzs ?? 0)} so‘m kuyadi` },
 };
 
 /** Title and line of a centre entry in the customer's language. */
@@ -559,6 +589,7 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
   }
   const line = isTemplate(template) ? CENTRE_LINES[template]?.[lang](payload) : undefined;
   if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
+  if (template.startsWith('bonus.')) return { title: 'VITALO Bonus', body: line ?? '' };
   if (template === 'support.reply' || template === 'support.closed') {
     const topic = SUPPORT_TOPICS[(payload.topic ?? 'tech') as SupportTopic]?.[lang] ?? '';
     const head = lang === 'uz' ? `Murojaat №${payload.thread_no ?? ''}` : `Обращение №${payload.thread_no ?? ''}`;
