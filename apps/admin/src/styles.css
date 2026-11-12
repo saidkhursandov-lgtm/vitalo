@@ -612,3 +612,10 @@ textarea { resize: vertical; }
 @media (max-width: 767px) {
   .card:not(.flush) > .table, .pad > .table, main > .table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
+
+/* Аудит админки 2.1: a filter with several choices (statuses of the orders list) */
+.multi-select { position: relative; }
+.multi-select > summary { list-style: none; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.multi-select > summary::-webkit-details-marker { display: none; }
+.multi-select-menu { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 240px; max-height: 60vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; box-shadow: 0 8px 24px rgb(15 23 42 / 12%); display: grid; gap: 2px; }
+.multi-select-menu .check { min-height: 36px; }

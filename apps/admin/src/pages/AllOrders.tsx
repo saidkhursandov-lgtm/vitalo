@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ChannelTabs } from '../components/ChannelTabs';
 import { Badge, ErrorBox, Loading, OrderStatus, PageHead, Pagination } from '../components/ui';
 import { api, qs } from '../lib/api';
-import { cancelLabel, dateTime, money, YANDEX_STATUS, type CancelInfo } from '../lib/format';
+import { cancelLabel, dateTime, money, ORDER_STATUS, PAYMENT_METHOD, PAYMENT_STATUS, YANDEX_STATUS, type CancelInfo } from '../lib/format';
 import { ShipBy } from './YandexOrders';
 
 type Channel = 'vitalo' | 'yandex';
@@ -20,15 +20,50 @@ interface Row {
   total_uzs: number;
   ship_by: { date: string; time: string | null } | null;
   is_test: boolean;
+  payment_status: string | null;
   /** who cancelled (аудит 10.11, п. 1.6) */
   cancel?: CancelInfo | null;
 }
 interface Page {
   items: Row[];
   page: number;
+  page_size: number;
   total: number;
   total_pages: number;
+  total_sum_uzs: number;
   ship_today: number;
+}
+
+/** Аудит 2.1: the status filter — Mini App and Yandex statuses in one list (a status of one channel leaves the other out). */
+function StatusFilter({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const toggle = (s: string) => onChange(value.includes(s) ? value.filter((x) => x !== s) : [...value, s]);
+  const names = value.map((s) => ORDER_STATUS[s] ?? YANDEX_STATUS[s]?.[0] ?? s);
+  return (
+    <details className="multi-select">
+      <summary>{value.length ? `Статус: ${names.join(', ')}` : 'Все статусы'}</summary>
+      <div className="multi-select-menu">
+        <div className="muted small">Mini App</div>
+        {Object.entries(ORDER_STATUS).map(([s, label]) => (
+          <label key={s} className="check">
+            <input type="checkbox" checked={value.includes(s)} onChange={() => toggle(s)} />
+            {label}
+          </label>
+        ))}
+        <div className="muted small">Яндекс</div>
+        {Object.entries(YANDEX_STATUS).map(([s, [label]]) => (
+          <label key={s} className="check">
+            <input type="checkbox" checked={value.includes(s)} onChange={() => toggle(s)} />
+            {label}
+          </label>
+        ))}
+        {value.length > 0 && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange([])}>
+            Сбросить
+          </button>
+        )}
+      </div>
+    </details>
+  );
 }
 
 export const CHANNEL_LABEL: Record<Channel, string> = { vitalo: 'Mini App', yandex: 'Яндекс' };
@@ -38,7 +73,18 @@ export function AllOrders() {
   const [params, setParams] = useSearchParams();
   // аудит 10.11, п. 1.7: тестовые скрыты по умолчанию; ?show_test=true — показать
   const showTest = params.get('show_test') === 'true';
-  const f = { ship_today: params.get('ship_today') ?? '', hide_test: showTest ? '' : 'true', q: params.get('q') ?? '' };
+  const f = {
+    ship_today: params.get('ship_today') ?? '',
+    hide_test: showTest ? '' : 'true',
+    q: params.get('q') ?? '',
+    // аудит 2.1
+    status: params.get('status') ?? '',
+    payment_method: params.get('payment_method') ?? '',
+    date_from: params.get('date_from') ?? '',
+    date_to: params.get('date_to') ?? '',
+    page_size: params.get('page_size') ?? '',
+  };
+  const statuses = f.status ? f.status.split(',') : [];
   const page = Number(params.get('page')) || 1;
   const [text, setText] = useState(f.q);
   const set = (k: string, v: string) => {
@@ -64,7 +110,18 @@ export function AllOrders() {
         <ChannelTabs current="all" />
       </PageHead>
       <div className="filters">
-        <input placeholder="Номер заказа (VITALO или Яндекса)" value={text} onChange={(e) => setText(e.target.value)} />
+        <input placeholder="Номер заказа, телефон или имя" value={text} onChange={(e) => setText(e.target.value)} />
+        <StatusFilter value={statuses} onChange={(v) => set('status', v.join(','))} />
+        <select value={f.payment_method} onChange={(e) => set('payment_method', e.target.value)} aria-label="Способ оплаты">
+          <option value="">Любая оплата</option>
+          {Object.entries(PAYMENT_METHOD).map(([code, label]) => (
+            <option key={code} value={code}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <input type="date" value={f.date_from} onChange={(e) => set('date_from', e.target.value)} aria-label="Создан с" />
+        <input type="date" value={f.date_to} onChange={(e) => set('date_to', e.target.value)} aria-label="Создан по" />
         <label className="check">
           <input type="checkbox" checked={f.ship_today === 'true'} onChange={(e) => set('ship_today', e.target.checked ? 'true' : '')} />
           Отгрузить сегодня{q.data ? ` (${q.data.ship_today})` : ''}
@@ -93,6 +150,7 @@ export function AllOrders() {
                 <th>Создан</th>
                 <th>Покупатель</th>
                 <th>Статус</th>
+                <th>Оплата</th>
                 <th>Отгрузить до</th>
                 <th className="num">Шт.</th>
                 <th className="num">Сумма</th>
@@ -119,6 +177,16 @@ export function AllOrders() {
                     {o.channel === 'vitalo' ? <OrderStatus status={o.status} cod={o.payment_method === 'cod'} /> : <YandexStatus status={o.status} />}
                     {o.cancel && <div className="muted small">{cancelLabel(o.cancel)}</div>}
                   </td>
+                  <td className="small">
+                    {o.channel === 'vitalo' ? (
+                      <>
+                        {o.payment_method ? (PAYMENT_METHOD[o.payment_method] ?? o.payment_method) : '—'}
+                        {o.payment_status && <div className="muted">{PAYMENT_STATUS[o.payment_status] ?? o.payment_status}</div>}
+                      </>
+                    ) : (
+                      <span className="muted">Яндекс</span>
+                    )}
+                  </td>
                   <td className="small">{o.channel === 'yandex' ? <ShipBy value={o.ship_by} status={o.status} /> : '—'}</td>
                   <td className="num">{o.qty}</td>
                   <td className="num">{money(o.total_uzs)}</td>
@@ -126,7 +194,16 @@ export function AllOrders() {
               ))}
             </tbody>
           </table>
-          <Pagination page={q.data.page} totalPages={q.data.total_pages} onPage={(p) => set('page', p > 1 ? String(p) : '')} />
+          <div className="table-foot">
+            <span className="muted">
+              Заказов: {q.data.total} · на сумму {money(q.data.total_sum_uzs)}
+            </span>
+            <select value={String(q.data.page_size)} onChange={(e) => set('page_size', e.target.value === '30' ? '' : e.target.value)} aria-label="Строк на странице">
+              <option value="30">30 на странице</option>
+              <option value="100">100 на странице</option>
+            </select>
+            <Pagination page={q.data.page} totalPages={q.data.total_pages} onPage={(p) => set('page', p > 1 ? String(p) : '')} />
+          </div>
         </section>
       )}
     </>

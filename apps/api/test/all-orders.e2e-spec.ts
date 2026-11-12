@@ -99,6 +99,35 @@ describe('All orders: Mini App and Yandex in one list (e2e)', () => {
     }
   });
 
+  it('аудит 2.1: search by phone and name, filters by status, payment method and period, totals of the filter', async () => {
+    const ids = async (query: string) => (await list('admin', query).expect(200)).body.items.map((i: { id: string }) => i.id);
+    // phone in another form, the recipient's name, the Yandex customer's name
+    expect(await ids('?q=90 111-22-33')).toContain(vitaloId);
+    expect(await ids('?q=Канал Тест')).toContain(vitaloId);
+    expect(await ids('?q=Яндекс Тест')).toContain(shipNow);
+    // statuses of one channel leave the other channel out; both channels together
+    const paid = await ids(`?status=paid&q=${vitaloNumber}`);
+    expect(paid).toEqual([vitaloId]);
+    expect(await ids(`?status=cancelled&q=${vitaloNumber}`)).toEqual([]);
+    expect(await ids(`?status=NEW&q=ALL-${run}`)).toEqual(expect.arrayContaining([shipNow, shipLater]));
+    expect((await list('admin', '?status=paid').expect(200)).body.items.every((i: { channel: string }) => i.channel === 'vitalo')).toBe(true);
+    expect((await list('admin', '?status=paid,NEW').expect(200)).body.items.map((i: { channel: string }) => i.channel)).toEqual(expect.arrayContaining(['vitalo', 'yandex']));
+    await list('admin', '?status=lost').expect(400);
+    // a payment method is Mini App only
+    expect(await ids(`?payment_method=card_transfer&q=${vitaloNumber}`)).toEqual([vitaloId]);
+    expect(await ids(`?payment_method=payme&q=${vitaloNumber}`)).toEqual([]);
+    expect((await list('admin', '?payment_method=card_transfer').expect(200)).body.items.every((i: { channel: string }) => i.channel === 'vitalo')).toBe(true);
+    // the period by the day of creation in Tashkent
+    const today = new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10);
+    expect(await ids(`?date_from=${today}&date_to=${today}&q=${vitaloNumber}`)).toEqual([vitaloId]);
+    expect(await ids(`?date_to=2020-01-01&q=${vitaloNumber}`)).toEqual([]);
+    // totals of the whole filter and the page size
+    const one = (await list('admin', `?q=${vitaloNumber}`).expect(200)).body;
+    expect(one).toMatchObject({ total: 1, total_sum_uzs: one.items[0].total_uzs });
+    expect((await list('admin', '?page_size=100').expect(200)).body.page_size).toBe(100);
+    await list('admin', '?page_size=7').expect(400);
+  });
+
   it('who sees what: warehouse and manager see both, marketer nothing', async () => {
     for (const r of ['warehouse', 'manager'] as Role[]) {
       const ids = (await list(r, `?q=${vitaloNumber}`).expect(200)).body.items.map((i: { id: string }) => i.id);
