@@ -1,4 +1,4 @@
-import { YandexApiError, YandexMarketClient, type FetchLike } from './yandex-client';
+import { countYandexCall, YandexApiError, YandexMarketClient, yandexCallsToday, type FetchLike } from './yandex-client';
 import { minimizeYandexOrder, parseYandexOrder } from './yandex-order';
 import { ipInNetworks } from './yandex-sync.controller';
 import { scrubSecrets } from './yandex-sync';
@@ -173,5 +173,16 @@ describe('notifications: sender check and secrets', () => {
     const t = scrubSecrets(`order 51234567 failed with ${KEY} and webhook-secret-0123456789`, [KEY, 'webhook-secret-0123456789']);
     expect(t).toBe('order 51234567 failed with [скрыто] and [скрыто]');
     expect(scrubSecrets('key ACMA:abc:def', [])).toBe('key [скрыто]');
+  });
+});
+
+describe('аудит 4.7: requests to Yandex today', () => {
+  it('counts every request of the Tashkent day and starts again the next day', () => {
+    const day1 = new Date('2026-11-12T10:00:00Z');
+    const start = yandexCallsToday(day1);
+    countYandexCall(day1);
+    countYandexCall(day1);
+    expect(yandexCallsToday(day1)).toBe(start + 2);
+    expect(yandexCallsToday(new Date('2026-11-13T10:00:00Z'))).toBe(0);
   });
 });

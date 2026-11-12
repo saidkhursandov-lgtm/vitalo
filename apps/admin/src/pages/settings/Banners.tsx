@@ -10,6 +10,8 @@ interface Banner {
   id: string;
   kind: 'doctor' | 'delivery' | 'ai' | 'image';
   enabled: boolean;
+  /** аудит 4.3: last 30 days */
+  stats?: { views: number; clicks: number };
   sort_order: number;
   image_ru_url: string | null;
   image_uz_url: string | null;
@@ -140,6 +142,9 @@ export function BannersSettings() {
 function BannerCard({ banner: b, index, onChanged, recommended }: { banner: Banner; index: number; onChanged: () => void; recommended: BannerList['recommended'] }) {
   const [link, setLink] = useState<{ type: LinkType | ''; value: string }>({ type: b.link_type ?? '', value: b.link_value ?? '' });
   const [days, setDays] = useState({ from: toDay(b.starts_at), to: toDay(b.ends_at) });
+  // аудит 4.3: «Включён» is saved with the link and the dates — one «Сохранить»
+  const [enabled, setEnabled] = useState(b.enabled);
+  const dirty = enabled !== b.enabled || link.type !== (b.link_type ?? '') || link.value !== (b.link_value ?? '') || days.from !== toDay(b.starts_at) || days.to !== toDay(b.ends_at);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const patch = useMutation({
@@ -177,13 +182,17 @@ function BannerCard({ banner: b, index, onChanged, recommended }: { banner: Bann
         <label className="check">
           <input
             type="checkbox"
-            checked={b.enabled}
-            disabled={patch.isPending || (b.kind === 'image' && !hasImage && !b.enabled)}
-            onChange={(e) => patch.mutate({ enabled: e.target.checked })}
+            checked={enabled}
+            disabled={patch.isPending || (b.kind === 'image' && !hasImage && !enabled)}
+            onChange={(e) => (setEnabled(e.target.checked), setSaved(false))}
           />
           {b.enabled ? <Badge tone="ok">Включён</Badge> : <Badge>Выключен</Badge>}
         </label>
       </div>
+      <p className="muted small">
+        За 30 дней: показов {b.stats?.views ?? 0}, нажатий {b.stats?.clicks ?? 0}
+        {b.stats && b.stats.views > 0 ? ` (${Math.round((b.stats.clicks / b.stats.views) * 100)} %)` : ''}
+      </p>
       {builtIn && <p className="muted small">{builtIn.text}</p>}
 
       {b.kind === 'image' && (
@@ -247,14 +256,16 @@ function BannerCard({ banner: b, index, onChanged, recommended }: { banner: Bann
       </div>
       <p className="muted small">Даты необязательны: пусто — показывать всегда. Дата «по» включительно (до конца дня по Ташкенту).</p>
       <ErrorBox error={patch.error ?? image.error ?? remove.error} />
-      {saved && <div className="alert alert-ok">Сохранено</div>}
+      {saved && !dirty && <div className="alert alert-ok">Сохранено</div>}
+      {dirty && <p className="text-warn small">Есть несохранённые изменения</p>}
       <div className="banner-actions">
         <button
           type="button"
           className="btn btn-sm"
-          disabled={patch.isPending || (!!link.type && !link.value)}
+          disabled={patch.isPending || !dirty || (!!link.type && !link.value)}
           onClick={() =>
             patch.mutate({
+              enabled,
               link_type: link.type || null,
               link_value: link.type ? link.value : null,
               starts_at: fromDay(days.from, false),
@@ -262,7 +273,7 @@ function BannerCard({ banner: b, index, onChanged, recommended }: { banner: Bann
             })
           }
         >
-          Сохранить ссылку и даты
+          Сохранить
         </button>
         {b.kind === 'image' && (
           <button type="button" className="btn btn-sm btn-ghost text-bad" disabled={remove.isPending} onClick={() => window.confirm('Удалить этот баннер?') && remove.mutate()}>

@@ -365,6 +365,7 @@ model users {
   payment_receipts  payment_receipts[]
   compat_requests   compat_requests[]
   support_threads   support_threads[]
+  notes             customer_notes[]
 
   @@index([status])
 }
@@ -469,6 +470,7 @@ model staff_users {
   compat_rules_approved compat_rules[]                 @relation("RuleApprover")
   goals_approved        goal_evidence[]                @relation("GoalEvidenceApprover")
   ai_answers_reviewed   ai_compat_answers[]
+  customer_notes        customer_notes[]
   marketplace_orders    marketplace_orders[]
   reviewed_receipts     payment_receipts[]
   compat_answered       compat_requests[]
@@ -2200,6 +2202,8 @@ model ai_requests {
   latency_ms    Int?
   /// why it failed: a check name or an error code, never the customer's text
   error         String?
+  /// аудит 4.5: the model's answer that a check rejected (staff only, for the log of refusals)
+  rejected_text String?
   created_at    DateTime @default(now())
 
   @@index([created_at])
@@ -2570,4 +2574,17 @@ model goal_evidence {
 
   @@unique([substance_id, goal])
   @@index([goal, status])
+}
+
+/// Аудит админки 4.1: a staff note about a customer (never deleted, like the audit log).
+model customer_notes {
+  id            String      @id @default(uuid()) @db.Uuid
+  user_id       String      @db.Uuid
+  staff_user_id String      @db.Uuid
+  text          String
+  created_at    DateTime    @default(now())
+  user          users       @relation(fields: [user_id], references: [id])
+  staff         staff_users @relation(fields: [staff_user_id], references: [id])
+
+  @@index([user_id, created_at])
 }

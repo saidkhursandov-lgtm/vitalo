@@ -377,8 +377,10 @@ describe('Admin panel operations (e2e)', () => {
         await as(t.admin).put('/staff/settings/card-transfer', { ...before, card_number: '8600 1234' }).expect(400);
         // Release 1 (D-04): the card holder's name is optional (customers never see it)
         await as(t.admin).put('/staff/settings/card-transfer', { ...before, recipient: 'x'.repeat(101) }).expect(400);
-        const saved = (await as(t.admin).put('/staff/settings/card-transfer', { card_number: '8600 1234 5678 9012', recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' }).expect(200)).body;
-        expect(saved).toEqual({ card_number: '8600123456789012', recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' });
+        // the same number with spaces; a new number needs the code from the bot (card-code.e2e-spec.ts)
+        const spaced = before.card_number.match(/.{1,4}/g)!.join(' ');
+        const saved = (await as(t.admin).put('/staff/settings/card-transfer', { card_number: spaced, recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' }).expect(200)).body;
+        expect(saved).toEqual({ card_number: before.card_number, recipient: 'ТЕСТ ПОЛУЧАТЕЛЬ 2' });
 
         const { order, customer } = await placeOrder(1, 10, 50_000, 'card_transfer');
         const shown = (await http().get(`/api/orders/${order.id}/payment/bank-transfer`).set(bearer(customer)).expect(200)).body;

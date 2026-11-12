@@ -1,7 +1,8 @@
 import { Body, Controller, Get, HttpCode, Injectable, Module, NotFoundException, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthModule } from '../auth/auth.module';
 import { AuthContext } from '../auth/auth.types';
@@ -181,7 +182,21 @@ class PromoLinkDto {
   @ApiProperty({ description: 'id товара, slug категории или адрес бренда' }) @IsString() @MinLength(1) @MaxLength(120) value!: string;
 }
 
-export class SendPromoDto {
+/** Аудит 4.2: who gets the promo — always only customers with «Получать акции и новости». */
+export const PROMO_SEGMENTS = ['all', 'bought', 'waiting', 'inactive'] as const;
+export type PromoSegment = (typeof PROMO_SEGMENTS)[number];
+
+export class PromoAudienceQuery {
+  @ApiPropertyOptional({ enum: PROMO_SEGMENTS, default: 'all' }) @IsOptional() @IsIn(PROMO_SEGMENTS) segment?: PromoSegment;
+  /** bought / waiting: the product */
+  @ApiPropertyOptional() @ValidateIf((o) => o.segment === 'bought' || o.segment === 'waiting') @IsUUID() product_id?: string;
+  /** inactive: no order for this many days */
+  @ApiPropertyOptional({ default: 30 }) @IsOptional() @Type(() => Number) @IsInt() @Min(7) @Max(365) days?: number;
+}
+
+export class SendPromoDto extends PromoAudienceQuery {
+  /** Аудит 4.2: «Отправить себе» — only to the employee's own Telegram, at once; nobody else gets it */
+  @ApiPropertyOptional() @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() to_me?: boolean;
   @ApiProperty() @IsString() @MinLength(2) @MaxLength(80) title_ru!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) title_uz?: string;
   @ApiProperty() @IsString() @MinLength(2) @MaxLength(600) text_ru!: string;
@@ -207,8 +222,66 @@ export class PromoService {
     private readonly audit: AuditService,
   ) {}
 
-  async audience() {
-    return { recipients: await this.prisma.users.count({ where: PROMO_AUDIENCE }) };
+  /** Аудит 4.2: the subscribed customers of one group. */
+  private where(q: PromoAudienceQuery, now = new Date()): Prisma.usersWhereInput {
+    const paid = ['paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered'] as const;
+    switch (q.segment ?? 'all') {
+      case 'bought':
+        return { ...PROMO_AUDIENCE, orders: { some: { status: { in: [...paid] }, items: { some: { product_id: q.product_id } } } } };
+      case 'waiting':
+        return { ...PROMO_AUDIENCE, waitlist: { some: { product_id: q.product_id, notified_at: null, cancelled_at: null } } };
+      case 'inactive':
+        return { ...PROMO_AUDIENCE, orders: { none: { created_at: { gte: new Date(now.getTime() - (q.days ?? 30) * 86_400_000) } } } };
+      default:
+        return PROMO_AUDIENCE;
+    }
+  }
+
+  async audience(q: PromoAudienceQuery = {}) {
+    return { recipients: await this.prisma.users.count({ where: this.where(q) }) };
+  }
+
+  /** Аудит 4.2: the last sends with how many were delivered and opened in the Mini App centre. */
+  async history() {
+    const logs = await this.prisma.audit_logs.findMany({ where: { action: 'promo.sent' }, orderBy: { created_at: 'desc' }, take: 30, include: { staff: { select: { name: true } } } });
+    const ids = logs.map((l) => l.entity_id).filter((x): x is string => !!x);
+    const stats = ids.length
+      ? await this.prisma.$queryRaw<{ campaign: string; total: bigint; sent: bigint; failed: bigint; read: bigint }[]>`
+          SELECT split_part(dedup_key, ':', 2) AS campaign, COUNT(*) AS total,
+                 COUNT(*) FILTER (WHERE status = 'sent') AS sent,
+                 COUNT(*) FILTER (WHERE status IN ('failed', 'skipped')) AS failed,
+                 COUNT(read_at) AS read
+          FROM notifications
+          WHERE template = 'promo.message' AND user_id IS NOT NULL AND split_part(dedup_key, ':', 2) = ANY(${ids})
+          GROUP BY 1`
+      : [];
+    return logs.map((l) => {
+      const a = (l.after_json ?? {}) as { title_ru?: string; recipients?: number; scheduled_at?: string; segment?: string; segment_label?: string };
+      const s = stats.find((x) => x.campaign === l.entity_id);
+      return {
+        id: l.entity_id,
+        created_at: l.created_at,
+        staff_name: l.staff?.name ?? null,
+        title_ru: a.title_ru ?? '',
+        segment: a.segment_label ?? 'Все подписанные',
+        recipients: a.recipients ?? 0,
+        scheduled_at: a.scheduled_at ?? null,
+        sent: Number(s?.sent ?? 0),
+        failed: Number(s?.failed ?? 0),
+        read: Number(s?.read ?? 0),
+      };
+    });
+  }
+
+  private async segmentLabel(q: PromoAudienceQuery): Promise<string> {
+    const seg = q.segment ?? 'all';
+    if (seg === 'inactive') return `Без заказов ${q.days ?? 30} дней`;
+    if (seg === 'bought' || seg === 'waiting') {
+      const p = await this.prisma.products.findUnique({ where: { id: q.product_id }, select: { sku: true } });
+      if (!p) throw new NotFoundException('Product not found');
+      return `${seg === 'bought' ? 'Купили' : 'Ждут'} ${p.sku}`;
+    }
+    return 'Все подписанные';
   }
 
   /**
@@ -216,11 +289,28 @@ export class PromoService {
    * entry in the centre. The opt-out is checked again right before sending.
    */
   async send(staffId: string, dto: SendPromoDto, now = new Date()) {
-    const users = await this.prisma.users.findMany({ where: PROMO_AUDIENCE, select: { id: true, telegram_user_id: true, language: true } });
-    const campaign = randomUUID();
-    const at = quietUntil(now) ?? now;
     const path = linkPath(dto.link);
     const clean = (s?: string) => s?.trim() || undefined;
+    const content = {
+      order_number: '',
+      title_ru: dto.title_ru.trim(),
+      title_uz: clean(dto.title_uz),
+      text_ru: dto.text_ru.trim(),
+      text_uz: clean(dto.text_uz),
+      ...(path && { open_path: path, open_button: 'link' }),
+    };
+    const label = await this.segmentLabel(dto);
+    if (dto.to_me) {
+      // аудит 4.2: a test to the employee's own Telegram, at once (no quiet hours); not in the history of sends
+      const me = await this.prisma.staff_users.findUniqueOrThrow({ where: { id: staffId }, select: { telegram_user_id: true } });
+      await this.prisma.notifications.create({
+        data: { staff_user_id: staffId, chat_id: me.telegram_user_id, kind: 'service', template: 'promo.message', next_attempt_at: now, payload: { ...content, lang: 'ru' } },
+      });
+      return { campaign: null, recipients: 1, scheduled_at: now, deferred: false, to_me: true, would_reach: (await this.audience(dto)).recipients };
+    }
+    const users = await this.prisma.users.findMany({ where: this.where(dto, now), select: { id: true, telegram_user_id: true, language: true } });
+    const campaign = randomUUID();
+    const at = quietUntil(now) ?? now;
     await this.prisma.$transaction(async (tx) => {
       await tx.notifications.createMany({
         data: users.map((u) => ({
@@ -231,20 +321,12 @@ export class PromoService {
           template: 'promo.message',
           next_attempt_at: at,
           dedup_key: `promo:${campaign}:${u.id}`,
-          payload: {
-            order_number: '',
-            lang: u.language,
-            title_ru: dto.title_ru.trim(),
-            title_uz: clean(dto.title_uz),
-            text_ru: dto.text_ru.trim(),
-            text_uz: clean(dto.text_uz),
-            ...(path && { open_path: path, open_button: 'link' }),
-          },
+          payload: { ...content, lang: u.language },
         })),
         skipDuplicates: true,
       });
       await this.audit.log(
-        { staffId, action: 'promo.sent', entityType: 'promo', entityId: campaign, after: { title_ru: dto.title_ru, recipients: users.length, scheduled_at: at.toISOString(), link: dto.link ?? null } },
+        { staffId, action: 'promo.sent', entityType: 'promo', entityId: campaign, after: { title_ru: dto.title_ru, recipients: users.length, scheduled_at: at.toISOString(), link: dto.link ?? null, segment: dto.segment ?? 'all', segment_label: label, product_id: dto.product_id ?? null, days: dto.segment === 'inactive' ? (dto.days ?? 30) : null } },
         tx,
       );
     });
@@ -262,8 +344,15 @@ export class PromoController {
   /** How many customers will get the promo now. */
   @Get('audience')
   @RequirePermission('promo.send')
-  audience() {
-    return this.promo.audience();
+  audience(@Query() q: PromoAudienceQuery) {
+    return this.promo.audience(q);
+  }
+
+  /** Аудит 4.2: the history of sends (delivered, opened in the Mini App). */
+  @Get('history')
+  @RequirePermission('promo.send')
+  history() {
+    return this.promo.history();
   }
 
   @Post()

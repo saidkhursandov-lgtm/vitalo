@@ -14,6 +14,7 @@ import { SYSTEM_COMMON, costUsd } from '../src/compat/ai';
 import { AnthropicModel, AiCallError } from '../src/compat/ai-client';
 import { GOAL_SCHEMA, SYSTEM_GOAL, checkGoalAnswer, goalDataBlock, type Duration, type Goal } from '../src/compat/ai-goal';
 import { AiGoalService } from '../src/compat/ai-goal.service';
+import type { Item } from '../src/compat/compat.service';
 
 config({ path: process.env.VITALO_ENV ?? resolve(__dirname, '../../../../../../apps/api/.env'), quiet: true } as never);
 const url = process.env.DATABASE_URL ?? '';
@@ -90,7 +91,7 @@ async function main() {
   let spent = 0;
 
   for (const [i, c] of CARTS.entries()) {
-    const items = [];
+    const items: Item[] = [];
     for (const s of c.subs) {
       const p = await prisma.products.findFirst({
         where: { status: 'active', substances: { some: { substance_id: subId.get(s) } } },

@@ -163,7 +163,10 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     expect(res).toMatchObject({ result: 'specialist', reason: 'invalid', answer: null });
     const set = [p.c.id, p.d.id].sort().join(',');
     expect(await prisma.compat_requests.findFirst({ where: { set_key: set, status: 'pending' }, orderBy: { created_at: 'desc' } })).toMatchObject({ source: 'ai_fallback' });
-    expect(await prisma.ai_requests.findFirst({ where: { set_key: set }, orderBy: { created_at: 'desc' } })).toMatchObject({ status: 'invalid', error: 'forbidden_words' });
+    expect(await prisma.ai_requests.findFirst({ where: { set_key: set }, orderBy: { created_at: 'desc' } })).toMatchObject({ status: 'invalid', error: 'forbidden_words', rejected_text: expect.stringContaining('лечит всё') });
+    // аудит 4.5: the log of refusals in «Настройки → VITALO AI» says why and shows the text
+    const view = (await http().get('/api/staff/ai/settings').set(bearer(tokens.admin)).expect(200)).body;
+    expect(view.refusals[0]).toMatchObject({ error: 'forbidden_words', reason: expect.stringContaining('запрещённые слова'), rejected_text: expect.stringContaining('лечит всё') });
     expect(await prisma.ai_compat_answers.count({ where: { set_key: set } })).toBe(0);
   });
 

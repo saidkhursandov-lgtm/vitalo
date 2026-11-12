@@ -5,7 +5,8 @@ import type { Permission } from './lib/auth';
 import { dateTime, money } from './lib/format';
 import { activeItem, groupsFor, homeFor, NAV_GROUPS, navFor } from './lib/nav';
 import { TestBadge } from './components/OrderFinance';
-import { monthRange } from './pages/Analytics';
+import { change, monthRange, previousPeriod } from './pages/Analytics';
+import { noSales } from './pages/Campaigns';
 import { monthName } from './pages/Finance';
 import { Diff } from './pages/Audit';
 import { ReasonPicker } from './components/Reason';
@@ -251,6 +252,17 @@ describe('stage 3: money is for the admin only', () => {
     expect(monthRange('2026-11-17', 0)).toEqual({ from: '2026-11-01', to: '2026-11-30' });
     expect(monthRange('2027-01-05', -1)).toEqual({ from: '2026-12-01', to: '2026-12-31' });
     expect(monthRange('2028-03-05', -1)).toEqual({ from: '2028-02-01', to: '2028-02-29' });
+    // аудит 4.9: the period before a custom one has the same length
+    expect(previousPeriod({ from: '2026-11-10', to: '2026-11-19' }, 'custom')).toEqual({ from: '2026-10-31', to: '2026-11-09' });
+    expect(change(120, 100)?.text).toBe('+20 % к прошлому');
+    expect(change(80, 100)).toEqual({ text: '−20 % к прошлому', up: false });
+    expect(change(5, 0)).toBeUndefined();
+    // аудит 4.4: a running campaign without orders for a week is highlighted
+    const now = Date.parse('2026-11-20T00:00:00Z');
+    expect(noSales({ state: 'running', start_at: '2026-11-12T00:00:00Z', orders: 0 }, now)).toBe(true);
+    expect(noSales({ state: 'running', start_at: '2026-11-15T00:00:00Z', orders: 0 }, now)).toBe(false);
+    expect(noSales({ state: 'running', start_at: '2026-11-01T00:00:00Z', orders: 3 }, now)).toBe(false);
+    expect(noSales({ state: 'ended', start_at: '2026-11-01T00:00:00Z', orders: 0 }, now)).toBe(false);
     expect(monthName('2026-11')).toBe('ноябрь 2026');
     expect(money(-15000).replace(/\s/g, ' ')).toBe('-15 000 сум');
   });

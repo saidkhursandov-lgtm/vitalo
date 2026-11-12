@@ -369,6 +369,7 @@ describe('Stage 3: expenses, tax, payroll, analytics — admin only (e2e)', () =
     expect(a.attention.expiring.map((x: { physical_id: string }) => x.physical_id)).toContain(exp.units[0].physical_id);
     expect(a.attention.expiring.map((x: { physical_id: string }) => x.physical_id)).not.toContain(units[0].physical_id); // 2029
     expect(a.attention.stale.map((x: { product_id: string }) => x.product_id)).toContain(exp.product.id); // on the shelf, never sold
+    expect(a.attention.stale.find((x: { product_id: string }) => x.product_id === exp.product.id).cost_uzs).toBeGreaterThan(0); // аудит 4.9: the frozen money
   });
 
   it('npm run orders:mark-test: lists Yandex TEST-… and every Mini App order, marks only TEST-… and the numbers named by the owner', async () => {

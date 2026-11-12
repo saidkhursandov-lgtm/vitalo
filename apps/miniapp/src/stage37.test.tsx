@@ -145,6 +145,20 @@ describe('3.7 countdown and the home slide', () => {
     await waitFor(() => expect(events('campaign_banner_click')).toHaveLength(1));
   });
 
+  it('аудит 4.3: a banner from the admin counts as shown once per session and a tap is home_banner_click', async () => {
+    const id = '6f1c2a3b-0000-4000-8000-00000000abcd';
+    const own: ShopBanner[] = [{ id, kind: 'image', image_url: '/b.webp', image_jpeg_url: null, link: { type: 'category', value: 'vitamins' } }];
+    const { container, unmount } = show('ru', <HomeCarousel firstOrderFree={false} freeFromUzs={null} banners={own} />);
+    await waitFor(() => expect(events('home_banner_view')).toHaveLength(1));
+    expect(events('home_banner_view')[0].body!.props).toEqual({ banner_id: id });
+    fireEvent.click(container.querySelector('.hero-track > *')!);
+    await waitFor(() => expect(events('home_banner_click')).toHaveLength(1));
+    unmount();
+    show('ru', <HomeCarousel firstOrderFree={false} freeFromUzs={null} banners={own} />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(events('home_banner_view')).toHaveLength(1); // not again in the same session
+  });
+
   it('Uzbek slide: «Tugashiga», UZ title', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(new Date(ENDS).getTime() - 26 * 60 * 60_000));

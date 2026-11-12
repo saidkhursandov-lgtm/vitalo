@@ -130,6 +130,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'customer.unblocked': 'Клиент разблокирован',
   'settings.bank_transfer_updated': 'Изменены реквизиты',
   'settings.card_transfer_updated': 'Изменены данные карты',
+  'settings.card_code_sent': 'Запрошен код для смены карты',
   'settings.checkout_options_updated': 'Изменены настройки оплаты (при получении, Payme / Click / Uzum, бесплатная доставка)',
   'settings.texts_updated': 'Изменены тексты магазина',
   'settings.maps_updated': 'Включена или выключена карта (Яндекс) в Mini App',
@@ -216,6 +217,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'competitor_price.hidden': 'Скрыта цена конкурента',
   'dictionary.created': 'Добавлена запись справочника',
   'dictionary.backfill': 'Справочник заполнен из товаров',
+  'dictionary.merged': 'Справочник: объединены дубли',
   'product.deleted': 'Товар удалён',
   'product.delete_archived': 'Товар с историей убран в архив (кнопка «Удалить»)',
   'product.sku_renamed': 'Изменён SKU товара',
@@ -237,6 +239,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'order.cod_confirmed': 'Заказ с оплатой при получении подтверждён',
   'order.payment_manual_override': 'Онлайн-оплата подтверждена вручную',
   'order.reserve_extended': 'Резерв заказа продлён',
+  'customer.note_added': 'Заметка о клиенте',
   // аудит 2.14: who exported what
   'export.orders': 'Выгрузка заказов в Excel',
   'export.stock': 'Выгрузка остатков в Excel',

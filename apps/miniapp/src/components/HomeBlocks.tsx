@@ -36,6 +36,10 @@ const BUILT_IN_BANNERS: ShopBanner[] = [
 /** 3.5: the home banner moves to the next slide every 3.5 s until the customer touches it. */
 export const HERO_AUTOPLAY_MS = 3500;
 
+/** Аудит 4.3: banners already counted as shown in this app session; only real banners (with an id from the server). */
+const seenBanners = new Set<string>();
+const isId = (k: string) => /^[0-9a-f-]{36}$/i.test(k);
+
 /** Where a tap on the banner leads (null — nowhere). */
 export function bannerHref(link: ShopBanner['link']): string | null {
   if (!link) return null;
@@ -133,6 +137,17 @@ export function HomeCarousel({
     return () => clearInterval(timer);
   }, [touched, count]);
   const stop = () => setTouched(true);
+  // аудит 4.3: banner stats — a slide counts as shown once per app session, when it is on screen
+  const current = slides[index]?.key;
+  useEffect(() => {
+    if (!current || seenBanners.has(current) || !isId(current)) return;
+    seenBanners.add(current);
+    trackEvent('home_banner_view', { banner_id: current });
+  }, [current]);
+  const click = (s: { key: string; campaignId?: string }) => () => {
+    if (s.campaignId) trackEvent('campaign_banner_click', { campaign_id: s.campaignId });
+    if (isId(s.key)) trackEvent('home_banner_click', { banner_id: s.key });
+  };
 
   if (slides.length === 0) return null;
   return (
@@ -144,7 +159,7 @@ export function HomeCarousel({
       >
         {slides.map((s) =>
           s.href ? (
-            <Link key={s.key} to={s.href} className={s.className} onClick={s.campaignId ? () => trackEvent('campaign_banner_click', { campaign_id: s.campaignId! }) : undefined}>
+            <Link key={s.key} to={s.href} className={s.className} onClick={click(s)}>
               {s.body}
             </Link>
           ) : (

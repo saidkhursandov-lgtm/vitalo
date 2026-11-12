@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import sharp from 'sharp';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { bearer, createTestApp, createTestProduct, archiveTestProducts, loginStaff } from './helpers';
+import { bearer, createTestApp, createTestProduct, archiveTestProducts, loginCustomer, loginStaff } from './helpers';
 
 const ADMIN_TG = 222_222_221;
 const DOCTOR = '00000000-0000-4000-8000-00000000b001';
@@ -44,6 +44,15 @@ describe('Home banners (e2e)', () => {
     expect(list.recommended).toEqual({ width: 1200, height: 400 });
     expect(list.items.map((b: { kind: string }) => b.kind)).toEqual(['doctor', 'delivery']);
     expect((await shop('ru')).map((b) => b.kind)).toEqual(['doctor', 'delivery']);
+  });
+
+  it('аудит 4.3: shows and taps from the Mini App are counted per banner for 30 days', async () => {
+    const token = await loginCustomer(app, 975_500_000 + Math.floor(Math.random() * 90_000));
+    const before = (await http().get(base).set(bearer(admin)).expect(200)).body.items.find((b: { id: string }) => b.id === DOCTOR).stats;
+    await http().post('/api/analytics/events').set(bearer(token)).send({ event: 'home_banner_view', props: { banner_id: DOCTOR } }).expect((r) => expect(r.status).toBeLessThan(300));
+    await http().post('/api/analytics/events').set(bearer(token)).send({ event: 'home_banner_click', props: { banner_id: DOCTOR } }).expect((r) => expect(r.status).toBeLessThan(300));
+    const after = (await http().get(base).set(bearer(admin)).expect(200)).body.items.find((b: { id: string }) => b.id === DOCTOR).stats;
+    expect(after).toEqual({ views: before.views + 1, clicks: before.clicks + 1 });
   });
 
   it('at most 5 banners', async () => {

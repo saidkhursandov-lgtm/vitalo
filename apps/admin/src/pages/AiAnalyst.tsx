@@ -36,6 +36,8 @@ interface FeedRow {
   product: { id: string; sku: string; name_ru: string } | null;
   match: { status: MatchStatus; reasons: string[] } | null;
   problem: string | null;
+  /** аудит 4.5 */
+  sku_warning?: string | null;
 }
 
 interface FeedResult {
@@ -322,6 +324,7 @@ function FeedCard() {
                         )}
                       </td>
                       <td>
+                        {r.sku_warning && <div className="text-warn small">{r.sku_warning}</div>}
                         {r.problem ? (
                           <span className="text-bad small">{r.problem}</span>
                         ) : r.match ? (
