@@ -627,3 +627,10 @@ textarea { resize: vertical; }
 .row-menu[open] > summary { background: var(--primary-soft); }
 .row-menu-list { position: absolute; right: 0; z-index: 20; top: calc(100% + 4px); min-width: 220px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 6px; box-shadow: 0 8px 24px rgb(15 23 42 / 12%); display: grid; gap: 2px; text-align: left; }
 .row-menu-list .btn { justify-content: flex-start; width: 100%; }
+
+/* Аудит админки 2.5: «problem» filters with counters and the bar of bulk actions */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.chip { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.chip.is-on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); font-weight: 600; }
+.chip-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+.bulk-bar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 12px; border-radius: 10px; background: var(--primary-soft); border: 1px solid var(--border); }

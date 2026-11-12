@@ -26,6 +26,7 @@ import { Prisma, ProductStatus, StaffRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -216,6 +217,13 @@ export class ProductLabelDto {
   @ApiPropertyOptional({ nullable: true, maxLength: 300 }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) label_composition_uz?: string | null;
 }
 
+/** Аудит 2.5: orders of the products list. */
+export const PRODUCT_SORTS = ['status', 'name', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc'] as const;
+export type ProductSort = (typeof PRODUCT_SORTS)[number];
+/** Аудит 2.5: «problems» of a product card, each with its own filter and counter. */
+export const PRODUCT_PROBLEMS = ['no_photo', 'no_ikpu', 'no_uz', 'yandex_mismatch'] as const;
+export type ProductProblem = (typeof PRODUCT_PROBLEMS)[number];
+
 export class StaffProductsQuery extends PageQuery {
   @ApiPropertyOptional({ description: 'SKU, название или бренд' }) @IsOptional() @Transform(trim) @IsString() @MaxLength(100) q?: string;
   @ApiPropertyOptional({ enum: ProductStatus }) @IsOptional() @IsEnum(ProductStatus) status?: ProductStatus;
@@ -229,6 +237,20 @@ export class StaffProductsQuery extends PageQuery {
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')
   hide_test?: boolean;
+  @ApiPropertyOptional({ enum: PRODUCT_SORTS, default: 'status', description: 'Аудит 2.5: порядок списка' })
+  @IsOptional()
+  @IsIn(PRODUCT_SORTS)
+  sort?: ProductSort;
+  @ApiPropertyOptional({ enum: PRODUCT_PROBLEMS, description: 'Аудит 2.5: только товары с этой проблемой (без фото, без ИКПУ, без текста UZ, цена Яндекса не совпадает)' })
+  @IsOptional()
+  @IsIn(PRODUCT_PROBLEMS)
+  problem?: ProductProblem;
+}
+
+/** Аудит 2.5 (D-64): «Скрыть / Показать / В архив» for several products at once — no deleting. */
+export class BulkStatusDto {
+  @ApiProperty({ type: [String] }) @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @IsUUID('all', { each: true }) ids!: string[];
+  @ApiProperty({ enum: ['active', 'hidden', 'archived'] }) @IsIn(['active', 'hidden', 'archived']) status!: 'active' | 'hidden' | 'archived';
 }
 
 /** Real image type from the first bytes (the browser-provided mimetype can lie). */
@@ -365,8 +387,44 @@ export class AdminProductsService {
     @Inject(FILE_STORAGE) private readonly storage: FileStorage,
   ) {}
 
+  /** Аудит 2.5: the condition of each «problem» (the Yandex price compared with the shop price column to column). */
+  private problemWhere(p: ProductProblem): Prisma.productsWhereInput {
+    switch (p) {
+      case 'no_photo':
+        return { media: { none: { media_type: 'image' } } };
+      case 'no_ikpu':
+        return { OR: [{ ikpu_code: null }, { ikpu_code: '' }] };
+      case 'no_uz':
+        return { OR: [{ name_uz: null }, { name_uz: '' }, { short_description_uz: null }, { short_description_uz: '' }] };
+      case 'yandex_mismatch':
+        return { yandex_price_uzs: { not: null }, NOT: { yandex_price_uzs: { equals: this.prisma.products.fields.price_uzs } } };
+    }
+  }
+
+  /** Аудит 2.5: how many products (not archived, not test) have each problem — the counters next to the filters. */
+  private async problemCounts(): Promise<Record<ProductProblem, number>> {
+    const base: Prisma.productsWhereInput = { status: { not: 'archived' }, is_test: false };
+    const counts = await Promise.all(PRODUCT_PROBLEMS.map((p) => this.prisma.products.count({ where: { AND: [base, this.problemWhere(p)] } })));
+    return Object.fromEntries(PRODUCT_PROBLEMS.map((p, i) => [p, counts[i]])) as Record<ProductProblem, number>;
+  }
+
+  /** Аудит 2.5 (D-64): several products hidden, shown again or archived at once — each one audited like a single change. */
+  async bulkStatus(staffId: string, dto: BulkStatusDto) {
+    const ids = [...new Set(dto.ids)];
+    const found = await this.prisma.products.findMany({ where: { id: { in: ids } }, select: { id: true, status: true } });
+    if (found.length !== ids.length) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND', message: 'Некоторые товары не найдены' });
+    let changed = 0;
+    for (const p of found) {
+      if (p.status === dto.status) continue;
+      await this.update(staffId, p.id, { status: dto.status });
+      changed++;
+    }
+    return { changed, unchanged: found.length - changed };
+  }
+
   async list(q: StaffProductsQuery) {
     const where: Prisma.productsWhereInput = {
+      ...(q.problem && { AND: [this.problemWhere(q.problem)] }),
       ...(q.status && { status: q.status }),
       ...(q.yandex_sync_needed && { yandex_price_sync_needed: true }),
       ...(q.hide_test && { is_test: false }),
@@ -382,13 +440,23 @@ export class AdminProductsService {
         ],
       }),
     };
-    const [total, rows] = await this.prisma.$transaction([
+    const sort = q.sort ?? 'status';
+    // аудит 2.5: by stock — the sum over warehouses, ordered here (Prisma cannot order by a sum of a relation)
+    let pageIds: string[] | null = null;
+    if (sort === 'stock_asc' || sort === 'stock_desc') {
+      const all = await this.prisma.products.findMany({ where, select: { id: true, name_ru: true, inventory: { select: { actual_qty: true, reserved_qty: true } } } });
+      const stock = (p: (typeof all)[number]) => p.inventory.reduce((s, i) => s + i.actual_qty - i.reserved_qty, 0);
+      all.sort((a, b) => (sort === 'stock_asc' ? stock(a) - stock(b) : stock(b) - stock(a)) || a.name_ru.localeCompare(b.name_ru, 'ru'));
+      pageIds = all.slice((q.page - 1) * PAGE_SIZE, q.page * PAGE_SIZE).map((p) => p.id);
+    }
+    const orderBy: Prisma.productsOrderByWithRelationInput[] =
+      sort === 'name' ? [{ name_ru: 'asc' }] : sort === 'price_asc' ? [{ price_uzs: 'asc' }, { name_ru: 'asc' }] : sort === 'price_desc' ? [{ price_uzs: 'desc' }, { name_ru: 'asc' }] : [{ status: 'asc' }, { name_ru: 'asc' }];
+    const [total, found, problems] = await Promise.all([
       this.prisma.products.count({ where }),
       this.prisma.products.findMany({
-        where,
-        orderBy: [{ status: 'asc' }, { name_ru: 'asc' }],
-        skip: (q.page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
+        where: pageIds ? { id: { in: pageIds } } : where,
+        orderBy,
+        ...(pageIds ? {} : { skip: (q.page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
         include: {
           inventory: true,
           media: { where: { is_main: true }, take: 1 },
@@ -397,8 +465,11 @@ export class AdminProductsService {
           ...(q.q && { sku_aliases: { where: { alias_norm: { contains: q.q.trim().toUpperCase() } }, select: { alias: true }, take: 1 } }),
         },
       }),
+      this.problemCounts(),
     ]);
+    const rows = pageIds ? pageIds.map((id) => found.find((p) => p.id === id)!).filter(Boolean) : found;
     return {
+      problems,
       items: rows.map((p) => ({
         id: p.id,
         sku: p.sku,
@@ -797,6 +868,14 @@ export class AdminProductsController {
   @RequirePermission('products.label')
   async updateLabel(@CurrentStaff() me: StaffContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ProductLabelDto) {
     return forViewer(me.staff.role, await this.products.updateLabel(me.staff.id, id, dto));
+  }
+
+  /** Аудит 2.5 (D-64): «Скрыть / Показать / В архив» for the ticked products; no deleting here. */
+  @Post('bulk-status')
+  @HttpCode(200)
+  @RequirePermission('products.edit')
+  bulkStatus(@CurrentStaff() me: StaffContext, @Body() dto: BulkStatusDto) {
+    return this.products.bulkStatus(me.staff.id, dto);
   }
 
   @Post(':id/archive')
