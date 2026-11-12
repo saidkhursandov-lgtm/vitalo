@@ -28,7 +28,8 @@ describe('D-70: переписка с VITALO AI (e2e)', () => {
   const fake = new FakeModel();
   const tokens: Record<string, string> = {};
   let tg = 839_300_000;
-  const run = Date.now().toString(36);
+  // digits only: a random «b6» or «b12» in a name would change the topics of the cart
+  const run = String(Date.now());
   const http = () => request(app.getHttpServer());
   const p: Record<string, { id: string; sku: string }> = {};
   const s: Record<string, string> = {};

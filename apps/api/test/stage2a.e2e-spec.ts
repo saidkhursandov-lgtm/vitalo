@@ -44,7 +44,7 @@ describe('Stage 2A: purchases (e2e)', () => {
     for (const r of Object.keys(STAFF_TG) as Role[]) tokens[r] = await loginStaff(app, STAFF_TG[r]);
     account = (await as('admin').post('/staff/dictionaries/ozon_accounts', { name_ru: `Сиадкомол ${RUN}` }).expect(201)).body;
     account2 = (await as('admin').post('/staff/dictionaries/ozon_accounts', { name_ru: `Хадича ${RUN}` }).expect(201)).body;
-    supplier = (await as('admin').post('/staff/dictionaries/suppliers', { name_ru: `Glorious Health Nutrition ${RUN}`, note: 'Ташкент' }).expect(201)).body;
+    supplier = (await as('admin').post('/staff/dictionaries/suppliers', { name_ru: `Тест-поставщик Glorious ${RUN}`, note: 'Ташкент' }).expect(201)).body;
     [p1, p2, p3] = await Promise.all([1, 2, 3].map(() => createTestProduct(prisma, { price: 100_000, stock: 0 })));
   });
   afterAll(async () => {
@@ -57,12 +57,12 @@ describe('Stage 2A: purchases (e2e)', () => {
     const dup = await as('admin').post('/staff/dictionaries/ozon_accounts', { name_ru: `  сиадкомол   ${RUN} ` }).expect(409);
     expect(dup.body.code).toBe('DICTIONARY_DUPLICATE');
     const list = (await as('admin').get('/staff/dictionaries/suppliers').expect(200)).body;
-    expect(list.find((s: { id: string }) => s.id === supplier.id)).toMatchObject({ name_ru: `Glorious Health Nutrition ${RUN}`, note: 'Ташкент', products: 0 });
+    expect(list.find((s: { id: string }) => s.id === supplier.id)).toMatchObject({ name_ru: `Тест-поставщик Glorious ${RUN}`, note: 'Ташкент', products: 0 });
     await as('manager').get('/staff/dictionaries/ozon_accounts').expect(200);
     // D-61: the names are seen by everyone who sees products (the supplier tabs); the notes only with purchases
     for (const r of ['warehouse', 'marketer'] as Role[]) {
       const seen = (await as(r).get('/staff/dictionaries/suppliers').expect(200)).body;
-      expect(seen.find((s: { id: string }) => s.id === supplier.id)).toMatchObject({ name_ru: `Glorious Health Nutrition ${RUN}`, note: null });
+      expect(seen.find((s: { id: string }) => s.id === supplier.id)).toMatchObject({ name_ru: `Тест-поставщик Glorious ${RUN}`, note: null });
       await as(r).get('/staff/dictionaries/ozon_accounts').expect(403);
     }
     await as('manager').post('/staff/dictionaries/suppliers', { name_ru: 'X' }).expect(403);

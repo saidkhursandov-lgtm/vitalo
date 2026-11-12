@@ -70,7 +70,9 @@ describe('D-60/D-61: «под заказ» (iHerb из США, a local supplier)
     // the migration made them: Ozon (stock only), iHerb (from abroad, «из США»), Glorious Healthy Nutrition (local)
     sup.iherb = await prisma.suppliers.findUniqueOrThrow({ where: { code: 'iherb' } });
     sup.ozon = await prisma.suppliers.findUniqueOrThrow({ where: { code: 'ozon' } });
-    sup.local = await prisma.suppliers.findFirstOrThrow({ where: { kind: 'local', name: { startsWith: 'Glorious' } } });
+    sup.local = await prisma.suppliers.findFirstOrThrow({ where: { kind: 'local', name: { startsWith: 'Glorious Healthy' } }, orderBy: { created_at: 'asc' } });
+    // suppliers other tests left in vitalo_test whose names also start with «Glorious» would be taken for this one
+    await prisma.suppliers.updateMany({ where: { name: { startsWith: 'Glorious' }, id: { not: sup.local.id } }, data: { status: 'archived' } });
     // the default terms: from abroad 7–14 days, guarantee 21; local 1–2 days, guarantee 7
     await prisma.suppliers.updateMany({ where: { id: { in: [sup.iherb.id, sup.local.id] } }, data: { days_min: null, days_max: null, guarantee_days: null, status: 'active' } });
   });
