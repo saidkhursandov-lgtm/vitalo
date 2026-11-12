@@ -187,7 +187,8 @@ export const GOAL_FORBIDDEN = [
 ];
 
 /** D-68: no units on the screen — «мг», «мкг», «МЕ» as separate words. */
-const UNITS = /(^|[^a-zа-яё])(мг|мкг|ме|mg|mkg)(?=[^a-zа-яё]|$)/iu;
+/** a dose is a number with a unit: «400 мг»; «комплекс Mg + D3» is magnesium, not a dose (Шаг 0в) */
+const UNITS = /\d\s*(мг|мкг|ме|mg|mkg)(?=[^a-zа-яё]|$)/iu;
 
 export function findGoalForbidden(text: string): string[] {
   const t = text.toLowerCase().replace(/ё/g, 'е');
@@ -233,7 +234,9 @@ export function checkGoalAnswer(raw: unknown, d: GoalData): { ok: true; answer: 
   const steps = (Array.isArray(r.steps) ? r.steps : []).map((s) => String(s ?? '').trim()).filter(Boolean);
   if (!steps.length || steps.length > 4 || steps.some((s) => s.length > STEP_MAX)) return { ok: false, error: 'steps' };
   const all = [summary, ...products.map((p) => p.text), ...steps].join(' ');
-  if (findGoalForbidden(all).length) return { ok: false, error: 'forbidden_words' };
+  // the product names are ours: «Mg + D3», «Biotin 5000 mkg» are not a dose from the model (found in Шаг 0в)
+  const scrubbed = d.cart.reduce((t, p) => t.split(p.name).join(' '), all);
+  if (findGoalForbidden(scrubbed).length) return { ok: false, error: 'forbidden_words' };
   if (!inLanguage(all, d.lang)) return { ok: false, error: 'language' };
   return { ok: true, answer: { summary, products, steps } };
 }

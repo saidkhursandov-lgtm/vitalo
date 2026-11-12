@@ -66,4 +66,13 @@ describe('Шаг 0б: «Поможет ли этот набор для моей 
     expect(findGoalForbidden('Ложитесь в одно время, в режиме сна важна регулярность')).toEqual([]);
     expect(checkGoalAnswer({ ...good, summary: 'Похоже на синдром хронической усталости, магний поможет.' }, data())).toEqual({ ok: false, error: 'forbidden_words' });
   });
+
+  it('Шаг 0в: a dose inside our product name is not a dose from the model', () => {
+    const d = data({ cart: [{ ...data().cart[0], name: 'Mg + D3 + Омега-3' }, { ...data().cart[1], name: 'Biotin 5000 mkg' }] });
+    const answer = { ...good, summary: 'Для сна комплекс Mg + D3 + Омега-3 может помочь; Biotin 5000 mkg для этой цели можно не брать.' };
+    expect(checkGoalAnswer(answer, d).ok).toBe(true);
+    expect(checkGoalAnswer({ ...answer, steps: ['Принимайте 400 мг магния.'] }, d)).toEqual({ ok: false, error: 'forbidden_words' });
+    expect(findGoalForbidden('иммунный комплекс Mg + D3 можно не брать')).toEqual([]);
+    expect(findGoalForbidden('Biotin 5000mkg')).toContain('units');
+  });
 });
