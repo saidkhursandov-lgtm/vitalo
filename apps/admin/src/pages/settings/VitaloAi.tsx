@@ -62,7 +62,7 @@ export function VitaloAiSettings() {
       <section className="card narrow">
         <h2>VITALO AI</h2>
         <p className="muted">
-          Проверка совместимости корзины (и чат — с подэтапа 3.9). Когда AI выключен, нет ключа или кончился бюджет, покупатель видит «Ответ
+          Проверка совместимости корзины (чат появится позже). Когда AI выключен, нет ключа или кончился бюджет, покупатель видит «Ответ
           готовит специалист VITALO», а запрос уходит специалисту.
         </p>
         <p>
@@ -78,7 +78,7 @@ export function VitaloAiSettings() {
           )}
         </p>
         {!s.key_set && (
-          <p className="muted small">Ключ ANTHROPIC_API_KEY вписывают в файл .env на сервере (не в админке), затем перезапускают API.</p>
+          <p className="muted small">Ключ ANTHROPIC_API_KEY вписывают в настройки сервера (не в админке), затем перезапускают API.</p>
         )}
         <form onSubmit={submit}>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
@@ -99,7 +99,7 @@ export function VitaloAiSettings() {
           <Field label="Новых AI-проверок корзины в день на покупателя" hint="Ответы из кэша и сохранённые ответы специалиста — без лимита.">
             <input type="number" min={0} max={50} step="1" value={form.cart_daily_limit} onChange={(e) => set('cart_daily_limit', Math.round(num(e.target.value)))} />
           </Field>
-          <Field label="Сообщений в чате VITALO AI в день на покупателя" hint="Для чата (подэтап 3.9).">
+          <Field label="Сообщений в чате VITALO AI в день на покупателя" hint="Для чата — он появится позже.">
             <input type="number" min={0} max={500} step="1" value={form.chat_daily_limit} onChange={(e) => set('chat_daily_limit', Math.round(num(e.target.value)))} />
           </Field>
           <ErrorBox error={save.error} />

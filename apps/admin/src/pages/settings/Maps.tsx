@@ -67,7 +67,7 @@ export function MapsSettings() {
       {!(s.has_js_key && s.has_geocoder_key) && (
         <p className="muted small">
           Не хватает ключа: {[!s.has_js_key && 'YANDEX_MAPS_JS_API_KEY', !s.has_geocoder_key && 'YANDEX_GEOCODER_API_KEY'].filter(Boolean).join(', ')} — его
-          вписывают в файл .env на сервере (не в админке).
+          вписывают в настройки сервера (не в админке).
         </p>
       )}
 

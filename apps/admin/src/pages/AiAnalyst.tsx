@@ -139,7 +139,7 @@ function StatusCard({ s }: { s: Status }) {
       {!s.key_set && (
         <div className="alert alert-warn">
           <span>
-            Нет ключа. Впишите свой ключ Anthropic в файл <code>apps/api/.env</code> строкой <code>ANTHROPIC_ADMIN_API_KEY=…</code> и перезапустите API. Ключ
+            Подключение ещё не настроено: нет ключа Anthropic. Его вписывают в настройки сервера (ANTHROPIC_ADMIN_API_KEY) и перезапускают API. Ключ
             не вводится здесь и не пересылается в чат.
           </span>
         </div>

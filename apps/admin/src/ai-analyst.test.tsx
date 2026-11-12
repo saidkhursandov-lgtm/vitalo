@@ -54,7 +54,7 @@ describe('«AI-аналитик» (D-57, узел 5)', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    await screen.findByText(/Нет ключа/);
+    await screen.findByText(/нет ключа Anthropic/);
     expect(screen.getByText(/Потрачено в этом месяце: \$1\.50 из \$20\.00/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Текст или таблица'), { target: { value: 'Fitvibe 199 000' } });

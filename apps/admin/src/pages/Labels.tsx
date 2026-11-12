@@ -192,7 +192,7 @@ export function TestPrint() {
           Печать
         </button>
         <span className="muted small">
-          Сплошная рамка — край этикетки {size.width_mm}×{size.height_mm} мм, пунктир — безопасное поле 2 мм, риски — каждые 10 мм. Подробно: docs/PRINT_SETUP.md.
+          Сплошная рамка — край этикетки {size.width_mm}×{size.height_mm} мм, пунктир — безопасное поле 2 мм, риски — каждые 10 мм. Подробно — в инструкции по печати этикеток.
         </span>
       </div>
       <div className="labels">

@@ -150,7 +150,7 @@ describe('3.8 Настройки → VITALO AI', () => {
     mock(['settings.manage'], [], settings({ key_set: false }));
     show(<VitaloAiSettings />);
     expect(await screen.findByText('Нет ключа Claude на сервере')).toBeTruthy();
-    expect(screen.getByText(/вписывают в файл .env на сервере/)).toBeTruthy();
+    expect(screen.getByText(/вписывают в настройки сервера/)).toBeTruthy();
     cleanup();
     mock(['settings.manage'], [], settings({ month: { requests: 90, cost_usd: 10.2 } }));
     show(<VitaloAiSettings />);

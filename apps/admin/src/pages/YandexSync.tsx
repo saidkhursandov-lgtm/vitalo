@@ -132,7 +132,7 @@ export function YandexSync() {
           <dt>Опрос</dt>
           <dd>{c.enabled ? `включён, каждые ${c.intervalMinutes} мин, за ${c.days} дн. (первый раз ${c.firstDays})` : 'выключен (YANDEX_SYNC_ENABLED) — работает только «Проверить сейчас»'}</dd>
           <dt>Токен</dt>
-          <dd>{c.tokenSet ? 'задан' : <span className="text-warn">не задан: добавьте YANDEX_API_KEY в apps/api/.env</span>}</dd>
+          <dd>{c.tokenSet ? 'задан' : <span className="text-warn">не задан: подключение ещё не настроено (ключ YANDEX_API_KEY в настройках сервера)</span>}</dd>
           <dt>Кабинет / кампании</dt>
           <dd>
             {c.businessId} / {c.campaignIds.join(', ')}

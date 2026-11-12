@@ -74,7 +74,7 @@ export function problemText(c: ItemCheck, guardMaxPct: number): string | null {
     case 'no_discount':
       return 'Акционная цена не ниже обычной';
     case 'too_big':
-      return c.max_pct === 35 ? 'Скидка больше 35% (D-28)' : 'Без даты окончания скидка — не больше 25%';
+      return c.max_pct === 35 ? 'Скидка больше 35%' : 'Без даты окончания скидка — не больше 25%';
     case 'below_margin':
       return c.cost_known
         ? `Ниже границы маржи: не дешевле ${money(c.floor_uzs)}`

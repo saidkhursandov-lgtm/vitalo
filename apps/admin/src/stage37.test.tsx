@@ -18,7 +18,7 @@ describe('3.7 Акции', () => {
   });
 
   it('warnings while typing: 35% / 25%, margin floor, no cost, one product — one sale', () => {
-    expect(problemText({ ...item, problem: 'too_big' }, 20)).toBe('Скидка больше 35% (D-28)');
+    expect(problemText({ ...item, problem: 'too_big' }, 20)).toBe('Скидка больше 35%');
     expect(problemText({ ...item, problem: 'too_big', max_pct: 25 }, 20)).toBe('Без даты окончания скидка — не больше 25%');
     expect(plain(problemText({ ...item, problem: 'below_margin' }, 20))).toBe('Ниже границы маржи: не дешевле 77 000 сум');
     expect(plain(problemText({ ...item, problem: 'below_margin', cost_known: false, floor_uzs: 80_000 }, 20))).toBe('Нет закупочной цены: скидка не больше 20% (не дешевле 80 000 сум)');

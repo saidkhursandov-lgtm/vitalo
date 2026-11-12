@@ -63,7 +63,7 @@ export function ManifestSettings() {
       <p className="muted">
         Строка на главной под «Популярным» открывает окно: одна фраза и три карточки «Не берём» (красный крестик) и «Стандарт
         VITALO» (зелёная галочка), внизу кнопка «Спросить специалиста». То же окно открывается из кнопки «AI-подбор». Без
-        процентов усвоения и без слова Halal (решение D-36).
+        процентов усвоения и без слова Halal.
       </p>
       <label className="check">
         <input type="checkbox" checked={f.enabled} onChange={(e) => set({ ...f, enabled: e.target.checked })} />

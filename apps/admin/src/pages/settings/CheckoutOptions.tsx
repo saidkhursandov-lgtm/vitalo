@@ -32,7 +32,7 @@ const MODES: [Mode, string][] = [
 /** Why «Работает» cannot be chosen yet, in plain words. */
 function liveBlocker(s: Options['online_status'][Provider]): string | null {
   if (s.can_go_live) return null;
-  const missing = [!s.keys_present && 'ключей в файле .env на сервере', !s.module_ready && 'модуля подключения (его добавит программист)'].filter(Boolean);
+  const missing = [!s.keys_present && 'ключей подключения на сервере', !s.module_ready && 'модуля подключения'].filter(Boolean);
   return `«Тест» и «Работает» пока нельзя: нет ${missing.join(' и ')}.`;
 }
 

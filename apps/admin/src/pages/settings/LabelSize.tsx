@@ -42,7 +42,7 @@ function LabelSizeForm({ size }: { size: Size }) {
       <h2>Размер этикетки Physical ID</h2>
       <p className="muted">
         Бумага в принтере XP-365B. По умолчанию 58×40 мм. Этот же размер нужно выбрать в драйвере принтера и в окне печати Chrome
-        (docs/PRINT_SETUP.md).
+        (подробно — в инструкции по печати этикеток).
       </p>
       <form onSubmit={submit}>
         <div className="form-grid">

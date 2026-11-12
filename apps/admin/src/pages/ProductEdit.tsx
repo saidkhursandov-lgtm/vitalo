@@ -54,7 +54,7 @@ const TEXTS = [
   ['directions', 'Способ применения', 3],
   ['warnings', 'Противопоказания и предупреждения', 3],
   ['doctor_verdict', 'Вердикт врача (до 1500 знаков; в карточке видны 4 строки и «Читать полностью»)', 3],
-  ['intake_memo', 'Памятка приёма (покупатель увидит с релиза 3)', 3],
+  ['intake_memo', 'Памятка приёма', 3],
 ] as const;
 
 /** D-53: what a marketer (products.content) may change — the same list as CONTENT_FIELDS in apps/api admin-products.ts */
