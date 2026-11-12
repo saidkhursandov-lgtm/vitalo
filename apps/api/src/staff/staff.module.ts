@@ -16,6 +16,7 @@ import { AdminCrossBorderController } from './admin-cross-border';
 import { AdminProductsController, AdminProductsService } from './admin-products';
 import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
 import { AdminWaitlistController, AdminWaitlistService } from './admin-waitlist';
+import { AdminSearchController, AdminSearchService } from './admin-search';
 import { AdminPromoCodesController, AdminPromoCodesService } from './admin-promo-codes';
 import { AdminCampaignsController, AdminCampaignsService } from './admin-campaigns';
 import { PromoModule } from '../promo/promo.module';
@@ -94,6 +95,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AuditController,
     AdminLegalController,
     AdminWaitlistController,
+    AdminSearchController,
     AdminPromoCodesController,
     AdminCampaignsController,
     PromoController,
@@ -149,6 +151,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     { provide: YANDEX_CLIENT_OPTIONS, useValue: {} },
     AdminSettingsService,
     AdminWaitlistService,
+    AdminSearchService,
     PromoService,
     ReceiptsService,
     CompatService,

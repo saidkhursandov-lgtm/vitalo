@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/auth';
 import { ROLE } from '../lib/format';
 import { activeItem, groupsFor, type NavGroup, type NavItem } from '../lib/nav';
+import { GlobalSearch } from './GlobalSearch';
 import { CloseIcon, MenuIcon, NextIcon } from './Icons';
 import { Logo } from './Logo';
 
@@ -54,6 +55,7 @@ export function Layout() {
           <MenuIcon size={22} /> Меню
         </button>
         <Logo />
+        <GlobalSearch className="topbar-search" />
       </header>
       <div className="sidebar-backdrop" aria-hidden onClick={() => setOpen(false)} />
       <aside className="sidebar" id="admin-sidebar">
@@ -68,6 +70,7 @@ export function Layout() {
             <CloseIcon size={20} />
           </button>
         </div>
+        <GlobalSearch className="sidebar-search" hotkey />
         <nav aria-label="Разделы админки">
           {groups.map((g) =>
             g.items.length === 1 && g.items[0].label === g.label ? (

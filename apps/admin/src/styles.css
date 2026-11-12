@@ -641,3 +641,15 @@ textarea { resize: vertical; }
 
 /* Аудит админки 2.9: many tabs (Настройки) wrap onto a second line instead of hiding off the edge */
 .segmented.segmented-wrap { flex-wrap: wrap; overflow-x: visible; }
+
+/* Аудит админки 2.10: one search for the whole admin panel (menu button, Ctrl+K) */
+.search-open { gap: 8px; min-height: 44px; }
+.sidebar-search { width: 100%; justify-content: flex-start; margin: 0 0 8px; border: 1px solid var(--border); color: var(--muted); }
+.sidebar-search kbd { margin-left: auto; font-family: inherit; }
+.topbar-search { margin-left: auto; color: var(--primary); }
+.search-input { width: 100%; min-height: 44px; font-size: 16px; }
+.search-results { display: grid; gap: 12px; margin-top: 12px; max-height: 60vh; overflow-y: auto; }
+.search-results h3 { margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+.search-results ul { list-style: none; margin: 0; padding: 0; }
+.search-hit { width: 100%; min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: inherit; text-align: left; cursor: pointer; }
+.search-hit:hover, .search-hit:focus-visible, .search-hit.is-first { background: var(--primary-soft); }

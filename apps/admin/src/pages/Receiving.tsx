@@ -715,6 +715,12 @@ export function Units() {
     onSettled: () => input.current?.focus(),
   });
   useEffect(() => input.current?.focus(), []);
+  // аудит 2.10: the global search links a jar as ?tab=units&code=V-000184 — open its card at once
+  const linked = params.get('code');
+  useEffect(() => {
+    if (linked) find.mutate(linked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linked]);
   const pageUnits = list.data?.items ?? [];
   const chosenIds = pageUnits.filter((u) => chosen.has(u.id) && printable(u)).map((u) => u.id);
   const selection: UnitSelection = {
