@@ -634,3 +634,7 @@ textarea { resize: vertical; }
 .chip.is-on { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); font-weight: 600; }
 .chip-count { font-variant-numeric: tabular-nums; color: var(--muted); }
 .bulk-bar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 12px; border-radius: 10px; background: var(--primary-soft); border: 1px solid var(--border); }
+
+/* Аудит админки 2.13: «Отдельные действия» grouped, each group collapsed */
+.funnel-group { border-top: 1px solid var(--border); }
+.funnel-group > summary { min-height: 44px; display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; }

@@ -158,6 +158,11 @@ function Report({ d, channel }: { d: AnalyticsData; channel: Channel }) {
               <Line label="− Налог с оборота" value={-s.tax} />
               {shared ? (
                 <>
+                  {/* аудит 2.13: прибыль от продаж до общих расходов — отдельной строкой, чтобы не путать с чистой */}
+                  <tr>
+                    <td className="strong">= Маржинальная прибыль (с продаж)</td>
+                    <td className="num strong">{money(d.net_profit + d.other_expenses + d.salaries)}</td>
+                  </tr>
                   <Line label="− Прочие расходы" value={-d.other_expenses} />
                   <Line label="− Зарплаты (начислено за период)" value={-d.salaries} />
                 </>

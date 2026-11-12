@@ -115,6 +115,10 @@ describe('Stage 0: permissions, payment check reminder, reservation time (e2e)',
         expect(d).not.toHaveProperty('margin');
         expect(d).not.toHaveProperty('ai_spend');
       }
+      // аудит 2.13: Mini App cancels/payments for everyone, the previous period's revenue only with money
+      expect(await dash('admin')).toMatchObject({ mini_app: { created: expect.any(Number), cancelled: expect.any(Number), paid: expect.any(Number) }, previous: { orders: expect.any(Number), revenue_uzs: expect.any(Number) } });
+      expect(m.previous).not.toHaveProperty('revenue_uzs');
+      expect(typeof m.mini_app.created).toBe('number');
       await http().get('/api/staff/dashboard/funnel?period=7').set(bearer(tokens.marketer)).expect(200);
     });
   });

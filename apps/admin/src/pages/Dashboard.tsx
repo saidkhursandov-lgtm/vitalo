@@ -53,6 +53,21 @@ export interface DashboardData {
     awaiting_payment?: number;
   };
   ai_spend?: { month_usd: number; budget_usd: number };
+  /** аудит 2.13 (D-64): Mini App orders created in the period — all, cancelled, paid */
+  mini_app?: { created: number; cancelled: number; paid: number };
+  /** аудит 2.13: the previous period of the same length, for «±» */
+  previous?: { orders: number; revenue_uzs?: number };
+}
+
+/** «+12 % к прошлому периоду»; nothing when there is nothing to compare with. */
+export function delta(now: number, before: number | undefined): string | undefined {
+  if (before === undefined || before <= 0) return undefined;
+  const p = Math.round(((now - before) / before) * 100);
+  return `${p > 0 ? '+' : p < 0 ? '−' : '±'}${Math.abs(p)} % к прошлому периоду`;
+}
+
+function share(part: number, all: number): string {
+  return all > 0 ? `${Math.round((part / all) * 100)} %` : '—';
 }
 
 const PERIODS = [
@@ -98,8 +113,14 @@ export function DashboardView({ data, can }: { data: DashboardData; can: (p: Per
   return (
     <>
       <div className="kpis">
-        {withRevenue && <Kpi label="Выручка" value={money(s.revenue_uzs ?? 0)} hint={`Mini App ${split('vitalo')} · Яндекс ${split('yandex')}`} />}
-        <Kpi label="Доставлено заказов" value={String(s.orders)} hint={`Mini App ${s.channels.vitalo.orders} · Яндекс ${s.channels.yandex.orders}`} />
+        {withRevenue && (
+          <Kpi label="Выручка" value={money(s.revenue_uzs ?? 0)} hint={[`Mini App ${split('vitalo')} · Яндекс ${split('yandex')}`, delta(s.revenue_uzs ?? 0, data.previous?.revenue_uzs)].filter(Boolean).join('; ')} />
+        )}
+        <Kpi
+          label="Доставлено заказов"
+          value={String(s.orders)}
+          hint={[`Mini App ${s.channels.vitalo.orders} · Яндекс ${s.channels.yandex.orders}`, delta(s.orders, data.previous?.orders)].filter(Boolean).join('; ')}
+        />
         {withRevenue && <Kpi label="Средний чек" value={money(s.average_check_uzs ?? 0)} />}
         {data.margin && (
           <Kpi
@@ -113,13 +134,16 @@ export function DashboardView({ data, can }: { data: DashboardData; can: (p: Per
           />
         )}
         <Kpi label="Новых заказов" value={String(data.orders_created.vitalo + data.orders_created.yandex)} hint={`Mini App ${data.orders_created.vitalo} · Яндекс ${data.orders_created.yandex}`} />
-        {data.ai_spend && (
-          <Kpi
-            label="Расход VITALO AI за месяц"
-            value={`$${data.ai_spend.month_usd.toLocaleString('ru-RU')}`}
-            hint={`из $${data.ai_spend.budget_usd.toLocaleString('ru-RU')} бюджета`}
-            tone={data.ai_spend.month_usd >= data.ai_spend.budget_usd * 0.8 ? 'warn' : undefined}
-          />
+        {data.mini_app && (
+          <>
+            <Kpi
+              label="Доля отмен Mini App"
+              value={share(data.mini_app.cancelled, data.mini_app.created)}
+              hint={`${data.mini_app.cancelled} из ${data.mini_app.created} новых заказов`}
+              tone={data.mini_app.created >= 10 && data.mini_app.cancelled / data.mini_app.created >= 0.3 ? 'warn' : undefined}
+            />
+            <Kpi label="Конверсия заказ → оплата" value={share(data.mini_app.paid, data.mini_app.created)} hint={`оплачено ${data.mini_app.paid} из ${data.mini_app.created} новых заказов Mini App`} />
+          </>
         )}
       </div>
       <p className="muted small">

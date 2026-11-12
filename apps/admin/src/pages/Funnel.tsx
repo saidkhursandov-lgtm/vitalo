@@ -87,6 +87,21 @@ const SYSTEM_NAMES: Record<string, string> = {
   not_applicable: 'не подходит к товарам',
   delivery_free: 'доставка уже бесплатная',
 };
+/** аудит 2.13: below this many customers on the previous step a percent says nothing. */
+export const FUNNEL_MIN_BASE = 20;
+/** аудит 2.13: single actions grouped by topic, each group collapsed. */
+const EXTRA_GROUPS: [string, (e: string) => boolean][] = [
+  ['Оплата', (e) => /^(cod_|payment_|receipt_)/.test(e)],
+  ['Адрес и карта', (e) => e.startsWith('map_')],
+  ['Промокоды и акции', (e) => /^(promo_|campaign_|upsell_)/.test(e)],
+  ['VITALO AI и совместимость', (e) => /^(ai_|compat_)/.test(e)],
+  ['Поддержка и уведомления', (e) => /^(support_|notification_|intake_|active_order_)/.test(e)],
+];
+export function extraGroup(event: string): string {
+  return EXTRA_GROUPS.find(([, test]) => test(event))?.[0] ?? 'Прочее';
+}
+const GROUP_ORDER = [...EXTRA_GROUPS.map(([g]) => g), 'Прочее'];
+
 const PERIODS = [
   ['today', 'Сегодня'],
   ['7', '7 дней'],
@@ -110,7 +125,7 @@ export function FunnelCard() {
           ))}
         </div>
       </div>
-      <p className="muted small">Уникальные покупатели на каждом шаге; процент — сколько дошло с предыдущего шага.</p>
+      <p className="muted small">Уникальные покупатели на каждом шаге; процент — сколько дошло с предыдущего шага. Если на предыдущем шаге меньше {FUNNEL_MIN_BASE} человек, процент не показываем: он случайный.</p>
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (
@@ -118,14 +133,14 @@ export function FunnelCard() {
       ) : (
         <table className="table funnel">
           <tbody>
-            {q.data.steps.map((s) => (
+            {q.data.steps.map((s, i) => (
               <tr key={s.event}>
                 <td>{STEP_NAMES[s.event] ?? s.event}</td>
                 <td className="funnel-bar-cell">
                   <span className="funnel-bar" style={{ width: `${(s.users / top) * 100}%` }} />
                 </td>
                 <td className="num strong">{s.users}</td>
-                <td className="num muted">{s.conversion_pct == null ? '' : `${s.conversion_pct}%`}</td>
+                <td className="num muted">{s.conversion_pct == null ? '' : i > 0 && q.data.steps[i - 1].users < FUNNEL_MIN_BASE ? 'мало данных' : `${s.conversion_pct}%`}</td>
               </tr>
             ))}
           </tbody>
@@ -135,6 +150,13 @@ export function FunnelCard() {
         <>
           <h3 className="funnel-extra-title">Отдельные действия</h3>
           <p className="muted small">Покупатели — сколько разных людей; нажатия — сколько раз всего.</p>
+          {GROUP_ORDER.map((g) => [g, q.data.extra!.filter((e) => extraGroup(e.event) === g)] as const)
+            .filter(([, list]) => list.length > 0)
+            .map(([g, list]) => (
+          <details key={g} className="funnel-group">
+            <summary>
+              {g} <span className="muted small">· действий: {list.length}</span>
+            </summary>
           <table className="table">
             <thead>
               <tr>
@@ -144,7 +166,7 @@ export function FunnelCard() {
               </tr>
             </thead>
             <tbody>
-              {q.data.extra.flatMap((e) => [
+              {list.flatMap((e) => [
                 <tr key={e.event}>
                   <td>{EXTRA_NAMES[e.event] ?? e.event}</td>
                   <td className="num strong">{e.users}</td>
@@ -160,6 +182,8 @@ export function FunnelCard() {
               ])}
             </tbody>
           </table>
+          </details>
+            ))}
         </>
       )}
     </section>

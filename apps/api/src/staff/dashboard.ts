@@ -66,7 +66,16 @@ export class DashboardService {
     const from = minusDays(to, days - 1);
     const fromTs = new Date(`${from}T00:00:00+05:00`);
 
-    const events = (await this.finance.saleEvents()).filter((e) => e.day >= from && e.day <= to);
+    const allEvents = await this.finance.saleEvents();
+    const events = allEvents.filter((e) => e.day >= from && e.day <= to);
+    // аудит 2.13: the same numbers for the period just before, for «± к прошлому периоду»
+    const prevTo = minusDays(from, 1);
+    const prevFrom = minusDays(from, days);
+    const prev = allEvents.filter((e) => e.day >= prevFrom && e.day <= prevTo);
+    const previous = {
+      orders: prev.reduce((s, e) => s + e.sign, 0),
+      revenue_uzs: prev.reduce((s, e) => s + e.lines.reduce((x, l) => x + l.revenue, 0) * e.sign, 0),
+    };
     const dayList = Array.from({ length: days }, (_, i) => minusDays(to, days - 1 - i));
     const byDay = new Map(dayList.map((d) => [d, { day: d, vitalo_orders: 0, yandex_orders: 0, vitalo_revenue_uzs: 0, yandex_revenue_uzs: 0 }]));
     const channels: Record<Channel, { orders: number; revenue_uzs: number }> = { vitalo: { orders: 0, revenue_uzs: 0 }, yandex: { orders: 0, revenue_uzs: 0 } };
@@ -104,7 +113,7 @@ export class DashboardService {
     const revenue = channels.vitalo.revenue_uzs + channels.yandex.revenue_uzs;
     const top = [...products.values()].filter((r) => r.qty > 0).sort((a, b) => b.qty - a.qty || b.revenue_uzs - a.revenue_uzs).slice(0, 5);
 
-    const [createdVitalo, createdYandex, byStatus, lowStock, attention, aiSpend, expired] = await Promise.all([
+    const [createdVitalo, createdYandex, byStatus, lowStock, attention, aiSpend, expired, cancelledNew, paidNew] = await Promise.all([
       this.prisma.orders.count({ where: { is_test: false, created_at: { gte: fromTs } } }),
       this.prisma.marketplace_orders.count({ where: { is_test: false, created_at: { gte: fromTs } } }),
       this.prisma.orders.groupBy({ by: ['status'], where: { is_test: false }, _count: { _all: true } }),
@@ -116,6 +125,9 @@ export class DashboardService {
         SELECT COUNT(*) AS n FROM orders o
         WHERE NOT o.is_test AND o.status = 'cancelled'
           AND (SELECT h.reason FROM order_status_history h WHERE h.order_id = o.id AND h.to_status = 'cancelled' ORDER BY h.created_at DESC LIMIT 1) LIKE 'Reservation expired%'`,
+      // аудит 2.13: of the Mini App orders created in the period — how many were cancelled and how many got paid (confirmed)
+      this.prisma.orders.count({ where: { is_test: false, created_at: { gte: fromTs }, status: 'cancelled' } }),
+      this.prisma.orders.count({ where: { is_test: false, created_at: { gte: fromTs }, OR: [{ paid_at: { not: null } }, { status: { in: PAID_STATUSES } }] } }),
     ]);
 
     return {
@@ -142,6 +154,9 @@ export class DashboardService {
         },
       }),
       orders_created: { vitalo: createdVitalo, yandex: createdYandex },
+      // аудит 2.13: «Доля отмен Mini App» and «Конверсия заказ → оплата» (cash on delivery counts once confirmed)
+      mini_app: { created: createdVitalo, cancelled: cancelledNew, paid: paidNew },
+      previous: { orders: previous.orders, ...(viewer.revenue && { revenue_uzs: previous.revenue_uzs }) },
       statuses: Object.fromEntries(byStatus.map((s) => [s.status, s._count._all])),
       cancelled_expired: Number(expired[0]?.n ?? 0),
       top_products: top.map(({ revenue_uzs, ...r }) => ({ ...r, ...(viewer.revenue && { revenue_uzs }) })),

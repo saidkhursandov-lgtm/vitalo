@@ -35,6 +35,8 @@ const data = (over: Partial<DashboardData> = {}): DashboardData => ({
   low_stock: [{ id: 'p2', sku: 'VTL-2', name_ru: 'Цинк', min_stock: 5, available: 1, incoming: 10 }],
   attention: { awaiting_confirmation: 2, units_attention: 0, yandex_to_ship: 1, ai_red: 0, compat_pending: 0, expiring_units: 0, waitlist: { products: 1, people: 4, in_stock: 0 } },
   ai_spend: { month_usd: 9, budget_usd: 10 },
+  mini_app: { created: 10, cancelled: 4, paid: 5 },
+  previous: { orders: 2, revenue_uzs: 400_000 },
   ...over,
 });
 
@@ -48,12 +50,17 @@ const show = (d: DashboardData, perms: Permission[]) =>
   );
 
 describe('dashboard (генплан, этап 2)', () => {
-  it('admin: revenue with the channel split, margin, AI spend near the budget, chart, «уже едет»', () => {
+  it('admin: revenue with the channel split and ± to the previous period, margin, Mini App cancels and payments, chart, «уже едет»', () => {
     const { container } = show(data(), ['orders.view', 'yandex.orders.view', 'inventory.view']);
     expect(screen.getByText('600 000 сум')).toBeTruthy();
-    expect(screen.getByText('Mini App 400 000 сум · Яндекс 200 000 сум')).toBeTruthy();
-    expect(screen.getByText('40 %')).toBeTruthy();
-    expect(screen.getByText('$9').closest('.kpi')!.classList.contains('kpi-warn')).toBe(true);
+    expect(screen.getByText('Mini App 400 000 сум · Яндекс 200 000 сум; +50 % к прошлому периоду')).toBeTruthy();
+    expect(screen.getByText('Mini App 2 · Яндекс 1; +50 % к прошлому периоду')).toBeTruthy();
+    expect(screen.getByText('Валовая маржа').closest('.kpi')!.textContent).toContain('40 %');
+    // аудит 2.13 (D-64): no AI spend in the top row; cancels and payments of Mini App instead
+    expect(screen.queryByText(/Расход VITALO AI/)).toBeNull();
+    expect(screen.getByText('Доля отмен Mini App').closest('.kpi')!.textContent).toContain('40 %');
+    expect(screen.getByText('Доля отмен Mini App').closest('.kpi')!.classList.contains('kpi-warn')).toBe(true);
+    expect(screen.getByText('Конверсия заказ → оплата').closest('.kpi')!.textContent).toContain('50 %');
     expect(screen.getByRole('img', { name: 'Выручка по дням по каналам' })).toBeTruthy();
     expect(container.querySelectorAll('.bar-vitalo')).toHaveLength(1);
     expect(container.querySelectorAll('.bar-yandex')).toHaveLength(1);
