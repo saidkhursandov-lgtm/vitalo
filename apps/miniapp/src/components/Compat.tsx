@@ -4,7 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useAiCompat, useCompat } from '../lib/queries';
-import { AiCompat, SpecialistBox } from './AiCompat';
+import { AiCompat, SpecialistBox, type AiCartItem } from './AiCompat';
 import { AiGoalBlock } from './AiGoal';
 import type { CompatRequest, CompatState, CompatVerdict } from '../lib/types';
 import { AlertIcon, CheckIcon, CloseIcon, ShieldIcon } from './Icons';
@@ -40,7 +40,7 @@ const writeRefused = (on: boolean) => {
  * specialist (3.4, 2+ different products). Above it — the specialist's answer for the latest request (with «Состав
  * корзины изменился — проверьте снова» when the cart is another set now) or «ждём ответа» while a specialist has it.
  */
-export function CompatBlock({ productIds }: { productIds: string[] }) {
+export function CompatBlock({ productIds, items = [] }: { productIds: string[]; items?: AiCartItem[] }) {
   const { t, lang } = useI18n();
   const setKey = setKeyOf(productIds);
   const compat = useCompat(setKey, lang);
@@ -80,6 +80,8 @@ export function CompatBlock({ productIds }: { productIds: string[] }) {
           products={s.products}
           canAskSpecialist={canAsk}
           askConsent={askConsent}
+          setKey={setKey}
+          items={items}
           onAsk={() => setOpen(true)}
           below={<AiGoalBlock canAskSpecialist={canAsk} onAsk={() => setOpen(true)} />}
           onRefuse={() => {

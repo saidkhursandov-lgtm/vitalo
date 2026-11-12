@@ -46,6 +46,9 @@ function mock(c: CompatState, a: AiState, replies: { consent?: AiState; check?: 
   });
 }
 beforeEach(() => {
+  // D-70: the checked set and «Скрыть» are remembered — every test starts clean
+  sessionStorage.clear();
+  localStorage.clear();
   AI_MIN_MS.value = 0;
   AI_CACHED_MS.value = 0;
 });
@@ -72,7 +75,7 @@ describe('3.8 VITALO AI in the cart', () => {
   it('one block: the title, the subtitle and no specialist button or pale hint beside it', async () => {
     mock(compat(), ai());
     show();
-    const main = await screen.findByRole('button', { name: /Проверить совместимость \(VITALO AI\)/ });
+    const main = await screen.findByRole('button', { name: /Сверить совместимость \d+ товаров с помощью VITALO AI/ });
     expect(main.textContent).toContain('Получите разбор совместимости и режим приёма за несколько секунд');
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(screen.queryByText(/у специалиста|специалиста лично/)).toBeNull();
@@ -97,10 +100,10 @@ describe('3.8 VITALO AI in the cart', () => {
     sessionStorage.clear();
     mock(compat(), ai({ consent: false }));
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /Проверить совместимость \(VITALO AI\)/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Сверить совместимость \d+ товаров с помощью VITALO AI/ }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Перед началом' })).getByRole('button', { name: 'Закрыть' }));
     expect(await screen.findByRole('button', { name: /Спросить специалиста лично/ })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Проверить совместимость \(VITALO AI\)/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Сверить совместимость \d+ товаров с помощью VITALO AI/ })).toBeNull();
     expect(posts('/compat/ai/check')).toBe(0);
     fireEvent.click(screen.getByRole('button', { name: /Проверить с VITALO AI/ }));
     expect(screen.getByRole('dialog', { name: 'Перед началом' })).toBeTruthy();
@@ -110,7 +113,7 @@ describe('3.8 VITALO AI in the cart', () => {
   it('first time: the consent, then the check; the card: navy title, badge, times, medicine lines', async () => {
     mock(compat(), ai({ consent: false }), { check: { status: 200, body: ai({ result: 'ai', left_today: 0, answer: answer() }) } });
     show();
-    fireEvent.click(await screen.findByRole('button', { name: /Проверить совместимость \(VITALO AI\)/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Сверить совместимость \d+ товаров с помощью VITALO AI/ }));
     const dialog = screen.getByRole('dialog', { name: 'Перед началом' });
     expect(dialog.textContent).toContain('не ставит диагнозы и не заменяет консультацию врача');
     expect(dialog.textContent).toContain('Нажимая «Я согласен», вы принимаете Правила использования VITALO AI и Политику конфиденциальности.');
@@ -128,7 +131,7 @@ describe('3.8 VITALO AI in the cart', () => {
     expect(card.textContent).toContain('минимум на 4 часа');
     expect(card.textContent).toContain('Если принимаете лекарства — уточните у врача');
     expect(card.textContent).toContain('Не является медицинской консультацией');
-    expect(screen.queryByRole('button', { name: /Проверить совместимость \(VITALO AI\)/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Сверить совместимость \d+ товаров с помощью VITALO AI/ })).toBeNull();
     // «Спросить специалиста лично» inside the answer opens the 3.4 sheet
     fireEvent.click(within(card).getByRole('button', { name: 'Спросить специалиста лично' }));
     expect(screen.getByRole('dialog', { name: 'Проверить совместимость у специалиста' })).toBeTruthy();
@@ -167,7 +170,7 @@ describe('3.8 VITALO AI in the cart', () => {
     mock(compat(), ai(), { check: { status: 200, body: ai({ result: 'ai', answer: answer({ overlaps: [], overlap_text: null, drugs: [] }) }) } });
     show();
     fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
-    expect(await screen.findByText('VITALO AI анализирует корзину…')).toBeTruthy();
+    expect(await screen.findByText('Сверяю 2 товара…')).toBeTruthy();
     for (const step of ['Сверяем вещества и формы в товарах…', 'Ищем повторы веществ в разных товарах…', 'Проверяем правила сочетаний VITALO…', 'Составляем режим приёма: утро / вечер…']) {
       expect(screen.getByText(step)).toBeTruthy();
     }
@@ -192,7 +195,7 @@ describe('3.8 VITALO AI in the cart', () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
     expect(screen.getByText(/Бесплатная AI-проверка доступна 1 раз в день/)).toBeTruthy();
-    expect(screen.queryByText('VITALO AI анализирует корзину…')).toBeNull();
+    expect(screen.queryByText('Сверяю 2 товара…')).toBeNull();
     expect(posts('/compat/ai/check')).toBe(0);
     fireEvent.click(screen.getByRole('button', { name: 'Спросить специалиста лично' }));
     expect(screen.getByRole('dialog', { name: 'Проверить совместимость у специалиста' })).toBeTruthy();
@@ -225,7 +228,7 @@ describe('3.8 VITALO AI in the cart', () => {
   it('Uzbek: the button, the consent and «Roziman» fit the texts of the spec', async () => {
     mock(compat(), ai({ consent: false }));
     show('uz');
-    fireEvent.click(await screen.findByRole('button', { name: /Moslikni tekshirish \(VITALO AI\)/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /ta mahsulot mosligini VITALO AI bilan tekshirish/ }));
     const dialog = screen.getByRole('dialog', { name: 'Boshlashdan oldin' });
     expect(dialog.textContent).toContain('«Roziman» tugmasini bosish orqali siz VITALO AI dan foydalanish qoidalari va Maxfiylik siyosatini qabul qilasiz.');
     expect(within(dialog).getByRole('button', { name: 'Roziman' })).toBeTruthy();
@@ -238,7 +241,7 @@ describe('Шаг 0а: VITALO AI first, the result only by the tap, the specialis
   it('an answer is ready for this cart, but the block stays folded until it is tapped', async () => {
     mock(compat(), ai({ cached: true, answer: answer(), specialist: spec }));
     show();
-    expect(await screen.findByRole('button', { name: /Проверить совместимость \(VITALO AI\)/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Сверить совместимость \d+ товаров с помощью VITALO AI/ })).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Разбор совместимости VITALO AI' })).toBeNull();
     expect(screen.queryByText(spec.text)).toBeNull();
     expect(screen.queryByText(/Есть ответ специалиста VITALO/)).toBeNull();

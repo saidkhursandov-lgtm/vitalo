@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
-import { useI18n, type MessageKey } from '../lib/i18n';
+import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import type { AiAnswer, AiState, CompatVerdict } from '../lib/types';
 import { AlertIcon, CheckIcon, ChevronIcon, CloseIcon, InfoIcon, MoonIcon, ShieldIcon, SparkIcon, SunIcon } from './Icons';
 
@@ -17,6 +17,47 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 type Note = 'limit' | 'fallback' | 'unavailable' | 'failed';
+
+/** D-70: a product of the cart for the thumbnails of the block. */
+export interface AiCartItem {
+  product_id: string;
+  name: string;
+  image_url: string | null;
+}
+
+/** D-70: the set checked last in this app session — the same set shows its answer again, another one says «изменилась». */
+const CHECKED_KEY = 'vitalo.ai-checked';
+/** D-70: «Скрыть» is remembered on the phone. */
+const FOLDED_KEY = 'vitalo.ai-folded';
+const readStore = (store: () => Storage, key: string) => {
+  try {
+    return store().getItem(key);
+  } catch {
+    return null;
+  }
+};
+const writeStore = (store: () => Storage, key: string, value: string | null) => {
+  try {
+    if (value === null) store().removeItem(key);
+    else store().setItem(key, value);
+  } catch {
+    // storage blocked: the choice lives until the screen is left
+  }
+};
+const session = () => sessionStorage;
+const local = () => localStorage;
+
+/** «Сверяю 1 товар / 2 товара / 5 товаров». */
+export function goodsAcc(n: number, lang: 'ru' | 'uz'): string {
+  if (lang === 'uz') return 'mahsulot';
+  return { one: 'товар', few: 'товара', many: 'товаров' }[pluralForm(n)];
+}
+
+/** «3 товаров», «21 товара» (after «совместимость»); Uzbek has no plural after a number. */
+export function goodsWord(n: number, lang: 'ru' | 'uz'): string {
+  if (lang === 'uz') return 'mahsulot';
+  return pluralForm(n) === 'one' ? 'товара' : 'товаров';
+}
 type Tone = 'green' | 'yellow' | 'red';
 
 /**
@@ -51,6 +92,9 @@ export function AiCompat({
   onRefuse,
   askConsent = false,
   below,
+  setKey = '',
+  items = [],
+  onChat,
 }: {
   state: AiState;
   products: string[];
@@ -62,13 +106,21 @@ export function AiCompat({
   /** open the consent at once («Проверить с VITALO AI» after a refusal) */
   askConsent?: boolean;
   below?: ReactNode;
+  /** D-70: the set of the cart — «Корзина изменилась — сверить снова» and the answer kept for the same set */
+  setKey?: string;
+  /** D-70: thumbnails in the block and in the analysis */
+  items?: AiCartItem[];
+  /** D-70: «Спросить VITALO AI о корзине» */
+  onChat?: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [phase, setPhase] = useState<'idle' | 'consent' | 'checking'>(askConsent ? 'consent' : 'idle');
   const [note, setNote] = useState<Note | null>(null);
   const [ms, setMs] = useState(AI_MIN_MS.value);
   // Шаг 0а: the result appears only after the tap, on this screen
-  const [shown, setShown] = useState(false);
+  const checked = readStore(session, CHECKED_KEY);
+  const [shown, setShown] = useState(() => !!setKey && checked === setKey && !!state.answer);
+  const changed = !!setKey && !!checked && checked !== setKey;
 
   const run = async (next0: AiState = state) => {
     setNote(null);
@@ -93,13 +145,23 @@ export function AiCompat({
     if (failed) setNote(failed);
     if (next) {
       onChange(next);
-      if (next.answer || (next.result === 'instant' && next.specialist)) setShown(true);
+      if (next.answer || (next.result === 'instant' && next.specialist)) {
+        setShown(true);
+        if (setKey) writeStore(session, CHECKED_KEY, setKey);
+      }
       if (next.result === 'specialist') setNote('fallback');
       if (next.result === 'unavailable') setNote('unavailable');
     }
   };
 
   const one = products.length === 1;
+  const n = products.length;
+  const title = one ? t('ai.checkOne') : changed ? t('ai.recheck') : t('ai.checkN', { n, goods: goodsWord(n, lang) });
+  const chat = onChat && (
+    <button type="button" className="ai-chat-btn" onClick={onChat}>
+      <SparkIcon width={16} height={16} aria-hidden /> {t(one ? 'ai.chatOne' : 'ai.chat')}
+    </button>
+  );
   const ask = canAskSpecialist && (
     <button type="button" className="link ai-ask" onClick={onAsk}>
       {t('ai.askLive')}
@@ -110,26 +172,30 @@ export function AiCompat({
   return (
     <div className="ai-compat">
       {phase === 'checking' ? (
-        <AiProgress ms={ms} />
+        <AiProgress ms={ms} items={items} count={n} />
       ) : shown && state.answer ? (
         <>
           <AiAnswerCard answer={state.answer} ask={ask} specialist={specialist} />
+          {chat}
           {below}
         </>
       ) : shown && state.specialist ? (
         // the AI could not answer and a saved specialist answer was given at once
         <SpecialistAnswer answer={state.specialist} />
       ) : (
-        <section className="ai-box">
+        <section className="ai-box ai-hero">
           <button type="button" className="ai-box-main" onClick={() => (state.consent ? void run() : setPhase('consent'))}>
             <span className="ai-box-text">
-              <strong>
-                <SparkIcon width={16} height={16} aria-hidden /> {t(one ? 'ai.checkOne' : 'ai.check')}
-              </strong>
+              <span className="ai-hero-tag">
+                <SparkIcon width={14} height={14} aria-hidden /> VITALO AI
+              </span>
+              <strong>{title}</strong>
               <span>{t('ai.sub')}</span>
+              {items.length > 0 && <Thumbs items={items} />}
             </span>
             <ChevronIcon className="ask-chevron" width={20} height={20} aria-hidden />
           </button>
+          {chat}
           {note && (
             <div className={`ai-note${note === 'fallback' ? ' is-info' : ''}`} role="status">
               {note === 'fallback' ? <InfoIcon width={18} height={18} aria-hidden /> : <AlertIcon width={18} height={18} aria-hidden />}
@@ -183,9 +249,26 @@ export function SpecialistBox({ onAsk, onTryAi }: { onAsk: () => void; onTryAi?:
   );
 }
 
-/** A navy header, a soft shimmer and 4 steps ticked in turn; with reduced motion — all steps at once, no shimmer. */
-function AiProgress({ ms }: { ms: number }) {
-  const { t } = useI18n();
+/** D-70: the products of the cart in a row; `lit` — the one being checked now. */
+function Thumbs({ items, lit = -1 }: { items: AiCartItem[]; lit?: number }) {
+  return (
+    <span className="ai-thumbs" aria-hidden>
+      {items.slice(0, 6).map((p, i) => (
+        <span key={p.product_id} className={`ai-thumb${i === lit ? ' is-lit' : ''}`}>
+          {p.image_url ? <img src={p.image_url} alt="" width={36} height={36} loading="lazy" decoding="async" /> : <span>{p.name.slice(0, 1)}</span>}
+        </span>
+      ))}
+      {items.length > 6 && <span className="ai-thumb ai-thumb-more">+{items.length - 6}</span>}
+    </span>
+  );
+}
+
+/**
+ * A navy header, a soft shimmer and 4 steps ticked in turn; with reduced motion — all steps at once, no shimmer.
+ * D-70: «Сверяю 3 товара…» and the products light up in turn.
+ */
+function AiProgress({ ms, items = [], count = 0 }: { ms: number; items?: AiCartItem[]; count?: number }) {
+  const { t, lang } = useI18n();
   const still = reducedMotion();
   const [done, setDone] = useState(still ? STEPS.length : 0);
   useEffect(() => {
@@ -194,12 +277,23 @@ function AiProgress({ ms }: { ms: number }) {
     const id = setInterval(() => setDone((d) => Math.min(STEPS.length, d + 1)), every);
     return () => clearInterval(id);
   }, [ms, still]);
+  const [lit, setLit] = useState(0);
+  useEffect(() => {
+    if (still || items.length < 2) return;
+    const id = setInterval(() => setLit((i) => (i + 1) % items.length), Math.max(250, ms / Math.max(items.length, 1)));
+    return () => clearInterval(id);
+  }, [ms, still, items.length]);
   return (
     <section className={`ai-progress${still ? '' : ' is-moving'}`} role="status" aria-live="polite">
       <header className="ai-head">
         <SparkIcon width={16} height={16} aria-hidden />
-        <h3>{t('ai.progress')}</h3>
+        <h3>{count > 1 ? t('ai.checking', { n: count, goods: goodsAcc(count, lang) }) : t('ai.progress')}</h3>
       </header>
+      {items.length > 1 && (
+        <div className="ai-progress-thumbs">
+          <Thumbs items={items} lit={still ? -1 : lit} />
+        </div>
+      )}
       <ol className="ai-steps">
         {STEPS.map((key, i) => (
           <li key={key} className={i < done ? 'is-done' : i === done ? 'is-now' : ''}>
@@ -262,6 +356,11 @@ function AiAnswerCard({ answer, ask, specialist }: { answer: AiAnswer; ask: Reac
     track('compat_view', { verdict: answer.verdict, source: 'ai', changed: false });
   }, [answer.answer_id, answer.verdict]);
   const badge = aiBadge(answer);
+  const [folded, setFolded] = useState(() => readStore(local, FOLDED_KEY) === '1');
+  const fold = () => {
+    writeStore(local, FOLDED_KEY, folded ? null : '1');
+    setFolded(!folded);
+  };
   return (
     <section className="ai-answer" aria-label={t('ai.answerTitle')}>
       <header className="ai-head">
@@ -269,6 +368,11 @@ function AiAnswerCard({ answer, ask, specialist }: { answer: AiAnswer; ask: Reac
         <h3>{t('ai.answerTitle')}</h3>
         <span className={`ai-verdict is-${badge.tone}`}>{t(badge.key)}</span>
       </header>
+      <button type="button" className="ai-fold" aria-expanded={!folded} onClick={fold}>
+        <span>{t(folded ? 'ai.more' : 'ai.hide')}</span>
+        <ChevronIcon className={`ai-fold-chevron${folded ? '' : ' is-open'}`} width={16} height={16} aria-hidden />
+      </button>
+      {!folded && (
       <div className="ai-answer-body">
         <p className="ai-answer-text">{answer.text}</p>
         {answer.overlaps.length > 0 && (
@@ -317,6 +421,7 @@ function AiAnswerCard({ answer, ask, specialist }: { answer: AiAnswer; ask: Reac
         {specialist && <SpecialistLink answer={specialist} />}
         {ask}
       </div>
+      )}
     </section>
   );
 }

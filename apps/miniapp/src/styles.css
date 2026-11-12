@@ -1399,6 +1399,44 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .ai-box-text strong svg { flex: none; }
 .ai-box-text > span { font-size: 12px; line-height: 1.35; color: var(--muted); }
 .ai-box > .ai-ask { margin: -6px 0 2px 14px; }
+/* D-70: VITALO AI at the top of the cart — a navy card, the products of the cart as thumbnails */
+.ai-hero { background: var(--primary); border-color: var(--primary); }
+.ai-hero .ai-box-main { color: var(--on-primary); padding: 14px 12px 12px 14px; }
+.ai-hero .ai-box-main:active { background: rgb(255 255 255 / 0.08); }
+.ai-hero .ai-box-text { gap: 5px; }
+.ai-hero .ai-box-text strong { font-size: 16px; line-height: 1.3; color: var(--on-primary); }
+.ai-hero .ai-box-text > span { color: rgb(255 255 255 / 0.85); }
+.ai-hero .ai-box-text > .ai-hero-tag { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; padding: 2px 8px; border-radius: 999px; background: rgb(255 255 255 / 0.14); color: var(--on-primary); font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; }
+.ai-hero .ask-chevron { color: var(--on-primary); }
+.ai-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.ai-thumb {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; overflow: hidden;
+  border-radius: 8px; background: var(--surface); border: 2px solid transparent; color: var(--primary-text); font-size: 13px; font-weight: 700;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.ai-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.ai-thumb.is-lit { border-color: var(--accent); transform: scale(1.08); }
+.ai-thumb-more { font-size: 12px; }
+.ai-progress-thumbs { padding: 10px 12px 0; }
+.ai-progress-thumbs .ai-thumb { border-color: var(--ai-body-border); }
+.ai-progress-thumbs .ai-thumb.is-lit { border-color: var(--primary); }
+@media (prefers-reduced-motion: reduce) { .ai-thumb { transition: none; } .ai-thumb.is-lit { transform: none; } }
+.ai-chat-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 24px); min-height: var(--tap); margin: 0 12px 12px;
+  border: 1px solid var(--ai-box-border); border-radius: var(--radius-sm); background: var(--surface); color: var(--primary-text);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ai-chat-btn:active { background: var(--primary-soft); }
+.ai-compat > .ai-chat-btn { width: 100%; margin: 8px 0 0; }
+/* D-70: «Подробнее / Скрыть» under the header of the answer */
+.ai-fold {
+  display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 40px; padding: 0 12px;
+  border: 0; border-bottom: 1px solid var(--ai-body-border); background: var(--surface); color: var(--primary-text);
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ai-fold[aria-expanded='false'] { border-bottom: 0; }
+.ai-fold-chevron { transform: rotate(90deg); transition: transform 0.2s; }
+.ai-fold-chevron.is-open { transform: rotate(-90deg); }
 .ai-ask {
   display: inline-flex; align-items: center; gap: 4px; min-height: var(--tap); padding: 0; border: 0; background: none;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--primary-text); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;

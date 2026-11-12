@@ -47,6 +47,8 @@ function mock(goalReply: { status: number; body: object } = { status: 200, body:
   });
 }
 beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
   AI_MIN_MS.value = 0;
   AI_CACHED_MS.value = 0;
 });
@@ -69,6 +71,35 @@ async function openAnswer(lang: Lang = 'ru') {
   fireEvent.click(await screen.findByRole('button', { name: /VITALO AI/ }));
   await screen.findByRole('region', { name: lang === 'uz' ? 'VITALO AI moslik tahlili' : 'Разбор совместимости VITALO AI' });
 }
+
+describe('D-70: VITALO AI at the top of the cart', () => {
+  it('the title counts the products; «Скрыть» folds the answer and is remembered; another set — «сверить снова»', async () => {
+    mock();
+    await openAnswer();
+    const card = screen.getByRole('region', { name: 'Разбор совместимости VITALO AI' });
+    expect(card.textContent).toContain('Конфликтов не найдено');
+    fireEvent.click(within(card).getByRole('button', { name: 'Скрыть' }));
+    expect(within(card).queryByText(answer.text)).toBeNull();
+    expect(localStorage.getItem('vitalo.ai-folded')).toBe('1');
+    fireEvent.click(within(card).getByRole('button', { name: 'Подробнее' }));
+    expect(within(card).getByText(answer.text)).toBeTruthy();
+    expect(sessionStorage.getItem('vitalo.ai-checked')).toBe('p1,p2');
+    cleanup();
+
+    sessionStorage.setItem('vitalo.ai-checked', 'p1,p9');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <I18nProvider lang="ru" setLang={() => undefined}>
+            <CompatBlock productIds={['p1', 'p2']} />
+          </I18nProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('button', { name: /Корзина изменилась — сверить снова/ })).toBeTruthy();
+  });
+});
 
 describe('Шаг 0б: «Задать вопрос VITALO AI по корзине» (D-68, D-69)', () => {
   it('appears only under the AI answer and is folded; no text field anywhere', async () => {

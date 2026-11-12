@@ -198,6 +198,9 @@ export function Cart() {
       <CartWarnings cart={data} warnings={warnings} />
       {data.cross_border && <UsaWindowNotice window={data.cross_border} />}
 
+      {/* D-70: VITALO AI at the top of the cart */}
+      <CompatBlock productIds={data.items.map((l) => l.product_id)} items={data.items.map((l) => ({ product_id: l.product_id, name: shortNameOf(l, lang), image_url: l.image_url ?? null }))} />
+
       <ul className="cart-lines">
         {data.items.map((l) => (
           <li key={l.product_id} className={`cart-line ${l.status === 'unavailable' ? 'is-out' : ''}`}>
@@ -233,8 +236,6 @@ export function Cart() {
           </li>
         ))}
       </ul>
-
-      <CompatBlock productIds={data.items.map((l) => l.product_id)} />
 
       <section className="card">
         <h2>{t('cart.deliveryTo')}</h2>
