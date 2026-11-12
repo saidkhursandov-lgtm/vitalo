@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChannelTabs } from '../components/ChannelTabs';
 import { Badge, ErrorBox, Loading, OrderStatus, PageHead, Pagination } from '../components/ui';
+import { ExportButton } from '../components/ExportButton';
 import { api, qs } from '../lib/api';
 import { cancelLabel, dateTime, money, ORDER_STATUS, PAYMENT_METHOD, PAYMENT_STATUS, YANDEX_STATUS, type CancelInfo } from '../lib/format';
 import { ShipBy } from './YandexOrders';
@@ -108,6 +109,7 @@ export function AllOrders() {
     <>
       <PageHead title="Заказы">
         <ChannelTabs current="all" />
+        <ExportButton path={`/staff/export/orders${qs({ ...f, page_size: undefined })}`} />
       </PageHead>
       <div className="filters">
         <input placeholder="Номер заказа, телефон или имя" value={text} onChange={(e) => setText(e.target.value)} />

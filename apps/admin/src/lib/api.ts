@@ -74,6 +74,28 @@ export async function apiBlob(path: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Аудит 2.14: a file from the API (CSV export) saved by the browser under the name the API gives. */
+export async function downloadFile(path: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { headers: { 'x-vitalo-admin': '1', ...(token && { authorization: `Bearer ${token}` }) } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      setToken(null);
+      onUnauthorized?.();
+    }
+    throw new ApiError(res.status, body.code, body);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'vitalo.csv';
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Idempotency-Key for one attempt (randomUUID needs https or localhost; the fallback is unique enough). */
 export const newKey = () => (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, ErrorBox, Loading, PageHead } from '../components/ui';
+import { ExportButton } from '../components/ExportButton';
 import { api, qs } from '../lib/api';
 import { money, ruDate } from '../lib/format';
 
@@ -87,6 +88,7 @@ export function Analytics() {
   return (
     <>
       <PageHead title="Аналитика">
+        {ok && <ExportButton path={`/staff/export/product-analytics${qs({ ...period, channel })}`} label="Товары — для Excel" />}
         <div className="segmented">
           {(['this', 'last', 'custom'] as const).map((p) => (
             <button key={p} className={preset === p ? 'is-on' : ''} onClick={() => setPreset(p)}>

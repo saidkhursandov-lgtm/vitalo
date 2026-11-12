@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, Pagination, toInt } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { useTab } from '../lib/useTab';
+import { ExportButton } from '../components/ExportButton';
 import { useSession } from '../lib/auth';
 import { CONDITION, dateTime, money, MOVEMENT } from '../lib/format';
 import { CloseIcon } from '../components/Icons';
@@ -38,6 +39,7 @@ const TABS = [
 
 export function Inventory() {
   const { can } = useSession();
+  const [params] = useSearchParams();
   const tabs = TABS.filter(([, , perm]) => !perm || can(perm));
   const [tab, setTab] = useTab(
     tabs.map(([t]) => t),
@@ -54,6 +56,7 @@ export function Inventory() {
             </button>
           ))}
         </div>
+        {tab === 'stock' && <ExportButton path={`/staff/export/stock${qs({ q: params.get('q'), low_only: params.get('low_only') === 'true' || undefined })}`} />}
       </PageHead>
       {tab === 'stock' ? (
         <Stock editable={can('inventory.edit')} />

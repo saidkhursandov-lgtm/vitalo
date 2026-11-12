@@ -17,6 +17,7 @@ import { AdminProductsController, AdminProductsService } from './admin-products'
 import { AdminPurchasesController, AdminPurchasesService } from './admin-purchases';
 import { AdminWaitlistController, AdminWaitlistService } from './admin-waitlist';
 import { AdminSearchController, AdminSearchService } from './admin-search';
+import { AdminExportController, AdminExportService } from './admin-export';
 import { AdminPromoCodesController, AdminPromoCodesService } from './admin-promo-codes';
 import { AdminCampaignsController, AdminCampaignsService } from './admin-campaigns';
 import { PromoModule } from '../promo/promo.module';
@@ -96,6 +97,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminLegalController,
     AdminWaitlistController,
     AdminSearchController,
+    AdminExportController,
     AdminPromoCodesController,
     AdminCampaignsController,
     PromoController,
@@ -152,6 +154,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminSettingsService,
     AdminWaitlistService,
     AdminSearchService,
+    AdminExportService,
     PromoService,
     ReceiptsService,
     CompatService,

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { useTab } from '../lib/useTab';
+import { ExportButton } from '../components/ExportButton';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
 import { api, qs } from '../lib/api';
 import { money, ruDate } from '../lib/format';
@@ -93,6 +94,7 @@ function Expenses() {
         <label className="muted small">
           по <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} aria-label="Расходы по" />
         </label>
+        <ExportButton path={`/staff/export/expenses${qs(f)}`} />
         <select value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value })} aria-label="Категория">
           <option value="">Все категории</option>
           {categories.data.map((c) => (
