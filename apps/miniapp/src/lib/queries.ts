@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
-import type { Lang } from './types';
+import type { Lang, BonusAccount } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
 import type { Address, AiState, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo, SupportThread } from './types';
 
@@ -177,6 +177,21 @@ export function useCartPromo(city: CityRef | null, lang: Lang) {
   };
   return { apply, remove };
 }
+
+/** 3.10-А: «Списать бонусы» in the cart (kept on the cart; the server counts the amount). */
+export function useCartBonus(city: CityRef | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (use: boolean) => api<Cart>('/cart/bonus', { method: 'POST', body: { use, ...city } }),
+    onSuccess: (cart) => {
+      applyCart(client, cart);
+      if (city) client.setQueryData(['cart', city], cart);
+    },
+  });
+}
+
+/** 3.10-А: the balance, when it burns, the rules and the history. */
+export const useBonusAccount = () => useQuery({ queryKey: ['bonus'], queryFn: () => api<BonusAccount>('/bonus'), staleTime: 30_000 });
 
 // ---------- favorites ----------
 

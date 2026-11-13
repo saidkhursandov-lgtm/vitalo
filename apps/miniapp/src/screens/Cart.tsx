@@ -13,8 +13,9 @@ import { MapPickerButton } from '../components/MapPicker';
 import { OrderTotals } from '../components/OrderItems';
 import { formLabel, money, nameOf, shortNameOf } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import { useCart, useCartActions, useCartMapPick, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
+import { useCart, useCartActions, useCartBonus, useCartMapPick, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
 import { PromoBox } from '../components/Promo';
+import { BonusSwitch, CashbackLine } from '../components/Bonus';
 import { CompatBlock } from '../components/Compat';
 import { UsaBadge, UsaWindowNotice } from '../components/CrossBorder';
 import type { Cart as CartData, CartWarning, DeliveryQuote, Lang } from '../lib/types';
@@ -165,6 +166,7 @@ export function Cart() {
   const cart = useCart(selected);
   const { setQty, remove } = useCartActions();
   const promo = useCartPromo(selected, lang);
+  const bonus = useCartBonus(selected);
   // The API reports each warning once (then stores the correction). Any screen may have loaded the cart
   // first (cards with quick add do), so warnings are kept in a shared store until seen here.
   const client = useQueryClient();
@@ -190,7 +192,7 @@ export function Cart() {
   const district = region?.cities.find((c) => c.id === selected?.city_id);
   const placeLine = region && district ? `${nameOf(region, lang)}, ${nameOf(district, lang)}` : null;
   // Amount to pay: goods after discounts + delivery once the city is known (updates with every change).
-  const payable = data.goods_total_uzs - data.discount_total_uzs + (delivery?.cost_uzs ?? 0);
+  const payable = data.goods_total_uzs - data.discount_total_uzs - (data.bonus_used_uzs ?? 0) + (delivery?.cost_uzs ?? 0);
 
   return (
     <div className="page cart">
@@ -276,6 +278,7 @@ export function Cart() {
 
       <section className="card summary">
         <PromoBox applied={data.promo} place="cart" onApply={promo.apply} onRemove={promo.remove} />
+        <BonusSwitch bonus={data.bonus} busy={bonus.isPending} onToggle={(use) => bonus.mutate(use)} />
         <OrderTotals
           goods={data.goods_list_total_uzs ?? data.goods_total_uzs}
           goodsCount={data.items_count}
@@ -283,10 +286,12 @@ export function Cart() {
           saleHint={!!data.promo && data.items.some((i) => (i.campaign?.discount_pct ?? 0) > 15)}
           discount={data.discount_total_uzs}
           promo={data.promo}
+          bonus={data.bonus_used_uzs}
           delivery={delivery ? (delivery.is_free ? 0 : delivery.cost_uzs) : null}
           firstOrder={!!delivery?.first_order}
           total={payable}
         />
+        <CashbackLine bonus={data.bonus} />
       </section>
 
       <StickyAction>

@@ -269,6 +269,8 @@ export interface ShopInfo {
   delivery_terms: { tashkent: DaysRange | null; regions: DaysRange | null };
   home_content?: HomeContent;
   bonus_teaser?: { enabled: boolean; text: LocalizedText };
+  /** 3.10-А: VITALO Bonus — «+N сум на бонусный счёт» on the product card */
+  bonus?: { enabled: boolean; cashback_pct: number; max_spend_pct: number };
   /** 2.4: «Как VITALO отбирает добавки» (Настройки → Главная → Манифест). */
   manifest?: Manifest;
   /** Release 1 switches from Настройки → Оплата. */
@@ -342,6 +344,36 @@ export interface Cart {
   campaigns?: CampaignLine[];
   /** D-60: the cart has lines from the USA — the promised window counted from today */
   cross_border?: CrossBorderWindow | null;
+  /** 3.10-А */
+  bonus?: BonusView;
+  bonus_used_uzs?: number;
+}
+
+/** 3.10-А: why bonuses cannot be spent on this order. */
+export type BonusBlock = 'disabled' | 'empty' | 'promo' | 'big_sale' | 'margin';
+
+/** 3.10-А: VITALO Bonus of the cart / checkout (computed on the server). */
+export interface BonusView {
+  balance_uzs: number;
+  available_uzs: number;
+  use: boolean;
+  used_uzs: number;
+  blocked: BonusBlock | null;
+  cashback_pct: number;
+  cashback_uzs: number;
+  max_spend_pct: number;
+}
+
+export type BonusOp = 'purchase' | 'referral' | 'promo' | 'manual_add' | 'manual_subtract' | 'redemption' | 'reversal' | 'expire' | 'review';
+
+/** 3.10-А: GET /bonus — «VITALO Bonus» in the profile. */
+export interface BonusAccount {
+  balance_uzs: number;
+  /** YYYY-MM-DD (Tashkent): the whole balance burns this day */
+  expires_on: string | null;
+  last_activity_at: string | null;
+  rules: { enabled: boolean; cashback_pct: number; max_spend_pct: number; lifetime_days: number; review_uzs: number; review_photo_uzs: number };
+  history: { id: string; op: BonusOp; amount_uzs: number; balance_after_uzs: number; order_id: string | null; order_number: string | null; created_at: string }[];
 }
 
 /** D-61: «из США» (foreign, from_ru / from_uz) or a local supplier; older answers without kind — from the USA. */
@@ -530,6 +562,8 @@ export interface OrderPreview {
   promo_rejection?: PromoRejection | null;
   /** 3.7 */
   campaigns?: CampaignLine[];
+  /** 3.10-А */
+  bonus?: BonusView;
   problems: { code: string; product_id: string; requested: number; available: number }[];
   can_place: boolean;
   /** «Оплата при получении» is offered only for the city of Tashkent and up to the limit. */

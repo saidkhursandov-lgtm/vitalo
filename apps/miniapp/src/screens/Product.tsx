@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ProductCashback } from '../components/Bonus';
 import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
@@ -94,6 +95,7 @@ export function Product() {
       {substance && <p className="product-sub">{substance}</p>}
       <div className="price-line">
         <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" campaign={p.campaign} />
+        <ProductCashback price={p.price_uzs} />
         {p.in_stock ? (
           <div className="stock is-in">{t('product.inStock')}</div>
         ) : p.cross_border ? (

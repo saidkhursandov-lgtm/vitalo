@@ -24,6 +24,7 @@ import { PaymePayment } from './screens/PaymePayment';
 import { SupportList, SupportThreadScreen } from './screens/Support';
 import { Product } from './screens/Product';
 import { Profile } from './screens/Profile';
+import { BonusScreen } from './screens/Bonus';
 import { Search } from './screens/Search';
 
 function NotFound() {
@@ -103,6 +104,7 @@ function Shop() {
         <Route path="support" element={<SupportList />} />
         <Route path="support/:id" element={<SupportThreadScreen />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="bonus" element={<BonusScreen />} />
         <Route path="profile/addresses" element={<Addresses />} />
         <Route path="profile/addresses/:id" element={<AddressEdit />} />
         <Route path="legal/:code" element={<LegalDocument />} />

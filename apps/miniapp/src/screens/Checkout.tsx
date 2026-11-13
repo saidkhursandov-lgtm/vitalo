@@ -9,8 +9,9 @@ import { useUser } from '../lib/auth';
 import { money, normalizePhone, prettyPhone } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { createIdempotencyKeys } from '../lib/idempotency';
-import { useAddressActions, useAddresses, useCartMapPick, useCartPromo, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
+import { useAddressActions, useAddresses, useCartMapPick, useCartPromo, useCartBonus, useCheckoutDefaults, useDeliveryCity, useRegions, useShopTexts, type CityRef } from '../lib/queries';
 import { PromoBox, type PromoApplyResult } from '../components/Promo';
+import { BonusSwitch, CashbackLine } from '../components/Bonus';
 import { canRequestPhone, haptic, requestPhone } from '../lib/telegram';
 import { payPath } from '../lib/shop';
 import { track } from '../lib/analytics';
@@ -115,9 +116,11 @@ export function Checkout() {
       ? { region_id: form.region_id, city_id: form.city_id }
       : null;
 
-  const promoBody = buyId ? { promo_code: buyPromo ?? '' } : {};
+  // 3.10-А: «Купить сейчас» keeps the bonus switch here; the cart checkout uses the switch of the cart
+  const [buyBonus, setBuyBonus] = useState(false);
+  const promoBody = buyId ? { promo_code: buyPromo ?? '', use_bonus: buyBonus } : {};
   const preview = useQuery({
-    queryKey: ['preview', source, city, method, buyPromo],
+    queryKey: ['preview', source, city, method, buyPromo, buyBonus],
     queryFn: () => api<OrderPreview>('/orders/preview', { method: 'POST', body: { ...source, ...city, payment_method: method, ...promoBody } }),
     enabled: !!city,
     placeholderData: keepPreviousData, // no flicker of the payment options while the method or the address changes
@@ -162,6 +165,13 @@ export function Checkout() {
     setPromoNotice(null);
     if (buyId) return setBuyPromo(null);
     await cartPromo.remove();
+    await preview.refetch();
+  }
+
+  const cartBonus = useCartBonus(city);
+  async function toggleBonus(use: boolean) {
+    if (buyId) return setBuyBonus(use);
+    await cartBonus.mutateAsync(use);
     await preview.refetch();
   }
 
@@ -223,6 +233,8 @@ export function Checkout() {
       payment_method: method,
       // 3.3: exactly the code of the shown total ('' = none)
       promo_code: preview.data.promo?.code ?? '',
+      // 3.10-А: exactly the bonuses of the shown total
+      use_bonus: !!preview.data.bonus?.use,
       expected_total_uzs: preview.data.totals.total_uzs,
     };
     if (sending.current) return;
@@ -397,16 +409,19 @@ export function Checkout() {
               {p.skipped_unavailable.length > 0 && <p className="hint small">{t('checkout.skipped')}</p>}
               {promoNotice && <div className="notice notice-warn" role="alert">{promoNotice}</div>}
               <PromoBox applied={p.promo} place="checkout" onApply={applyPromo} onRemove={removePromo} />
+              <BonusSwitch bonus={p.bonus} busy={cartBonus.isPending || preview.isFetching} onToggle={(use) => void toggleBonus(use)} />
               <OrderTotals
                 goods={p.totals.goods_list_total_uzs ?? p.totals.goods_total_uzs}
                 campaigns={p.campaigns}
                 saleHint={!!p.promo && p.items.some((i) => (i.campaign?.discount_pct ?? 0) > 15)}
                 discount={p.totals.discount_total_uzs}
                 promo={p.promo}
+                bonus={p.totals.bonus_used_uzs}
                 delivery={p.totals.delivery_cost_uzs}
                 firstOrder={!!p.delivery.first_order}
                 total={p.totals.total_uzs}
               />
+              <CashbackLine bonus={p.bonus} />
               <FreeShippingProgress quote={p.delivery} />
               <OrderTerm window={p.cross_border} min={p.delivery.min_days} max={p.delivery.max_days} note={lang === 'uz' ? p.delivery.note_uz : p.delivery.note_ru} />
             </>

@@ -52,12 +52,14 @@ export function OrderItems({ items, note }: { items: OrderItemLine[]; note?: (it
  * Goods, the promo discount as its own line (3.3), delivery («Бесплатно» as an accent, the first-order or promo badge)
  * and a big «Итого». delivery null = city not chosen. `goods` is before the discount.
  */
-export function OrderTotals({ goods, goodsCount, discount = 0, promo, delivery, firstOrder = false, total, campaigns, saleHint = false }: {
+export function OrderTotals({ goods, goodsCount, discount = 0, promo, bonus = 0, delivery, firstOrder = false, total, campaigns, saleHint = false }: {
   /** 3.7: at regular prices when there are sale lines (they follow it) */
   goods: number;
   goodsCount?: number;
   discount?: number;
   promo?: { code: string; free_delivery: boolean } | null;
+  /** 3.10-А: bonuses spent on the order */
+  bonus?: number;
   delivery: number | null;
   firstOrder?: boolean;
   total: number;
@@ -81,6 +83,12 @@ export function OrderTotals({ goods, goodsCount, discount = 0, promo, delivery, 
         </div>
       )}
       {saleHint && <p className="hint small sale-hint">{t('promo.saleHint')}</p>}
+      {bonus > 0 && (
+        <div className="sum-row promo-row">
+          <span>{t('bonus.line')}</span>
+          <span className="promo-amount">−{money(bonus, lang)}</span>
+        </div>
+      )}
       {delivery != null && (
         <div className="sum-row">
           <span>

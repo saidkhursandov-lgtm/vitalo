@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
-import { BonusTeaser } from '../components/BonusTeaser';
+import { BonusCard } from '../components/Bonus';
 import { api } from '../lib/api';
 import { useUser } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
@@ -32,7 +32,8 @@ export function Profile() {
         </div>
       </div>
 
-      <BonusTeaser />
+      {/* 3.10-А: the real balance (the «Скоро» card while the programme is off and the balance is empty) */}
+      <BonusCard />
 
       {/* 2.2: no «Язык» block here — the language is switched with RU | UZ in the header (saved on the server). */}
 
