@@ -145,7 +145,10 @@ ${comment}`);
       for (const status of ['picking', 'handed_to_delivery', 'in_transit', 'delivered']) {
         await http().post(`/api/staff/orders/${o.id}/status`).set(bearer(manager)).send({ status }).expect(200);
       }
-      const rows = await queued({ chat_id: chatId });
+      const all = await queued({ chat_id: chatId });
+      // 3.10-А: the cashback message comes right after «Доставлен»
+      expect(all.map((r) => r.template).slice(-2)).toEqual(['order.delivered', 'bonus.accrued']);
+      const rows = all.filter((r) => r.category === 'order');
       expect(rows.map((r) => r.template)).toEqual(['order.accepted_pay', 'order.paid', 'order.picking', 'order.handed_to_delivery', 'order.in_transit', 'order.delivered']);
       expect(rows.every((r) => r.order_id === o.id && r.category === 'order')).toBe(true);
       expect(rows.every((r) => (r.payload as { lang: string }).lang === 'uz')).toBe(true);

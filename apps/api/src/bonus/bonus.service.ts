@@ -163,6 +163,7 @@ export class BonusService {
         category: 'bonus',
         payload: { order_number: order.order_number, lang, bonus_uzs: amount, balance_uzs: balance, open_path: '/bonus', open_button: 'bonus' },
         dedupKey: `${template}:${order.id}`,
+        at: new Date(Date.now() + 1000), // the worker sends by created_at: always after the status message
       });
 
     if (to === 'delivered') {

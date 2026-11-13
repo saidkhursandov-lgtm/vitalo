@@ -275,10 +275,11 @@ export class OrderLifecycleService {
       },
     });
     await this.settlePromo(tx, orderId, to);
-    // 3.10-А: cashback after «Доставлен», spent bonuses back after a cancellation, both reversed by a return
-    await this.bonus.onOrderStatus(tx, orderId, to);
     const shownReason = shown ?? (actor.type === 'staff' ? reason : actor.type === 'system' ? EXPIRED_REASON_CODE : null);
     await this.notifications.orderStatusChanged(tx, orderId, to, shownReason);
+    // 3.10-А: cashback after «Доставлен», spent bonuses back after a cancellation, both reversed by a return
+    // (after the status message: the customer reads «Доставлен», then «Начислено +N»)
+    await this.bonus.onOrderStatus(tx, orderId, to);
   }
 
   /**

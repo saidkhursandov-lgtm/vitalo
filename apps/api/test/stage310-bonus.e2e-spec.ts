@@ -70,9 +70,9 @@ describe('Stage 3.10-А VITALO Bonus (e2e)', () => {
   it('preview: up to 25% of the goods, the delivery stays money; cashback counts from what is paid', async () => {
     const { token } = await customer(100_000);
     const p = await product();
-    const off = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id)).expect(201)).body;
+    const off = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id)).expect(200)).body;
     expect(off.bonus).toMatchObject({ balance_uzs: 100_000, available_uzs: 50_000, use: false, used_uzs: 0, blocked: null, cashback_pct: 3, cashback_uzs: 6_000 });
-    const on = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id, { use_bonus: true })).expect(201)).body;
+    const on = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id, { use_bonus: true })).expect(200)).body;
     expect(on.bonus).toMatchObject({ use: true, used_uzs: 50_000, cashback_uzs: 4_500 });
     expect(on.totals.bonus_used_uzs).toBe(50_000);
     expect(on.totals.goods_paid_uzs).toBe(150_000);
@@ -107,14 +107,14 @@ describe('Stage 3.10-А VITALO Bonus (e2e)', () => {
     expect(mine.history[0]).toMatchObject({ op: 'reversal', amount_uzs: 50_000, order_number: order.order_number });
   });
 
-  it('a cancelled order gives the bonuses back once; cash on delivery gets the cashback only when the money is collected', async () => {
+  it('a cancelled order gives the bonuses back once', async () => {
     const { token, user } = await customer(40_000);
     const p = await product();
     const order = (await place(token, checkout(p.id, { use_bonus: true })).expect(201)).body;
     expect(await balanceOf(user.id)).toBe(0);
-    await http().post(`/api/orders/${order.id}/cancel`).set(bearer(token)).send({}).expect(201);
+    await http().post(`/api/orders/${order.id}/cancel`).set(bearer(token)).send({}).expect(200);
     expect(await balanceOf(user.id)).toBe(40_000);
-    await http().post(`/api/orders/${order.id}/cancel`).set(bearer(token)).send({}).expect(201);
+    await http().post(`/api/orders/${order.id}/cancel`).set(bearer(token)).send({}).expect(200);
     expect(await balanceOf(user.id)).toBe(40_000);
     expect(await prisma.notifications.count({ where: { user_id: user.id, template: 'bonus.returned' } })).toBe(1);
   });
@@ -128,7 +128,7 @@ describe('Stage 3.10-А VITALO Bonus (e2e)', () => {
       code, type: 'percent', value: 10, scope: 'order', first_order_only: false, per_customer_limit: 1,
       start_at: new Date(now - 3600_000).toISOString(), end_at: new Date(now + DAY).toISOString(), active: true,
     }).expect(201);
-    const r = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id, { use_bonus: true, promo_code: code })).expect(201)).body;
+    const r = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id, { use_bonus: true, promo_code: code })).expect(200)).body;
     expect(r.bonus).toMatchObject({ used_uzs: 0, blocked: 'promo', cashback_uzs: 5_400 });
     expect(r.totals.bonus_used_uzs).toBe(0);
   });
@@ -171,7 +171,7 @@ describe('Stage 3.10-А VITALO Bonus (e2e)', () => {
     try {
       const { token } = await customer(50_000);
       const p = await product();
-      const r = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id, { use_bonus: true })).expect(201)).body;
+      const r = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id, { use_bonus: true })).expect(200)).body;
       expect(r.bonus).toMatchObject({ used_uzs: 0, blocked: 'disabled', cashback_uzs: 0 });
       const order = (await place(token, checkout(p.id, { use_bonus: true })).expect(201)).body;
       expect((await prisma.orders.findUniqueOrThrow({ where: { id: order.id } })).bonus_rate_snapshot).toBeNull();

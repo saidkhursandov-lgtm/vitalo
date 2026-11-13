@@ -125,7 +125,7 @@ export class NotificationsService {
    */
   async toCustomer(
     db: Db,
-    m: { userId: string; chatId: bigint; template: TemplateName; payload: TemplatePayload; orderId?: string; productId?: string; category?: CentreCategory; kind?: 'service' | 'marketing'; dedupKey?: string },
+    m: { userId: string; chatId: bigint; template: TemplateName; payload: TemplatePayload; orderId?: string; productId?: string; category?: CentreCategory; kind?: 'service' | 'marketing'; dedupKey?: string; at?: Date },
   ): Promise<boolean> {
     const res = await db.notifications.createMany({
       data: [
@@ -139,6 +139,7 @@ export class NotificationsService {
           product_id: m.productId ?? null,
           category: m.category ?? (m.orderId ? 'order' : null),
           dedup_key: m.dedupKey ?? null,
+          ...(m.at && { created_at: m.at }),
         },
       ],
       skipDuplicates: true,
