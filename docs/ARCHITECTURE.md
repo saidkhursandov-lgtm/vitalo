@@ -68,6 +68,7 @@
 | VITALO AI (3.8) | `substances`, `product_substances`, `compat_rules`, `ai_requests` (поле `rejected_text`, 4.5: текст ответа модели, не показанный покупателю; миграция `20261125100000`), `ai_compat_answers`, `users.ai_consent_at` | справочник веществ и правила (в ответы идут только одобренные), журнал запросов к модели, кэш ответов AI; ничего не удаляется, только выключается или скрывается (миграция `20261109100000`) |
 | VITALO AI — переписка о корзине (D-70) | `ai_chats`, `ai_chat_messages`, `users.ai_chat_consent_at` | переписка покупателя с VITALO AI о корзине; срок хранения 12 месяцев по согласию, в юридических документах пока 30 дней — вопрос 143; миграция `20261128100000_ai_chats` (только добавляющая) |
 | VITALO Bonus (3.10-А, D-71) | `bonus_accounts`, `bonus_ledger` (новые значения `expire`, `review`; поля `last_activity_at`, `expiry_notified_for`), `carts.use_bonus` | миграция `20261129100000_bonus` (только добавляющая); сервис `BonusService` (журнал с ключами от повторов); API `GET /api/bonus`, `POST /api/cart/bonus`; сгорание через 90 дней с напоминанием; выложено 13.11 (`release-bonus`, `03ded07`), миграция применена на боевой базе |
+| Проверенные отзывы (3.10-Б, D-71) | `reviews`, `review_media`; поля `users.review_requests`, `orders.review_asked_at`, `products.reviews_count`, `products.rating_sum` | миграция `20261130100000_reviews` (только добавляющая); фото до публикации — в закрытой папке `REVIEWS_DIR`; готово локально 13.11, на сервер не выложено |
 | Лист ожидания | `product_waitlist` | товар и покупатель (уникально); `notified_at` — когда бот написал «снова в наличии» (2.4, миграция `20261031100000`, только добавляющая; на сервере с 31.10); `cancelled_at` — покупатель выключил колокольчик, запись не удаляется (патч 2.4, миграция `20261031200000`, только добавляющая; на сервере с 31.10) |
 | iHerb и цены (этап 5, D-57) | `iherb_uploads`, `iherb_price_snapshots`, `price_changes`, `iherb_reminders`; поля iHerb в `products` (`iherb_url`, `iherb_product_id`, наценка, округление, режим склада, доза, форма — миграция `20261114100000`, применена на `vitalo_dev` и на сервере 08.11) | загрузка вишлиста → срезы цен (`iherb_price_snapshots`, товар может быть без ссылки) → автоцена → журнал `price_changes`; миграция `20261115100000_iherb_prices` (только добавляющая) — применена на `vitalo_dev` и на сервере 08.11 |
 | Цены конкурентов (этап 5, ветка 3, D-57) | `competitor_prices` (товар VITALO, площадка, название и ссылка у конкурента, цена, дата, 4 поля сверки, результат, источник вручную / ai, `hidden_at` вместо удаления) | сверка «1-в-1» проверяется по текущей карточке товара; миграция `20261116100000_competitor_prices` (только добавляющая) — применена на `vitalo_dev` 08.11 и на сервере 09.11 (выложено, `release-stage5-competitors`) |
@@ -108,7 +109,7 @@
 - VPS Hostmaster в Узбекистане, Ubuntu 24.04, IP `91.213.99.230`; данные должны храниться в Узбекистане.
 - Службы: `nginx`, `postgresql` (база `vitalo`, вход через локальный сокет), `vitalo-api`, `vitalo-bot`,
   `vitalo-backup.timer`, `certbot.timer`, `fail2ban`, `ufw` (открыты только 22/80/443).
-- Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `/var/lib/vitalo/receipts` (чеки клиентов, закрытая папка `RECEIPTS_DIR`, nginx её не раздаёт; с 3.1, на сервере — с 31.10, папка создаётся при первом чеке), `.env` в `apps/api`.
+- Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `/var/lib/vitalo/receipts` (чеки клиентов, закрытая папка `RECEIPTS_DIR`, nginx её не раздаёт; с 3.1, на сервере — с 31.10, папка создаётся при первом чеке), `/var/lib/vitalo/reviews` (фото отзывов до публикации; закрытая папка `REVIEWS_DIR`; с 3.10-Б — после выкладки), `.env` в `apps/api`.
 - Файлы настроек сервера в репозитории: `deploy/nginx`, `deploy/systemd`, `deploy/sudoers-vitalo`.
 
 ## Деплой
@@ -122,7 +123,7 @@
 ## Бэкапы
 
 - Сервер: `scripts/server/backup.sh` каждую ночь в 03:30 (таймер) и перед каждым `update.sh`: база (сразу
-  проверяется), фото, чеки (`receipts-*.tar.gz`, с 3.1), `.env`; хранение 14 дней. Проверка восстановления — `restore-check.sh`.
+  проверяется), фото, чеки (`receipts-*.tar.gz`, с 3.1), отзывы (`reviews-*.tar.gz`, с 3.10-Б — после выкладки), `.env`; хранение 14 дней. Проверка восстановления — `restore-check.sh`.
 - Ноутбук: копии `vitalo_dev` в папке `backups\` (в git не попадают). Копии с сервера забирать к себе по
   [DEPLOY_RUNBOOK](DEPLOY_RUNBOOK.md), фаза 7.3.
 
