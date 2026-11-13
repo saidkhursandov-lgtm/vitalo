@@ -1,3 +1,4 @@
+import { SafeImg } from '../components/Picture';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -121,7 +122,7 @@ export function UpsellStrip({ city, goodsTotal, inCart }: { city: CityRef | null
         {items.map((p) => (
           <li key={p.id}>
             <Link to={`/product/${p.id}`} className="upsell-item">
-              <span className="upsell-img">{p.image_url && <img src={p.image_url} alt="" width={56} height={56} loading="lazy" decoding="async" />}</span>
+              <span className="upsell-img">{p.image_url && <SafeImg src={p.image_url} alt="" width={56} height={56} loading="lazy" decoding="async" />}</span>
               <span className="upsell-info">
                 <span className="upsell-name">{shortNameOf(p, lang)}</span>
                 <strong className="upsell-price">{money(p.price_uzs, lang)}</strong>
@@ -209,7 +210,7 @@ export function Cart() {
         {data.items.map((l) => (
           <li key={l.product_id} className={`cart-line ${l.status === 'unavailable' ? 'is-out' : ''}`}>
             <Link to={`/product/${l.product_id}`} className="cart-img">
-              {l.image_url && <img src={l.image_url} alt="" width={56} height={56} loading="lazy" decoding="async" />}
+              {l.image_url && <SafeImg src={l.image_url} alt="" width={56} height={56} loading="lazy" decoding="async" />}
             </Link>
             {/* 3.8 fix: compact — the name, then one row: the price on the left, a small stepper on the right */}
             <div className="cart-info">

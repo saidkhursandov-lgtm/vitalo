@@ -154,7 +154,9 @@ describe('D-70: «Спросить VITALO AI о корзине» — the convers
     expect(await within(sheet).findByText('О корзине')).toBeTruthy();
     expect(within(sheet).getByText('Что беспокоит')).toBeTruthy();
     expect(within(sheet).getByRole('button', { name: 'Можно ли принимать их вместе?' })).toBeTruthy();
-    expect(within(sheet).getByRole('button', { name: 'Болят и хрустят суставы — что из этого поможет?' })).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: 'Постоянно нет сил — что из этого поможет?' })).toBeTruthy();
+    // only the 3 concerns closest to the cart
+    expect(within(sheet).queryByRole('button', { name: 'Болят и хрустят суставы — что из этого поможет?' })).toBeNull();
     expect((within(sheet).getByRole('textbox') as HTMLTextAreaElement).maxLength).toBe(300);
     expect(sheet.textContent).toContain('VITALO AI работает в бета-режиме и пополняет свою базу знаний. Не заменяет консультацию врача.');
   });
@@ -240,7 +242,7 @@ describe('D-70: «Спросить VITALO AI о корзине» — the convers
     showCart('uz');
     fireEvent.click(await screen.findByRole('button', { name: 'VITALO AI dan savat haqida soʻrash' }));
     const sheet = await screen.findByRole('dialog', { name: 'VITALO AI dan savat haqida soʻrash' });
-    expect(await within(sheet).findByRole('button', { name: 'Boʻgʻimlarim ogʻriydi va qisirlaydi — bulardan qaysi biri yordam beradi?' })).toBeTruthy();
+    expect(await within(sheet).findByRole('button', { name: 'Doim holsizman — bulardan qaysi biri yordam beradi?' })).toBeTruthy();
   });
 });
 

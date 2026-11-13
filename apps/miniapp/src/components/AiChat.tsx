@@ -1,3 +1,4 @@
+import { SafeImg } from './Picture';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -48,7 +49,8 @@ export function chatSuggestions(lang: Lang, count: number, topics: Goal[]): { ca
   const tail = CONCERN_TAIL[lang][count === 0 ? 'empty' : count === 1 ? 'one' : 'cart'];
   return {
     cart: count === 0 ? [] : count === 1 ? ABOUT_ONE[lang] : ABOUT_CART[lang],
-    concerns: topics.map((g) => CONCERN[lang][g] + tail),
+    // with products in the cart — the 3 concerns closest to them (the server puts the cart's goals first)
+    concerns: topics.slice(0, count === 0 ? topics.length : 3).map((g) => CONCERN[lang][g] + tail),
   };
 }
 
@@ -199,7 +201,7 @@ export function AiChatSheet({ items, onClose, onAsk }: { items: AiCartItem[]; on
           ) : (
             <>
               <span className="ai-chat-thumbs" aria-hidden>
-                {items.slice(0, 4).map((i) => (i.image_url ? <img key={i.product_id} src={i.image_url} alt="" /> : <span key={i.product_id} className="ai-chat-thumb-empty" />))}
+                {items.slice(0, 4).map((i) => (i.image_url ? <SafeImg key={i.product_id} src={i.image_url} alt="" /> : <span key={i.product_id} className="ai-chat-thumb-empty" />))}
               </span>
               <span className="ai-chat-cart-names">{items.map((i) => i.name).join(', ')}</span>
             </>

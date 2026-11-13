@@ -3,7 +3,7 @@ import { ProductCashback } from '../components/Bonus';
 import { track } from '../lib/analytics';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
-import { countryName, formLabel, money, nameOf, pricePerDay, shortNameOf, textOf } from '../lib/format';
+import { countryName, formLabel, money, pricePerDay, shortNameOf, textOf } from '../lib/format';
 import { PromoLabelBadge } from '../components/Campaign';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
@@ -15,7 +15,7 @@ import type { ProductCard } from '../lib/types';
 import { useUnderOrderDays, useUnderOrderText } from '../components/CrossBorder';
 import { tapHaptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
-import { Picture } from '../components/Picture';
+import { Picture, SafeImg } from '../components/Picture';
 import { ClampText } from '../components/ClampText';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip } from '../components/ui';
 
@@ -64,7 +64,7 @@ export function Product() {
         {images[imageIdx] && (
           <Picture
             src={{ webp: images[imageIdx].url, jpeg: images[imageIdx].url_jpeg, width: images[imageIdx].width, height: images[imageIdx].height }}
-            alt={nameOf(p, lang)}
+            alt={short}
             eager={imageIdx === 0}
           />
         )}
@@ -76,7 +76,7 @@ export function Product() {
         <div className="thumbs">
           {images.map((m, i) => (
             <button key={m.url} className={i === imageIdx ? 'is-on' : ''} onClick={() => setImageIdx(i)}>
-              <img src={m.thumb_url ?? m.url} alt="" width={56} height={56} loading="lazy" decoding="async" />
+              <SafeImg src={m.thumb_url ?? m.url} alt="" width={56} height={56} loading="lazy" decoding="async" />
             </button>
           ))}
         </div>

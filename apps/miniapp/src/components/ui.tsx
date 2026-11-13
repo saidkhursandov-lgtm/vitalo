@@ -7,7 +7,7 @@ import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, ShopCampaign } from '../lib/types';
 import { useUnderOrderText } from './CrossBorder';
 import { PromoLabelBadge, SaleBadge, SalePrice } from './Campaign';
-import { Picture } from './Picture';
+import { Picture, SafeImg } from './Picture';
 import { QuickAdd } from './QuickAdd';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
 
@@ -268,7 +268,7 @@ export function ProductTile({ product }: { product: ProductListItem }) {
   return (
     <Link to={`/product/${product.id}`} className={`tile ${product.in_stock || product.cross_border ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
       <div className="tile-img">
-        {product.image ? <Picture src={product.image} /> : product.image_url && <img src={product.image_url} alt="" loading="lazy" decoding="async" />}
+        {product.image ? <Picture src={product.image} /> : product.image_url && <SafeImg src={product.image_url} alt="" loading="lazy" decoding="async" />}
         <FavoriteButton productId={product.id} className="tile-fav" />
         {/* the badges live on the photo (top left, one under another): a sale or the manual promo label, then −% */}
         <div className="tile-badges">

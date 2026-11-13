@@ -1,3 +1,4 @@
+import { SafeImg } from './Picture';
 import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { formLabel, money, shortNameOf } from '../lib/format';
@@ -28,7 +29,7 @@ export function OrderItems({ items, note }: { items: OrderItemLine[]; note?: (it
       {items.map((i) => (
         <li key={i.product_id} className="order-item">
           <Link to={`/product/${i.product_id}`} className="order-item-img" tabIndex={-1} aria-hidden>
-            {i.image_url && <img src={i.image_url} alt="" width={48} height={48} loading="lazy" decoding="async" />}
+            {i.image_url && <SafeImg src={i.image_url} alt="" width={48} height={48} loading="lazy" decoding="async" />}
           </Link>
           <div className="order-item-info">
             <Link to={`/product/${i.product_id}`} className="order-item-name">

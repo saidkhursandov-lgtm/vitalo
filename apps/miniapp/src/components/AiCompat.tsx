@@ -1,3 +1,4 @@
+import { SafeImg } from './Picture';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
@@ -260,7 +261,7 @@ function Thumbs({ items, lit = -1 }: { items: AiCartItem[]; lit?: number }) {
     <span className="ai-thumbs" aria-hidden>
       {items.slice(0, 6).map((p, i) => (
         <span key={p.product_id} className={`ai-thumb${i === lit ? ' is-lit' : ''}`}>
-          {p.image_url ? <img src={p.image_url} alt="" width={36} height={36} loading="lazy" decoding="async" /> : <span>{p.name.slice(0, 1)}</span>}
+          {p.image_url ? <SafeImg src={p.image_url} alt="" width={36} height={36} loading="lazy" decoding="async" /> : <span>{p.name.slice(0, 1)}</span>}
         </span>
       ))}
       {items.length > 6 && <span className="ai-thumb ai-thumb-more">+{items.length - 6}</span>}
