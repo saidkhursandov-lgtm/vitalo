@@ -30,6 +30,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // both channels in one list; Mini App and Yandex — a switch above the list (генплан, этап 2)
       { to: '/orders', label: 'Заказы', permission: 'orders.view', paths: ['/yandex-orders'] },
+      // 3.10-В: customers' return requests (admin, manager)
+      { to: '/returns', label: 'Возвраты', permission: 'returns.manage' },
       { to: '/customers', label: 'Клиенты', permission: 'customers.view' },
       { to: '/waitlist', label: 'Лист ожидания', permission: 'customers.view' },
       // 3.4: questions from the cart — admin and «специалист» answer, manager only looks

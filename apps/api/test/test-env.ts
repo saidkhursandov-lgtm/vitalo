@@ -34,4 +34,5 @@ export const TEST_ENV = {
   UPLOAD_DIR:require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
   RECEIPTS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-receipts'),
   REVIEWS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-reviews'),
+  RETURNS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-returns'),
 };

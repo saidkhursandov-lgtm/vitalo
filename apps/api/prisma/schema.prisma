@@ -2105,11 +2105,24 @@ model returns {
   refund_amount_uzs BigInt?
   refunded_at       DateTime?
   refund_comment    String?
+  /// 3.10-В: every line with its full quantity — the order itself goes to «Возврат» (units on check, all bonuses back)
+  full_order         Boolean   @default(false)
+  rejected_by        String?   @db.Uuid
+  rejected_at        DateTime?
+  refunded_by        String?   @db.Uuid
+  /// card | cash | payme | click | other — how the money went back (the refund is manual)
+  refund_method      String?
+  /// 3.10-В, a part of the order: the cashback taken back and the spent bonuses given back for the returned lines
+  bonus_reversed_uzs BigInt    @default(0)
+  bonus_returned_uzs BigInt    @default(0)
   order             orders         @relation(fields: [order_id], references: [id])
   user              users          @relation(fields: [user_id], references: [id])
   staff             staff_users?   @relation(fields: [approved_by], references: [id])
   items             return_items[]
   media             return_media[]
+
+  @@index([order_id])
+  @@index([status, created_at])
 }
 
 model return_items {
@@ -2121,13 +2134,19 @@ model return_items {
   condition         ReturnCondition?
   return            returns          @relation(fields: [return_id], references: [id])
   order_item        order_items      @relation(fields: [order_item_id], references: [id])
+
+  @@index([return_id])
 }
 
 model return_media {
-  id        String  @id @default(uuid()) @db.Uuid
-  return_id String  @db.Uuid
-  url       String
-  return    returns @relation(fields: [return_id], references: [id])
+  id         String   @id @default(uuid()) @db.Uuid
+  return_id  String   @db.Uuid
+  /// 3.10-В: the private file key (photos of a return are never public; staff open them with their token)
+  url        String
+  created_at DateTime @default(now())
+  return     returns  @relation(fields: [return_id], references: [id])
+
+  @@index([return_id])
 }
 
 // ───────────── CONTENT / MARKETING ─────────────

@@ -32,6 +32,7 @@ const Compat = page(() => import('./pages/Compat'), 'Compat');
 const AiChats = page(() => import('./pages/AiChats'), 'AiChats');
 const SupportList = page(() => import('./pages/Support'), 'SupportList');
 const Reviews = page(() => import('./pages/Reviews'), 'Reviews');
+const Returns = page(() => import('./pages/Returns'), 'Returns');
 const SupportThread = page(() => import('./pages/Support'), 'SupportThread');
 const Devices = page(() => import('./pages/Devices'), 'Devices');
 const Finance = page(() => import('./pages/Finance'), 'Finance');
@@ -94,6 +95,7 @@ export function App() {
         <Route path="ai-chats" element={<Guard perm="compat.answer"><AiChats /></Guard>} />
         <Route path="support" element={<Guard perm="support.view"><SupportList /></Guard>} />
         <Route path="reviews" element={<Guard perm="reviews.moderate"><Reviews /></Guard>} />
+        <Route path="returns" element={<Guard perm="returns.manage"><Returns /></Guard>} />
         <Route path="support/:id" element={<Guard perm="support.view"><SupportThread /></Guard>} />
         <Route path="waitlist/:productId" element={<Guard perm="customers.view"><WaitlistProductPage /></Guard>} />
         <Route path="analytics" element={<Guard perm="finance.manage"><Analytics /></Guard>} />

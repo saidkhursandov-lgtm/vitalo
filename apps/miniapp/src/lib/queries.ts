@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
-import type { Lang, BonusAccount, ProductReviews, ReviewableItem, ReviewFormInfo } from './types';
+import type { Lang, BonusAccount, OrderReturns, ProductReviews, ReviewableItem, ReviewFormInfo } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
 import type { Address, AiState, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo, SupportThread } from './types';
 
@@ -364,6 +364,9 @@ export const useSupportThread = (id: string) => useQuery({ queryKey: ['support',
 /** 3.10-Б: products of a delivered order to review (with the status of a review already sent). */
 export const useReviewable = (orderId: string) =>
   useQuery({ queryKey: ['reviews', 'pending', orderId], queryFn: () => api<ReviewableItem[]>(`/reviews/pending${qs({ order_id: orderId })}`) });
+/** 3.10-В: what of the order may be returned, the deadline and the requests already sent. */
+export const useOrderReturns = (orderId: string, enabled = true) =>
+  useQuery({ queryKey: ['returns', orderId], queryFn: () => api<OrderReturns>(`/returns/order/${orderId}`), enabled: enabled && !!orderId });
 /** 3.10-Б: the bonus for a review and how the name will be signed. */
 export const useReviewForm = () => useQuery({ queryKey: ['reviews', 'form'], queryFn: () => api<ReviewFormInfo>('/reviews/form'), staleTime: 300_000 });
 /** 3.10-Б: published reviews of a product, 10 per page. */

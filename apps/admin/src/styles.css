@@ -707,3 +707,4 @@ textarea { resize: vertical; }
 .review-media img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); display: block; }
 .review-reply { padding: 8px 12px; border-left: 3px solid var(--primary); background: var(--bg); border-radius: 8px; }
 .review-card .row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.return-items { margin: 0; padding-left: 18px; font-size: 14px; }
