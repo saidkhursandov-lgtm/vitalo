@@ -1941,3 +1941,17 @@ a.bonus-wallet { text-decoration: none; margin: 0 0 12px; }
 .review-reply { margin: 4px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--verdict-bg); border-left: 3px solid var(--primary); }
 .review-reply strong { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--primary-text); }
 .review-reply p { margin: 4px 0 0; }
+
+/* ---------- 3.10-В «Вернуть товар» ---------- */
+.return-line { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.return-line:last-child { border-bottom: 0; }
+.return-line .check-row { align-items: center; }
+.return-line-img { flex: none; width: 48px; height: 48px; border-radius: var(--radius-sm); background: var(--surface-2); overflow: hidden; }
+.return-line-img img { width: 100%; height: 100%; object-fit: contain; }
+.return-line-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.return-line-name strong { font-size: 14px; line-height: 1.3; }
+.return-line-qty { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 10px 34px; }
+.return-total { margin: 4px 0 8px; font-weight: 600; color: var(--text); }
+.return-status { margin: 0 0 6px; font-size: 14px; }
+.return-status.is-approved, .return-status.is-refunded { color: var(--success); }
+.return-status.is-rejected { color: var(--error); }

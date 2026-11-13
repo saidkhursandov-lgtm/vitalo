@@ -724,3 +724,4 @@ textarea { resize: vertical; }
 .substance-search input[type='search'] { width: 100%; }
 .substance-found { margin: 4px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); max-height: 280px; overflow-y: auto; }
 .substance-found .btn { width: 100%; justify-content: flex-start; text-align: left; min-height: 44px; }
+.return-items { margin: 0; padding-left: 18px; font-size: 14px; }

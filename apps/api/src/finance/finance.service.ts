@@ -109,6 +109,32 @@ export class FinanceService {
       events.push({ ...base, day: day(o.delivered_at!), sign: 1 });
       if (o.status === 'return' && o.history[0]) events.push({ ...base, day: day(o.history[0].created_at), sign: -1 });
     }
+
+    // 3.10-В: a part of an order returned on the customer's request — only the returned jars, in the month of the
+    // approval (the whole order returned is the order «Возврат» above)
+    const parts = await this.prisma.returns.findMany({
+      where: { full_order: false, status: { in: ['approved', 'refunded', 'closed'] }, approved_at: { not: null }, order: { is_test: false, delivered_at: { not: null } } },
+      include: {
+        order: { select: { id: true, order_number: true } },
+        items: { include: { order_item: { include: { product: { select: { id: true, sku: true, name_ru: true } }, units: { where: { cost_snapshot_uzs: { not: null } } } } } } },
+      },
+    });
+    for (const r of parts) {
+      const lines: SaleLine[] = r.items.map((x) => {
+        const l = x.order_item;
+        const lineCost = l.units.length === l.qty ? l.units.reduce((s, u) => s + Number(u.cost_snapshot_uzs), 0) : null;
+        return {
+          product_id: l.product.id,
+          sku: l.product.sku,
+          name: l.product.name_ru,
+          qty: x.qty,
+          revenue: Number(x.refund_amount_uzs),
+          cost: lineCost === null ? null : Math.round((lineCost * x.qty) / l.qty),
+          commission: 0,
+        };
+      });
+      events.push({ channel: 'vitalo', order_id: r.order.id, number: r.order.order_number, lines, own_delivery: 0, day: day(r.approved_at!), sign: -1 });
+    }
     return events;
   }
 

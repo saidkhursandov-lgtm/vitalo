@@ -4,8 +4,8 @@ import { ChevronIcon, OrdersIcon, STATUS_ICONS } from '../components/Icons';
 import { EmptyState, ErrorState, Loading, StatusPill } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { dateTime, money, nameOf, orderNo, prettyPhone } from '../lib/format';
-import { errorText, orderStatusKey, useI18n } from '../lib/i18n';
-import { useOrder, useOrders, useShopTexts } from '../lib/queries';
+import { errorText, orderStatusKey, useI18n, type MessageKey } from '../lib/i18n';
+import { useOrder, useOrderReturns, useOrders, useShopTexts } from '../lib/queries';
 import { daysText, payPath } from '../lib/shop';
 import { haptic } from '../lib/telegram';
 import { useConfirm } from '../components/Confirm';
@@ -168,6 +168,8 @@ export function OrderDetail() {
         </ol>
       </section>
 
+      {(o.status === 'delivered' || o.status === 'return') && <ReturnStatusCard orderId={o.id} />}
+
       {cancel.isError && (
         <div className="notice notice-error">{errorText(lang, cancel.error instanceof ApiError ? cancel.error.code : undefined)}</div>
       )}
@@ -186,6 +188,8 @@ export function OrderDetail() {
             <StarIcon width={20} height={20} /> {t('review.rateOrder')}
           </Link>
         )}
+        {/* 3.10-В: a damaged or a wrong item — a request within 14 days after the delivery */}
+        {o.status === 'delivered' && <ReturnButton orderId={o.id} />}
         {o.can_cancel && (
           <button className="btn btn-danger btn-block" disabled={cancel.isPending} onClick={() => void onCancel()}>
             {t('orders.cancel')}
@@ -196,6 +200,36 @@ export function OrderDetail() {
         <OrderAsk order={{ id: o.id, number: o.order_number }} />
       </div>
     </div>
+  );
+}
+
+function ReturnButton({ orderId }: { orderId: string }) {
+  const { t } = useI18n();
+  const r = useOrderReturns(orderId);
+  if (!r.data?.can_request) return null;
+  return (
+    <Link to={`/orders/${orderId}/return`} className="btn btn-secondary btn-block">
+      {t('return.button')}
+    </Link>
+  );
+}
+
+/** 3.10-В: what happened to the return requests of this order (the newest first). */
+function ReturnStatusCard({ orderId }: { orderId: string }) {
+  const { t, lang } = useI18n();
+  const r = useOrderReturns(orderId);
+  const list = r.data?.returns ?? [];
+  if (!list.length) return null;
+  return (
+    <section className="card">
+      <h2>{t('return.card')}</h2>
+      {list.map((x) => (
+        <p key={x.id} className={`return-status is-${x.status}`}>
+          {t(`return.status.${x.status}` as MessageKey, { sum: money(x.refund_amount_uzs ?? 0, lang), reason: x.reject_reason ?? '' })}
+          <span className="hint small"> · {dateTime(x.created_at, lang)}</span>
+        </p>
+      ))}
+    </section>
   );
 }
 

@@ -224,6 +224,10 @@ export const AUDIT_ACTION: Record<string, string> = {
   'review.rejected': 'Отзыв отклонён',
   'review.hidden': 'Отзыв скрыт',
   'review.replied': 'Ответ специалиста под отзывом',
+  // 3.10-В: «Возвраты»
+  'return.approved': 'Возврат одобрен',
+  'return.rejected': 'Заявка на возврат отклонена',
+  'return.refunded': 'Деньги по возврату возвращены',
   'competitor_price.added': 'Добавлена цена конкурента',
   'competitor_price.hidden': 'Скрыта цена конкурента',
   'dictionary.created': 'Добавлена запись справочника',

@@ -80,6 +80,30 @@ export interface ProductListItem extends Named {
   rating?: { avg: number; count: number } | null;
 }
 
+/** 3.10-В: «Вернуть товар». */
+export type ReturnReasonCode = 'damaged' | 'wrong_item';
+export type ReturnStatus = 'requested' | 'approved' | 'rejected' | 'refunded' | 'closed';
+export interface ReturnLine {
+  order_item_id: string;
+  name_ru: string;
+  name_uz: string | null;
+  image: { webp: string; jpeg?: string | null; width?: number | null; height?: number | null } | null;
+  qty: number;
+  max_qty: number;
+  unit_paid_uzs: number;
+}
+export interface OrderReturns {
+  order_id: string;
+  order_number: string;
+  deadline: string | null;
+  days: number;
+  can_request: boolean;
+  blocked: 'RETURN_NOT_DELIVERED' | 'RETURN_TOO_LATE' | 'RETURN_ACTIVE' | 'RETURN_NOTHING_LEFT' | null;
+  reasons: ReturnReasonCode[];
+  lines: ReturnLine[];
+  returns: { id: string; status: ReturnStatus; reason: string; created_at: string; refund_amount_uzs: number | null; reject_reason: string | null; refunded_at: string | null; items: { order_item_id: string; qty: number }[] }[];
+}
+
 /** 3.10-Б: «Проверенные отзывы». */
 export type ReviewTag = 'effect' | 'easy' | 'quality' | 'price' | 'no_effect' | 'hard';
 export type ReviewStatus = 'pending' | 'published' | 'rejected' | 'hidden';

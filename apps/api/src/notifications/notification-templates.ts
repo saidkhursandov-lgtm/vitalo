@@ -55,6 +55,11 @@ export type TemplateName =
   | 'review.ask'
   | 'review.published'
   | 'review.rejected'
+  | 'return.received'
+  | 'return.approved'
+  | 'return.rejected'
+  | 'return.refunded'
+  | 'staff.return_new'
   | 'promo.message';
 
 export interface TemplatePayload {
@@ -543,6 +548,30 @@ Hisobda: ${formatUzs(p.balance_uzs ?? 0)} so‘m.`,
     ru: (p: TemplatePayload) => `Отзыв о «${p.product ?? ''}» не опубликован. Причина: ${p.reason ?? '—'}. Вы можете написать новый.`,
     uz: (p: TemplatePayload) => `«${p.product ?? ''}» haqidagi sharh chop etilmadi. Sabab: ${p.reason ?? '—'}. Yangisini yozishingiz mumkin.`,
   },
+  // 3.10-В: returns on request (reason — the customer's reason, or the staff's reason of a refusal; total_uzs — the amount)
+  'return.received': {
+    ru: (p: TemplatePayload) => `Заявка на возврат по заказу №${p.order_number} получена (${p.reason ?? ''}). Менеджер рассмотрит её и напишет вам.`,
+    uz: (p: TemplatePayload) => `№${p.order_number} buyurtma bo‘yicha qaytarish arizasi qabul qilindi (${p.reason ?? ''}). Menejer ko‘rib chiqib, sizga yozadi.`,
+  },
+  'return.approved': {
+    ru: (p: TemplatePayload) => `Возврат по заказу №${p.order_number} одобрен. Вернём ${formatUzs(p.total_uzs ?? 0)} сум — менеджер свяжется с вами, чтобы забрать товар и вернуть деньги.`,
+    uz: (p: TemplatePayload) => `№${p.order_number} buyurtma bo‘yicha qaytarish tasdiqlandi. ${formatUzs(p.total_uzs ?? 0)} so‘m qaytariladi — menejer mahsulotni olib ketish va pulni qaytarish uchun bog‘lanadi.`,
+  },
+  'return.rejected': {
+    ru: (p: TemplatePayload) => `Заявка на возврат по заказу №${p.order_number} отклонена. Причина: ${p.reason ?? '—'}. Если есть вопросы — напишите в поддержку.`,
+    uz: (p: TemplatePayload) => `№${p.order_number} buyurtma bo‘yicha qaytarish arizasi rad etildi. Sabab: ${p.reason ?? '—'}. Savollar bo‘lsa — yordam xizmatiga yozing.`,
+  },
+  'return.refunded': {
+    ru: (p: TemplatePayload) => `Деньги по возврату заказа №${p.order_number} отправлены: ${formatUzs(p.total_uzs ?? 0)} сум.`,
+    uz: (p: TemplatePayload) => `№${p.order_number} buyurtma qaytarilishi bo‘yicha pul yuborildi: ${formatUzs(p.total_uzs ?? 0)} so‘m.`,
+  },
+  // 3.10-В: a new return request (admins and managers, Russian)
+  'staff.return_new': {
+    ru: (p: TemplatePayload) => `Заявка на возврат: заказ №${p.order_number}, ${p.reason ?? ''}, на ${formatUzs(p.total_uzs ?? 0)} сум.
+
+Админка → Возвраты`,
+    uz: (p: TemplatePayload) => `Qaytarish arizasi: №${p.order_number}`,
+  },
   // D-57: 09:00 / 15:00 / 21:00 — nobody uploaded the iHerb wishlist yet (admins, Russian; switched on in «iHerb и цены»).
   'staff.iherb_upload_due': {
     ru: (p: TemplatePayload) => `Пора загрузить вишлист iHerb: товаров со ссылкой iHerb — ${p.count ?? 0}. Сохраните страницу вишлиста и загрузите её в «iHerb и цены».`,
@@ -602,6 +631,10 @@ const CENTRE_LINES: Partial<Record<TemplateName, Record<Lang, (p: TemplatePayloa
   'review.ask': { ru: (p) => `Как вам ${p.product ?? 'заказ'}? Оставьте отзыв`, uz: (p) => `${p.product ?? 'Buyurtma'} yoqdimi? Sharh qoldiring` },
   'review.published': { ru: (p) => `Отзыв опубликован${p.bonus_uzs ? `, +${formatUzs(p.bonus_uzs)} бонусных сум` : ''}`, uz: (p) => `Sharh chop etildi${p.bonus_uzs ? `, +${formatUzs(p.bonus_uzs)} bonus so‘m` : ''}` },
   'review.rejected': { ru: (p) => `Отзыв не опубликован: ${p.reason ?? '—'}`, uz: (p) => `Sharh chop etilmadi: ${p.reason ?? '—'}` },
+  'return.received': { ru: () => 'Заявка на возврат получена', uz: () => 'Qaytarish arizasi qabul qilindi' },
+  'return.approved': { ru: (p) => `Возврат одобрен: ${formatUzs(p.total_uzs ?? 0)} сум`, uz: (p) => `Qaytarish tasdiqlandi: ${formatUzs(p.total_uzs ?? 0)} so‘m` },
+  'return.rejected': { ru: (p) => `Возврат отклонён: ${p.reason ?? '—'}`, uz: (p) => `Qaytarish rad etildi: ${p.reason ?? '—'}` },
+  'return.refunded': { ru: (p) => `Деньги отправлены: ${formatUzs(p.total_uzs ?? 0)} сум`, uz: (p) => `Pul yuborildi: ${formatUzs(p.total_uzs ?? 0)} so‘m` },
 };
 
 /** Title and line of a centre entry in the customer's language. */

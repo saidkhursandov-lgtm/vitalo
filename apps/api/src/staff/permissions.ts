@@ -34,6 +34,7 @@ export const PERMISSIONS = {
   'customers.block': ['manager'],
   'settings.manage': [],
   'bonus.manage': [],
+  'returns.manage': ['manager'], // 3.10-В: «Возвраты» — approve with the amount, reject, «Деньги возвращены» (admin, manager)
   'reviews.moderate': [], // 3.10-Б: «Отзывы» — publish (the bonus is posted), reject, hide, the specialist's answer; admin and specialists // 3.10-А: «Настройки → VITALO Bonus», «+ Начислить» / «− Списать» on the customer card, the month numbers — admin only
   'staff.manage': [],
   'audit.view': [],

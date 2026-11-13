@@ -14,6 +14,8 @@ UPLOADS=${UPLOADS_DIR:-/var/lib/vitalo/uploads}
 RECEIPTS=${RECEIPTS_DIR:-/var/lib/vitalo/receipts}
 # 3.10-Б: photos of reviews not yet published (private too; published copies are in the uploads folder).
 REVIEWS=${REVIEWS_DIR:-/var/lib/vitalo/reviews}
+# 3.10-В: photos of return requests (private, never public).
+RETURNS=${RETURNS_DIR:-/var/lib/vitalo/returns}
 ENV_FILE=${ENV_FILE:-/opt/vitalo/app/apps/api/.env}
 DB_NAME=${DB_NAME:-vitalo}
 KEEP_DAYS=${KEEP_DAYS:-14}
@@ -45,6 +47,10 @@ if [ "${1:-all}" != "db" ]; then
     tar -czf "$DIR/reviews-$STAMP.tar.gz" -C "$(dirname "$REVIEWS")" "$(basename "$REVIEWS")"
     echo "Фото отзывов: $DIR/reviews-$STAMP.tar.gz ($(du -h "$DIR/reviews-$STAMP.tar.gz" | cut -f1))"
   fi
+  if [ -d "$RETURNS" ]; then
+    tar -czf "$DIR/returns-$STAMP.tar.gz" -C "$(dirname "$RETURNS")" "$(basename "$RETURNS")"
+    echo "Фото возвратов: $DIR/returns-$STAMP.tar.gz ($(du -h "$DIR/returns-$STAMP.tar.gz" | cut -f1))"
+  fi
   # The settings file holds secrets: the copy stays in this closed folder with the same rights (600).
   if [ -r "$ENV_FILE" ]; then
     cp "$ENV_FILE" "$DIR/env-$STAMP.env"
@@ -53,5 +59,5 @@ if [ "${1:-all}" != "db" ]; then
   fi
 fi
 
-find "$DIR" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'uploads-*.tar.gz' -o -name 'receipts-*.tar.gz' -o -name 'reviews-*.tar.gz' -o -name 'env-*.env' \) -mtime +"$KEEP_DAYS" -delete
+find "$DIR" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'uploads-*.tar.gz' -o -name 'receipts-*.tar.gz' -o -name 'reviews-*.tar.gz' -o -name 'returns-*.tar.gz' -o -name 'env-*.env' \) -mtime +"$KEEP_DAYS" -delete
 find "$DIR" -maxdepth 1 -type f -name '*.part' -mmin +120 -delete
