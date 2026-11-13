@@ -33,7 +33,8 @@ export const PERMISSIONS = {
   'customers.view': ['manager'],
   'customers.block': ['manager'],
   'settings.manage': [],
-  'bonus.manage': [], // 3.10-А: «Настройки → VITALO Bonus», «+ Начислить» / «− Списать» on the customer card, the month numbers — admin only
+  'bonus.manage': [],
+  'reviews.moderate': [], // 3.10-Б: «Отзывы» — publish (the bonus is posted), reject, hide, the specialist's answer; admin and specialists // 3.10-А: «Настройки → VITALO Bonus», «+ Начислить» / «− Списать» on the customer card, the month numbers — admin only
   'staff.manage': [],
   'audit.view': [],
   'costs.view': [], // cost price and purchase price: GET /staff/products/:id, receipt cost_uzs
@@ -82,7 +83,7 @@ export const PERMISSIONS = {
 export type Permission = keyof typeof PERMISSIONS;
 
 /** 3.4: what the «специалист» mark adds to any role (it may read the customer's comment — D-40). */
-export const SPECIALIST_PERMISSIONS: readonly Permission[] = ['compat.view', 'compat.answer', 'support.view', 'support.answer'];
+export const SPECIALIST_PERMISSIONS: readonly Permission[] = ['compat.view', 'compat.answer', 'support.view', 'support.answer', 'reviews.moderate'];
 
 export function can(role: StaffRole, permission: Permission, specialist = false): boolean {
   return role === 'admin' || (PERMISSIONS[permission] as readonly StaffRole[]).includes(role) || (specialist && SPECIALIST_PERMISSIONS.includes(permission));

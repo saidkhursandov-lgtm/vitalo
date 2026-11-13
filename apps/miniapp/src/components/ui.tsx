@@ -9,6 +9,7 @@ import { useUnderOrderText } from './CrossBorder';
 import { PromoLabelBadge, SaleBadge, SalePrice } from './Campaign';
 import { Picture, SafeImg } from './Picture';
 import { QuickAdd } from './QuickAdd';
+import { TileRating } from './Reviews';
 import { HeartIcon, MinusIcon, OfflineIcon, PlusIcon, SearchEmptyIcon, STATUS_ICONS, type Icon } from './Icons';
 
 // ---------------------------------------------------------------- loading skeletons (no spinners)
@@ -278,7 +279,11 @@ export function ProductTile({ product }: { product: ProductListItem }) {
         {!product.in_stock && (product.cross_border ? <span className="tile-usa">{uo('short', product.under_order)}</span> : <span className="tile-out">{t('product.outOfStock')}</span>)}
       </div>
       <div className="tile-body">
-        <div className="tile-brand">{product.brand}</div>
+        <div className="tile-brand-row">
+          <div className="tile-brand">{product.brand}</div>
+          {/* 3.10-Б: stars from 3 published reviews */}
+          <TileRating rating={product.rating} />
+        </div>
         {/* 2.3: the short name, exactly 2 lines, whole words; the full one stays in search */}
         <div className="tile-name">{shortNameOf(product, lang)}</div>
         <TileMeta product={product} />

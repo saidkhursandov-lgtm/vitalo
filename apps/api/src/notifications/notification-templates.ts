@@ -52,6 +52,9 @@ export type TemplateName =
   | 'bonus.accrued'
   | 'bonus.returned'
   | 'bonus.expiring'
+  | 'review.ask'
+  | 'review.published'
+  | 'review.rejected'
   | 'promo.message';
 
 export interface TemplatePayload {
@@ -88,7 +91,7 @@ export interface TemplatePayload {
   /** 2.4: product name for waiting-list messages */
   product?: string;
   /** 2.4: which page the button opens (text of the button); default: the order. 3.2: 'pay', 'link' */
-  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart' | 'support' | 'bonus';
+  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart' | 'support' | 'bonus' | 'review';
   /** 3.10-А: VITALO Bonus — the amount of the operation, the balance after it, the day the balance burns («12.02.2027») */
   bonus_uzs?: number;
   balance_uzs?: number;
@@ -159,6 +162,8 @@ export const SUPPORT_BUTTON: Record<Lang, string> = { ru: 'Спросить сп
 export const REPLY_BUTTON: Record<Lang, string> = { ru: 'Открыть и ответить', uz: 'Ochish va javob berish' };
 /** 3.10-А: button under the bonus messages. */
 export const BONUS_BUTTON: Record<Lang, string> = { ru: 'Мои бонусы', uz: 'Mening bonuslarim' };
+/** 3.10-Б: button under «Как вам …? Оставьте отзыв». */
+export const REVIEW_BUTTON: Record<Lang, string> = { ru: 'Оставить отзыв', uz: 'Sharh qoldirish' };
 
 export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang): string {
   if (kind === 'product') return OPEN_PRODUCT_BUTTON[lang];
@@ -167,6 +172,7 @@ export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang)
   if (kind === 'cart') return CART_BUTTON[lang];
   if (kind === 'support') return REPLY_BUTTON[lang];
   if (kind === 'bonus') return BONUS_BUTTON[lang];
+  if (kind === 'review') return REVIEW_BUTTON[lang];
   return OPEN_BUTTON[lang];
 }
 
@@ -522,6 +528,21 @@ Hisobda: ${formatUzs(p.balance_uzs ?? 0)} so‘m.`,
     ru: (p: TemplatePayload) => `VITALO Bonus: ${p.burn_date ?? ''} сгорят ${formatUzs(p.bonus_uzs ?? 0)} сум. Оплатите ими часть заказа до этого дня.`,
     uz: (p: TemplatePayload) => `VITALO Bonus: ${p.burn_date ?? ''} kuni ${formatUzs(p.bonus_uzs ?? 0)} so‘m kuyadi. Shu kungacha ular bilan buyurtmaning bir qismini to‘lang.`,
   },
+  // 3.10-Б: 3 days after the delivery, once per order (switched off in the profile)
+  'review.ask': {
+    ru: (p: TemplatePayload) =>
+      `Как вам ${p.product ?? 'заказ'}? Расскажите другим покупателям — оставьте отзыв о заказе №${p.order_number}.${p.bonus_uzs ? ` За опубликованный отзыв начислим до ${formatUzs(p.bonus_uzs)} бонусных сум.` : ''}`,
+    uz: (p: TemplatePayload) =>
+      `${p.product ?? 'Buyurtma'} sizga yoqdimi? Boshqa xaridorlarga aytib bering — №${p.order_number} buyurtma haqida sharh qoldiring.${p.bonus_uzs ? ` Chop etilgan sharh uchun ${formatUzs(p.bonus_uzs)} so‘mgacha bonus beramiz.` : ''}`,
+  },
+  'review.published': {
+    ru: (p: TemplatePayload) => `Спасибо! Ваш отзыв о «${p.product ?? ''}» опубликован.${p.bonus_uzs ? ` Начислено +${formatUzs(p.bonus_uzs)} бонусных сум.` : ''}`,
+    uz: (p: TemplatePayload) => `Rahmat! «${p.product ?? ''}» haqidagi sharhingiz chop etildi.${p.bonus_uzs ? ` +${formatUzs(p.bonus_uzs)} bonus so‘m qo‘shildi.` : ''}`,
+  },
+  'review.rejected': {
+    ru: (p: TemplatePayload) => `Отзыв о «${p.product ?? ''}» не опубликован. Причина: ${p.reason ?? '—'}. Вы можете написать новый.`,
+    uz: (p: TemplatePayload) => `«${p.product ?? ''}» haqidagi sharh chop etilmadi. Sabab: ${p.reason ?? '—'}. Yangisini yozishingiz mumkin.`,
+  },
   // D-57: 09:00 / 15:00 / 21:00 — nobody uploaded the iHerb wishlist yet (admins, Russian; switched on in «iHerb и цены»).
   'staff.iherb_upload_due': {
     ru: (p: TemplatePayload) => `Пора загрузить вишлист iHerb: товаров со ссылкой iHerb — ${p.count ?? 0}. Сохраните страницу вишлиста и загрузите её в «iHerb и цены».`,
@@ -578,6 +599,9 @@ const CENTRE_LINES: Partial<Record<TemplateName, Record<Lang, (p: TemplatePayloa
   'bonus.accrued': { ru: (p) => `Начислено +${formatUzs(p.bonus_uzs ?? 0)} сум${p.order_number ? ` за заказ №${p.order_number}` : ''}`, uz: (p) => `+${formatUzs(p.bonus_uzs ?? 0)} so‘m qo‘shildi${p.order_number ? ` (№${p.order_number})` : ''}` },
   'bonus.returned': { ru: (p) => `${formatUzs(p.bonus_uzs ?? 0)} сум вернулись на счёт (заказ №${p.order_number})`, uz: (p) => `${formatUzs(p.bonus_uzs ?? 0)} so‘m hisobga qaytdi (№${p.order_number})` },
   'bonus.expiring': { ru: (p) => `${p.burn_date ?? ''} сгорят ${formatUzs(p.bonus_uzs ?? 0)} сум`, uz: (p) => `${p.burn_date ?? ''} kuni ${formatUzs(p.bonus_uzs ?? 0)} so‘m kuyadi` },
+  'review.ask': { ru: (p) => `Как вам ${p.product ?? 'заказ'}? Оставьте отзыв`, uz: (p) => `${p.product ?? 'Buyurtma'} yoqdimi? Sharh qoldiring` },
+  'review.published': { ru: (p) => `Отзыв опубликован${p.bonus_uzs ? `, +${formatUzs(p.bonus_uzs)} бонусных сум` : ''}`, uz: (p) => `Sharh chop etildi${p.bonus_uzs ? `, +${formatUzs(p.bonus_uzs)} bonus so‘m` : ''}` },
+  'review.rejected': { ru: (p) => `Отзыв не опубликован: ${p.reason ?? '—'}`, uz: (p) => `Sharh chop etilmadi: ${p.reason ?? '—'}` },
 };
 
 /** Title and line of a centre entry in the customer's language. */
@@ -589,7 +613,7 @@ export function renderCentre(template: string, payload: TemplatePayload, lang: L
   }
   const line = isTemplate(template) ? CENTRE_LINES[template]?.[lang](payload) : undefined;
   if (template === 'waitlist.back_in_stock') return { title: payload.product ?? '', body: line ?? '' };
-  if (template.startsWith('bonus.')) return { title: 'VITALO Bonus', body: line ?? '' };
+  if (template.startsWith('bonus.')) return { title: lang === 'uz' ? 'Bonus hamyon' : 'Бонусный кошелёк', body: line ?? '' };
   if (template === 'support.reply' || template === 'support.closed') {
     const topic = SUPPORT_TOPICS[(payload.topic ?? 'tech') as SupportTopic]?.[lang] ?? '';
     const head = lang === 'uz' ? `Murojaat №${payload.thread_no ?? ''}` : `Обращение №${payload.thread_no ?? ''}`;

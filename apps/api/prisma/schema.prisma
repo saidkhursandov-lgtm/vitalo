@@ -181,6 +181,15 @@ enum BonusOp {
   review
 }
 
+/// 3.10-Б: pending — waits for moderation; published — on the product card (the bonus is posted); rejected — not shown;
+/// hidden — was published, then taken off the card by staff (the bonus stays)
+enum ReviewStatus {
+  pending
+  published
+  rejected
+  hidden
+}
+
 enum ReferralStatus {
   pending
   qualified
@@ -349,6 +358,8 @@ model users {
   ai_consent_at    DateTime?
   /// D-70: the consent to VITALO AI that says the conversation is kept (12 months); asked once more from those who agreed before
   ai_chat_consent_at DateTime?
+  /// 3.10-Б: «Просить оставить отзыв» — the bot asks 3 days after the delivery (switched off in the profile)
+  review_requests  Boolean    @default(true)
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
   deleted_at       DateTime?
@@ -373,6 +384,7 @@ model users {
   support_threads   support_threads[]
   notes             customer_notes[]
   ai_chats          ai_chats[]
+  reviews           reviews[]
 
   @@index([status])
 }
@@ -481,6 +493,8 @@ model staff_users {
   customer_notes        customer_notes[]
   marketplace_orders    marketplace_orders[]
   reviewed_receipts     payment_receipts[]
+  moderated_reviews     reviews[]                      @relation("ReviewModerator")
+  replied_reviews       reviews[]                      @relation("ReviewReplier")
   compat_answered       compat_requests[]
   compat_saved          compat_answers[]
   iherb_uploads         iherb_uploads[]
@@ -711,6 +725,11 @@ model products {
   competitor_prices       competitor_prices[]
   admin_ai_memory         admin_business_memory[]
   support_threads         support_threads[]
+  reviews                 reviews[]
+
+  /// 3.10-Б: published reviews — their number and the sum of their stars (the average is sum / count)
+  reviews_count           Int                       @default(0)
+  rating_sum              Int                       @default(0)
 
   // Trigram index on name/brand/keywords for typo-tolerant search: see constraints.sql
   @@index([status])
@@ -1648,6 +1667,8 @@ model orders {
   expected_to                    DateTime?     @db.Date
   /// D-60: the staff reminder «дата прошла» was sent for this expected_to
   cross_border_overdue_for       DateTime?     @db.Date
+  /// 3.10-Б: the bot asked «Как вам …? Оставьте отзыв» (once per order, 3 days after the delivery)
+  review_asked_at                DateTime?
 
   user                users                  @relation(fields: [user_id], references: [id])
   region              regions                @relation(fields: [region_id], references: [id])
@@ -1669,6 +1690,7 @@ model orders {
   payme_txs           payme_transactions[]
   cross_border_events cross_border_events[]
   support_threads     support_threads[]
+  reviews             reviews[]
 
   @@index([user_id, status, created_at])
   @@index([status, reserved_until]) // reservation-expiry job
@@ -1921,6 +1943,73 @@ model promo_codes {
   code         String          @unique
   status       PromoCodeStatus @default(active)
   promotion    promotions      @relation(fields: [promotion_id], references: [id])
+}
+
+// ───────────── REVIEWS (3.10-Б) ─────────────
+
+/// 3.10-Б: a verified review — only for a product of the customer's delivered order, one per order line product.
+/// Never deleted: rejected or hidden reviews stay for the history and the audit.
+model reviews {
+  id            String         @id @default(uuid()) @db.Uuid
+  product_id    String         @db.Uuid
+  order_id      String         @db.Uuid
+  user_id       String         @db.Uuid
+  rating        Int            @db.SmallInt
+  /// quick tags chosen by the customer: effect | easy | quality | price | no_effect | hard
+  tags          String[]       @default([])
+  text          String?
+  /// «Саидкомол Х.» when show_name, else «Покупатель VITALO» (the phone and username are never shown)
+  show_name     Boolean        @default(true)
+  author_name   String
+  lang          Lang           @default(ru)
+  status        ReviewStatus   @default(pending)
+  /// spam | rude | empty | medical | other
+  reject_reason String?
+  reject_note   String?
+  moderated_by  String?        @db.Uuid
+  moderated_at  DateTime?
+  /// the answer of the VITALO specialist under the review
+  reply_text    String?
+  replied_by    String?        @db.Uuid
+  replied_at    DateTime?
+  /// what was posted to the bonus account on publication (0 — none: the programme was off or the amount is 0)
+  bonus_uzs     Int            @default(0)
+  published_at  DateTime?
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+
+  product   products       @relation(fields: [product_id], references: [id])
+  order     orders         @relation(fields: [order_id], references: [id])
+  user      users          @relation(fields: [user_id], references: [id])
+  moderator staff_users?   @relation("ReviewModerator", fields: [moderated_by], references: [id], onDelete: SetNull)
+  replier   staff_users?   @relation("ReviewReplier", fields: [replied_by], references: [id], onDelete: SetNull)
+  media     review_media[]
+
+  @@unique([order_id, product_id])
+  @@index([product_id, status, published_at])
+  @@index([status, created_at])
+  @@index([user_id, created_at])
+}
+
+/// 3.10-Б: up to 2 photos of a review. Until publication they live in the private folder (private_key, like receipts);
+/// on publication they are copied to the public uploads (url…).
+model review_media {
+  id             String   @id @default(uuid()) @db.Uuid
+  review_id      String   @db.Uuid
+  sort           Int      @default(0) @db.SmallInt
+  /// file name base in REVIEWS_DIR: <review_id>/<uuid> (+ .webp / .jpg / -400.webp / -400.jpg)
+  private_key    String
+  url            String?
+  url_jpeg       String?
+  thumb_url      String?
+  thumb_url_jpeg String?
+  width          Int?
+  height         Int?
+  created_at     DateTime @default(now())
+
+  review reviews @relation(fields: [review_id], references: [id])
+
+  @@index([review_id])
 }
 
 // ───────────── BONUSES / REFERRAL ─────────────

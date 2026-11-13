@@ -64,6 +64,7 @@ export type Permission =
   | 'promo.manage'
   | 'compat.view'
   | 'support.view'
+  | 'reviews.moderate'
   | 'support.answer'
   | 'compat.answer'
   | 'compat.rules.approve';

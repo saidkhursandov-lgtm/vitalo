@@ -218,6 +218,12 @@ export const AUDIT_ACTION: Record<string, string> = {
   // D-70: «Переписки VITALO AI»
   'ai_chat.viewed': 'Открыта переписка покупателя с VITALO AI',
   'ai_chat.reviewed': 'Отмечена проверка переписки VITALO AI',
+  // 3.10-Б: «Отзывы»
+  'review.published': 'Отзыв опубликован, бонус начислен',
+  'review.unhidden': 'Скрытый отзыв возвращён на сайт',
+  'review.rejected': 'Отзыв отклонён',
+  'review.hidden': 'Отзыв скрыт',
+  'review.replied': 'Ответ специалиста под отзывом',
   'competitor_price.added': 'Добавлена цена конкурента',
   'competitor_price.hidden': 'Скрыта цена конкурента',
   'dictionary.created': 'Добавлена запись справочника',

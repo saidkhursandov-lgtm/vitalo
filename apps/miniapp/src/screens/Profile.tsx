@@ -15,6 +15,11 @@ export function Profile() {
   const recent = orders.data?.pages[0].items.slice(0, 3) ?? [];
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
   const [marketing, setMarketing] = useState(user.marketing_opt_in);
+  const [reviewAsk, setReviewAsk] = useState(user.review_requests ?? true);
+  const toggleReviewAsk = (on: boolean) => {
+    setReviewAsk(on);
+    api('/auth/me', { method: 'PATCH', body: { review_requests: on } }).catch(() => setReviewAsk(!on));
+  };
   const toggleMarketing = (on: boolean) => {
     setMarketing(on);
     api('/auth/me', { method: 'PATCH', body: { marketing_opt_in: on } }).catch(() => setMarketing(!on));
@@ -59,6 +64,11 @@ export function Profile() {
         <label className="list-row switch-row">
           <span>{t('profile.marketingRow')}</span>
           <input type="checkbox" role="switch" className="switch" checked={marketing} onChange={(e) => toggleMarketing(e.target.checked)} />
+        </label>
+        {/* 3.10-Б: the bot asks for a review once, 3 days after delivery */}
+        <label className="list-row switch-row">
+          <span>{t('profile.reviewRow')}</span>
+          <input type="checkbox" role="switch" className="switch" checked={reviewAsk} onChange={(e) => toggleReviewAsk(e.target.checked)} />
         </label>
       </section>
 

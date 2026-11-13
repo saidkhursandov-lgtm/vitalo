@@ -38,6 +38,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/ai-chats', label: 'Переписки VITALO AI', permission: 'compat.answer' },
       // 6а-Д: questions from «Спросить специалиста» in the Mini App
       { to: '/support', label: 'Обращения', permission: 'support.view' },
+      // 3.10-Б: reviews from delivered orders — premoderation by the admin and «специалист»
+      { to: '/reviews', label: 'Отзывы', permission: 'reviews.moderate' },
     ],
   },
   {

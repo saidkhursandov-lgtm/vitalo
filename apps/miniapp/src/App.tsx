@@ -21,6 +21,7 @@ import { OrderDetail, Orders } from './screens/Orders';
 import { Notifications } from './screens/Notifications';
 import { Payment } from './screens/Payment';
 import { PaymePayment } from './screens/PaymePayment';
+import { ReviewScreen } from './screens/Review';
 import { SupportList, SupportThreadScreen } from './screens/Support';
 import { Product } from './screens/Product';
 import { Profile } from './screens/Profile';
@@ -100,6 +101,7 @@ function Shop() {
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/pay" element={<Payment />} />
         <Route path="orders/:id/payme" element={<PaymePayment />} />
+        <Route path="review/:orderId" element={<ReviewScreen />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="support" element={<SupportList />} />
         <Route path="support/:id" element={<SupportThreadScreen />} />

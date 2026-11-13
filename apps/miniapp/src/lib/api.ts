@@ -60,18 +60,20 @@ export async function api<T>(
   init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // 3.10-Б: a form with photos (FormData) goes as multipart and gets more time on a slow mobile network
+  const form = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  const timer = setTimeout(() => controller.abort(), form ? REQUEST_TIMEOUT_MS * 4 : REQUEST_TIMEOUT_MS);
   let res: Response;
   let body: Record<string, unknown>;
   try {
     res = await fetch(`${BASE}${path}`, {
       method: init.method ?? 'GET',
       headers: {
-        ...(init.body !== undefined && { 'content-type': 'application/json' }),
+        ...(init.body !== undefined && !form && { 'content-type': 'application/json' }),
         ...(token && { authorization: `Bearer ${token}` }),
         ...init.headers,
       },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      body: init.body === undefined ? undefined : form ? (init.body as FormData) : JSON.stringify(init.body),
       signal: controller.signal,
     });
     body = res.status === 204 ? {} : await res.json().catch(() => ({}));

@@ -694,3 +694,16 @@ textarea { resize: vertical; }
 .ai-chat-log p { margin: 4px 0 0; }
 .ai-chat-log ul { margin: 6px 0 0; padding-left: 18px; }
 .ai-chat-log-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 13px; }
+
+/* 3.10-Б «Отзывы» */
+.review-list { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+.review-card { display: flex; flex-direction: column; gap: 8px; }
+.review-card p { margin: 0; }
+.review-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.review-stars { color: var(--warn); letter-spacing: 1px; }
+.review-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.review-text { font-size: 14px; line-height: 1.5; }
+.review-media { display: flex; gap: 8px; flex-wrap: wrap; }
+.review-media img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); display: block; }
+.review-reply { padding: 8px 12px; border-left: 3px solid var(--primary); background: var(--bg); border-radius: 8px; }
+.review-card .row-actions { display: flex; flex-wrap: wrap; gap: 8px; }

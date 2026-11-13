@@ -17,6 +17,7 @@ import { tapHaptic } from '../lib/telegram';
 import { DeliveryTerm } from '../components/Delivery';
 import { Picture, SafeImg } from '../components/Picture';
 import { ClampText } from '../components/ClampText';
+import { ProductReviewsBlock, RatingLine } from '../components/Reviews';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip } from '../components/ui';
 
 /** Accordions; «Описание» comes first and is folded — the expert text on the first screen is the verdict (2.3 fixes). */
@@ -93,6 +94,8 @@ export function Product() {
       {/* 2.3: the short name and the substance form; the full name is in «О товаре» and in search */}
       <h1 className="product-title">{short}</h1>
       {substance && <p className="product-sub">{substance}</p>}
+      {/* 3.10-Б: «★ 4,8 (18 отзывов)» — only verified buyers' reviews */}
+      <RatingLine rating={p.rating} />
       <div className="price-line">
         <Price price={p.price_uzs} old={p.old_price_uzs} size="lg" campaign={p.campaign} />
         <ProductCashback price={p.price_uzs} />
@@ -185,6 +188,9 @@ export function Product() {
           ))}
         </section>
       )}
+
+      {/* 3.10-Б: «Отзывы покупателей» — only from delivered orders, after moderation */}
+      <ProductReviewsBlock productId={p.id} />
 
       <section className="card">
         <h2>{t('product.delivery')}</h2>

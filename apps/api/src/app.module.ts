@@ -23,6 +23,7 @@ import { BannersModule } from './banners/banners.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
 import { MapsModule } from './maps/maps.module';
 import { BonusModule } from './bonus/bonus.service';
+import { ReviewsModule } from './reviews/reviews.module';
 
 // forRoot() loads .env into process.env synchronously, so JOBS_ENABLED from .env is visible below.
 const config = ConfigModule.forRoot({ isGlobal: true });
@@ -36,6 +37,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     PrismaModule,
     SettingsModule,
     BonusModule,
+    ReviewsModule,
     StorageModule,
     NotificationsModule,
     NotificationCentreModule,

@@ -16,7 +16,7 @@ import { OrderItems, OrderTotals } from '../components/OrderItems';
 import { IntakeGuideBlock } from '../components/OrderNotices';
 import type { Order, OrderListItem } from '../lib/types';
 import { UsaTracking, useUsaStageLabel } from '../components/CrossBorder';
-import { PlaneIcon } from '../components/Icons';
+import { PlaneIcon, StarIcon } from '../components/Icons';
 
 /** The same status twice in a row (e.g. "new" -> "awaiting_payment" shown as "Ожидает оплаты" twice) is shown once. */
 export function dedupeHistory<T extends { to_status: string }>(history: T[], label: (s: string) => string = (s) => s): T[] {
@@ -178,6 +178,12 @@ export function OrderDetail() {
         {unpaid && !reported && (o.payment?.method === 'card_transfer' || o.payment?.method === 'bank_transfer' || o.payment?.method === 'payme') && (
           <Link to={payPath(o.id, o.payment?.method)} className="btn btn-block">
             {t('orders.pay')}
+          </Link>
+        )}
+        {/* 3.10-Б: reviews only from a delivered order */}
+        {o.status === 'delivered' && (
+          <Link to={`/review/${o.id}`} className="btn btn-secondary btn-block">
+            <StarIcon width={20} height={20} /> {t('review.rateOrder')}
           </Link>
         )}
         {o.can_cancel && (

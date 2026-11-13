@@ -27,6 +27,8 @@ export interface UserProfile {
   phone: string | null;
   language: Lang;
   marketing_opt_in: boolean;
+  /** 3.10-Б: «Просить оставить отзыв» — the bot asks once, 3 days after delivery */
+  review_requests?: boolean;
 }
 
 export interface CategoryNode extends Named {
@@ -74,6 +76,53 @@ export interface ProductListItem extends Named {
   campaign?: ShopCampaign | null;
   /** 6а-В: the manual label «11.11», «Black Friday», «Хит», «Новинка» (a running sale's badge wins) */
   promo_label?: PromoLabel | null;
+  /** 3.10-Б: published reviews — the average and the count; null while there are none */
+  rating?: { avg: number; count: number } | null;
+}
+
+/** 3.10-Б: «Проверенные отзывы». */
+export type ReviewTag = 'effect' | 'easy' | 'quality' | 'price' | 'no_effect' | 'hard';
+export type ReviewStatus = 'pending' | 'published' | 'rejected' | 'hidden';
+export interface ReviewableItem {
+  order_id: string;
+  order_number: string;
+  delivered_at: string | null;
+  product_id: string;
+  name_ru: string;
+  name_uz: string | null;
+  image: { webp: string; jpeg?: string | null; width?: number | null; height?: number | null } | null;
+  review_status: ReviewStatus | null;
+}
+export interface ReviewFormInfo {
+  bonus: { plain_uzs: number; photo_uzs: number } | null;
+  author_name: string;
+  anonymous_name: string;
+}
+export interface ReviewPhoto {
+  url: string;
+  url_jpeg: string | null;
+  thumb_url: string | null;
+  thumb_url_jpeg: string | null;
+  width: number | null;
+  height: number | null;
+}
+export interface ProductReview {
+  id: string;
+  rating: number;
+  tags: ReviewTag[];
+  text: string;
+  author: string;
+  lang: string;
+  verified: boolean;
+  published_at: string | null;
+  photos: ReviewPhoto[];
+  reply: { text: string; at: string | null } | null;
+}
+export interface ProductReviews {
+  summary: { avg: number | null; count: number; stars: number[] };
+  items: ProductReview[];
+  page: number;
+  pages: number;
 }
 
 /** 3.7: «Акции»: the skin draws the badge and the price colour; «none» — only the two prices. */

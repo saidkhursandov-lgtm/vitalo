@@ -56,7 +56,7 @@ export class AuthService {
     return { sessionId: session.id, user: session.user };
   }
 
-  updateProfile(userId: string, data: { language?: 'ru' | 'uz'; marketing_opt_in?: boolean }): Promise<users> {
+  updateProfile(userId: string, data: { language?: 'ru' | 'uz'; marketing_opt_in?: boolean; review_requests?: boolean }): Promise<users> {
     return this.prisma.users.update({ where: { id: userId }, data });
   }
 

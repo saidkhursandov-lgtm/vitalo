@@ -1,3 +1,4 @@
+import { ratingAvg } from '../reviews/review-rules';
 import { Prisma } from '@prisma/client';
 import { SUPPLIER_TERMS_SELECT, underOrderOf, type SupplyTerms } from '../orders/cross-border';
 import { thumbSize } from '../storage/image-processing';
@@ -88,6 +89,8 @@ export interface ProductListItem {
   campaign: ShopCampaign | null;
   /** 6а-В: «11.11», «Black Friday», «Хит», «Новинка» set by hand (a running sale's badge wins in the shop) */
   promo_label: PromoLabel | null;
+  /** 3.10-Б: published reviews — the average (4.8) and the count; null while there are none */
+  rating: { avg: number; count: number } | null;
 }
 
 /** 3.7: what the shop shows about a product's sale: the badge (skin, title, %) and the countdown. */
@@ -149,6 +152,7 @@ export function toProductListItem(p: ProductForList): ProductListItem {
     ...underOrderFields(p),
     campaign: null,
     promo_label: promoLabelOf(p.promo_label),
+    rating: p.reviews_count > 0 ? { avg: ratingAvg(p.rating_sum, p.reviews_count) ?? 0, count: p.reviews_count } : null,
   };
 }
 

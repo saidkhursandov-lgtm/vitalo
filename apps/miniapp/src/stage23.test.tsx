@@ -97,7 +97,7 @@ describe('2.3 fixes: mini-card', () => {
   it('fixed places: name, one meta line (kept even when empty), then the price and under it a wide «В корзину» (6б-А)', () => {
     const { container } = show('ru', <ProductTile product={{ ...PRODUCT, substance_form_ru: null, course_days: null }} />);
     const body = container.querySelector('.tile-body')!;
-    expect([...body.children].map((e) => e.className)).toEqual(['tile-brand', 'tile-name', 'tile-meta', 'tile-foot']);
+    expect([...body.children].map((e) => e.className)).toEqual(['tile-brand-row', 'tile-name', 'tile-meta', 'tile-foot']);
     // the price block (an empty old-price slot over the price), the button row under it
     expect([...container.querySelector('.tile-foot')!.children].map((e) => e.className)).toEqual(['tile-prices', 'tile-action']);
     expect([...container.querySelector('.tile-prices')!.children].map((e) => e.className)).toEqual(['tile-price-old', 'tile-price']);

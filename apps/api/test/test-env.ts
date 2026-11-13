@@ -33,4 +33,5 @@ export const TEST_ENV = {
   PAYME_DELIVERY_PACKAGE_CODE: '',
   UPLOAD_DIR:require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
   RECEIPTS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-receipts'),
+  REVIEWS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-reviews'),
 };

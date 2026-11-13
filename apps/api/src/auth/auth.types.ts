@@ -19,6 +19,8 @@ export interface UserProfile {
   phone: string | null;
   language: string;
   marketing_opt_in: boolean;
+  /** 3.10-Б */
+  review_requests: boolean;
   created_at: Date;
 }
 
@@ -32,6 +34,7 @@ export function toUserProfile(u: users): UserProfile {
     phone: u.phone,
     language: u.language,
     marketing_opt_in: u.marketing_opt_in,
+    review_requests: u.review_requests,
     created_at: u.created_at,
   };
 }
