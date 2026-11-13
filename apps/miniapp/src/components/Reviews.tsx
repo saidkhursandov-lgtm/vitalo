@@ -72,11 +72,25 @@ export function ProductReviewsBlock({ productId }: { productId: string }) {
   if (!first?.summary) return null;
   const { summary } = first;
   const items = q.data?.pages.flatMap((p) => p.items) ?? [];
+  const empty = summary.count === 0 || summary.avg === null;
+  // its own section (like «Похожие товары»), not one more accordion card: a heading outside, each review its own card
   return (
-    <section className="card reviews-block" id="reviews">
-      <h2>{t('review.block')}</h2>
-      {summary.count === 0 || summary.avg === null ? (
-        <p className="hint">{t('review.none')}</p>
+    <section className="section reviews-block" id="reviews">
+      <div className="section-head">
+        <h2>{t('review.block')}</h2>
+        {!empty && summary.avg !== null && (
+          <span className="reviews-head-avg" aria-hidden>
+            <StarIcon width={16} height={16} filled /> {avgText(summary.avg, lang)}
+          </span>
+        )}
+      </div>
+      {empty || summary.avg === null ? (
+        <div className="reviews-empty">
+          <span className="reviews-empty-icon" aria-hidden>
+            <StarIcon width={22} height={22} />
+          </span>
+          <p>{t('review.none')}</p>
+        </div>
       ) : (
         <div className="reviews-summary">
           <div className="reviews-avg">
@@ -102,6 +116,9 @@ export function ProductReviewsBlock({ productId }: { productId: string }) {
               );
             })}
           </ul>
+          <p className="reviews-trust">
+            <BadgeIcon width={16} height={16} aria-hidden /> {t('review.trust')}
+          </p>
         </div>
       )}
       {items.map((r) => (

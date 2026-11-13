@@ -14,7 +14,6 @@ import { useSheets } from '../components/Sheets';
 import type { ProductCard } from '../lib/types';
 import { useUnderOrderDays, useUnderOrderText } from '../components/CrossBorder';
 import { tapHaptic } from '../lib/telegram';
-import { DeliveryTerm } from '../components/Delivery';
 import { Picture, SafeImg } from '../components/Picture';
 import { ClampText } from '../components/ClampText';
 import { ProductReviewsBlock, RatingLine } from '../components/Reviews';
@@ -191,12 +190,6 @@ export function Product() {
 
       {/* 3.10-Б: «Отзывы покупателей» — only from delivered orders, after moderation */}
       <ProductReviewsBlock productId={p.id} />
-
-      <section className="card">
-        <h2>{t('product.delivery')}</h2>
-        <DeliveryTerm />
-        <p className="hint small">{t('product.deliveryInfo')}</p>
-      </section>
 
       <ProductStrip title={t('product.similar')} products={p.similar} />
       <ProductStrip title={t('product.alsoBought')} products={p.also_bought} />
