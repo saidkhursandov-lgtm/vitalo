@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -101,8 +101,10 @@ describe('3.10-А VITALO Bonus in the Mini App', () => {
 
   it('profile card and the bonus page: balance, «до 25%», when it burns, history with signs', async () => {
     show('ru', <BonusCard />);
-    expect(plain((await screen.findByText(/22 500 сум/, { selector: '.bonus-balance' })).textContent)).toBe('22 500 сум');
-    expect(screen.getByText('Оплачивайте бонусами до 25% заказа')).toBeTruthy();
+    expect(plain((await screen.findByText(/22 500 сум/, { selector: '.bonus-wallet-sum' })).textContent)).toBe('22 500 сум');
+    expect(screen.getByText('Бонусный кошелёк')).toBeTruthy();
+    expect(screen.getByText('Накопительный баланс • Кешбэк 3% с покупок')).toBeTruthy();
+    expect(screen.queryByText(/до 25%/)).toBeNull();
     expect(plain(screen.getByText(/Сгорят/).textContent)).toBe('Сгорят 22 500 сум 12.02.2027');
     cleanup();
 
@@ -115,6 +117,16 @@ describe('3.10-А VITALO Bonus in the Mini App', () => {
     expect(ops[1]).toContain('−15 000 сум');
     expect(ops[2]).toContain('Кешбэк за заказ');
     expect(ops[2]).toContain('заказ №V-1');
+    expect(screen.queryByText(/до 25%/)).toBeNull();
+    expect(plain(document.querySelector('.bonus-wallet-badge')?.textContent)).toBe('Кешбэк 3% • 1 бонус = 1 сум');
+    fireEvent.click(screen.getByRole('button', { name: 'Ознакомиться с условиями бонусной системы' }));
+    const sheet = screen.getByRole('dialog', { name: 'Условия бонусной программы VITALO' });
+    const terms = within(sheet).getAllByRole('listitem').map((li) => plain(li.textContent));
+    expect(terms).toHaveLength(5);
+    expect(terms[0]).toContain('3% от стоимости оплаченных товаров');
+    expect(terms[2]).toContain('до 25% стоимости товаров');
+    expect(terms[3]).toContain('90 дней');
+    expect(terms[4]).toContain('не суммируется с промокодами');
   });
 
   it('product cashback: whole sum down from the price and the percent', () => {

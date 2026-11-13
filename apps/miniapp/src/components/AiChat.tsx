@@ -7,7 +7,7 @@ import { useCartActions } from '../lib/queries';
 import type { AiChatMessage, AiChatState, AiChatTopic, AiGoalFit, Lang } from '../lib/types';
 import type { AiCartItem } from './AiCompat';
 import { useConfirm } from './Confirm';
-import { CloseIcon, InfoIcon, SendIcon, ShieldIcon, SparkIcon } from './Icons';
+import { CloseIcon, InfoIcon, PlusIcon, SendIcon, ShieldIcon, SparkIcon, TrashIcon } from './Icons';
 
 const FIT_TONE: Record<AiGoalFit, 'green' | 'yellow' | 'grey'> = { helps: 'green', maybe: 'yellow', unlikely: 'grey', no_data: 'grey' };
 type Goal = Exclude<AiChatTopic, 'compat' | 'other'>;
@@ -54,6 +54,25 @@ export function chatSuggestions(lang: Lang, count: number, topics: Goal[]): { ca
 
 type Failure = 'limit' | 'failed' | 'full' | 'too_long';
 
+/** The cart the last conversation was about: when the cart is another one now, the sheet opens a new conversation. */
+const CHAT_CART_KEY = 'vitalo.aichat.cart';
+export const cartSig = (items: { product_id: string }[]) => items.map((i) => i.product_id).sort().join(',');
+const readChatCart = (): { id: string; sig: string } | null => {
+  try {
+    const raw = localStorage.getItem(CHAT_CART_KEY);
+    return raw ? (JSON.parse(raw) as { id: string; sig: string }) : null;
+  } catch {
+    return null;
+  }
+};
+const writeChatCart = (id: string, sig: string) => {
+  try {
+    localStorage.setItem(CHAT_CART_KEY, JSON.stringify({ id, sig }));
+  } catch {
+    /* private mode: the conversation simply continues */
+  }
+};
+
 /**
  * D-70: «Спросить VITALO AI о корзине» — a conversation in a bottom sheet. On top — the cart in short; then suggested
  * questions (about the cart, then «Что беспокоит» — the goals of the cart first) and a text field (up to `max_chars`);
@@ -79,6 +98,16 @@ export function AiChatSheet({ items, onClose, onAsk }: { items: AiCartItem[]; on
   const messages = chat?.messages ?? [];
   const full = !!chat && !!s && chat.questions >= s.max_turns;
   const n = items.length;
+  const sig = cartSig(items);
+  const decided = useRef(false);
+
+  // The saved conversation continues only for the same cart; another cart starts a new one (the old one stays saved).
+  useEffect(() => {
+    if (decided.current || !s) return;
+    decided.current = true;
+    const saved = readChatCart();
+    if (s.chat && !(saved?.id === s.chat.id && saved.sig === sig)) setFresh(true);
+  }, [s, sig]);
 
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: 'end' });
@@ -99,6 +128,7 @@ export function AiChatSheet({ items, onClose, onAsk }: { items: AiCartItem[]; on
         body: { text: q, ...(chat && { chat_id: chat.id }), ...(suggestion && { suggestion }) },
       });
       setFresh(false);
+      if (res.chat) writeChatCart(res.chat.id, sig);
       setState({ ...s, chat: res.chat, left_today: res.left_today });
     } catch (e) {
       const code = e instanceof ApiError ? e.code : undefined;
@@ -217,11 +247,11 @@ export function AiChatSheet({ items, onClose, onAsk }: { items: AiCartItem[]; on
               {chat && (
                 <div className="ai-chat-tools">
                   <span className="ai-chat-number">{chat.number}</span>
-                  <button type="button" className="link" onClick={restart}>
-                    {t('aichat.new')}
+                  <button type="button" className="ai-chat-tool" onClick={restart}>
+                    <PlusIcon width={15} height={15} aria-hidden /> {t('aichat.newShort')}
                   </button>
-                  <button type="button" className="link ai-chat-delete" onClick={() => void remove()}>
-                    {t('aichat.delete')}
+                  <button type="button" className="ai-chat-tool is-icon" aria-label={t('aichat.delete')} title={t('aichat.delete')} onClick={() => void remove()}>
+                    <TrashIcon width={16} height={16} aria-hidden />
                   </button>
                 </div>
               )}

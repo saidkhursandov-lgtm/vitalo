@@ -56,6 +56,15 @@
   --ai-gradient: linear-gradient(135deg, #002d62 0%, #002d62 35%, #ff6600 100%); /* 2.4: centre «Подбор» (add-on 3.1, module 1) */
   --ai-box-bg: #f0f6ff;       /* 3.8 fix: the VITALO AI block in the cart; navy on it is 13:1 */
   --ai-box-border: #d6e4f5;
+  --ai-soft-gradient: linear-gradient(135deg, #f0f6ff 0%, #fff7ed 100%); /* the VITALO AI block in the cart; navy on both ends > 12:1 */
+  --ai-soft-border: #cfdcf0;
+  --wallet-bg: #002d62;      /* «Бонусный кошелёк»: navy card; white on it 13.9:1 */
+  --wallet-glow: rgb(255 102 0 / 0.45); /* the soft orange light in the corner (decoration, no text on it) */
+  --wallet-muted: rgb(255 255 255 / 0.82); /* small text on the wallet: > 9:1 */
+  --wallet-badge-bg: rgb(255 255 255 / 0.14);
+  --wallet-burn: #ffd2ad;    /* «Сгорят …» on navy: 10:1 */
+  --cashback-bg: #fff7ed;    /* the cashback pill on the product card */
+  --cashback-border: #fed7aa;
   --ai-body-bg: #f4f7fb;      /* 3.8 fix: the body of the VITALO AI answer */
   --ai-body-border: #cbd5e1;
   /* 3.7: sale skins. Black Friday: white / gold on #111827 (17:1 / 10:1); 11.11: #111827 on orange (6.3:1), its price
@@ -1412,14 +1421,14 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .ai-box-text > span { font-size: 12px; line-height: 1.35; color: var(--muted); }
 .ai-box > .ai-ask { margin: -6px 0 2px 14px; }
 /* D-70: VITALO AI at the top of the cart — a navy card, the products of the cart as thumbnails */
-.ai-hero { background: var(--primary); border-color: var(--primary); }
-.ai-hero .ai-box-main { color: var(--on-primary); padding: 14px 12px 12px 14px; }
-.ai-hero .ai-box-main:active { background: rgb(255 255 255 / 0.08); }
-.ai-hero .ai-box-text { gap: 5px; }
-.ai-hero .ai-box-text strong { font-size: 16px; line-height: 1.3; color: var(--on-primary); }
-.ai-hero .ai-box-text > span { color: rgb(255 255 255 / 0.85); }
-.ai-hero .ai-box-text > .ai-hero-tag { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; padding: 2px 8px; border-radius: 999px; background: rgb(255 255 255 / 0.14); color: var(--on-primary); font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; }
-.ai-hero .ask-chevron { color: var(--on-primary); }
+.ai-hero { background: var(--ai-soft-gradient); border-color: var(--ai-soft-border); padding: 12px; }
+.ai-hero-head { display: flex; align-items: flex-start; gap: 10px; }
+.ai-spark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ai-gradient); color: var(--on-primary); }
+.ai-hero .ai-box-text { gap: 2px; }
+.ai-hero .ai-box-text strong { font-size: 14.5px; line-height: 1.3; }
+.ai-hero .ai-box-text > span { font-size: 12.5px; }
+.ai-hero-check { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: var(--tap); margin-top: 10px; white-space: nowrap; }
+.ai-hero .ai-chat-btn { width: 100%; margin: 6px 0 0; min-height: var(--tap); background: rgb(255 255 255 / 0.7); }
 .ai-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .ai-thumb {
   display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; overflow: hidden;
@@ -1740,14 +1749,24 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .ai-chat-thumbs > :first-child { margin-left: 0; }
 .ai-chat-cart-names { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-chat-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
-.ai-chat-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
-.ai-chat-tools .link { min-height: 32px; font-size: 12.5px; }
+.ai-chat-tools { display: flex; align-items: center; gap: 4px; font-size: 12.5px; }
 .ai-chat-number { color: var(--muted); margin-right: auto; }
-.ai-chat-delete { color: var(--error); }
+/* «Новый чат» and the bin: a quiet pill 32px high inside a 44px tap area (transparent border) */
+.ai-chat-tool {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: var(--tap); min-height: var(--tap); padding: 0 12px;
+  border: 6px solid transparent; background-clip: padding-box; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--ai-box-border);
+  background-color: var(--ai-box-bg); color: var(--primary-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.ai-chat-tool:active { background-color: var(--primary-soft); }
+.ai-chat-tool.is-icon { padding: 0; width: var(--tap); color: var(--muted); background-color: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
 .ai-chat-hello { margin: 0; font-size: 14px; color: var(--text); }
 .ai-chat-group-title { margin: 10px 0 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.ai-chat-chips { margin: 0; }
-.ai-chat-chips .chip { white-space: normal; text-align: left; line-height: 1.25; font-size: 13.5px; min-height: var(--tap); }
+.ai-chat-chips { margin: 0; gap: 0 2px; }
+/* suggested questions: a small chip (about 32px) inside a 44px tap area */
+.ai-chat-chips .chip {
+  flex: 0 1 auto; max-width: 100%; white-space: normal; text-align: left; line-height: 1.25; font-size: 12.5px; font-weight: 500; min-height: var(--tap); padding: 6px 12px;
+  border: 5px solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px var(--border-strong); border-radius: 20px;
+}
 .ai-msg { max-width: 92%; padding: 9px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
 .ai-msg.is-user { align-self: flex-end; background: var(--primary); color: var(--on-primary); border-bottom-right-radius: 4px; white-space: pre-wrap; }
 .ai-msg.is-ai { align-self: flex-start; background: var(--ai-box-bg); color: var(--text); border-bottom-left-radius: 4px; }
@@ -1797,5 +1816,44 @@ a.bonus-card { text-decoration: none; align-items: center; min-height: 44px; }
 .bonus-use { font-weight: 600; }
 .bonus-blocked { margin: 6px 0; }
 .bonus-cashback { margin: 8px 0 0; color: var(--primary-text); }
-.product-cashback { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--primary-text); flex-basis: 100%; }
-.product-cashback svg { flex: none; }
+/* 3.10-А: the cashback pill next to the price — a 30px capsule in a 44px tap area; a tap opens the rules */
+.cashback-pill { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0; border: 0; background: none; font: inherit; cursor: pointer; text-align: left; }
+.cashback-pill-in {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  background: var(--cashback-bg); border: 1px solid var(--cashback-border); color: var(--accent-text); font-size: 13px; line-height: 1.3;
+}
+.cashback-pill-in strong { font-weight: 700; white-space: nowrap; }
+.cashback-pill-in svg { flex: none; }
+.cashback-pill:active .cashback-pill-in { background: var(--accent-soft); }
+/* 3.10-А: «Бонусный кошелёк» — a navy card with a soft orange light in the corner */
+.bonus-wallet {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: var(--radius-lg);
+  background: radial-gradient(circle at 100% 0%, var(--wallet-glow) 0%, transparent 55%), var(--wallet-bg); color: var(--on-primary);
+}
+a.bonus-wallet { text-decoration: none; margin: 0 0 12px; }
+.bonus-wallet-link:active { filter: brightness(1.08); }
+.bonus-wallet-top { display: flex; align-items: center; gap: 10px; }
+.bonus-wallet-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--wallet-badge-bg); }
+.bonus-wallet-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bonus-wallet-name strong { font-size: 15px; }
+.bonus-wallet-name span, .bonus-wallet-label { font-size: 12.5px; color: var(--wallet-muted); }
+.bonus-wallet-chevron { flex: none; }
+.bonus-wallet .bonus-wallet-chevron { color: var(--wallet-muted); }
+.bonus-wallet-sum { font-size: 26px; font-weight: 700; line-height: 1.15; color: var(--on-primary); overflow-wrap: anywhere; }
+.bonus-wallet-sum.is-big { font-size: 32px; }
+.bonus-wallet-badge { align-self: flex-start; padding: 3px 10px; border-radius: 999px; background: var(--wallet-badge-bg); font-size: 12.5px; font-weight: 600; }
+.bonus-wallet-burn { font-size: 12.5px; color: var(--wallet-burn); }
+.bonus-wallet-btn { margin-top: 8px; background: var(--surface); color: var(--primary-text); border-color: var(--surface); }
+.bonus-wallet-btn:active { background: var(--primary-soft); }
+.bonus-terms-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; margin: 12px 0; padding: 0 14px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); color: var(--primary-text); font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.bonus-terms-row > span { flex: 1; min-width: 0; }
+.bonus-terms-row svg { flex: none; }
+.bonus-terms-row .bonus-wallet-chevron { color: var(--muted); }
+.bonus-terms-row:active { background: var(--surface-2); }
+.bonus-terms li > span:last-child { line-height: 1.4; }
+.bonus-disclaimer { margin: 12px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.bonus-history-empty { margin: 0; padding: 4px 16px 16px; }
+.bonus-history { padding: 0 16px 4px; }

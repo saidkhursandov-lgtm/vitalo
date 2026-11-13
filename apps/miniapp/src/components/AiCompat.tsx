@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
@@ -154,6 +154,7 @@ export function AiCompat({
 
   const one = products.length === 1;
   const n = products.length;
+  const heroId = useId();
   const title = one ? t('ai.checkOne') : changed ? t('ai.recheck') : t('ai.checkN', { n, goods: goodsWord(n, lang) });
   const chat = onChat && (
     <button type="button" className="ai-chat-btn" onClick={onChat}>
@@ -181,16 +182,23 @@ export function AiCompat({
         <SpecialistAnswer answer={state.specialist} />
       ) : (
         <section className="ai-box ai-hero">
-          <button type="button" className="ai-box-main" onClick={() => (state.consent ? void run() : setPhase('consent'))}>
-            <span className="ai-box-text">
-              <span className="ai-hero-tag">
-                <SparkIcon width={14} height={14} aria-hidden /> VITALO AI
-              </span>
-              <strong>{title}</strong>
-              <span>{t('ai.sub')}</span>
-              {items.length > 0 && <Thumbs items={items} />}
+          <div className="ai-hero-head">
+            <span className="ai-spark" aria-hidden>
+              <SparkIcon width={18} height={18} />
             </span>
-            <ChevronIcon className="ask-chevron" width={20} height={20} aria-hidden />
+            <span className="ai-box-text">
+              <strong id={`${heroId}-t`}>{title}</strong>
+              <span>{t('ai.sub')}</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm ai-hero-check"
+            aria-labelledby={`${heroId}-t ${heroId}-b`}
+            onClick={() => (state.consent ? void run() : setPhase('consent'))}
+          >
+            <SparkIcon width={15} height={15} aria-hidden />
+            <span id={`${heroId}-b`}>{t(one ? 'ai.checkBtnOne' : 'ai.checkBtn')}</span>
           </button>
           {chat}
           {note && (

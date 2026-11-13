@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { dmy } from '../components/Bonus';
+import { BonusTermsRow, dmy } from '../components/Bonus';
 import { ErrorState, Loading } from '../components/ui';
 import { money } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
@@ -29,28 +29,22 @@ export function BonusScreen() {
   return (
     <div className="page bonus-page">
       <h1>{t('bonus.title')}</h1>
-      <section className="card bonus-hero">
-        <span className="hint small">{t('bonus.balanceLabel')}</span>
-        <strong className="bonus-big">{money(a.balance_uzs, lang)}</strong>
-        <span className="small">{t('bonus.payUpTo', { pct: r.max_spend_pct })}</span>
-        {a.expires_on && <span className="small bonus-burn">{t('bonus.burns', { sum: money(a.balance_uzs, lang), date: dmy(a.expires_on) })}</span>}
-        <Link to="/catalog" className="btn btn-block">{t('common.toCatalog')}</Link>
+      <section className="bonus-wallet bonus-wallet-hero">
+        <span className="bonus-wallet-label">{t('bonus.balance')}</span>
+        <strong className="bonus-wallet-sum is-big">{money(a.balance_uzs, lang)}</strong>
+        <span className="bonus-wallet-badge">{t('bonus.badge', { pct: r.cashback_pct })}</span>
+        {a.expires_on && <span className="bonus-wallet-burn">{t('bonus.burns', { sum: money(a.balance_uzs, lang), date: dmy(a.expires_on) })}</span>}
+        <Link to="/catalog" className="btn btn-block bonus-wallet-btn">
+          {t('common.toCatalog')}
+        </Link>
       </section>
 
-      <section className="card">
-        <h2>{t('bonus.rules')}</h2>
-        <ul className="bonus-rules">
-          <li>{t('bonus.rule1', { pct: r.cashback_pct })}</li>
-          <li>{t('bonus.rule2', { pct: r.max_spend_pct })}</li>
-          <li>{t('bonus.rule3', { days: r.lifetime_days })}</li>
-          <li>{t('bonus.rule4')}</li>
-        </ul>
-      </section>
+      <BonusTermsRow />
 
       <section className="card list">
         <h2>{t('bonus.history')}</h2>
         {a.history.length === 0 ? (
-          <p className="hint small">{t('bonus.historyEmpty')}</p>
+          <p className="hint small bonus-history-empty">{t('bonus.historyEmpty')}</p>
         ) : (
           <ul className="bonus-history">
             {a.history.map((h) => (

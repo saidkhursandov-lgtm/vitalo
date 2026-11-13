@@ -193,6 +193,8 @@ export function Cart() {
   const placeLine = region && district ? `${nameOf(region, lang)}, ${nameOf(district, lang)}` : null;
   // Amount to pay: goods after discounts + delivery once the city is known (updates with every change).
   const payable = data.goods_total_uzs - data.discount_total_uzs - (data.bonus_used_uzs ?? 0) + (delivery?.cost_uzs ?? 0);
+  // The button shows the goods (as the floating cart does); delivery is added on the checkout screen.
+  const goodsToPay = data.goods_total_uzs - data.discount_total_uzs - (data.bonus_used_uzs ?? 0);
 
   return (
     <div className="page cart">
@@ -296,7 +298,7 @@ export function Cart() {
 
       <StickyAction>
         <button className="btn btn-block" disabled={!data.can_checkout} onClick={() => navigate('/checkout')}>
-          {t('cart.checkout', { sum: money(payable, lang) })}
+          {t('cart.checkout', { sum: money(goodsToPay, lang) })}
         </button>
       </StickyAction>
     </div>

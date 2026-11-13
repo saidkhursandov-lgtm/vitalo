@@ -46,7 +46,7 @@ function wrap(lang: Lang, ui: React.ReactNode) {
 describe('VITALO Bonus card (B4)', () => {
   it('shows "Скоро" without any balance or numbers; opens how it will work', () => {
     const { container } = wrap('ru', <BonusTeaser />);
-    expect(container.textContent).toContain('VITALO Bonus');
+    expect(container.textContent).toContain('Бонусный кошелёк');
     expect(container.textContent).toContain('Накопительный баланс');
     expect(container.textContent).toContain('Скоро');
     expect(container.textContent).not.toMatch(/\d|сум/);

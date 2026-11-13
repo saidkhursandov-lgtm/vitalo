@@ -202,6 +202,8 @@ describe('D-70: «Спросить VITALO AI о корзине» — the convers
     expect(await within(sheet).findByText('О корзине')).toBeTruthy();
     cleanup();
 
+    // the saved conversation is about this very cart — it continues
+    localStorage.setItem('vitalo.aichat.cart', JSON.stringify({ id: 'c1', sig: 'p1,p2' }));
     mock({ state: chatState({ chat: { ...chatAnswer, questions: 6 } }) });
     showCart();
     fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
@@ -211,6 +213,26 @@ describe('D-70: «Спросить VITALO AI о корзине» — the convers
     fireEvent.click(within(full).getAllByRole('button', { name: 'Новый разговор' }).at(-1)!);
     expect(within(full).getByRole('textbox')).toBeTruthy();
     expect(within(full).getByText('О корзине')).toBeTruthy();
+  });
+
+  it('the cart is another one than in the saved conversation: a new conversation opens; the tools are «Новый чат» and the bin', async () => {
+    localStorage.setItem('vitalo.aichat.cart', JSON.stringify({ id: 'c1', sig: 'p1,p9' }));
+    mock({ state: chatState({ chat: chatAnswer }) });
+    showCart();
+    fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Спросить VITALO AI о корзине' });
+    expect(await within(sheet).findByText('О корзине')).toBeTruthy();
+    expect(within(sheet).queryByText('AI-20261112-0001')).toBeNull();
+    cleanup();
+
+    localStorage.setItem('vitalo.aichat.cart', JSON.stringify({ id: 'c1', sig: 'p1,p2' }));
+    mock({ state: chatState({ chat: chatAnswer }) });
+    showCart();
+    fireEvent.click(await screen.findByRole('button', { name: 'Спросить VITALO AI о корзине' }));
+    const same = await screen.findByRole('dialog', { name: 'Спросить VITALO AI о корзине' });
+    expect(await within(same).findByText('AI-20261112-0001')).toBeTruthy();
+    expect(within(same).getByRole('button', { name: 'Новый чат' })).toBeTruthy();
+    expect(within(same).getByRole('button', { name: 'Удалить переписку' }).textContent).toBe('');
   });
 
   it('Uzbek: the button and the questions', async () => {
@@ -234,6 +256,7 @@ describe('D-70: an empty cart — products of the catalogue with «В корзи
         },
       ],
     };
+    localStorage.setItem('vitalo.aichat.cart', JSON.stringify({ id: 'c1', sig: '' }));
     mock({ state: chatState({ chat: pick }) });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
