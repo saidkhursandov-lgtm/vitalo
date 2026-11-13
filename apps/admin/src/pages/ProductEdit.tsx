@@ -1,6 +1,6 @@
 import { SkuAliases } from './SkuAliases';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DictionarySelect, type DictionaryKind } from '../components/DictionarySelect';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
@@ -11,6 +11,7 @@ import { dateTime, discountAboveLimit, MAX_SHOWN_DISCOUNT, PRODUCT_STATUS } from
 import { BackIcon } from '../components/Icons';
 import { TestFlag } from '../components/TestFlag';
 import { SUPPLIER_KIND_LABELS, supplierTerms, useSuppliers } from '../components/SupplierTabs';
+import { FORM_LABEL_MAX, labelOf, SubstancePicker, type PickedSubstance } from '../components/SubstancePicker';
 
 interface CategoryNode {
   id: string;
@@ -44,6 +45,8 @@ interface AdminProduct {
   unit_tracking?: boolean;
   label_composition_ru?: string | null;
   label_composition_uz?: string | null;
+  /** «Состав» from the dictionary of VITALO AI; in_label → «Форма вещества» */
+  substances?: PickedSubstance[];
   [text: string]: unknown;
 }
 
@@ -209,7 +212,26 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [askSync, setAskSync] = useState(false);
+  // «Состав» (VITALO AI): sent only when changed here — an old product keeps its hand-written label until then
+  const [subs, setSubs] = useState<PickedSubstance[]>(product?.substances ?? []);
+  const [subsTouched, setSubsTouched] = useState(false);
   const yandexView = can('yandex.price.view');
+  // what «Состав» looks for substances in (a hand-written old label counts too: «Цитрат магния» → Магний цитрат)
+  const suggestTexts = useMemo(
+    () => ({
+      name_ru: f.name_ru,
+      name_uz: f.name_uz,
+      short_name_ru: f.short_name_ru,
+      short_name_uz: f.short_name_uz,
+      substance_form_ru: f.substance_form_ru,
+      match_form: f.match_form,
+      search_keywords: f.search_keywords,
+      label_composition_ru: (product?.label_composition_ru as string | null) ?? '',
+      composition_ru: f.composition_ru,
+      composition_uz: f.composition_uz,
+    }),
+    [f.name_ru, f.name_uz, f.short_name_ru, f.short_name_uz, f.substance_form_ru, f.match_form, f.search_keywords, f.composition_ru, f.composition_uz, product?.label_composition_ru],
+  );
   const costsView = can('costs.view');
 
   const save = useMutation({
@@ -239,6 +261,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       body.dose_amount = toNum(f.dose_amount);
       body.dose_unit = f.dose_unit || null;
       body.dose_per = f.dose_per || null;
+      if (subsTouched) body.substances = subs.map((s) => ({ id: s.id, in_label: s.in_label }));
       if (f.supply_touched === '1') {
         body.supplier_ids = f.supplier_ids ? f.supplier_ids.split(',') : [];
         body.on_zero_supplier_id = f.on_zero_supplier_id || null;
@@ -263,7 +286,16 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       void client.invalidateQueries({ queryKey: ['products'] });
       setSaved(true);
       setDirty(false);
-      setF((x) => ({ ...x, yandex_price_uzs: p.yandex_price_uzs == null ? '' : String(p.yandex_price_uzs) }));
+      setF((x) => ({
+        ...x,
+        yandex_price_uzs: p.yandex_price_uzs == null ? '' : String(p.yandex_price_uzs),
+        // the server builds the label from «Состав»
+        substance_form_ru: (p.substance_form_ru as string | null) ?? '',
+        substance_form_uz: (p.substance_form_uz as string | null) ?? '',
+      }));
+      setSubs(p.substances ?? []);
+      setSubsTouched(false);
+      void client.invalidateQueries({ queryKey: ['compat', 'products'] });
       if (!product) navigate(`/products/${p.id}`, { replace: true });
     },
   });
@@ -629,11 +661,37 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       <section className="card" id="p-expert">
         <h2>Карточка в магазине: экспертиза</h2>
         <p className="muted small">Пустые поля покупатель не видит — блок просто не показывается.</p>
+        <div className="substance-block" id="p-substances">
+          <h3>Действующие вещества (для VITALO AI и надписи «Форма вещества»)</h3>
+          <p className="muted small">
+            Выбираются из справочника «База знаний AI → Вещества». По ним VITALO AI проверяет совместимость и подбирает под цель; без них товар для AI «без
+            данных». Отмеченные «в надпись» ({FORM_LABEL_MAX} знаков максимум) показываются под названием в магазине.
+          </p>
+          {!subsTouched && !subs.some((s) => s.in_label) && f.substance_form_ru.trim() && (
+            <div className="alert alert-warn">
+              Сейчас надпись написана вручную: «{f.substance_form_ru}». Отметьте «в надпись» вещества ниже — после сохранения надпись соберётся из
+              справочника{subs.length === 0 ? ' (сначала добавьте вещества)' : ''}.
+            </div>
+          )}
+          {can('compat.view') ? (
+            <SubstancePicker
+              value={subs}
+              disabled={!editable}
+              canAddToDictionary={can('compat.answer')}
+              texts={suggestTexts}
+              manualLabel={subsTouched ? undefined : f.substance_form_ru.trim() || undefined}
+              onChange={(next) => {
+                setSubs(next);
+                setSubsTouched(true);
+                setSaved(false);
+                setDirty(true);
+              }}
+            />
+          ) : (
+            <p>{labelOf(subs, 'ru') || f.substance_form_ru || '—'}</p>
+          )}
+        </div>
         <div className="form-grid">
-          <Field label="Форма вещества (RU)" hint="Под названием: «Цитрат + B6»">
-            {input('substance_form_ru', { maxLength: 60, placeholder: 'Например: Цитрат + B6' })}
-          </Field>
-          <Field label="Форма вещества (UZ)">{input('substance_form_uz', { maxLength: 60, placeholder: 'Masalan: Sitrat + B6' })}</Field>
           <Field label="Количество в банке" hint="Капсул / таблеток / порций">
             {input('pack_count', { inputMode: 'numeric' })}
           </Field>

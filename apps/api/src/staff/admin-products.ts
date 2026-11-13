@@ -23,7 +23,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiProperty, ApiPropertyOptional, ApiTags, PartialType } from '@nestjs/swagger';
 import { Prisma, ProductStatus, StaffRole } from '@prisma/client';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -41,6 +41,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { randomUUID } from 'crypto';
 import { memoryStorage } from 'multer';
@@ -54,6 +55,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FILE_STORAGE, type FileStorage } from '../storage/file-storage';
 import { imageFiles, storeProductImage } from '../storage/image-processing';
 import { AuditService } from './audit.service';
+import { writeProductSubstances } from '../compat/substance-label';
 import { can } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 
@@ -207,6 +209,18 @@ export class ProductInput {
   @IsOptional()
   @IsBoolean()
   yandex_price_already_changed?: boolean;
+
+  /**
+   * «Состав» from the dictionary of substances (VITALO AI): in order; those with in_label make «Форма вещества» under the
+   * name — then substance_form_ru / _uz are built by the server and the sent ones are ignored. Sent — replaces the list.
+   */
+  @ApiPropertyOptional({ type: () => [ProductSubstanceItem] })
+  @IsOptional() @IsArray() @ArrayMaxSize(60) @ValidateNested({ each: true }) @Type(() => ProductSubstanceItem) substances?: ProductSubstanceItem[];
+}
+
+export class ProductSubstanceItem {
+  @ApiProperty() @IsUUID() id!: string;
+  @ApiPropertyOptional({ description: 'Показывать в надписи «Форма вещества»' }) @IsOptional() @IsBoolean() in_label?: boolean;
 }
 
 export class ProductPatch extends PartialType(ProductInput) {}
@@ -266,6 +280,10 @@ const productInclude = {
   media: { orderBy: [{ is_main: 'desc' }, { sort_order: 'asc' }] },
   inventory: { include: { warehouse: { select: { id: true, name: true } } } },
   suppliers: { select: { supplier_id: true } },
+  substances: {
+    orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
+    select: { in_label: true, substance: { select: { id: true, kind: true, name_ru: true, name_uz: true, enabled: true, parent: { select: { name_ru: true } } } } },
+  },
 } satisfies Prisma.productsInclude;
 
 type ProductRow = Prisma.productsGetPayload<{ include: typeof productInclude }>;
@@ -331,6 +349,7 @@ function toAdminProduct(p: ProductRow) {
     media,
     inventory,
     suppliers,
+    substances,
     price_uzs,
     old_price_uzs,
     cost_uzs,
@@ -353,6 +372,7 @@ function toAdminProduct(p: ProductRow) {
     dose_amount: num(dose_amount),
     category_ids: categories.map((c) => c.category_id),
     supplier_ids: suppliers.map((s) => s.supplier_id),
+    substances: substances.map(({ in_label, substance: { parent, ...s } }) => ({ ...s, parent_name: parent?.name_ru ?? null, in_label })),
     media: media.map((m) => ({ id: m.id, url: m.url, is_main: m.is_main, type: m.media_type, title: m.title })),
     stock: inventory.map((i) => ({
       warehouse: i.warehouse,
@@ -504,14 +524,18 @@ export class AdminProductsService {
 
   async create(staffId: string | null, dto: ProductInput) {
     const id = await this.write(async (tx) => {
-      const { category_ids, supplier_ids, on_zero_supplier_id, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, null, data as Record<string, unknown>);
       const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, withDefaultPaymeCodes(data) as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
       if (category_ids?.length) await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: p.id, category_id: c })) });
       const sup = supplier_ids === undefined && on_zero_supplier_id === undefined ? await defaultSuppliers(tx, p.sku) : { supplier_ids, on_zero_supplier_id };
       const supplies = await this.setSuppliers(tx, p.id, sup.supplier_ids, sup.on_zero_supplier_id);
-      await this.audit.log({ staffId, action: 'product.created', entityType: 'product', entityId: p.id, after: { ...p, category_ids, ...supplies } }, tx);
+      const subs = substances ? await writeProductSubstances(tx, p.id, substances, { clearLabel: true }) : null;
+      await this.audit.log(
+        { staffId, action: 'product.created', entityType: 'product', entityId: p.id, after: { ...p, category_ids, ...supplies, ...(subs && { substances: subs.after, substance_form_ru: subs.label?.ru ?? null }) } },
+        tx,
+      );
       return p.id;
     });
     return this.get(id);
@@ -522,7 +546,7 @@ export class AdminProductsService {
     await this.write(async (tx) => {
       const before = await tx.products.findUnique({ where: { id }, include: { categories: true, suppliers: { select: { supplier_id: true } } } });
       if (!before) throw new NotFoundException('Product not found');
-      const { category_ids, supplier_ids, on_zero_supplier_id, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, before, data as Record<string, unknown>);
       const after = await tx.products.update({ where: { id }, data: this.toData(this.applyYandexSync(before, data as Record<string, unknown>)) });
@@ -531,6 +555,7 @@ export class AdminProductsService {
         await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: id, category_id: c })) });
       }
       const supplies = await this.setSuppliers(tx, id, supplier_ids, on_zero_supplier_id);
+      const subs = substances ? await writeProductSubstances(tx, id, substances, { clearLabel: true }) : null;
       const { categories, suppliers: beforeSuppliers, ...beforePlain } = before;
       await this.audit.log(
         {
@@ -538,8 +563,8 @@ export class AdminProductsService {
           action: dto.status === 'archived' && before.status !== 'archived' ? 'product.archived' : 'product.updated',
           entityType: 'product',
           entityId: id,
-          before: { ...beforePlain, category_ids: categories.map((c) => c.category_id), supplier_ids: beforeSuppliers.map((s) => s.supplier_id) },
-          after: { ...after, ...(category_ids && { category_ids }), ...supplies },
+          before: { ...beforePlain, category_ids: categories.map((c) => c.category_id), supplier_ids: beforeSuppliers.map((s) => s.supplier_id), ...(subs && { substances: subs.before }) },
+          after: { ...after, ...(category_ids && { category_ids }), ...supplies, ...(subs && { substances: subs.after, substance_form_ru: subs.label?.ru ?? null, substance_form_uz: subs.label?.uz ?? null }) },
         },
         tx,
       );

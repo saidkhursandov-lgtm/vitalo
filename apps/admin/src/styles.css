@@ -707,3 +707,20 @@ textarea { resize: vertical; }
 .review-media img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); display: block; }
 .review-reply { padding: 8px 12px; border-left: 3px solid var(--primary); background: var(--bg); border-radius: 8px; }
 .review-card .row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* «Состав» of the product card: substances from the dictionary of VITALO AI, the label «Форма вещества» */
+.substance-block { margin: 0 0 16px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.substance-block h3 { margin: 0 0 4px; font-size: 15px; }
+.substance-list { margin: 8px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.substance-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+.substance-name { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.substance-ops { display: inline-flex; gap: 2px; }
+.substance-ops .btn { min-width: 44px; min-height: 44px; }
+.substance-label-preview { margin: 8px 0; padding: 8px; background: var(--panel); border-radius: 8px; overflow-wrap: anywhere; }
+.substance-label-preview.is-bad { border: 1px solid var(--bad); }
+.substance-suggest { margin: 8px 0; }
+.substance-suggest .chip { cursor: pointer; border: 1px solid var(--primary); background: var(--primary-soft); color: var(--primary-text); min-height: 36px; }
+.substance-suggest .chip-weak { border-style: dashed; background: var(--panel); }
+.substance-search input[type='search'] { width: 100%; }
+.substance-found { margin: 4px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); max-height: 280px; overflow-y: auto; }
+.substance-found .btn { width: 100%; justify-content: flex-start; text-align: left; min-height: 44px; }

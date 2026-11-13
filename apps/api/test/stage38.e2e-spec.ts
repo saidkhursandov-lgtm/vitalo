@@ -102,7 +102,7 @@ describe('Stage 3.8 VITALO AI knowledge (e2e)', () => {
     const put = (token: string, substance_ids: string[]) => http().put(`/api/staff/compat/products/${product.id}/substances`).set(bearer(token)).send({ substance_ids });
     await put(tokens.manager, ids).expect(403);
     let list = (await put(tokens.specialist, ids).expect(200)).body;
-    expect(list.find((p: { id: string }) => p.id === product.id).substances.map((s: { name_ru: string }) => s.name_ru)).toEqual(['Витамин B6', 'Магний']);
+    expect(list.find((p: { id: string }) => p.id === product.id).substances.map((s: { name_ru: string }) => s.name_ru)).toEqual(['Магний', 'Витамин B6']); // in the order given
     list = (await put(tokens.admin, [ids[0]]).expect(200)).body;
     expect(list.find((p: { id: string }) => p.id === product.id).substances).toHaveLength(1);
     expect((await put(tokens.admin, ['00000000-0000-4000-8000-000000000000']).expect(400)).body.code).toBe('BAD_SUBSTANCE');

@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../staff/audit.service';
 import { can } from '../staff/permissions';
 import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '../staff/staff-auth';
+import { suggestSubstances, writeProductSubstances, type ProductTexts, type SuggestDictEntry } from './substance-label';
 import { RULE_KINDS, RULE_STATUSES, SUBSTANCE_KINDS, WHEN, normalizeText, withParents, type RuleKind, type RuleStatus, type SubstanceKind, type When } from './knowledge';
 
 const TEXT_MAX = 600;
@@ -206,35 +207,100 @@ export class KnowledgeService {
 
   // ---------------- products ----------------
 
+  private dict(): Promise<SuggestDictEntry[]> {
+    return this.prisma.substances.findMany({ select: { id: true, code: true, kind: true, name_ru: true, name_uz: true, synonyms: true, parent_id: true, enabled: true } });
+  }
+
+  /**
+   * Products with their substances, the label «Форма вещества» (from the dictionary or typed by hand) and — for a product
+   * without substances — what the dictionary finds in its names and composition (a suggestion, not written).
+   */
   async products() {
-    const rows = await this.prisma.products.findMany({
-      where: { status: { not: 'archived' } },
-      orderBy: { sku: 'asc' },
-      select: { id: true, sku: true, status: true, name_ru: true, short_name_ru: true, label_composition_ru: true, substances: { select: { substance: { select: { id: true, name_ru: true } } } } },
-    });
+    const [rows, dict] = await Promise.all([
+      this.prisma.products.findMany({
+        where: { status: { not: 'archived' } },
+        orderBy: { sku: 'asc' },
+        select: {
+          ...SUGGEST_TEXTS,
+          id: true,
+          sku: true,
+          status: true,
+          brand: true,
+          substances: { orderBy: [{ position: 'asc' }, { created_at: 'asc' }], select: { in_label: true, substance: { select: { id: true, name_ru: true } } } },
+        },
+      }),
+      this.dict(),
+    ]);
+    const nameOf = new Map(dict.map((d) => [d.id, d.name_ru]));
     return rows.map((p) => ({
       id: p.id,
       sku: p.sku,
       status: p.status,
+      brand: p.brand,
       name: p.short_name_ru || p.name_ru,
       composition: p.label_composition_ru,
-      substances: p.substances.map((s) => s.substance).sort((x, y) => x.name_ru.localeCompare(y.name_ru)),
+      form_label: p.substance_form_ru,
+      label_source: p.substances.some((s) => s.in_label) ? ('dictionary' as const) : p.substance_form_ru ? ('manual' as const) : ('none' as const),
+      substances: p.substances.map((s) => ({ ...s.substance, in_label: s.in_label })),
+      suggested: p.substances.length ? [] : suggestSubstances(p, dict).map((x) => ({ ...x, name_ru: nameOf.get(x.id)! })),
     }));
   }
 
+  /** «Состав» of the card editor: suggestions from the texts typed so far (the product may be not saved yet). */
+  async suggest(texts: ProductTexts) {
+    const dict = await this.dict();
+    const byId = new Map(dict.map((d) => [d.id, d]));
+    return suggestSubstances(texts, dict).map((x) => {
+      const d = byId.get(x.id)!;
+      return { ...x, kind: d.kind, name_ru: d.name_ru, name_uz: d.name_uz, parent_name: d.parent_id ? (byId.get(d.parent_id)?.name_ru ?? null) : null };
+    });
+  }
+
+  /** «Принять подсказки»: products without substances get the strong suggestions (found in the name / label / form). */
+  async acceptSuggestions(me: staff_users, productIds: string[]) {
+    const [rows, dict] = await Promise.all([
+      this.prisma.products.findMany({ where: { id: { in: productIds }, substances: { none: {} } }, select: { ...SUGGEST_TEXTS, id: true } }),
+      this.dict(),
+    ]);
+    let accepted = 0;
+    for (const p of rows) {
+      const ids = suggestSubstances(p, dict).filter((x) => x.strong).map((x) => x.id);
+      if (!ids.length) continue;
+      await this.prisma.$transaction(async (tx) => {
+        const r = await writeProductSubstances(tx, p.id, ids.map((id) => ({ id })), { clearLabel: false });
+        await this.audit.log({ staffId: me.id, action: 'compat.product_substances', entityType: 'product', entityId: p.id, before: { substances: r.before }, after: { substances: r.after, suggested: true } }, tx);
+      });
+      accepted++;
+    }
+    return { accepted, products: await this.products() };
+  }
+
   async setProductSubstances(me: staff_users, productId: string, ids: string[]) {
-    const product = await this.prisma.products.findUnique({ where: { id: productId }, select: { id: true, substances: { select: { substance_id: true } } } });
-    if (!product) throw new NotFoundException('Product not found');
-    const unique = [...new Set(ids)];
-    if ((await this.prisma.substances.count({ where: { id: { in: unique } } })) !== unique.length) throw new BadRequestException({ code: 'BAD_SUBSTANCE', message: 'Unknown substance' });
+    if (!(await this.prisma.products.findUnique({ where: { id: productId }, select: { id: true } }))) throw new NotFoundException('Product not found');
     await this.prisma.$transaction(async (tx) => {
-      await tx.product_substances.deleteMany({ where: { product_id: productId, substance_id: { notIn: unique } } });
-      await tx.product_substances.createMany({ data: unique.map((substance_id) => ({ product_id: productId, substance_id })), skipDuplicates: true });
-      await this.audit.log({ staffId: me.id, action: 'compat.product_substances', entityType: 'product', entityId: productId, before: { substances: product.substances.map((s) => s.substance_id) }, after: { substances: unique } }, tx);
+      // the label of a product with «в надпись» marks is rebuilt; a hand-written one of an old product stays
+      const r = await writeProductSubstances(tx, productId, ids.map((id) => ({ id })), { clearLabel: false });
+      await this.audit.log({ staffId: me.id, action: 'compat.product_substances', entityType: 'product', entityId: productId, before: { substances: r.before }, after: { substances: r.after } }, tx);
     });
     return this.products();
   }
 }
+
+/** The product texts suggestions are looked for in (substance-label.ts ProductTexts). */
+const SUGGEST_TEXTS = {
+  name_ru: true,
+  name_uz: true,
+  short_name_ru: true,
+  short_name_uz: true,
+  substance_form_ru: true,
+  substance_form_uz: true,
+  match_form: true,
+  label_composition_ru: true,
+  label_composition_uz: true,
+  search_keywords: true,
+  composition_ru: true,
+  composition_uz: true,
+} as const;
 
 // ---------------- DTOs ----------------
 
@@ -284,6 +350,25 @@ class RuleStatusDto {
 
 class RuleListQuery {
   @ApiPropertyOptional({ enum: RULE_STATUSES }) @IsOptional() @IsIn(RULE_STATUSES) status?: RuleStatus;
+}
+
+class SuggestDto implements ProductTexts {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) name_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) name_uz?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) short_name_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) short_name_uz?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) substance_form_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) substance_form_uz?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) match_form?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) label_composition_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) label_composition_uz?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) search_keywords?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20000) composition_ru?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(20000) composition_uz?: string | null;
+}
+
+class AcceptSuggestionsDto {
+  @ApiProperty({ type: [String] }) @IsArray() @ArrayMaxSize(1000) @IsUUID('all', { each: true }) product_ids!: string[];
 }
 
 class ProductSubstancesDto {
@@ -349,6 +434,20 @@ export class AdminKnowledgeController {
   @RequirePermission('compat.view')
   products() {
     return this.knowledge.products();
+  }
+
+  @Post('suggest')
+  @HttpCode(200)
+  @RequirePermission('compat.view')
+  suggest(@Body() dto: SuggestDto) {
+    return this.knowledge.suggest(dto);
+  }
+
+  @Post('products/accept-suggestions')
+  @HttpCode(200)
+  @RequirePermission('compat.answer')
+  acceptSuggestions(@CurrentStaff() me: StaffContext, @Body() dto: AcceptSuggestionsDto) {
+    return this.knowledge.acceptSuggestions(me.staff, dto.product_ids);
   }
 
   @Put('products/:id/substances')

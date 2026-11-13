@@ -2258,6 +2258,10 @@ model substances {
 model product_substances {
   product_id   String     @db.Uuid
   substance_id String     @db.Uuid
+  /// order in the product (the label «Форма вещества» goes in this order)
+  position     Int        @default(0)
+  /// shown in the label «Форма вещества» under the product name (the label is built from the dictionary names)
+  in_label     Boolean    @default(false)
   created_at   DateTime   @default(now())
   product      products   @relation(fields: [product_id], references: [id])
   substance    substances @relation(fields: [substance_id], references: [id])

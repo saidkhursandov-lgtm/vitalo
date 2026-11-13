@@ -1,6 +1,7 @@
 import { Help } from '../components/ui';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { Badge, ErrorBox, Field, Loading, Modal } from "../components/ui";
 import { api } from "../lib/api";
 import { dateTime } from "../lib/format";
@@ -45,7 +46,13 @@ interface ProductRow {
   status: string;
   name: string;
   composition: string | null;
-  substances: { id: string; name_ru: string }[];
+  brand?: string;
+  /** «Форма вещества» under the name; from the dictionary («в надпись») or typed by hand in old products */
+  form_label?: string | null;
+  label_source?: "dictionary" | "manual" | "none";
+  substances: { id: string; name_ru: string; in_label?: boolean }[];
+  /** a product without substances: what the dictionary finds in its names / composition (strong — in the name) */
+  suggested?: { id: string; name_ru: string; strong: boolean }[];
 }
 
 const KIND: Record<SubstanceKind, string> = {
@@ -672,18 +679,86 @@ export function ProductSubstancesTab({ canEdit }: { canEdit: boolean }) {
     queryKey: ["compat", "products"],
     queryFn: () => api<ProductRow[]>("/staff/compat/products"),
   });
+  const client = useQueryClient();
   const [editing, setEditing] = useState<ProductRow | null>(null);
+  const [filter, setFilter] = useState<"all" | "empty" | "manual">("all");
+  const [search, setSearch] = useState("");
+  const accept = useMutation({
+    mutationFn: (ids: string[]) =>
+      api<{ accepted: number; products: ProductRow[] }>(
+        "/staff/compat/products/accept-suggestions",
+        { method: "POST", body: { product_ids: ids } },
+      ),
+    onSuccess: (r) => {
+      client.setQueryData(["compat", "products"], r.products);
+      void client.invalidateQueries({ queryKey: ["compat", "substances"] });
+    },
+  });
   if (q.isPending) return <Loading />;
   if (q.isError)
     return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
-  const empty = q.data.filter((p) => !p.substances.length).length;
+  const empty = q.data.filter((p) => !p.substances.length);
+  const manual = q.data.filter((p) => p.label_source === "manual");
+  const withStrong = empty.filter((p) => p.suggested?.some((s) => s.strong));
+  const needle = search.trim().toLowerCase();
+  const rows = (filter === "empty" ? empty : filter === "manual" ? manual : q.data).filter(
+    (p) =>
+      !needle ||
+      `${p.name} ${p.sku} ${p.brand ?? ""}`.toLowerCase().includes(needle),
+  );
   return (
     <>
       <Help id="compat-products">
-        Вещества товара для проверки совместимости — выбираются из справочника.
-        Без веществ товар в проверке не участвует.
-        {empty > 0 && <strong> Без веществ: {empty}.</strong>}
+        Вещества товара для проверки совместимости и подбора под цель —
+        выбираются из справочника. Без веществ товар в проверке не участвует.
+        Для товара без веществ справочник сам ищет их в названии и составе —
+        подсказки можно принять по одному или все сразу. Проще всего выбирать
+        вещества прямо в карточке товара, блок «Действующие вещества».
       </Help>
+      <div className="compat-toolbar">
+        <div className="segmented">
+          <button className={filter === "all" ? "is-on" : ""} onClick={() => setFilter("all")}>
+            Все ({q.data.length})
+          </button>
+          <button className={filter === "empty" ? "is-on" : ""} onClick={() => setFilter("empty")}>
+            Без веществ ({empty.length})
+          </button>
+          <button className={filter === "manual" ? "is-on" : ""} onClick={() => setFilter("manual")}>
+            Надпись вручную ({manual.length})
+          </button>
+        </div>
+        <input
+          type="search"
+          value={search}
+          placeholder="Товар, SKU, бренд"
+          aria-label="Найти товар"
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {canEdit && withStrong.length > 0 && (
+          <button
+            className="btn btn-sm"
+            disabled={accept.isPending}
+            onClick={() =>
+              window.confirm(
+                `Привязать вещества, найденные в названии, к ${withStrong.length} товарам без веществ? Подсказки только из полного состава не берутся. Потом можно поправить каждый товар.`,
+              ) && accept.mutate(withStrong.map((p) => p.id))
+            }
+          >
+            {accept.isPending ? "Привязка…" : `Принять подсказки (${withStrong.length})`}
+          </button>
+        )}
+      </div>
+      {accept.data && (
+        <div className="alert alert-ok">Вещества привязаны к товарам: {accept.data.accepted}.</div>
+      )}
+      <ErrorBox error={accept.error} />
+      {filter === "manual" && (
+        <div className="alert alert-info">
+          Надпись «Форма вещества» у этих товаров написана вручную, поэтому
+          пишется по-разному. Откройте товар и отметьте «в надпись» нужные
+          вещества — надпись соберётся из справочника на RU и UZ.
+        </div>
+      )}
       <div className="card flush table-scroll">
         <table className="table compat-table">
           <thead>
@@ -691,11 +766,12 @@ export function ProductSubstancesTab({ canEdit }: { canEdit: boolean }) {
               <th>Товар</th>
               <th>Состав (из карточки)</th>
               <th>Вещества</th>
+              <th>Надпись</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {q.data.map((p) => (
+            {rows.map((p) => (
               <tr key={p.id}>
                 <td>
                   {p.name}
@@ -710,10 +786,31 @@ export function ProductSubstancesTab({ canEdit }: { canEdit: boolean }) {
                   {p.substances.length ? (
                     p.substances.map((s) => s.name_ru).join(", ")
                   ) : (
-                    <Badge tone="warn">нет</Badge>
+                    <>
+                      <Badge tone="warn">нет</Badge>
+                      {!!p.suggested?.length && (
+                        <div className="muted small">
+                          Подсказка:{" "}
+                          {p.suggested
+                            .map((s) => (s.strong ? s.name_ru : `${s.name_ru}?`))
+                            .join(", ")}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </td>
+                <td className="small">
+                  {p.form_label || "—"}
+                  {p.label_source === "manual" && (
+                    <div>
+                      <Badge tone="warn">вручную</Badge>
+                    </div>
                   )}
                 </td>
                 <td className="ops">
+                  <Link className="btn btn-sm btn-ghost" to={`/products/${p.id}#p-substances`}>
+                    Карточка
+                  </Link>
                   {canEdit && (
                     <button
                       className="btn btn-sm btn-ghost"
