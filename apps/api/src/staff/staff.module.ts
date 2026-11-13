@@ -9,6 +9,7 @@ import { AdminBannersController, AdminBannersService } from './admin-banners';
 import { AdminBrandsController, AdminBrandsService } from './admin-brands';
 import { TestFlagsController, TestFlagsService } from './test-flags';
 import { AdminCustomersController, AdminCustomersService } from './admin-customers';
+import { AdminBonusController } from './admin-bonus';
 import { AdminDictionariesController, AdminDictionariesService } from './admin-dictionaries';
 import { AdminInventoryController, AdminInventoryService } from './admin-inventory';
 import { AdminOrdersController, AdminOrdersService } from './admin-orders';
@@ -82,6 +83,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminProductsController,
     AdminInventoryController,
     AdminCustomersController,
+    AdminBonusController,
     AdminDictionariesController,
     AdminPurchasesController,
     AdminReceivingController,

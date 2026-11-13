@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Injectable, NotFoundException, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { BonusService } from '../bonus/bonus.service';
 import { ApiBearerAuth, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { Prisma, UserStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
@@ -39,6 +40,7 @@ export class AdminCustomersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly bonus: BonusService,
   ) {}
 
   async list(q: CustomersQuery) {
@@ -138,6 +140,8 @@ export class AdminCustomersService {
       status: u.status,
       is_test: u.is_test,
       bonus_balance_uzs: Number(u.bonus_account?.balance_uzs ?? 0n),
+      // 3.10-А: when the balance burns and the last operations
+      bonus: { ...(await this.bonus.account(id)), history: await this.bonus.history(id, { limit: 20 }) },
       addresses: u.addresses.map((a) => ({ id: a.id, label: a.label, region: a.region.name_ru, city: a.city.name_ru, address_text: a.address_text, is_primary: a.is_primary })),
       orders: u.orders.map((o) => ({ id: o.id, order_number: o.order_number, created_at: o.created_at, status: o.status, total_uzs: Number(o.total_uzs), is_test: o.is_test })),
       total_orders: total,

@@ -8,6 +8,7 @@ import { loadTelegramWebApp } from './telegram-webapp';
 
 export type Permission =
   | 'dashboard.view'
+  | 'bonus.manage'
   | 'orders.view'
   | 'orders.payment'
   | 'orders.fulfil'

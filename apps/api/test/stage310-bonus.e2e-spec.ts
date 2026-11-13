@@ -179,4 +179,47 @@ describe('Stage 3.10-А VITALO Bonus (e2e)', () => {
       await prisma.settings.deleteMany({ where: { key: 'bonus' } });
     }
   });
+describe('admin (bonus.manage — admin only)', () => {
+    it('settings: the manager cannot; the admin saves, the checkout follows at once; audited', async () => {
+      await http().get('/api/staff/bonus/settings').set(bearer(manager)).expect(403);
+      const body = { enabled: true, cashback_pct: 5, max_spend_pct: 10, lifetime_days: 120, remind_days: 5, review_uzs: 3000, review_photo_uzs: 5000 };
+      await http().put('/api/staff/bonus/settings').set(bearer(admin)).send({ ...body, cashback_pct: 11 }).expect(400);
+      try {
+        expect((await http().put('/api/staff/bonus/settings').set(bearer(admin)).send(body).expect(200)).body).toEqual(body);
+        const { token } = await customer(100_000);
+        const p = await product();
+        const r = (await http().post('/api/orders/preview').set(bearer(token)).send(checkout(p.id, { use_bonus: true })).expect(200)).body;
+        expect(r.bonus).toMatchObject({ used_uzs: 20_000, cashback_pct: 5, cashback_uzs: 9_000 });
+        expect(await prisma.audit_logs.count({ where: { action: 'settings.bonus_updated' } })).toBeGreaterThan(0);
+      } finally {
+        await prisma.settings.deleteMany({ where: { key: 'bonus' } });
+      }
+    });
+
+    it('customer card: «+ Начислить» with a reason (message in the bot), «− Списать» not more than the balance', async () => {
+      const { user } = await customer();
+      const url = `/api/staff/bonus/customers/${user.id}`;
+      await http().post(url).set(bearer(manager)).send({ amount: 5000, reason: 'Тест' }).expect(403);
+      await http().post(url).set(bearer(admin)).send({ amount: 5000, reason: ' ' }).expect(400);
+      expect((await http().post(url).set(bearer(admin)).send({ amount: 5000, reason: 'Компенсация за задержку' }).expect(201)).body).toEqual({ balance_uzs: 5000 });
+      expect(await prisma.notifications.count({ where: { user_id: user.id, template: 'bonus.accrued' } })).toBe(1);
+      const over = await http().post(url).set(bearer(admin)).send({ amount: -6000, reason: 'Ошибка' }).expect(422);
+      expect(over.body.code).toBe('BONUS_NOT_ENOUGH');
+      await http().post(url).set(bearer(admin)).send({ amount: -2000, reason: 'Ошибка начисления' }).expect(201);
+      const card = (await http().get(`/api/staff/customers/${user.id}`).set(bearer(admin)).expect(200)).body;
+      expect(card.bonus_balance_uzs).toBe(3000);
+      expect(card.bonus.history.map((h: { op: string; amount_uzs: number }) => [h.op, h.amount_uzs])).toEqual([['manual_subtract', -2000], ['manual_add', 5000]]);
+      expect(card.bonus.expires_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      const audit = await prisma.audit_logs.findFirstOrThrow({ where: { entity_id: user.id, action: 'customer.bonus_added' } });
+      expect(audit.after_json).toMatchObject({ amount_uzs: 5000, reason: 'Компенсация за задержку' });
+    });
+
+    it('month numbers: accrued and owed', async () => {
+      const r = (await http().get('/api/staff/bonus/stats').set(bearer(admin)).expect(200)).body;
+      expect(r.month).toMatch(/^\d{4}-\d{2}$/);
+      expect(r.accrued_uzs).toBeGreaterThan(0);
+      expect(r.owed_uzs).toBeGreaterThan(0);
+      await http().get('/api/staff/bonus/stats?month=2026-13').set(bearer(admin)).expect(400);
+    });
+  });
 });

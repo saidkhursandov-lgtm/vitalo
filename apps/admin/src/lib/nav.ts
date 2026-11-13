@@ -91,7 +91,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Система',
     items: [
       // payment, delivery, texts, dictionaries, label printing, documents, VITALO AI, staff — tabs of one page
-      { to: '/settings', label: 'Настройки', permission: 'settings.manage', also: ['texts', 'tariffs', 'dicts', 'print', 'docs', 'ai', 'staff'] },
+      { to: '/settings', label: 'Настройки', permission: 'settings.manage', also: ['texts', 'tariffs', 'dicts', 'print', 'docs', 'ai', 'bonus', 'staff'] },
       // D-57 узел 5: the admin AI analyst (its own key and budget) — admin only
       { to: '/ai-analyst', label: 'AI-аналитик', permission: 'ai_analyst.use' },
       { to: '/yandex-sync', label: 'Синхронизация Яндекса', permission: 'yandex.sync' },

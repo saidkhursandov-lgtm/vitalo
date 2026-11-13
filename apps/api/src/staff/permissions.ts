@@ -33,6 +33,7 @@ export const PERMISSIONS = {
   'customers.view': ['manager'],
   'customers.block': ['manager'],
   'settings.manage': [],
+  'bonus.manage': [], // 3.10-А: «Настройки → VITALO Bonus», «+ Начислить» / «− Списать» on the customer card, the month numbers — admin only
   'staff.manage': [],
   'audit.view': [],
   'costs.view': [], // cost price and purchase price: GET /staff/products/:id, receipt cost_uzs

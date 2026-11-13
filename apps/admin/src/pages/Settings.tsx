@@ -13,8 +13,9 @@ import { DictionariesSettings } from './settings/Dictionaries';
 import { LabelSizeSettings } from './settings/LabelSize';
 import { LegalSettings } from './settings/Legal';
 import { VitaloAiSettings } from './settings/VitaloAi';
+import { BonusSettingsPage } from './settings/Bonus';
 
-const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', tariffs: 'Доставка', dicts: 'Справочники', print: 'Печать', docs: 'Документы', ai: 'VITALO AI', staff: 'Сотрудники' } as const;
+const TABS = { bank: 'Оплата', texts: 'Тексты и контакты', tariffs: 'Доставка', dicts: 'Справочники', print: 'Печать', docs: 'Документы', ai: 'VITALO AI', bonus: 'VITALO Bonus', staff: 'Сотрудники' } as const;
 type Tab = keyof typeof TABS;
 
 export function Settings() {
@@ -49,6 +50,7 @@ export function Settings() {
       {tab === 'print' && <LabelSizeSettings />}
       {tab === 'docs' && <LegalSettings />}
       {tab === 'ai' && <VitaloAiSettings />}
+      {tab === 'bonus' && <BonusSettingsPage />}
       {tab === 'staff' && <Staff />}
     </>
   );

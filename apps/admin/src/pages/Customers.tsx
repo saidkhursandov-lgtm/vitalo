@@ -7,6 +7,7 @@ import { useSession } from '../lib/auth';
 import { dateTime, money, prettyPhone } from '../lib/format';
 import { BackIcon } from '../components/Icons';
 import { TestFlag, useShowTest } from '../components/TestFlag';
+import { CustomerBonus, type CustomerBonusInfo } from '../components/CustomerBonus';
 
 interface CustomerRow {
   id: string;
@@ -29,6 +30,8 @@ interface CustomerRow {
 
 interface CustomerProfile extends CustomerRow {
   bonus_balance_uzs: number;
+  /** 3.10-А */
+  bonus?: CustomerBonusInfo;
   addresses: { id: string; label: string | null; region: string; city: string; address_text: string; is_primary: boolean }[];
   orders: { id: string; order_number: string; created_at: string; status: string; total_uzs: number; is_test?: boolean }[];
   support: { id: string; number: number; topic: string; status: string; last_message_at: string }[];
@@ -222,7 +225,7 @@ export function CustomerDetail() {
               всего {c.total_orders}, оплачено {c.paid_orders} на {money(c.spent_uzs)}
             </dd>
             <dt>Бонусы</dt>
-            <dd>{money(c.bonus_balance_uzs)}</dd>
+            <dd>{money(c.bonus_balance_uzs)}{c.bonus?.expires_on && <span className="muted small"> · сгорят {c.bonus.expires_on.split('-').reverse().join('.')}</span>}</dd>
           </dl>
           <TestFlag entity="customer" id={c.id} value={!!c.is_test} invalidate={['customer', id]} />
           <h3>Адреса</h3>
@@ -308,6 +311,7 @@ export function CustomerDetail() {
             </p>
           )}
         </section>
+        {c.bonus && <CustomerBonus customerId={c.id} bonus={c.bonus} />}
         <section className="card">
           <h2>Заметки</h2>
           <p className="muted small">Видят сотрудники с доступом к клиентам. Заметки не удаляются.</p>
