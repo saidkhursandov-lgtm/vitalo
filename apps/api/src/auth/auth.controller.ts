@@ -23,6 +23,8 @@ export class UpdateProfileDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() marketing_opt_in?: boolean;
   /** 3.10-Б: «Просить оставить отзыв» (the bot asks 3 days after the delivery) */
   @ApiPropertyOptional() @IsOptional() @IsBoolean() review_requests?: boolean;
+  /** 4.2: «Напоминать о конце курса» */
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() course_reminders?: boolean;
 }
 
 @ApiTags('auth')

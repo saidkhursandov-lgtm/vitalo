@@ -360,6 +360,8 @@ model users {
   ai_chat_consent_at DateTime?
   /// 3.10-Б: «Просить оставить отзыв» — the bot asks 3 days after the delivery (switched off in the profile)
   review_requests  Boolean    @default(true)
+  /// 4.2: «Курс заканчивается» 5 days before the end of a delivered jar («Не напоминать» in the bot, profile switch)
+  course_reminders Boolean    @default(true)
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
   deleted_at       DateTime?

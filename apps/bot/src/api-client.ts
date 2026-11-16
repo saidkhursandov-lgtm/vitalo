@@ -93,6 +93,8 @@ export interface VitaloApi {
   compatAnswer(staffTelegramId: number, requestId: string, code: string, text?: string): Promise<CompatAnswer>;
   /** Генплан, этап 3: «Подтвердить» / «Это не я» on a login to the admin panel from a new browser. */
   staffLoginDecision(staffTelegramId: number, requestId: string, approve: boolean): Promise<{ result: string }>;
+  /** 4.2: «Не напоминать» under «Курс заканчивается». */
+  courseReminders(telegramId: number, on: boolean): Promise<{ saved: boolean }>;
 }
 
 /** Calls /api/internal/bot/* with the shared secret header. */
@@ -116,6 +118,7 @@ export class HttpVitaloApi implements VitaloApi {
   compatAnswer = (staffId: number, requestId: string, code: string, text?: string) =>
     this.post<CompatAnswer>(`/internal/bot/compat/${requestId}/answer`, { telegram_id: String(staffId), verdict: code, ...(text !== undefined && { text }) });
 
+  courseReminders = (id: number, on: boolean) => this.post<{ saved: boolean }>(`/internal/bot/users/${id}/course-reminders`, { on });
   staffLoginDecision = (staffId: number, requestId: string, approve: boolean) =>
     this.post<{ result: string }>(`/internal/bot/staff-login/${requestId}/decision`, { telegram_id: String(staffId), approve });
 

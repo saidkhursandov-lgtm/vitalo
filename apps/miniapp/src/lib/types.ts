@@ -29,6 +29,8 @@ export interface UserProfile {
   marketing_opt_in: boolean;
   /** 3.10-Б: «Просить оставить отзыв» — the bot asks once, 3 days after delivery */
   review_requests?: boolean;
+  /** 4.2: «Курс заканчивается» 5 days before the jars run out */
+  course_reminders?: boolean;
 }
 
 export interface CategoryNode extends Named {

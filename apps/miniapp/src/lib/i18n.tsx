@@ -541,6 +541,8 @@ const ru = {
   'profile.notifications': 'Уведомления в Telegram',
   'profile.marketing': 'Получать акции и новости',
   'profile.marketingRow': 'Акции и новости в Telegram',
+  // 4.2
+  'profile.courseRow': 'Напоминать о конце курса',
   'profile.serviceAlways': 'Сообщения о ваших заказах приходят всегда',
 
   'addresses.title': 'Мои адреса',
@@ -1315,6 +1317,7 @@ const uz: Record<MessageKey, string> = {
   'profile.notifications': 'Telegram xabarnomalari',
   'profile.marketing': 'Aksiya va yangiliklarni olish',
   'profile.marketingRow': 'Aksiya va yangiliklar Telegramda',
+  'profile.courseRow': 'Kurs tugashini eslatish',
   'profile.serviceAlways': 'Buyurtmalaringiz haqidagi xabarlar har doim keladi',
 
   'addresses.title': 'Manzillarim',

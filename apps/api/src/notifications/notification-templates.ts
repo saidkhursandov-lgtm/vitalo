@@ -53,6 +53,7 @@ export type TemplateName =
   | 'bonus.returned'
   | 'bonus.expiring'
   | 'review.ask'
+  | 'course.ending'
   | 'review.published'
   | 'review.rejected'
   | 'return.received'
@@ -96,7 +97,9 @@ export interface TemplatePayload {
   /** 2.4: product name for waiting-list messages */
   product?: string;
   /** 2.4: which page the button opens (text of the button); default: the order. 3.2: 'pay', 'link' */
-  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart' | 'support' | 'bonus' | 'review';
+  open_button?: 'order' | 'product' | 'pay' | 'link' | 'cart' | 'support' | 'bonus' | 'review' | 'repeat' | 'waitlist';
+  /** 4.2: days left until the course ends */
+  days?: number;
   /** 3.10-А: VITALO Bonus — the amount of the operation, the balance after it, the day the balance burns («12.02.2027») */
   bonus_uzs?: number;
   balance_uzs?: number;
@@ -170,6 +173,12 @@ export const BONUS_BUTTON: Record<Lang, string> = { ru: 'Мои бонусы', u
 /** 3.10-Б: button under «Как вам …? Оставьте отзыв». */
 export const REVIEW_BUTTON: Record<Lang, string> = { ru: 'Оставить отзыв', uz: 'Sharh qoldirish' };
 
+/** 4.2: buttons under «Курс заканчивается»: the product in stock / out of stock, and «Не напоминать» (bot callback cr:off). */
+export const REPEAT_BUTTON: Record<Lang, string> = { ru: 'Повторить', uz: 'Takrorlash' };
+export const WAITLIST_BUTTON: Record<Lang, string> = { ru: 'Сообщить о поступлении', uz: 'Kelganda xabar berish' };
+export const COURSE_OFF_BUTTON: Record<Lang, string> = { ru: 'Не напоминать', uz: 'Eslatmang' };
+export const COURSE_OFF_DATA = 'cr:off';
+
 export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang): string {
   if (kind === 'product') return OPEN_PRODUCT_BUTTON[lang];
   if (kind === 'pay') return PAY_BUTTON[lang];
@@ -178,7 +187,17 @@ export function openButtonText(kind: TemplatePayload['open_button'], lang: Lang)
   if (kind === 'support') return REPLY_BUTTON[lang];
   if (kind === 'bonus') return BONUS_BUTTON[lang];
   if (kind === 'review') return REVIEW_BUTTON[lang];
+  if (kind === 'repeat') return REPEAT_BUTTON[lang];
+  if (kind === 'waitlist') return WAITLIST_BUTTON[lang];
   return OPEN_BUTTON[lang];
+}
+
+/** 1 день, 2 дня, 5 дней. */
+export function ruDays(n: number): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return 'день';
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'дня';
+  return 'дней';
 }
 
 /** 3.2: last line of «Как принимать ваш заказ» (bot and Mini App). */
@@ -539,6 +558,11 @@ Hisobda: ${formatUzs(p.balance_uzs ?? 0)} so‘m.`,
       `Как вам ${p.product ?? 'заказ'}? Расскажите другим покупателям — оставьте отзыв о заказе №${p.order_number}.${p.bonus_uzs ? ` За опубликованный отзыв начислим до ${formatUzs(p.bonus_uzs)} бонусных сум.` : ''}`,
     uz: (p: TemplatePayload) =>
       `${p.product ?? 'Buyurtma'} sizga yoqdimi? Boshqa xaridorlarga aytib bering — №${p.order_number} buyurtma haqida sharh qoldiring.${p.bonus_uzs ? ` Chop etilgan sharh uchun ${formatUzs(p.bonus_uzs)} so‘mgacha bonus beramiz.` : ''}`,
+  },
+  // 4.2: the course of a delivered jar ends in a few days (once per order line; «Не напоминать» switches it off)
+  'course.ending': {
+    ru: (p: TemplatePayload) => `Курс «${p.product ?? ''}» заканчивается примерно через ${p.days ?? 5} ${ruDays(p.days ?? 5)}. Чтобы не прерывать приём, можно заказать снова.`,
+    uz: (p: TemplatePayload) => `«${p.product ?? ''}» kursi taxminan ${p.days ?? 5} kundan keyin tugaydi. Qabulni to‘xtatmaslik uchun yana buyurtma berishingiz mumkin.`,
   },
   'review.published': {
     ru: (p: TemplatePayload) => `Спасибо! Ваш отзыв о «${p.product ?? ''}» опубликован.${p.bonus_uzs ? ` Начислено +${formatUzs(p.bonus_uzs)} бонусных сум.` : ''}`,
