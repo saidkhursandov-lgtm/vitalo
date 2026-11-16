@@ -31,6 +31,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "compat:knowledge": "ts-node scripts/compat-knowledge.ts",
+    "compat:forms": "ts-node scripts/compat-forms.ts",
     "catalog:export": "ts-node scripts/catalog-export.ts",
     "catalog:check": "ts-node scripts/catalog-check.ts",
     "catalog:load": "ts-node scripts/catalog-load.ts",
