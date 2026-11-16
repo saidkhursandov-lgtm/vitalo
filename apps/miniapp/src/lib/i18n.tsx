@@ -74,6 +74,7 @@ const ru = {
   'card.vege': 'VEGE',
   'card.halalVege': 'Halal и VEGE',
   'card.verdict': 'Вердикт врача',
+  'pair.title': 'Идеальная пара',
   'card.whyBrand': 'Почему {brand} отобран в VITALO',
   // 06.11: long verdicts and brand stories — four lines, then «Читать полностью»
   'text.more': 'Читать полностью',
@@ -857,6 +858,7 @@ const uz: Record<MessageKey, string> = {
   'card.vege': 'VEGE',
   'card.halalVege': 'Halal va VEGE',
   'card.verdict': 'Shifokor xulosasi',
+  'pair.title': 'Mukammal juftlik',
   'card.whyBrand': 'Nega {brand} VITALOda',
   'text.more': 'Toʻliq oʻqish',
   'text.less': 'Yopish',

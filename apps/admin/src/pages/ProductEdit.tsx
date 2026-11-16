@@ -13,6 +13,7 @@ import { TestFlag } from '../components/TestFlag';
 import { SUPPLIER_KIND_LABELS, supplierTerms, useSuppliers } from '../components/SupplierTabs';
 import { FORM_LABEL_MAX, labelOf, SubstancePicker, type PickedSubstance } from '../components/SubstancePicker';
 import { AUDIENCE_LABELS, EnrichDraft, GOAL_LABELS, type Enrichment } from '../components/EnrichDraft';
+import { PairField, pairOf, type PairValue } from '../components/PairField';
 
 interface CategoryNode {
   id: string;
@@ -37,6 +38,9 @@ interface AdminProduct {
   yandex_payment_fee_percent?: number | null;
   yandex_logistics_uzs?: number | null;
   category_ids: string[];
+  /** 4.1 «Идеальная пара»: off, or chosen by hand (null = picked by the rules) */
+  pair_off?: boolean;
+  pair_product?: { id: string; sku: string; name_ru: string } | null;
   /** D-61: «Где берём» and «Если на складе ноль — под заказ у …» */
   supplier_ids: string[];
   on_zero_supplier_id: string | null;
@@ -226,6 +230,8 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const [aiTouched, setAiTouched] = useState(false);
   const [draft, setDraft] = useState<Enrichment | null>(product?.enrichment ?? null);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [pair, setPair] = useState<PairValue>(() => pairOf(product));
+  const [pairTouched, setPairTouched] = useState(false);
   const touchAi = () => {
     setAiTouched(true);
     setSaved(false);
@@ -283,6 +289,10 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         body.goals = goals;
       }
       if (draftId) body.enrichment_id = draftId;
+      if (pairTouched) {
+        body.pair_off = pair.mode === 'off';
+        body.pair_product_id = pair.mode === 'manual' ? (pair.product?.id ?? null) : null;
+      }
       if (f.supply_touched === '1') {
         body.supplier_ids = f.supplier_ids ? f.supplier_ids.split(',') : [];
         body.on_zero_supplier_id = f.on_zero_supplier_id || null;
@@ -824,6 +834,20 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             ))}
           </select>
           <p className="muted small">Видна на карточке и в списках магазина. Если на товар идёт акция, показывается значок акции.</p>
+        </div>
+        <div className="check-col">
+          <h3>Идеальная пара</h3>
+          <PairField
+            productId={product?.id ?? null}
+            value={pair}
+            disabled={!editable}
+            onChange={(v) => {
+              setPair(v);
+              setPairTouched(true);
+              setSaved(false);
+              setDirty(true);
+            }}
+          />
         </div>
         <div className="check-col">
           <h3>Стандарт VITALO</h3>

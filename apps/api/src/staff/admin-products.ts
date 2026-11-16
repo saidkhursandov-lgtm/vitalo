@@ -1,3 +1,4 @@
+import { invalidatePairCache } from '../catalog/pair.service';
 import { withDefaultPaymeCodes } from '../payments/payme/payme-config';
 import {
   BadRequestException,
@@ -147,6 +148,9 @@ export class ProductInput {
   @IsOptional() @IsIn([...HALAL_VEGE, null]) halal_vege?: HalalVege | null;
   @ApiPropertyOptional({ nullable: true, enum: PROMO_LABELS, description: '6а-В: промо-метка на карточке — 11.11, Black Friday, Хит, Новинка; null — выкл' })
   @IsOptional() @IsIn([...PROMO_LABELS, null]) promo_label?: PromoLabel | null;
+  @ApiPropertyOptional({ nullable: true, description: '4.1: «Идеальная пара» выбрана вручную; null — подбирается сама по правилам «синергия»' })
+  @IsOptional() @IsUUID() pair_product_id?: string | null;
+  @ApiPropertyOptional({ description: '4.1: не показывать блок «Идеальная пара»' }) @IsOptional() @IsBoolean() pair_off?: boolean;
   @ApiPropertyOptional({ description: 'Оболочка, напр. «говяжий желатин»' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) shell_ru?: string | null;
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(100) shell_uz?: string | null;
   @ApiPropertyOptional({ description: 'Откуда данные Halal/VEGE (только админка)' }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(300) halal_vege_source?: string | null;
@@ -402,6 +406,15 @@ function toAdminProduct(p: ProductRow) {
   };
 }
 
+/** 4.1: a pair chosen by hand is another active product. */
+async function assertPair(tx: Prisma.TransactionClient, id: string, pairId: string | null | undefined) {
+  if (!pairId) return;
+  if (pairId === id) throw new BadRequestException({ code: 'PAIR_SELF', message: 'Товар не может быть парой самому себе' });
+  if (!(await tx.products.findFirst({ where: { id: pairId, status: 'active' }, select: { id: true } }))) {
+    throw new BadRequestException({ code: 'PAIR_NOT_FOUND', message: 'Товар для пары не найден или в архиве' });
+  }
+}
+
 /**
  * D-61: a new product without «Где берём» — by its SKU (the owner's rule): VTL-H… iHerb (под заказ из США), VTL-GH…
  * iHerb and Glorious Healthy Nutrition, OZN-… Ozon.
@@ -540,7 +553,9 @@ export class AdminProductsService {
   async get(id: string) {
     const p = await this.prisma.products.findUnique({ where: { id }, include: productInclude });
     if (!p) throw new NotFoundException('Product not found');
-    return toAdminProduct(p);
+    // 4.1: the pair chosen by hand, by name (the card shows «Идеальная пара: …»)
+    const pair = p.pair_product_id ? await this.prisma.products.findUnique({ where: { id: p.pair_product_id }, select: { id: true, sku: true, name_ru: true, status: true } }) : null;
+    return { ...toAdminProduct(p), pair_product: pair };
   }
 
   async create(staffId: string | null, dto: ProductInput) {
@@ -573,6 +588,7 @@ export class AdminProductsService {
       const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, before, data as Record<string, unknown>);
+      await assertPair(tx, id, data.pair_product_id);
       const after = await tx.products.update({ where: { id }, data: this.toData(this.applyYandexSync(before, data as Record<string, unknown>)) });
       if (category_ids) {
         await tx.product_categories.deleteMany({ where: { product_id: id } });
@@ -597,6 +613,7 @@ export class AdminProductsService {
       );
     });
     if (textsChanged) this.enrich?.queue(id, 'auto', staffId);
+    invalidatePairCache();
     return this.get(id);
   }
 

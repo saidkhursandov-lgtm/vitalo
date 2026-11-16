@@ -1960,3 +1960,16 @@ a.bonus-wallet { text-decoration: none; margin: 0 0 12px; }
 .return-status { margin: 0 0 6px; font-size: 14px; }
 .return-status.is-approved, .return-status.is-refunded { color: var(--success); }
 .return-status.is-rejected { color: var(--error); }
+
+/* 4.1 «Идеальная пара»: the second jar in the product card, a white card with a navy title */
+.pair { margin: 12px 0; padding: 12px 14px; }
+.pair-title { margin: 0 0 8px; font-size: 15px; color: var(--primary-text); }
+.pair-row { display: flex; align-items: center; gap: 10px; }
+.pair-link { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.pair-img { flex: none; width: 56px; height: 56px; border-radius: var(--radius-sm); background: var(--neutral-soft); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.pair-img img { width: 100%; height: 100%; object-fit: contain; }
+.pair-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pair-name { font-size: 14px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pair-price { font-size: 14px; font-weight: 600; color: var(--primary-text); }
+.pair-add { flex: none; width: 112px; }
+.pair-why { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }

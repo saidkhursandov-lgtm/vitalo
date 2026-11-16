@@ -624,6 +624,9 @@ model products {
   warnings_uz          String?
   search_keywords      String?
   popularity_30d       Int           @default(0) // recalculated daily (30-day sold units)
+  /// 4.1 «Идеальная пара»: a pair chosen by hand (null = picked from the approved synergy rules); pair_off hides the block
+  pair_product_id      String?       @db.Uuid
+  pair_off             Boolean       @default(false)
   is_test              Boolean       @default(false) // аудит 10.11, п. 1.5: тестовый товар, скрыт в списках и сводках
   shipping_weight_g    Int?
   shipping_length_mm   Int?

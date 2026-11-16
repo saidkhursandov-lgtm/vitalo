@@ -257,6 +257,15 @@ export interface ProductCard extends ProductListItem {
   categories: { id: string; slug: string; tree_type: 'need' | 'product_type'; name_ru: string; name_uz: string }[];
   similar: ProductListItem[];
   also_bought: ProductListItem[];
+  /** 4.1 «Идеальная пара» (null — no block) */
+  pair?: ProductPair | null;
+}
+
+/** 4.1: the second jar and «почему вместе» (the text of the approved synergy rule; null for a pair chosen by hand without a rule) */
+export interface ProductPair {
+  product: ProductListItem;
+  why_ru: string | null;
+  why_uz: string | null;
 }
 
 export interface Page<T> {
