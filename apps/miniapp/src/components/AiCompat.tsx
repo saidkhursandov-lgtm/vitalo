@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
-import type { AiAnswer, AiState, CompatVerdict } from '../lib/types';
+import type { AiAnswer, AiState, AiTime, CompatVerdict } from '../lib/types';
 import { AlertIcon, CheckIcon, ChevronIcon, CloseIcon, InfoIcon, MoonIcon, ShieldIcon, SparkIcon, SunIcon } from './Icons';
 
 /** The analysis animation is shown at least this long (spec 2.3: 2–3 s). Tests set 0. */
@@ -110,7 +110,7 @@ export function AiCompat({
   /** D-70: thumbnails in the block and in the analysis */
   items?: AiCartItem[];
   /** D-70: «Спросить VITALO AI о корзине» */
-  onChat?: () => void;
+  onChat?: (question?: string) => void;
 }) {
   const { t, lang } = useI18n();
   const [phase, setPhase] = useState<'idle' | 'consent' | 'checking'>(askConsent ? 'consent' : 'idle');
@@ -158,7 +158,7 @@ export function AiCompat({
   const heroId = useId();
   const title = one ? t('ai.checkOne') : changed ? t('ai.recheck') : t('ai.checkN', { n, goods: goodsWord(n, lang) });
   const chat = onChat && (
-    <button type="button" className="ai-chat-btn" onClick={onChat}>
+    <button type="button" className="ai-chat-btn" onClick={() => onChat()}>
       <SparkIcon width={16} height={16} aria-hidden /> {t(one ? 'ai.chatOne' : 'ai.chat')}
     </button>
   );
@@ -175,7 +175,7 @@ export function AiCompat({
         <AiProgress ms={ms} items={items} count={n} />
       ) : shown && state.answer ? (
         <>
-          <AiAnswerCard answer={state.answer} ask={ask} specialist={specialist} />
+          <AiAnswerCard answer={state.answer} ask={ask} specialist={specialist} onFollow={onChat} />
           {chat}
         </>
       ) : shown && state.specialist ? (
@@ -353,7 +353,24 @@ function SpecialistLink({ answer }: { answer: { verdict: CompatVerdict; text: st
   );
 }
 
-function AiAnswerCard({ answer, ask, specialist }: { answer: AiAnswer; ask: ReactNode; specialist: { verdict: CompatVerdict; text: string } | null }) {
+const TIME_ORDER: AiTime[] = ['morning', 'day', 'evening', 'any'];
+/** «Когда принимать» by time of day, the empty groups left out. */
+export function timingGroups(timing: AiAnswer['timing']): [AiTime, AiAnswer['timing']][] {
+  return TIME_ORDER.map((time) => [time, timing.filter((x) => (x.time ?? 'any') === time)] as [AiTime, AiAnswer['timing']]).filter(([, rows]) => rows.length > 0);
+}
+
+function AiAnswerCard({
+  answer,
+  ask,
+  specialist,
+  onFollow,
+}: {
+  answer: AiAnswer;
+  ask: ReactNode;
+  specialist: { verdict: CompatVerdict; text: string } | null;
+  /** ветка 3: a chip under the answer opens the conversation with this question */
+  onFollow?: (question: string) => void;
+}) {
   const { t } = useI18n();
   const seen = useRef('');
   useEffect(() => {
@@ -386,19 +403,55 @@ function AiAnswerCard({ answer, ask, specialist }: { answer: AiAnswer; ask: Reac
             <AlertIcon width={14} height={14} aria-hidden /> {t('ai.overlap', { names: answer.overlaps.join(', ') })}
           </p>
         )}
+        {answer.child_text && <p className="ai-overlap">{answer.child_text}</p>}
         {answer.timing.length > 0 && (
           <>
             <h4 className="ai-sub">{t('ai.timing')}</h4>
-            <ul className="ai-timing">
-              {answer.timing.map((x) => (
-                <li key={x.product_id}>
-                  {isEvening(x.when) ? <MoonIcon width={16} height={16} aria-hidden /> : <SunIcon width={16} height={16} aria-hidden />}
-                  <span className="ai-timing-name">{x.name}</span>
-                  <span className="ai-timing-when">{x.when}</span>
-                </li>
-              ))}
-            </ul>
+            {answer.timing.every((x) => x.time) ? (
+              // ветка 3: the cheat sheet — morning, day, evening, any time
+              timingGroups(answer.timing).map(([time, rows]) => (
+                <div key={time} className="ai-timing-group">
+                  <h5 className="ai-timing-time">
+                    {time === 'evening' ? <MoonIcon width={16} height={16} aria-hidden /> : <SunIcon width={16} height={16} aria-hidden />}
+                    {t(`ai.time.${time}`)}
+                  </h5>
+                  <ul className="ai-timing">
+                    {rows.map((x) => (
+                      <li key={x.product_id}>
+                        <span className="ai-timing-name">{x.name}</span>
+                        <span className="ai-timing-when">{x.when}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            ) : (
+              <ul className="ai-timing">
+                {answer.timing.map((x) => (
+                  <li key={x.product_id}>
+                    {isEvening(x.when) ? <MoonIcon width={16} height={16} aria-hidden /> : <SunIcon width={16} height={16} aria-hidden />}
+                    <span className="ai-timing-name">{x.name}</span>
+                    <span className="ai-timing-when">{x.when}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
+        )}
+        {onFollow && answer.timing.length > 1 && (
+          <div className="ai-follow">
+            <h4 className="ai-sub">{t('ai.follow.title')}</h4>
+            <div className="ai-follow-chips">
+              {answer.overlaps.length > 0 && (
+                <button type="button" className="chip" onClick={() => onFollow(t('ai.follow.family'))}>
+                  {t('ai.follow.family')}
+                </button>
+              )}
+              <button type="button" className="chip" onClick={() => onFollow(t('ai.follow.goal'))}>
+                {t('ai.follow.goal')}
+              </button>
+            </div>
+          </div>
         )}
         {answer.suggestions.length > 0 && (
           <>

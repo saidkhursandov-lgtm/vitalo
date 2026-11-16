@@ -1512,6 +1512,11 @@ button.toast-action { border: 0; background: none; font: inherit; font-weight: 7
 .ai-timing li svg { flex: none; color: var(--primary); }
 .ai-timing-name { flex: 1 1 45%; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); }
 .ai-timing-when { flex: 0 1 auto; max-width: 55%; text-align: right; font-weight: 600; color: var(--text); }
+/* ветка 3: «Когда принимать» by time of day; the chips under the answer open VITALO AI */
+.ai-timing-group + .ai-timing-group { margin-top: 8px; }
+.ai-timing-time { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: 12.5px; font-weight: 700; color: var(--primary); }
+.ai-follow-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-follow-chips .chip { min-height: 44px; white-space: normal; text-align: left; }
 .ai-suggest { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .ai-suggest a {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--tap); padding: 0 12px;

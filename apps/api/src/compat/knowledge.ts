@@ -174,6 +174,18 @@ export function rulesForProducts<R extends RuleLike>(products: { id: string; sub
   );
 }
 
+/**
+ * D-73, ветка 3: «синергия» rules whose two substances are in ONE product (D3 + K2 in one capsule, магний + B6). They do
+ * not change the label — the answer praises the formula.
+ */
+export function innerSynergy<R extends RuleLike & { kind: string }>(products: { id: string; substances: Set<string> }[], rules: R[]): { product: string; rule: R }[] {
+  const out: { product: string; rule: R }[] = [];
+  for (const p of products) {
+    for (const r of rules) if (r.kind === 'synergy' && p.substances.has(r.substance_a_id) && p.substances.has(r.substance_b_id)) out.push({ product: p.id, rule: r });
+  }
+  return out;
+}
+
 // ---------------- the sheet «Правила совместимости» (docs/content/VITALO_catalog.xlsx) ----------------
 
 export const SHEET_RULE_KIND: Record<string, RuleKind> = {
@@ -415,9 +427,16 @@ export const PROPOSED_PRODUCT_SUBSTANCES: Record<string, string[]> = {
  * Owner's decision 02.11.2026 (D-47): any substance in 2+ different products raises the label to at least yellow with
  * this line, whatever the model says. Red comes only from explicit compatibility rules.
  */
+/** D-47 + D-73 (б): a repeated substance — fine for different members of a family, the total dose for one person. */
 export const OVERLAP_TEXT: Record<Lang, string> = {
-  ru: 'Одно вещество есть в нескольких товарах — проверьте суммарную дозировку или уточните у специалиста',
-  uz: 'Bir modda bir nechta mahsulotda bor — umumiy dozani tekshiring yoki mutaxassisdan soʻrang',
+  ru: 'Одно вещество есть в нескольких товарах. Если они для разных членов семьи — всё в порядке; если для одного человека — проверьте суммарную дозировку или уточните у специалиста',
+  uz: 'Bir modda bir nechta mahsulotda bor. Agar ular oilaning turli aʼzolari uchun boʻlsa — hammasi joyida; bitta odam uchun boʻlsa — umumiy dozani tekshiring yoki mutaxassisdan soʻrang',
+};
+
+/** A children's product in the cart: no advice on its doses or combinations (D-73 (б)). */
+export const CHILD_TEXT: Record<Lang, string> = {
+  ru: 'Детские товары принимают по этикетке или по совету педиатра',
+  uz: 'Bolalar mahsulotlari yorliqqa koʻra yoki pediatr maslahati bilan qabul qilinadi',
 };
 
 const VERDICT_RANK: Record<Verdict, number> = { compatible: 0, spread: 1, consult: 2 };

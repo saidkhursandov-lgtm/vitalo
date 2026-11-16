@@ -118,6 +118,10 @@ describe('D-70: переписка с VITALO AI — проверки', () => {
     const many = answer({ products: [...(two.products as object[]), { productId: 'ZN-1', fit: 'maybe', text: 'Цинк для иммунитета.' }] });
     const trimmed = checkChatAnswer(many, extra);
     expect(trimmed.ok && trimmed.answer.products.map((p) => p.ref)).toEqual(['MAG-1', 'D3-1', 'GLY-1', 'CRE-1']);
+    // ветка 3: the doses of the cart by the label may be repeated, other doses stay forbidden
+    const dose = answer({ text: 'В витамине D3 из корзины 2000 МЕ на порцию — этого достаточно для одного человека.' });
+    expect(checkChatAnswer(dose, data({ cartDoses: ['2000 МЕ'] })).ok).toBe(true);
+    expect(checkChatAnswer(dose, data())).toEqual({ ok: false, error: 'forbidden_words' });
     // our SKUs never reach the customer: they become names
     const sku = checkChatAnswer(answer({ text: 'Из корзины для вечера больше подходит MAG-1, а GLY-1 мягче для желудка.' }), data());
     expect(sku.ok && sku.answer.text).toBe('Из корзины для вечера больше подходит Магний 400 мг, а Магний глицинат мягче для желудка.');

@@ -30,7 +30,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../staff/audit.service';
 import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '../staff/staff-auth';
 import { productTitle } from '../waitlist/waitlist';
-import { SYSTEM_COMMON, cartDataBlock, costUsd, tashkentMonthStart } from './ai';
+import { SYSTEM_COMMON, cartDataBlock, costUsd, doseText, tashkentMonthStart } from './ai';
 import {
   CHAT_SCHEMA,
   CHAT_TOPICS,
@@ -66,8 +66,6 @@ const OPEN_MS = 24 * 3600_000;
 const HISTORY = 12;
 /** D-74: the catalogue block of the chat is rebuilt after this time */
 const CATALOG_TTL_MS = 5 * 60_000;
-/** the units of a dose in the catalogue block (ветка 1: product_substances.dose_unit) */
-const DOSE_UNIT_TEXT: Record<string, string> = { mg: 'мг', mcg: 'мкг', iu: 'МЕ', g: 'г', ml: 'мл', cfu_bn: 'млрд КОЕ' };
 
 export interface ChatProductView {
   product_id: string;
@@ -376,12 +374,18 @@ export class AiChatService {
     });
 
     let cartBlock = '';
+    const cartDoses: string[] = [];
     const cart: ChatData['cart'] = [];
     const ev: ChatEvidence[] = [];
     if (items.length) {
       const { data: cd, refs: cartRefs } = await this.ai.cartData(items, lang);
       cartBlock = cartDataBlock(cd);
       for (const p of cd.cart) {
+        // «Витамин D3 2000 МЕ» → «2000 МЕ»: the answer may name the doses of the cart (ветка 3)
+        for (const sub of p.substances) {
+          const m = sub.match(/\d+(?:\.\d+)? (?:мг|мкг|МЕ|г|мл|млрд КОЕ)$/);
+          if (m) cartDoses.push(m[0]);
+        }
         cart.push({ ref: p.ref, name: p.name });
         refs.set(p.ref, { id: cartRefs.get(p.ref)!, name: p.name, in_cart: true });
       }
@@ -405,7 +409,7 @@ export class AiChatService {
         return { role: m.role === 'user' ? ('user' as const) : ('ai' as const), text: `${m.text}${extra}` };
       });
     const clarifies = history.filter((m) => m.role === 'ai' && m.kind === 'clarify').length;
-    const data: ChatData = { lang, cartBlock, cart, evidence: ev, catalog: catalog.map((c) => c.item), history: turns, clarifyLeft: Math.max(0, MAX_CLARIFY - clarifies), question };
+    const data: ChatData = { lang, cartBlock, cart, evidence: ev, catalog: catalog.map((c) => c.item), cartDoses, history: turns, clarifyLeft: Math.max(0, MAX_CLARIFY - clarifies), question };
     return { data, refs };
   }
 
@@ -461,8 +465,8 @@ export class AiChatService {
           brand: p.brand || null,
           substances: own.map((x) => {
             const n = names.get(x.substance_id)!;
-            const dose = x.dose_amount != null && x.dose_unit ? ` ${Number(x.dose_amount)} ${DOSE_UNIT_TEXT[x.dose_unit] ?? x.dose_unit}` : '';
-            return `${lang === 'uz' ? n.name_uz : n.name_ru}${dose}`;
+            const dose = doseText(x.dose_amount, x.dose_unit);
+            return `${lang === 'uz' ? n.name_uz : n.name_ru}${dose ? ` ${dose}` : ''}`;
           }),
           audience: (AUDIENCES as readonly string[]).includes(p.audience ?? '') ? (p.audience as CatalogItem['audience']) : null,
           goalLabels: cardGoals.map((g) => PRODUCT_GOAL_LABELS[g][lang]),

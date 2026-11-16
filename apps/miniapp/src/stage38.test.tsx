@@ -149,9 +149,33 @@ describe('3.8 VITALO AI in the cart', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
     const card = await screen.findByRole('region', { name: 'Разбор совместимости VITALO AI' });
     expect(card.querySelectorAll('.ai-overlap')).toHaveLength(1);
-    expect(card.querySelector('.ai-overlap')!.textContent!.trim()).toBe('Повтор: Витамин B6 — проверьте суммарную дозировку');
+    expect(card.querySelector('.ai-overlap')!.textContent!.trim()).toBe(
+      'Повтор: Витамин B6. Если товары для разных членов семьи — всё в порядке; для одного человека — проверьте суммарную дозировку',
+    );
     expect(card.textContent!.match(/суммарн/g)).toHaveLength(1);
     expect(card.textContent).not.toContain('Одно вещество есть в нескольких товарах');
+  });
+
+  it('ветка 3: the cheat sheet by time of day, the children line, the chips that open VITALO AI', async () => {
+    const timed = answer({
+      timing: [
+        { product_id: 'p1', name: 'Магний B6', when: 'За 30 минут до сна', time: 'evening', meal: 'any' },
+        { product_id: 'p2', name: 'Витамин D3', when: 'Утром, с жирной едой', time: 'morning', meal: 'with_fat' },
+      ],
+      child_text: 'Детские товары принимают по этикетке или по совету педиатра',
+    });
+    mock(compat(), ai({ cached: true, answer: timed }), { check: { status: 200, body: ai({ result: 'ai_cache', cached: true, answer: timed }) } });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: /^(?!Спросить |VITALO AI dan ).*VITALO AI/s }));
+    const card = await screen.findByRole('region', { name: 'Разбор совместимости VITALO AI' });
+    const groups = [...card.querySelectorAll('.ai-timing-group')].map((g) => [g.querySelector('.ai-timing-time')!.textContent, g.querySelector('.ai-timing-name')!.textContent]);
+    expect(groups).toEqual([
+      ['Утро', 'Витамин D3'],
+      ['Вечер', 'Магний B6'],
+    ]);
+    expect(card.textContent).toContain('по совету педиатра');
+    expect(within(card).getByRole('button', { name: 'Товары для разных членов семьи' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Чего не хватает для моей цели?' })).toBeTruthy();
   });
 
   it('badges by reason: synergy, no conflicts, spread, dose only, consult', async () => {

@@ -134,13 +134,21 @@ export const SYSTEM_CHAT = `СЦЕНАРИЙ: переписка покупат�
    педиатра». Если вещество повторяется во взрослом и детском товаре — «если товары для разных членов семьи, всё в
    порядке». Вопрос про ребёнка, беременность или кормление, лекарства, боль в груди, кровь, сильную боль, потерю сознания —
    kind = "red_flag", text — коротко «обсудите с врачом», без советов.
-8. Вопрос не о добавках, товарах или самочувствии — kind = "off_topic", text — вежливо: отвечаешь только о товарах VITALO;
+8. После проверки корзины покупатель может нажать:
+   - «Товары для разных членов семьи» — ответь (goal = "compat"), для каких товаров корзины это важно: повторы веществ
+     для разных людей не страшны, для одного человека — проверить суммарную дозировку; о детских товарах — только
+     «по этикетке или по совету педиатра»;
+   - «Чего не хватает для моей цели?» — если цель неизвестна, уточни её (clarify, варианты — цели: «Сон», «Энергия»,
+     «Суставы», «Иммунитет»…); когда цель ясна — оцени товары корзины и предложи ОДИН товар из каталога, которого не
+     хватает: лучше всего тот, что сочетается с товаром корзины по одобренному правилу «синергия», иначе — по цели.
+     Спокойно, без давления; если всего хватает — так и скажи.
+9. Вопрос не о добавках, товарах или самочувствии — kind = "off_topic", text — вежливо: отвечаешь только о товарах VITALO;
    followups — 2–3 вопроса о подборе добавок.
-9. Никогда: диагнозы и названия болезней, «это может быть…», анализы, лечение, дозировки и единицы (мг, МЕ), обещания
+10. Никогда: диагнозы и названия болезней, «это может быть…», анализы, лечение, дозировки и единицы (мг, МЕ) — кроме доз товаров корзины ровно как в данных, обещания
    («гарантирует», «вылечит»), сравнение с лекарствами, цены. Строку про врача и кнопку «Спросить специалиста»
    приложение добавит само. Товары — только из каталога и корзины: id пиши только в productId, а в текстах называй товар
    его коротким названием из данных.
-10. ЯЗЫК: весь ответ — только на языке из данных. ru — по-русски, без английских слов (названия товаров и брендов
+11. ЯЗЫК: весь ответ — только на языке из данных. ru — по-русски, без английских слов (названия товаров и брендов
     оставляй как есть). uz — узбекский латиницей, без английских и русских слов. Пиши тепло и по делу, как живой
     консультант, без канцелярита. О себе не пиши в мужском или женском роде («я бы рассматривала») — пиши «можно»,
     «стоит», «лучше».`;
@@ -222,6 +230,8 @@ export interface ChatData {
   evidence: ChatEvidence[];
   /** D-74: the catalogue in stock — the model may offer these (sent as the cached block) */
   catalog: CatalogItem[];
+  /** ветка 3: doses of the cart by the label («2000 МЕ») — the answer may repeat them, other doses stay forbidden */
+  cartDoses?: string[];
   history: ChatTurn[];
   clarifyLeft: number;
   question: string;
@@ -380,7 +390,8 @@ export function checkChatAnswer(raw: unknown, d: ChatData): { ok: true; answer: 
   const all = [text, ...options, ...products.map((p) => p.text), ...steps, ...followups].join(' ');
   // the product names are ours: a dose inside a name is not the model's dose (Шаг 0в)
   const names = [...d.cart.map((p) => p.name), ...d.catalog.flatMap((c) => [c.name, c.brand ?? ''])].filter(Boolean).sort((a, b) => b.length - a.length);
-  const scrubbed = names.reduce((t, n) => t.split(n).join(' '), all);
+  const allowedDoses = [...new Set(d.cartDoses ?? [])].sort((a, b) => b.length - a.length);
+  const scrubbed = [...names, ...allowedDoses].reduce((t, n) => t.split(n).join(' '), all);
   if (findGoalForbidden(scrubbed).length || findForbidden(scrubbed).length) return { ok: false, error: 'forbidden_words' };
   if (!inLanguage(all, d.lang) || hasEnglish(scrubbed, d.lang)) return { ok: false, error: 'language' };
   if (kind !== 'clarify' && followups.length < 2) followups = readyFollowups(d, goal, followups);

@@ -48,6 +48,8 @@ export function CompatBlock({ productIds, items = [] }: { productIds: string[]; 
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [chat, setChat] = useState(false);
+  // ветка 3: a chip under the cart answer opens the conversation with its question
+  const [question, setQuestion] = useState<string | undefined>();
   const [refused, setRefused] = useState(readRefused);
   const [askConsent, setAskConsent] = useState(false);
   const s = compat.data;
@@ -84,7 +86,10 @@ export function CompatBlock({ productIds, items = [] }: { productIds: string[]; 
           setKey={setKey}
           items={items}
           onAsk={() => setOpen(true)}
-          onChat={() => setChat(true)}
+          onChat={(q) => {
+            setQuestion(q);
+            setChat(true);
+          }}
           onRefuse={() => {
             setAskConsent(false);
             writeRefused(true);
@@ -115,7 +120,11 @@ export function CompatBlock({ productIds, items = [] }: { productIds: string[]; 
       {chat && (
         <AiChatSheet
           items={items}
-          onClose={() => setChat(false)}
+          question={question}
+          onClose={() => {
+            setChat(false);
+            setQuestion(undefined);
+          }}
           onAsk={
             canAsk
               ? () => {

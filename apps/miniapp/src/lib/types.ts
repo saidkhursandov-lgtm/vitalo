@@ -738,15 +738,19 @@ export interface CartUpsell {
 }
 
 /** 3.8: VITALO AI in the cart (GET /api/compat/ai). */
+export type AiTime = 'morning' | 'day' | 'evening' | 'any';
 export interface AiAnswer {
   answer_id: string;
   verdict: CompatVerdict;
   text: string;
-  timing: { product_id: string; name: string; when: string }[];
+  /** time and meal (ветка 3): the cheat sheet «Утро / День / Вечер»; older answers have only `when` */
+  timing: { product_id: string; name: string; when: string; time?: AiTime | null; meal?: string | null }[];
   suggestions: { product_id: string; name: string }[];
   /** substances in 2+ products of the cart and the fixed line about them (D-47) */
   overlaps: string[];
   overlap_text: string | null;
+  /** a children's product in the cart: «по этикетке или по совету педиатра» (D-73) */
+  child_text?: string | null;
   /** approved «осторожно с лекарствами» rules for the substances of the cart */
   drugs: string[];
   /** why the label is what it is: the badge words (3.8 fix) */

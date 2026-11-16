@@ -82,7 +82,7 @@ const writeChatCart = (id: string, sig: string) => {
  * специалиста», follow-up questions. At the bottom — the beta line. The conversation is kept 12 months and the customer
  * may delete it here.
  */
-export function AiChatSheet({ items, onClose, onAsk }: { items: AiCartItem[]; onClose: () => void; onAsk?: () => void }) {
+export function AiChatSheet({ items, onClose, onAsk, question }: { items: AiCartItem[]; onClose: () => void; onAsk?: () => void; question?: string }) {
   const { t, lang } = useI18n();
   const client = useQueryClient();
   const confirm = useConfirm();
@@ -141,6 +141,14 @@ export function AiChatSheet({ items, onClose, onAsk }: { items: AiCartItem[]; on
       setPending(null);
     }
   };
+  // ветка 3: opened from a chip under the cart answer — its question is asked once, after the consent
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!question || asked.current || !s?.consent || !decided.current || busy) return;
+    asked.current = true;
+    void send(question, 'cart_followup');
+  });
+
   const agree = async () => {
     setBusy(true);
     try {
