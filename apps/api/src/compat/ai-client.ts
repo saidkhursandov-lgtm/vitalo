@@ -7,6 +7,9 @@ export interface AiCompletion {
   json: unknown;
   inputTokens: number;
   outputTokens: number;
+  /** prompt caching (the catalogue of the chat): tokens read from the cache and written to it, on top of inputTokens */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   /** ok | refusal | max_tokens | not_json */
   outcome: 'ok' | 'refusal' | 'max_tokens' | 'not_json';
 }
@@ -14,7 +17,17 @@ export interface AiCompletion {
 export interface AiModel {
   /** false — no ANTHROPIC_API_KEY: every request goes to the specialist */
   ready(): boolean;
-  complete(input: { model: string; system: string; data: string; schema: Record<string, unknown>; maxTokens: number }): Promise<AiCompletion>;
+  complete(input: AiInput): Promise<AiCompletion>;
+}
+
+export interface AiInput {
+  model: string;
+  system: string;
+  /** a long block that repeats from request to request (the catalogue): sent after the instruction and cached */
+  context?: string;
+  data: string;
+  schema: Record<string, unknown>;
+  maxTokens: number;
 }
 
 export const AI_MODEL = Symbol('AI_MODEL');
@@ -43,13 +56,18 @@ export class AnthropicModel implements AiModel {
     return this.client;
   }
 
-  async complete(input: { model: string; system: string; data: string; schema: Record<string, unknown>; maxTokens: number }): Promise<AiCompletion> {
+  async complete(input: AiInput): Promise<AiCompletion> {
     let res: Anthropic.Message;
     try {
       res = await this.api().messages.create({
         model: input.model,
         max_tokens: input.maxTokens,
-        system: input.system,
+        system: input.context
+          ? [
+              { type: 'text', text: input.system },
+              { type: 'text', text: input.context, cache_control: { type: 'ephemeral' } },
+            ]
+          : input.system,
         messages: [{ role: 'user', content: input.data }],
         output_config: { effort: 'low', format: { type: 'json_schema', schema: input.schema } },
       });
@@ -59,7 +77,12 @@ export class AnthropicModel implements AiModel {
       if (e instanceof Anthropic.APIError && e.status) throw new AiCallError(`api_${e.status}`);
       throw new AiCallError('network');
     }
-    const usage = { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
+    const usage = {
+      inputTokens: res.usage.input_tokens,
+      outputTokens: res.usage.output_tokens,
+      cacheReadTokens: res.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: res.usage.cache_creation_input_tokens ?? 0,
+    };
     if (res.stop_reason === 'refusal') return { json: null, ...usage, outcome: 'refusal' };
     if (res.stop_reason === 'max_tokens') return { json: null, ...usage, outcome: 'max_tokens' };
     const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');

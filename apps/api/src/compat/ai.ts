@@ -66,9 +66,25 @@ export const MODEL_PRICES: Record<string, { input: number; output: number }> = {
   'claude-opus-5-5': { input: 4, output: 20 },
 };
 
-export function costUsd(model: string, inputTokens: number, outputTokens: number): number {
+/** Prompt caching: a token read from the cache costs 0.1 of an input token, a token written to it 1.25. */
+export function costUsd(model: string, inputTokens: number, outputTokens: number, cacheRead = 0, cacheWrite = 0): number {
   const p = MODEL_PRICES[model] ?? MODEL_PRICES['claude-opus-5-5'];
-  return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
+  return ((inputTokens + cacheRead * 0.1 + cacheWrite * 1.25) * p.input + outputTokens * p.output) / 1_000_000;
+}
+
+/**
+ * English words in an answer (16.11: «influences», «the» in a Russian answer). Russian: a Latin word of 3+ small letters
+ * outside our product, brand and substance names (abbreviations like «BCAA», «MSM», «D3» are fine). Uzbek is Latin
+ * itself: frequent English words only.
+ */
+const EN_WORDS = new Set(
+  'the is are was were and or of for with without this that these those which what your you it its may might can could should would will helps help support supports influence influences improve improves effect effects also only because however sleep quality level levels body daily take taking'.split(' '),
+);
+export function hasEnglish(text: string, lang: Lang, names: string[] = []): boolean {
+  const t = names.filter(Boolean).reduce((acc, n) => acc.split(n).join(' '), text);
+  const words = t.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
+  if (lang === 'uz') return words.some((w) => EN_WORDS.has(w.toLowerCase()));
+  return words.some((w) => w.length >= 3 && /[a-z]{3}/.test(w) && !/^[A-Z]/.test(w)) || words.some((w) => EN_WORDS.has(w.toLowerCase()) && w.length > 2 && w !== w.toUpperCase());
 }
 
 const TASHKENT_OFFSET_MS = 5 * 3600_000;

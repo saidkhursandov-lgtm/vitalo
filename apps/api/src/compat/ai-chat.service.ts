@@ -44,13 +44,17 @@ import {
   isGoalTopic,
   scrubPii,
   topicOrder,
-  type ChatCandidate,
+  type CatalogItem,
+  LANGUAGE_RETRY,
+  catalogBlock,
+  hintGoals,
   type ChatData,
   type ChatEvidence,
   type ChatTopic,
 } from './ai-chat';
 import { AI_MODEL, AiCallError, type AiModel } from './ai-client';
-import { DOCTOR_LINE, LEVEL_LABELS, LEVELS, bestLevel, type Fit, type Goal, type Level } from './ai-goal';
+import { AUDIENCES, DOCTOR_LINE, LEVEL_LABELS, LEVELS, PRODUCT_GOAL_LABELS, PRODUCT_GOALS, bestLevel, type Fit, type Goal, type Level, type ProductGoal } from './ai-goal';
+import { availableQty } from '../catalog/product.mapper';
 import { AiService } from './ai.service';
 import { tashkentDayStart, type Lang } from './compat';
 import { CompatService, langOf, type Item } from './compat.service';
@@ -60,6 +64,10 @@ const MAX_TOKENS = 2000;
 /** a conversation continues while it was used within this time; later «Спросить VITALO AI» starts a new one */
 const OPEN_MS = 24 * 3600_000;
 const HISTORY = 12;
+/** D-74: the catalogue block of the chat is rebuilt after this time */
+const CATALOG_TTL_MS = 5 * 60_000;
+/** the units of a dose in the catalogue block (ветка 1: product_substances.dose_unit) */
+const DOSE_UNIT_TEXT: Record<string, string> = { mg: 'мг', mcg: 'мкг', iu: 'МЕ', g: 'г', ml: 'мл', cfu_bn: 'млрд КОЕ' };
 
 export interface ChatProductView {
   product_id: string;
@@ -126,6 +134,7 @@ export class AiChatService {
   private readonly logger = new Logger(AiChatService.name);
   private readonly busy = new Set<string>();
   private purging = false;
+  private readonly catalogCache = new Map<Lang, { at: number; rows: { id: string; item: CatalogItem }[] }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -262,39 +271,53 @@ export class AiChatService {
     const { data, refs } = await this.chatData(items, lang, history, text);
     const log = { scenario: 'cart_chat', user_id: userId, set_key: items.map((i) => i.product_id).sort().join(',') || null, lang, model: s.goal_model };
     const started = Date.now();
+    const system = `${SYSTEM_COMMON}\n\n${SYSTEM_CHAT}`;
+    const context = catalogBlock(data.catalog);
     let completion;
-    try {
-      completion = await this.model.complete({ model: s.goal_model, system: `${SYSTEM_COMMON}\n\n${SYSTEM_CHAT}`, data: chatDataBlock(data), schema: CHAT_SCHEMA, maxTokens: MAX_TOKENS });
-    } catch (e) {
-      const code = e instanceof AiCallError ? e.code : 'error';
-      this.logger.warn(`VITALO AI conversation failed: ${code}`);
-      const latency = Date.now() - started;
-      await this.prisma.ai_requests.create({ data: { ...log, status: code === 'timeout' ? 'timeout' : 'error', latency_ms: latency, error: code } });
-      return finish('failed', 'failed', { text: FAILED_TEXT[lang], payload: { specialist: true }, model: s.goal_model, latency, error: code });
+    let checked: ReturnType<typeof checkChatAnswer> = { ok: false, error: 'not_called' };
+    let cost = 0;
+    const tokens = { input: 0, output: 0 };
+    // D-74: an answer in the wrong language gets one more try with a reminder, then «не получилось ответить»
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const block = chatDataBlock(data) + (attempt ? `\n${LANGUAGE_RETRY[lang]}` : '');
+      const t0 = Date.now();
+      try {
+        completion = await this.model.complete({ model: s.goal_model, system, context, data: block, schema: CHAT_SCHEMA, maxTokens: MAX_TOKENS });
+      } catch (e) {
+        const code = e instanceof AiCallError ? e.code : 'error';
+        this.logger.warn(`VITALO AI conversation failed: ${code}`);
+        const latency = Date.now() - started;
+        await this.prisma.ai_requests.create({ data: { ...log, status: code === 'timeout' ? 'timeout' : 'error', latency_ms: Date.now() - t0, error: code } });
+        return finish('failed', 'failed', { text: FAILED_TEXT[lang], payload: { specialist: true }, model: s.goal_model, input: tokens.input, output: tokens.output, cost, latency, error: code });
+      }
+      const one = costUsd(s.goal_model, completion.inputTokens, completion.outputTokens, completion.cacheReadTokens ?? 0, completion.cacheWriteTokens ?? 0);
+      cost += one;
+      tokens.input += completion.inputTokens + (completion.cacheReadTokens ?? 0) + (completion.cacheWriteTokens ?? 0);
+      tokens.output += completion.outputTokens;
+      checked = completion.outcome === 'ok' ? checkChatAnswer(completion.json, data) : ({ ok: false, error: completion.outcome } as const);
+      await this.prisma.ai_requests.create({
+        data: {
+          ...log,
+          status: checked.ok ? 'ok' : 'invalid',
+          input_tokens: completion.inputTokens + (completion.cacheReadTokens ?? 0) + (completion.cacheWriteTokens ?? 0),
+          output_tokens: completion.outputTokens,
+          cost_usd: new Prisma.Decimal(one.toFixed(6)),
+          latency_ms: Date.now() - t0,
+          error: checked.ok ? null : checked.error,
+          rejected_text: checked.ok ? null : JSON.stringify(completion.json ?? null).slice(0, 4000),
+        },
+      });
+      if (checked.ok || checked.error !== 'language') break;
     }
     const latency = Date.now() - started;
-    const cost = costUsd(s.goal_model, completion.inputTokens, completion.outputTokens);
-    const checked = completion.outcome === 'ok' ? checkChatAnswer(completion.json, data) : ({ ok: false, error: completion.outcome } as const);
-    await this.prisma.ai_requests.create({
-      data: {
-        ...log,
-        status: checked.ok ? 'ok' : 'invalid',
-        input_tokens: completion.inputTokens,
-        output_tokens: completion.outputTokens,
-        cost_usd: new Prisma.Decimal(cost.toFixed(6)),
-        latency_ms: latency,
-        error: checked.ok ? null : checked.error,
-        rejected_text: checked.ok ? null : JSON.stringify(completion.json ?? null).slice(0, 4000),
-      },
-    });
-    const meta = { model: s.goal_model, input: completion.inputTokens, output: completion.outputTokens, cost, latency };
+    const meta = { model: s.goal_model, input: tokens.input, output: tokens.output, cost, latency };
     if (!checked.ok) return finish('failed', 'failed', { text: FAILED_TEXT[lang], payload: { specialist: true }, ...meta, error: checked.error });
 
     const a = checked.answer;
     if (a.kind === 'red_flag') return finish('red_flag', 'red_flag', { text: RED_FLAG_TEXT[lang], payload: { specialist: true }, ...meta }, a.goal);
     const products: ChatProductView[] = a.products.map((p) => {
       const lines = isGoalTopic(a.goal) ? data.evidence.filter((e) => e.ref === p.ref && e.goal === a.goal) : [];
-      const cand = isGoalTopic(a.goal) ? data.candidates.filter((c) => c.ref === p.ref && c.goal === a.goal) : [];
+      const cand = isGoalTopic(a.goal) ? (data.catalog.find((c) => c.ref === p.ref)?.approved ?? []).filter((x) => x.goal === a.goal) : [];
       const level = p.fit ? bestLevel([...lines, ...cand].map((l) => ({ substance: '', level: l.level, helps: '', not_helps: '' }))) : null;
       const r = refs.get(p.ref)!;
       return { product_id: r.id, name: r.name, fit: p.fit, level, level_text: level ? LEVEL_LABELS[level][lang] : null, text: p.text, in_cart: r.in_cart };
@@ -355,7 +378,6 @@ export class AiChatService {
     let cartBlock = '';
     const cart: ChatData['cart'] = [];
     const ev: ChatEvidence[] = [];
-    const candidates: ChatCandidate[] = [];
     if (items.length) {
       const { data: cd, refs: cartRefs } = await this.ai.cartData(items, lang);
       cartBlock = cartDataBlock(cd);
@@ -368,28 +390,11 @@ export class AiChatService {
         const all = withParents(rows.filter((r) => r.product_id === item.product_id && names.has(r.substance_id)).map((r) => r.substance_id), parentOf);
         for (const e of evidence.filter((x) => all.has(x.substance_id))) ev.push({ ref: item.sku, substance: subName(e.substance_id), ...lineOf(e) });
       }
-    } else if (evidence.length) {
-      // an empty cart: up to 3 products of the catalogue per goal, the best level first
-      const childrenOf = (id: string) => subs.filter((s) => s.parent_id === id).map((s) => s.id);
-      const sorted = [...evidence].sort((a, b) => LEVELS.indexOf(a.level as Level) - LEVELS.indexOf(b.level as Level));
-      const perGoal = new Map<string, number>();
-      for (const e of sorted) {
-        if ((perGoal.get(e.goal) ?? 0) >= 3) continue;
-        const products = await this.prisma.products.findMany({
-          where: { status: 'active', substances: { some: { substance_id: { in: [e.substance_id, ...childrenOf(e.substance_id)] } } } },
-          select: { id: true, sku: true, name_ru: true, name_uz: true, short_name_ru: true, short_name_uz: true, substances: { select: { substance_id: true } } },
-          orderBy: { sku: 'asc' },
-          take: 2,
-        });
-        for (const p of products) {
-          if ((perGoal.get(e.goal) ?? 0) >= 3) break;
-          const name = productTitle(p, lang);
-          candidates.push({ ref: p.sku, name, substances: p.substances.map((x) => subName(x.substance_id)), goal: e.goal as Goal, level: e.level as Level, helps: lang === 'uz' ? e.helps_uz : e.helps_ru });
-          refs.set(p.sku, { id: p.id, name, in_cart: false });
-          perGoal.set(e.goal, (perGoal.get(e.goal) ?? 0) + 1);
-        }
-      }
     }
+
+    // D-74: the whole catalogue in stock, a cached block; products already in the cart keep their cart line
+    const catalog = (await this.catalog(lang)).filter((c) => !refs.has(c.item.ref));
+    for (const c of catalog) refs.set(c.item.ref, { id: c.id, name: c.item.name, in_cart: false });
 
     const turns = history
       .filter((m) => m.text)
@@ -400,8 +405,74 @@ export class AiChatService {
         return { role: m.role === 'user' ? ('user' as const) : ('ai' as const), text: `${m.text}${extra}` };
       });
     const clarifies = history.filter((m) => m.role === 'ai' && m.kind === 'clarify').length;
-    const data: ChatData = { lang, cartBlock, cart, evidence: ev, candidates, history: turns, clarifyLeft: Math.max(0, MAX_CLARIFY - clarifies), question };
+    const data: ChatData = { lang, cartBlock, cart, evidence: ev, catalog: catalog.map((c) => c.item), history: turns, clarifyLeft: Math.max(0, MAX_CLARIFY - clarifies), question };
     return { data, refs };
+  }
+
+  /**
+   * D-74: products in stock as the chat sees them — substances with form and dose, audience, goals, approved rows of
+   * «Цели». No purchase prices, margins or stock counts (D-66). Kept for 5 minutes per language: a changed card shows
+   * up within that time, and the same text lets the Claude API cache it.
+   */
+  async catalog(lang: Lang, now = Date.now()): Promise<{ id: string; item: CatalogItem }[]> {
+    const hit = this.catalogCache.get(lang);
+    if (hit && now - hit.at < CATALOG_TTL_MS) return hit.rows;
+    const [subs, evidence, products] = await Promise.all([
+      this.prisma.substances.findMany({ where: { enabled: true }, select: { id: true, name_ru: true, name_uz: true, parent_id: true } }),
+      this.prisma.goal_evidence.findMany({ where: { status: 'approved' } }),
+      this.prisma.products.findMany({
+        where: { status: 'active' },
+        orderBy: { sku: 'asc' },
+        select: {
+          id: true,
+          sku: true,
+          name_ru: true,
+          name_uz: true,
+          short_name_ru: true,
+          short_name_uz: true,
+          brand: true,
+          audience: true,
+          goals: true,
+          inventory: { select: { actual_qty: true, reserved_qty: true } },
+          substances: { orderBy: { position: 'asc' }, select: { substance_id: true, dose_amount: true, dose_unit: true } },
+        },
+      }),
+    ]);
+    const names = new Map(subs.map((s) => [s.id, s]));
+    const parentOf = new Map(subs.map((s) => [s.id, s.parent_id]));
+    const rows: { id: string; item: CatalogItem }[] = [];
+    for (const p of products) {
+      if (availableQty(p.inventory) <= 0) continue;
+      const own = p.substances.filter((x) => names.has(x.substance_id));
+      const all = withParents(own.map((x) => x.substance_id), parentOf);
+      const approved = evidence
+        .filter((e) => all.has(e.substance_id))
+        .sort((a, b) => LEVELS.indexOf(a.level as Level) - LEVELS.indexOf(b.level as Level))
+        .filter((e, i, list) => list.findIndex((x) => x.goal === e.goal) === i)
+        .map((e) => ({ goal: e.goal as Goal, level: e.level as Level, helps: lang === 'uz' ? e.helps_uz : e.helps_ru }));
+      const ruNames = own.map((x) => names.get(x.substance_id)!.name_ru);
+      const cardGoals = p.goals.filter((g): g is ProductGoal => (PRODUCT_GOALS as readonly string[]).includes(g));
+      const goals = new Set<Goal>([...cardGoals.filter(isGoalTopic), ...approved.map((a) => a.goal), ...hintGoals(ruNames)]);
+      rows.push({
+        id: p.id,
+        item: {
+          ref: p.sku,
+          name: productTitle(p, lang),
+          brand: p.brand || null,
+          substances: own.map((x) => {
+            const n = names.get(x.substance_id)!;
+            const dose = x.dose_amount != null && x.dose_unit ? ` ${Number(x.dose_amount)} ${DOSE_UNIT_TEXT[x.dose_unit] ?? x.dose_unit}` : '';
+            return `${lang === 'uz' ? n.name_uz : n.name_ru}${dose}`;
+          }),
+          audience: (AUDIENCES as readonly string[]).includes(p.audience ?? '') ? (p.audience as CatalogItem['audience']) : null,
+          goalLabels: cardGoals.map((g) => PRODUCT_GOAL_LABELS[g][lang]),
+          goals: [...goals],
+          approved,
+        },
+      });
+    }
+    this.catalogCache.set(lang, { at: now, rows });
+    return rows;
   }
 
   /** DELETE /compat/ai/chat/:id — the customer deletes a conversation: its texts are wiped at once (D-70). */

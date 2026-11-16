@@ -1,4 +1,16 @@
-import { chatDataBlock, checkChatAnswer, hasRedFlag, scrubPii, topicOrder, type ChatData } from './ai-chat';
+import { catalogBlock, chatDataBlock, checkChatAnswer, hasRedFlag, hintGoals, scrubPii, topicOrder, type CatalogItem, type ChatData } from './ai-chat';
+
+const item = (over: Partial<CatalogItem> = {}): CatalogItem => ({
+  ref: 'GLY-1',
+  name: 'Магний глицинат',
+  brand: 'NOW Foods',
+  substances: ['Магний глицинат 200 мг'],
+  audience: 'adult',
+  goalLabels: ['сон'],
+  goals: ['sleep', 'stress'],
+  approved: [],
+  ...over,
+});
 
 const data = (over: Partial<ChatData> = {}): ChatData => ({
   lang: 'ru',
@@ -8,7 +20,7 @@ const data = (over: Partial<ChatData> = {}): ChatData => ({
     { ref: 'D3-1', name: 'Витамин D3' },
   ],
   evidence: [{ ref: 'MAG-1', substance: 'Магний', goal: 'sleep', level: 'B', helps: 'при напряжении', not_helps: 'если мешает кофеин' }],
-  candidates: [],
+  catalog: [item(), item({ ref: 'CRE-1', name: 'Креатин', brand: null, substances: ['Креатин'], goalLabels: [], goals: ['sport'] })],
   history: [],
   clarifyLeft: 2,
   question: 'Мне трудно заснуть',
@@ -52,19 +64,19 @@ describe('D-70: переписка с VITALO AI — проверки', () => {
     expect(block).toContain('VITALO AI: Трудно заснуть?');
     expect(block).toContain('осталось уточнений: 1');
     expect(block).toContain('<вопрос>Мне трудно заснуть</вопрос>');
-    expect(block).not.toContain('<товары каталога');
-    const empty = chatDataBlock(data({ cart: [], cartBlock: '', evidence: [], candidates: [{ ref: 'MAG-1', name: 'Магний', substances: ['Магний'], goal: 'sleep', level: 'B', helps: 'при напряжении' }] }));
-    expect(empty).toContain('корзина пуста');
-    expect(empty).toContain('- id MAG-1 | Магний');
+    expect(block).not.toContain('<каталог');
+    expect(chatDataBlock(data({ cart: [], cartBlock: '', evidence: [] }))).toContain('корзина пуста');
+    const cat = catalogBlock([item({ approved: [{ goal: 'sleep', level: 'B', helps: 'при напряжении' }] })]);
+    expect(cat).toContain('- id GLY-1 | Магний глицинат (NOW Foods) | вещества: Магний глицинат 200 мг | кому: взрослым | цели: сон | одобрено врачом: сон (sleep), уровень B, когда помогает: при напряжении');
   });
 
-  it('an answer: the fit comes from our base — no approved row means «no_data»', () => {
+  it('an answer: «helps» needs an approved row of our base, otherwise «maybe» (D-74)', () => {
     const r = checkChatAnswer(answer(), data());
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.answer.products).toEqual([
       { ref: 'MAG-1', fit: 'helps', text: 'Может помочь, если сон мешает напряжение.' },
-      { ref: 'D3-1', fit: 'no_data', text: 'Для сна этот товар обычно не берут.' },
+      { ref: 'D3-1', fit: 'maybe', text: 'Для сна этот товар обычно не берут.' },
     ]);
     const compat = checkChatAnswer(answer({ goal: 'compat' }), data());
     expect(compat.ok && compat.answer.products.every((p) => p.fit === null)).toBe(true);
@@ -88,5 +100,38 @@ describe('D-70: переписка с VITALO AI — проверки', () => {
     expect(topicOrder(['Магний'])[0]).toBe('sleep');
     expect(topicOrder(['Глюкозамин', 'Хондроитин'])[0]).toBe('joints');
     expect(topicOrder([])).toEqual(['sleep', 'stress', 'energy', 'joints', 'immunity', 'sport']);
+  });
+
+  it('D-74: the catalogue may be offered — up to 3 with an empty cart, 1 on top of a cart', () => {
+    const empty = data({ cart: [], cartBlock: '', evidence: [] });
+    const fromCatalog = (ids: string[]) => answer({ products: ids.map((id) => ({ productId: id, fit: 'helps', text: 'Мягкая форма, подходит для вечера.' })) });
+    const r = checkChatAnswer(fromCatalog(['GLY-1']), empty);
+    expect(r.ok && r.answer.products).toEqual([{ ref: 'GLY-1', fit: 'maybe', text: 'Мягкая форма, подходит для вечера.' }]);
+    expect(checkChatAnswer(fromCatalog(['GLY-1', 'CRE-1']), empty).ok).toBe(true);
+    const cart = answer({ products: [...answer().products as object[], { productId: 'GLY-1', fit: 'maybe', text: 'Если захотите, есть мягкая форма магния.' }] });
+    expect(checkChatAnswer(cart, data()).ok).toBe(true);
+    const two = answer({ products: [...answer().products as object[], { productId: 'GLY-1', fit: 'maybe', text: 'Мягкая форма магния.' }, { productId: 'CRE-1', fit: 'maybe', text: 'Креатин для спорта.' }] });
+    expect(checkChatAnswer(two, data())).toEqual({ ok: false, error: 'products' });
+  });
+
+  it('D-74: English words are refused; names of our products and abbreviations are fine', () => {
+    expect(checkChatAnswer(answer({ text: 'Магний influences качество сна по данным исследований.' }), data())).toEqual({ ok: false, error: 'language' });
+    expect(checkChatAnswer(answer({ text: 'Магний помогает, the main thing — режим.' }), data())).toEqual({ ok: false, error: 'language' });
+    expect(checkChatAnswer(answer({ text: 'Можно присмотреться к NOW Foods: там глицинат, а BCAA и GABA тут ни при чём.' }), data()).ok).toBe(true);
+    const uz = data({ lang: 'uz' });
+    const uzAnswer = (text: string) => answer({ text, products: [], steps: [], followups: [] });
+    expect(checkChatAnswer(uzAnswer('Magniy uyquga yordam beradi, tadqiqotlarga koʻra.'), uz).ok).toBe(true);
+    expect(checkChatAnswer(uzAnswer('Magniy sleep quality uchun yordam beradi.'), uz)).toEqual({ ok: false, error: 'language' });
+  });
+
+  it('D-74: a follow-up to a goal without products is dropped; fewer than 2 are topped up', () => {
+    const r = checkChatAnswer(
+      answer({ followups: [{ type: 'show_goal', goal: 'joints', text: 'А что есть для суставов?' }, { type: 'show_goal', goal: 'stress', text: 'А что поможет при стрессе?' }] }),
+      data(),
+    );
+    expect(r.ok && r.answer.followups).toEqual(['А что поможет при стрессе?', 'Как принимать их вместе?']);
+    const none = checkChatAnswer(answer({ products: [], followups: [] }), data({ cart: [], cartBlock: '', evidence: [] }));
+    expect(none.ok && none.answer.followups).toEqual(['А что поможет при стрессе?', 'А что есть для спорта?']);
+    expect(hintGoals(['Магний цитрат'])).toEqual(['sleep', 'stress']);
   });
 });
