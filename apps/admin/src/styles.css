@@ -713,12 +713,12 @@ textarea { resize: vertical; }
 .substance-block h3 { margin: 0 0 4px; font-size: 15px; }
 .substance-list { margin: 8px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .substance-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
-.substance-name { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.substance-name { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
 .substance-ops { display: inline-flex; gap: 2px; }
 .substance-ops .btn { min-width: 44px; min-height: 44px; }
 .substance-dose { display: inline-flex; gap: 4px; align-items: center; }
-.substance-dose input { width: 84px; min-height: 36px; }
-.substance-dose select { min-height: 36px; }
+.substance-dose input { width: 64px; min-height: 36px; }
+.substance-dose select { min-height: 36px; width: 84px; }
 .enrich-draft { margin: 12px 0; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--panel); }
 .enrich-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .enrich-list { margin: 6px 0; padding-left: 18px; }
