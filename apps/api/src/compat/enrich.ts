@@ -225,6 +225,16 @@ export function mergeEnrichment(
 ): { id: string; in_label: boolean; dose_amount: number | null; dose_unit: string | null }[] {
   const cur = new Map(current.map((c) => [c.id, c]));
   const hasLabel = current.some((c) => c.in_label);
+  // the draft's «Омега-3» while the card has its form «Омега-3 rTG»: the card's form stays (it says more), the draft
+  // only brings the dose
+  const ids0 = new Set(draft.substances.map((s) => s.id));
+  draft = {
+    ...draft,
+    substances: draft.substances.map((s) => {
+      const form = current.find((c) => parentOf.get(c.id) === s.id && !ids0.has(c.id));
+      return form ? { ...s, id: form.id } : s;
+    }),
+  };
   const draftIds = new Set(draft.substances.map((s) => s.id));
   const draftParents = new Set(draft.substances.map((s) => parentOf.get(s.id)).filter((x): x is string => !!x));
   const fromDraft = draft.substances.map((s) => {

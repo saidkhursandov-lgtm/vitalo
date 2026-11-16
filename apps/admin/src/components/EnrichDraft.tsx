@@ -59,9 +59,15 @@ interface DictRow {
 export function mergeDraft(current: PickedSubstance[], draft: Enrichment['payload'], parentOf: Map<string, string | null>): PickedSubstance[] {
   const cur = new Map(current.map((c) => [c.id, c]));
   const hasLabel = current.some((c) => c.in_label);
-  const draftIds = new Set(draft.substances.map((s) => s.id));
-  const draftParents = new Set(draft.substances.map((s) => parentOf.get(s.id)).filter((x): x is string => !!x));
-  const fromDraft: PickedSubstance[] = draft.substances.map((s) => {
+  // the draft's «Омега-3» while the card has «Омега-3 rTG»: the card's form stays, the draft brings the dose
+  const ids0 = new Set(draft.substances.map((s) => s.id));
+  const substances = draft.substances.map((s) => {
+    const form = current.find((c) => parentOf.get(c.id) === s.id && !ids0.has(c.id));
+    return form ? { ...s, id: form.id, kind: form.kind, name_ru: form.name_ru, name_uz: form.name_uz, parent_name: form.parent_name } : s;
+  });
+  const draftIds = new Set(substances.map((s) => s.id));
+  const draftParents = new Set(substances.map((s) => parentOf.get(s.id)).filter((x): x is string => !!x));
+  const fromDraft: PickedSubstance[] = substances.map((s) => {
     const c = cur.get(s.id);
     const parent = parentOf.get(s.id);
     const parentMarked = !!parent && !!cur.get(parent)?.in_label;

@@ -120,6 +120,16 @@ describe('VITALO AI enrichment: «Принять» keeps a person’s work', () 
     ]);
   });
 
+  it('the draft parent next to the card form: the form stays and takes the draft dose, no parent is added', () => {
+    const merged = mergeEnrichment(
+      [{ id: 'mgc', in_label: true, dose_amount: null, dose_unit: null }],
+      draft([{ id: 'mg', in_label: true, dose_amount: 300, dose_unit: 'mg' }]),
+      parentOf,
+      names,
+    );
+    expect(merged).toEqual([{ id: 'mgc', in_label: true, dose_amount: 300, dose_unit: 'mg' }]);
+  });
+
   it('a product without a label takes the draft marks', () => {
     const merged = mergeEnrichment([], draft([{ id: 'd3', in_label: true }, { id: 'k2', in_label: true }]), parentOf, names);
     expect(merged.map((m) => m.in_label)).toEqual([true, true]);
