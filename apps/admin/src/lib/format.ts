@@ -198,6 +198,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'compat.saved': 'Сохранён ответ о совместимости для набора товаров',
   'compat.saved_updated': 'Изменён сохранённый ответ о совместимости',
   'compat.product_substances': 'Изменены вещества товара (совместимость)',
+  'compat.enrichment_accepted': 'Принят черновик VITALO AI (вещества, дозы, цели)',
   'compat.substance_created': 'Добавлено вещество (совместимость)',
   'compat.substance_updated': 'Изменено вещество (совместимость)',
   'compat.rule_created': 'Добавлено правило базы знаний AI',

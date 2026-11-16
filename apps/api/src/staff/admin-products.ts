@@ -11,6 +11,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -56,6 +57,9 @@ import { FILE_STORAGE, type FileStorage } from '../storage/file-storage';
 import { imageFiles, storeProductImage } from '../storage/image-processing';
 import { AuditService } from './audit.service';
 import { writeProductSubstances } from '../compat/substance-label';
+import { AUDIENCES, PRODUCT_GOALS, type Audience, type ProductGoal } from '../compat/ai-goal';
+import { ENRICH_TEXTS } from '../compat/enrich';
+import { EnrichService, markEnrichmentAccepted } from '../compat/enrich.service';
 import { can } from './permissions';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 
@@ -216,11 +220,22 @@ export class ProductInput {
    */
   @ApiPropertyOptional({ type: () => [ProductSubstanceItem] })
   @IsOptional() @IsArray() @ArrayMaxSize(60) @ValidateNested({ each: true }) @Type(() => ProductSubstanceItem) substances?: ProductSubstanceItem[];
+
+  /** VITALO AI: who the product is for (null — not set). */
+  @ApiPropertyOptional({ enum: AUDIENCES, nullable: true }) @IsOptional() @IsIn([...AUDIENCES]) audience?: Audience | null;
+  /** VITALO AI: health goals of the product. */
+  @ApiPropertyOptional({ enum: PRODUCT_GOALS, isArray: true })
+  @IsOptional() @IsArray() @ArrayMaxSize(PRODUCT_GOALS.length) @IsIn([...PRODUCT_GOALS], { each: true }) goals?: ProductGoal[];
+  /** The VITALO AI draft this save accepts (it is marked «принят» in the same transaction). Not stored itself. */
+  @ApiPropertyOptional() @IsOptional() @IsUUID() enrichment_id?: string;
 }
 
 export class ProductSubstanceItem {
   @ApiProperty() @IsUUID() id!: string;
   @ApiPropertyOptional({ description: 'Показывать в надписи «Форма вещества»' }) @IsOptional() @IsBoolean() in_label?: boolean;
+  @ApiPropertyOptional({ nullable: true, description: 'Доза на порцию по этикетке' })
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 3, allowNaN: false, allowInfinity: false }) @Min(0) @Max(1_000_000) dose_amount?: number | null;
+  @ApiPropertyOptional({ enum: DOSE_UNITS, nullable: true }) @IsOptional() @IsIn([...DOSE_UNITS]) dose_unit?: DoseUnit | null;
 }
 
 export class ProductPatch extends PartialType(ProductInput) {}
@@ -282,8 +297,9 @@ const productInclude = {
   suppliers: { select: { supplier_id: true } },
   substances: {
     orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
-    select: { in_label: true, substance: { select: { id: true, kind: true, name_ru: true, name_uz: true, enabled: true, parent: { select: { name_ru: true } } } } },
+    select: { in_label: true, dose_amount: true, dose_unit: true, substance: { select: { id: true, kind: true, name_ru: true, name_uz: true, enabled: true, parent: { select: { name_ru: true } } } } },
   },
+  enrichments: { where: { status: 'pending' }, orderBy: { created_at: 'desc' }, take: 1, select: { id: true, payload: true, trigger: true, created_at: true } },
 } satisfies Prisma.productsInclude;
 
 type ProductRow = Prisma.productsGetPayload<{ include: typeof productInclude }>;
@@ -350,6 +366,7 @@ function toAdminProduct(p: ProductRow) {
     inventory,
     suppliers,
     substances,
+    enrichments,
     price_uzs,
     old_price_uzs,
     cost_uzs,
@@ -372,7 +389,9 @@ function toAdminProduct(p: ProductRow) {
     dose_amount: num(dose_amount),
     category_ids: categories.map((c) => c.category_id),
     supplier_ids: suppliers.map((s) => s.supplier_id),
-    substances: substances.map(({ in_label, substance: { parent, ...s } }) => ({ ...s, parent_name: parent?.name_ru ?? null, in_label })),
+    substances: substances.map(({ in_label, dose_amount: da, dose_unit, substance: { parent, ...s } }) => ({ ...s, parent_name: parent?.name_ru ?? null, in_label, dose_amount: num(da), dose_unit })),
+    /** VITALO AI: the latest draft waiting for «Принять» / «Отклонить» */
+    enrichment: enrichments[0] ?? null,
     media: media.map((m) => ({ id: m.id, url: m.url, is_main: m.is_main, type: m.media_type, title: m.title })),
     stock: inventory.map((i) => ({
       warehouse: i.warehouse,
@@ -405,6 +424,8 @@ export class AdminProductsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     @Inject(FILE_STORAGE) private readonly storage: FileStorage,
+    /** VITALO AI: a draft of substances, doses and goals after a new product or a changed composition (absent in scripts) */
+    @Optional() private readonly enrich?: EnrichService,
   ) {}
 
   /** Аудит 2.5: the condition of each «problem» (the Yandex price compared with the shop price column to column). */
@@ -524,7 +545,7 @@ export class AdminProductsService {
 
   async create(staffId: string | null, dto: ProductInput) {
     const id = await this.write(async (tx) => {
-      const { category_ids, supplier_ids, on_zero_supplier_id, substances, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, null, data as Record<string, unknown>);
       const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, withDefaultPaymeCodes(data) as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
@@ -532,21 +553,24 @@ export class AdminProductsService {
       const sup = supplier_ids === undefined && on_zero_supplier_id === undefined ? await defaultSuppliers(tx, p.sku) : { supplier_ids, on_zero_supplier_id };
       const supplies = await this.setSuppliers(tx, p.id, sup.supplier_ids, sup.on_zero_supplier_id);
       const subs = substances ? await writeProductSubstances(tx, p.id, substances, { clearLabel: true }) : null;
+      if (enrichment_id) await markEnrichmentAccepted(tx, enrichment_id, p.id, staffId);
       await this.audit.log(
         { staffId, action: 'product.created', entityType: 'product', entityId: p.id, after: { ...p, category_ids, ...supplies, ...(subs && { substances: subs.after, substance_form_ru: subs.label?.ru ?? null }) } },
         tx,
       );
       return p.id;
     });
+    if (!dto.enrichment_id) this.enrich?.queue(id, 'auto', staffId);
     return this.get(id);
   }
 
   /** Includes archiving (status = archived). Deleting is a separate action — remove() (D-54). */
   async update(staffId: string | null, id: string, dto: ProductPatch) {
+    let textsChanged = false;
     await this.write(async (tx) => {
       const before = await tx.products.findUnique({ where: { id }, include: { categories: true, suppliers: { select: { supplier_id: true } } } });
       if (!before) throw new NotFoundException('Product not found');
-      const { category_ids, supplier_ids, on_zero_supplier_id, substances, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, before, data as Record<string, unknown>);
       const after = await tx.products.update({ where: { id }, data: this.toData(this.applyYandexSync(before, data as Record<string, unknown>)) });
@@ -556,6 +580,9 @@ export class AdminProductsService {
       }
       const supplies = await this.setSuppliers(tx, id, supplier_ids, on_zero_supplier_id);
       const subs = substances ? await writeProductSubstances(tx, id, substances, { clearLabel: true }) : null;
+      if (enrichment_id) await markEnrichmentAccepted(tx, enrichment_id, id, staffId);
+      textsChanged =
+        !enrichment_id && ENRICH_TEXTS.some((k) => k in data && ((data as Record<string, unknown>)[k] ?? null) !== ((before as Record<string, unknown>)[k] ?? null));
       const { categories, suppliers: beforeSuppliers, ...beforePlain } = before;
       await this.audit.log(
         {
@@ -569,6 +596,7 @@ export class AdminProductsService {
         tx,
       );
     });
+    if (textsChanged) this.enrich?.queue(id, 'auto', staffId);
     return this.get(id);
   }
 

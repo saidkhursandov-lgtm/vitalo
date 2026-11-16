@@ -7,9 +7,57 @@ import { AuditService } from '../staff/audit.service';
 import { can } from '../staff/permissions';
 import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '../staff/staff-auth';
 import { suggestSubstances, writeProductSubstances, type ProductTexts, type SuggestDictEntry } from './substance-label';
-import { RULE_KINDS, RULE_STATUSES, SUBSTANCE_KINDS, WHEN, normalizeText, withParents, type RuleKind, type RuleStatus, type SubstanceKind, type When } from './knowledge';
+import {
+  MEALS,
+  RULE_KINDS,
+  RULE_STATUSES,
+  SUBSTANCE_KINDS,
+  TIMES,
+  WHEN,
+  joinWhen,
+  normalizeText,
+  ruleTiming,
+  splitWhen,
+  withParents,
+  type Meal,
+  type RuleKind,
+  type RuleStatus,
+  type SubstanceKind,
+  type TimeOfDay,
+  type When,
+} from './knowledge';
 
-const TEXT_MAX = 600;
+/** Texts of a rule: long enough for an explanation (ветка 1 VITALO AI: было 600). */
+const TEXT_MAX = 1500;
+
+type TimingDto = Partial<Record<'when_a' | 'when_b', When | null> & Record<'time_a' | 'time_b', TimeOfDay | null> & Record<'meal_a' | 'meal_b', Meal | null>>;
+type TimingRow = { when_a: string | null; when_b: string | null; time_a: string | null; time_b: string | null; meal_a: string | null; meal_b: string | null };
+
+/**
+ * The «когда» columns to write. The new «Время» / «Еда» win and the old one field follows them; an old one-field value
+ * alone (older admin, API callers) is split into the new ones.
+ */
+export function timingColumns(dto: TimingDto, before?: TimingRow | null): Partial<TimingRow> {
+  const out: Partial<TimingRow> = {};
+  for (const side of ['a', 'b'] as const) {
+    const t = dto[`time_${side}`];
+    const m = dto[`meal_${side}`];
+    const w = dto[`when_${side}`];
+    if (t !== undefined || m !== undefined) {
+      const time = t !== undefined ? t : ((before?.[`time_${side}`] as TimeOfDay | null) ?? null);
+      const meal = m !== undefined ? m : ((before?.[`meal_${side}`] as Meal | null) ?? null);
+      out[`time_${side}`] = time;
+      out[`meal_${side}`] = meal;
+      out[`when_${side}`] = joinWhen(time, meal);
+    } else if (w !== undefined) {
+      const x = splitWhen(w);
+      out[`when_${side}`] = w;
+      out[`time_${side}`] = x.time;
+      out[`meal_${side}`] = x.meal;
+    }
+  }
+  return out;
+}
 
 /** Synonyms as stored: lower case, trimmed, no empty ones and no repeats. */
 function cleanSynonyms(list: string[] | undefined): string[] {
@@ -110,6 +158,7 @@ export class KnowledgeService {
         interval_hours: r.interval_hours,
         when_a: r.when_a as When | null,
         when_b: r.when_b as When | null,
+        ...((t) => ({ time_a: t.a.time, meal_a: t.a.meal, time_b: t.b.time, meal_b: t.b.meal }))(ruleTiming(r)),
         text_ru: r.text_ru,
         text_uz: r.text_uz,
         source: r.source,
@@ -139,8 +188,7 @@ export class KnowledgeService {
           substance_b_id: dto.substance_b_id,
           kind: dto.kind,
           interval_hours: dto.interval_hours ?? null,
-          when_a: dto.when_a ?? null,
-          when_b: dto.when_b ?? null,
+          ...timingColumns(dto),
           text_ru: dto.text_ru.trim(),
           text_uz: dto.text_uz.trim(),
           source: dto.source?.trim() || null,
@@ -172,8 +220,7 @@ export class KnowledgeService {
           substance_b_id: b,
           ...(dto.kind && { kind: dto.kind }),
           ...(dto.interval_hours !== undefined && { interval_hours: dto.interval_hours }),
-          ...(dto.when_a !== undefined && { when_a: dto.when_a }),
-          ...(dto.when_b !== undefined && { when_b: dto.when_b }),
+          ...timingColumns(dto, before),
           ...(dto.text_ru?.trim() && { text_ru: dto.text_ru.trim() }),
           ...(dto.text_uz?.trim() && { text_uz: dto.text_uz.trim() }),
           ...(dto.source !== undefined && { source: dto.source?.trim() || null }),
@@ -326,6 +373,10 @@ export class RuleDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(24) interval_hours?: number | null;
   @ApiPropertyOptional({ enum: WHEN }) @IsOptional() @IsIn(WHEN) when_a?: When | null;
   @ApiPropertyOptional({ enum: WHEN }) @IsOptional() @IsIn(WHEN) when_b?: When | null;
+  @ApiPropertyOptional({ enum: TIMES }) @IsOptional() @IsIn(TIMES) time_a?: TimeOfDay | null;
+  @ApiPropertyOptional({ enum: TIMES }) @IsOptional() @IsIn(TIMES) time_b?: TimeOfDay | null;
+  @ApiPropertyOptional({ enum: MEALS }) @IsOptional() @IsIn(MEALS) meal_a?: Meal | null;
+  @ApiPropertyOptional({ enum: MEALS }) @IsOptional() @IsIn(MEALS) meal_b?: Meal | null;
   @ApiProperty() @IsString() @MinLength(5) @MaxLength(TEXT_MAX) text_ru!: string;
   @ApiProperty() @IsString() @MinLength(5) @MaxLength(TEXT_MAX) text_uz!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) source?: string | null;
@@ -338,6 +389,10 @@ class RulePatch {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(24) interval_hours?: number | null;
   @ApiPropertyOptional({ enum: WHEN }) @IsOptional() @IsIn(WHEN) when_a?: When | null;
   @ApiPropertyOptional({ enum: WHEN }) @IsOptional() @IsIn(WHEN) when_b?: When | null;
+  @ApiPropertyOptional({ enum: TIMES }) @IsOptional() @IsIn(TIMES) time_a?: TimeOfDay | null;
+  @ApiPropertyOptional({ enum: TIMES }) @IsOptional() @IsIn(TIMES) time_b?: TimeOfDay | null;
+  @ApiPropertyOptional({ enum: MEALS }) @IsOptional() @IsIn(MEALS) meal_a?: Meal | null;
+  @ApiPropertyOptional({ enum: MEALS }) @IsOptional() @IsIn(MEALS) meal_b?: Meal | null;
   @ApiPropertyOptional() @IsOptional() @IsString() @MinLength(5) @MaxLength(TEXT_MAX) text_ru?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MinLength(5) @MaxLength(TEXT_MAX) text_uz?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) source?: string | null;

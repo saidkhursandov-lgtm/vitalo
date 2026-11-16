@@ -31,6 +31,72 @@ export const WHEN_LABELS: Record<When, Record<Lang, string>> = {
   any: { ru: 'Не важно', uz: 'Farqi yoʻq' },
 };
 
+/**
+ * «Когда принимать» split in two (ветка 1 плана VITALO AI): the time of day and the meal, so «утром с жирной едой» can
+ * be said. The old one-field `when_*` is kept in step for the master table and older code.
+ */
+export const TIMES = ['morning', 'day', 'evening', 'any'] as const;
+export type TimeOfDay = (typeof TIMES)[number];
+export const TIME_LABELS: Record<TimeOfDay, Record<Lang, string>> = {
+  morning: { ru: 'Утро', uz: 'Ertalab' },
+  day: { ru: 'День', uz: 'Kunduzi' },
+  evening: { ru: 'Вечер', uz: 'Kechqurun' },
+  any: { ru: 'Любое время', uz: 'Istalgan vaqt' },
+};
+export const MEALS = ['with_food', 'with_fat', 'empty_stomach', 'any'] as const;
+export type Meal = (typeof MEALS)[number];
+export const MEAL_LABELS: Record<Meal, Record<Lang, string>> = {
+  with_food: { ru: 'С едой', uz: 'Ovqat bilan' },
+  with_fat: { ru: 'С жирной едой', uz: 'Yogʻli ovqat bilan' },
+  empty_stomach: { ru: 'Натощак', uz: 'Och qoringa' },
+  any: { ru: 'Еда не важна', uz: 'Ovqatga bogʻliq emas' },
+};
+
+/** The old one-field value → the two new ones (`any` → nothing known). */
+export function splitWhen(w: string | null | undefined): { time: TimeOfDay | null; meal: Meal | null } {
+  if (w === 'morning' || w === 'day' || w === 'evening') return { time: w, meal: null };
+  if (w === 'with_food' || w === 'empty_stomach') return { time: null, meal: w };
+  return { time: null, meal: null };
+}
+
+/** The two new values → the old one field: the time when it is said, else the meal («с жирной» → «с едой»). */
+export function joinWhen(time: string | null | undefined, meal: string | null | undefined): When | null {
+  if (time && time !== 'any') return time as When;
+  if (meal === 'with_fat') return 'with_food';
+  if (meal && meal !== 'any') return meal as When;
+  return time === 'any' || meal === 'any' ? 'any' : null;
+}
+
+/**
+ * The columns to write with an old one-field `when_a / when_b` (the master table, the xlsx import). A side whose old
+ * field did not change keeps its finer time and meal (`before`): «утро, с жирной едой» is not cut to «утро».
+ */
+export function whenColumns(
+  whenA: string | null | undefined,
+  whenB: string | null | undefined,
+  before?: { when_a: string | null; when_b: string | null; time_a: string | null; time_b: string | null; meal_a: string | null; meal_b: string | null } | null,
+) {
+  const side = (w: string | null | undefined, old: string | null | undefined, time: string | null | undefined, meal: string | null | undefined) =>
+    before && (w ?? null) === (old ?? null) && (time || meal) ? { time: (time ?? null) as TimeOfDay | null, meal: (meal ?? null) as Meal | null } : splitWhen(w);
+  const a = side(whenA, before?.when_a, before?.time_a, before?.meal_a);
+  const b = side(whenB, before?.when_b, before?.time_b, before?.meal_b);
+  return { time_a: a.time, meal_a: a.meal, time_b: b.time, meal_b: b.meal };
+}
+
+/** Time and meal of a rule: the new columns, or the old field when the rule was written before them. */
+export function ruleTiming(r: { when_a: string | null; when_b: string | null; time_a: string | null; time_b: string | null; meal_a: string | null; meal_b: string | null }) {
+  const side = (w: string | null, time: string | null, meal: string | null) =>
+    time || meal ? { time: (time as TimeOfDay | null) ?? null, meal: (meal as Meal | null) ?? null } : splitWhen(w);
+  return { a: side(r.when_a, r.time_a, r.meal_a), b: side(r.when_b, r.time_b, r.meal_b) };
+}
+
+/** «Утро, с жирной едой» — for the model and the lists. */
+export function timingText(t: { time: TimeOfDay | null; meal: Meal | null }, lang: Lang): string {
+  const parts = [t.time && t.time !== 'any' ? TIME_LABELS[t.time][lang] : null, t.meal && t.meal !== 'any' ? MEAL_LABELS[t.meal][lang].toLowerCase() : null].filter(Boolean);
+  const s = parts.join(', ');
+  return s ? s[0].toUpperCase() + s.slice(1) : '—';
+}
+
 /** Lower case, «ё» → «е», one space, quotes and brackets dropped: the form synonyms are compared in. */
 export function normalizeText(text: string): string {
   return text

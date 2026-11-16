@@ -15,6 +15,7 @@ import {
   SHEET_RULE_KIND,
   SHEET_WHEN,
   WHEN_LABELS,
+  whenColumns,
   matchSubstances,
   normalizeText,
   pairKey,
@@ -227,7 +228,7 @@ export async function applyKnowledgePlan(prisma: PrismaService, plan: KnowledgeP
       const clash = await tx.compat_rules.findFirst({ where: { OR: [{ substance_a_id: a, substance_b_id: b }, { substance_a_id: b, substance_b_id: a }] } });
       if (clash) continue;
       await tx.compat_rules.create({
-        data: { substance_a_id: a, substance_b_id: b, kind: r.kind, interval_hours: r.interval_hours, when_a: r.when_a, when_b: r.when_b, text_ru: r.text_ru, text_uz: r.text_uz, source: r.source, origin: r.origin, status: 'draft' },
+        data: { substance_a_id: a, substance_b_id: b, kind: r.kind, interval_hours: r.interval_hours, when_a: r.when_a, when_b: r.when_b, ...whenColumns(r.when_a, r.when_b), text_ru: r.text_ru, text_uz: r.text_uz, source: r.source, origin: r.origin, status: 'draft' },
       });
       rules++;
     }
@@ -245,7 +246,7 @@ export async function applyKnowledgePlan(prisma: PrismaService, plan: KnowledgeP
         // only while it is still a draft: an approved rule belongs to the admin
         const res = await tx.compat_rules.updateMany({
           where: { id: r.id, status: 'draft' },
-          data: { kind: r.kind, interval_hours: r.interval_hours, when_a: r.when_a, when_b: r.when_b, text_ru: r.text_ru, text_uz: r.text_uz, source: r.source },
+          data: { kind: r.kind, interval_hours: r.interval_hours, when_a: r.when_a, when_b: r.when_b, ...whenColumns(r.when_a, r.when_b), text_ru: r.text_ru, text_uz: r.text_uz, source: r.source },
         });
         updated += res.count;
       }

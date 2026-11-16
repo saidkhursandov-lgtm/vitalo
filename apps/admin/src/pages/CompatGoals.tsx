@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Badge, ErrorBox, Field, Help, Loading, Modal } from "../components/ui";
+import { TranslateButton } from "../components/TranslateButton";
 import { api } from "../lib/api";
 import { dateTime } from "../lib/format";
 import type { Substance } from "./CompatKnowledge";
@@ -187,7 +188,8 @@ function GoalEditor({ row, canApprove, onClose }: { row: GoalRow | null; canAppr
   const options = (subs.data ?? []).filter((s) => s.kind !== "drug_group" && (s.enabled || s.id === v.substance_id));
   const area = (k: "helps_ru" | "helps_uz" | "not_helps_ru" | "not_helps_uz", label: string, hint?: string) => (
     <Field label={label} hint={hint}>
-      <textarea rows={2} maxLength={400} value={v[k]} onChange={(e) => set(k, e.target.value)} required />
+      {k.endsWith("_uz") && <TranslateButton ru={v[k.replace("_uz", "_ru") as "helps_ru" | "not_helps_ru"]} onDone={(uz) => set(k, uz)} />}
+      <textarea rows={3} maxLength={1500} value={v[k]} onChange={(e) => set(k, e.target.value)} required />
     </Field>
   );
   return (

@@ -40,6 +40,8 @@ import { CompatService, langOf, type Item } from './compat.service';
 import { withParents } from './knowledge';
 
 const MAX_TOKENS = 2000;
+/** «Помогает» / «не помогает» of a goal row (ветка 1 VITALO AI: было 400). */
+const EVIDENCE_TEXT_MAX = 1500;
 
 /** What the cart shows: a line per product with the level in words, the general steps and the doctor line. */
 export interface GoalView {
@@ -330,10 +332,10 @@ export class GoalEvidenceDto {
   @ApiProperty() @IsUUID() substance_id!: string;
   @ApiProperty({ enum: GOALS }) @IsIn([...GOALS]) goal!: Goal;
   @ApiProperty({ enum: LEVELS }) @IsIn([...LEVELS]) level!: Level;
-  @ApiProperty() @IsString() @MaxLength(400) helps_ru!: string;
-  @ApiProperty() @IsString() @MaxLength(400) helps_uz!: string;
-  @ApiProperty() @IsString() @MaxLength(400) not_helps_ru!: string;
-  @ApiProperty() @IsString() @MaxLength(400) not_helps_uz!: string;
+  @ApiProperty() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) helps_ru!: string;
+  @ApiProperty() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) helps_uz!: string;
+  @ApiProperty() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) not_helps_ru!: string;
+  @ApiProperty() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) not_helps_uz!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) source?: string | null;
 }
 
@@ -341,10 +343,10 @@ export class GoalEvidencePatch {
   @ApiPropertyOptional() @IsOptional() @IsUUID() substance_id?: string;
   @ApiPropertyOptional({ enum: GOALS }) @IsOptional() @IsIn([...GOALS]) goal?: Goal;
   @ApiPropertyOptional({ enum: LEVELS }) @IsOptional() @IsIn([...LEVELS]) level?: Level;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(400) helps_ru?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(400) helps_uz?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(400) not_helps_ru?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(400) not_helps_uz?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) helps_ru?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) helps_uz?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) not_helps_ru?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(EVIDENCE_TEXT_MAX) not_helps_uz?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) source?: string | null;
 }
 

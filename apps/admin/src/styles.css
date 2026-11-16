@@ -716,6 +716,17 @@ textarea { resize: vertical; }
 .substance-name { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
 .substance-ops { display: inline-flex; gap: 2px; }
 .substance-ops .btn { min-width: 44px; min-height: 44px; }
+.substance-dose { display: inline-flex; gap: 4px; align-items: center; }
+.substance-dose input { width: 84px; min-height: 36px; }
+.substance-dose select { min-height: 36px; }
+.enrich-draft { margin: 12px 0; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--panel); }
+.enrich-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.enrich-list { margin: 6px 0; padding-left: 18px; }
+.enrich-list li { margin: 2px 0; }
+.enrich-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-meta { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-start; margin: 8px 0; }
+.ai-goals { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.translate-button { display: block; margin-bottom: 4px; }
 .substance-label-preview { margin: 8px 0; padding: 8px; background: var(--panel); border-radius: 8px; overflow-wrap: anywhere; }
 .substance-label-preview.is-bad { border: 1px solid var(--bad); }
 .substance-suggest { margin: 8px 0; }

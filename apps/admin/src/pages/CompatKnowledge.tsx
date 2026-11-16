@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Badge, ErrorBox, Field, Loading, Modal } from "../components/ui";
+import { TranslateButton } from "../components/TranslateButton";
+import { EnrichQueue } from "../components/EnrichQueue";
 import { api } from "../lib/api";
 import { dateTime } from "../lib/format";
 
@@ -11,6 +13,8 @@ type RuleKind = "synergy" | "spread" | "avoid" | "drug_caution";
 type RuleStatus = "draft" | "approved" | "off";
 type When =
   "morning" | "day" | "evening" | "with_food" | "empty_stomach" | "any";
+type TimeOfDay = "morning" | "day" | "evening" | "any";
+type Meal = "with_food" | "with_fat" | "empty_stomach" | "any";
 
 export interface Substance {
   id: string;
@@ -32,6 +36,11 @@ interface Rule {
   interval_hours: number | null;
   when_a: When | null;
   when_b: When | null;
+  /** «Время» и «Еда» отдельно (ветка 1 VITALO AI); старое `when_*` сервер держит в согласии с ними */
+  time_a: TimeOfDay | null;
+  meal_a: Meal | null;
+  time_b: TimeOfDay | null;
+  meal_b: Meal | null;
   text_ru: string;
   text_uz: string;
   source: string | null;
@@ -71,13 +80,26 @@ const STATUS: Record<RuleStatus, [string, "neutral" | "ok" | "warn"]> = {
   approved: ["Одобрено", "ok"],
   off: ["Выключено", "neutral"],
 };
-const WHEN: Record<When, string> = {
+const TIME: Record<TimeOfDay, string> = {
   morning: "Утро",
   day: "День",
   evening: "Вечер",
+  any: "Любое время",
+};
+const MEAL: Record<Meal, string> = {
   with_food: "С едой",
+  with_fat: "С жирной едой",
   empty_stomach: "Натощак",
-  any: "Не важно",
+  any: "Еда не важна",
+};
+/** «Утро, с жирной едой» */
+const timing = (time: TimeOfDay | null, meal: Meal | null) => {
+  const parts = [
+    time && time !== "any" ? TIME[time] : null,
+    meal && meal !== "any" ? MEAL[meal].toLowerCase() : null,
+  ].filter(Boolean) as string[];
+  const s = parts.join(", ");
+  return s ? s[0].toUpperCase() + s.slice(1) : "—";
 };
 const ORIGIN: Record<Rule["origin"], string> = {
   xlsx: "из таблицы",
@@ -201,9 +223,9 @@ export function RulesTab({
                     )}
                   </td>
                   <td className="small nowrap">
-                    A: {r.when_a ? WHEN[r.when_a] : "—"}
+                    A: {timing(r.time_a, r.meal_a)}
                     <br />
-                    B: {r.when_b ? WHEN[r.when_b] : "—"}
+                    B: {timing(r.time_b, r.meal_b)}
                   </td>
                   <td className="compat-answer-cell small">
                     <div className="pre">RU: {r.text_ru}</div>
@@ -301,8 +323,10 @@ function RuleEditor({
     substance_b_id: rule?.b.id ?? "",
     kind: rule?.kind ?? ("synergy" as RuleKind),
     interval_hours: rule?.interval_hours ?? null,
-    when_a: rule?.when_a ?? null,
-    when_b: rule?.when_b ?? null,
+    time_a: rule?.time_a ?? null,
+    meal_a: rule?.meal_a ?? null,
+    time_b: rule?.time_b ?? null,
+    meal_b: rule?.meal_b ?? null,
     text_ru: rule?.text_ru ?? "",
     text_uz: rule?.text_uz ?? "",
     source: rule?.source ?? "",
@@ -337,15 +361,28 @@ function RuleEditor({
       ))}
     </select>
   );
-  const when = (k: "when_a" | "when_b") => (
+  const time = (k: "time_a" | "time_b") => (
     <select
       value={v[k] ?? ""}
-      onChange={(e) => set(k, (e.target.value || null) as When | null)}
+      onChange={(e) => set(k, (e.target.value || null) as TimeOfDay | null)}
     >
       <option value="">—</option>
-      {(Object.keys(WHEN) as When[]).map((w) => (
+      {(Object.keys(TIME) as TimeOfDay[]).map((w) => (
         <option key={w} value={w}>
-          {WHEN[w]}
+          {TIME[w]}
+        </option>
+      ))}
+    </select>
+  );
+  const meal = (k: "meal_a" | "meal_b") => (
+    <select
+      value={v[k] ?? ""}
+      onChange={(e) => set(k, (e.target.value || null) as Meal | null)}
+    >
+      <option value="">—</option>
+      {(Object.keys(MEAL) as Meal[]).map((w) => (
+        <option key={w} value={w}>
+          {MEAL[w]}
         </option>
       ))}
     </select>
@@ -394,25 +431,28 @@ function RuleEditor({
               }
             />
           </Field>
-          <Field label="Когда принимать A">{when("when_a")}</Field>
-          <Field label="Когда принимать B">{when("when_b")}</Field>
+          <Field label="A: время суток">{time("time_a")}</Field>
+          <Field label="A: еда">{meal("meal_a")}</Field>
+          <Field label="B: время суток">{time("time_b")}</Field>
+          <Field label="B: еда">{meal("meal_b")}</Field>
         </div>
         <Field
           label="Объяснение для клиента RU"
-          hint="1 предложение, без «лечит», «100%», «гарантирует»"
+          hint="Простыми словами, без «лечит», «100%», «гарантирует»"
         >
           <textarea
             rows={3}
-            maxLength={600}
+            maxLength={1500}
             value={v.text_ru}
             onChange={(e) => set("text_ru", e.target.value)}
             required
           />
         </Field>
         <Field label="Объяснение UZ">
+          <TranslateButton ru={v.text_ru} onDone={(uz) => set("text_uz", uz)} />
           <textarea
             rows={3}
-            maxLength={600}
+            maxLength={1500}
             value={v.text_uz}
             onChange={(e) => set("text_uz", e.target.value)}
             required
@@ -708,6 +748,7 @@ export function ProductSubstancesTab({ canEdit }: { canEdit: boolean }) {
   );
   return (
     <>
+      <EnrichQueue canEdit={canEdit} />
       <Help id="compat-products">
         Вещества товара для проверки совместимости и подбора под цель —
         выбираются из справочника. Без веществ товар в проверке не участвует.

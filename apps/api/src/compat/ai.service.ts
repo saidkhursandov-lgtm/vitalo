@@ -33,7 +33,7 @@ import {
 import { AI_MODEL, AiCallError, type AiModel } from './ai-client';
 import { setKeyOf, tashkentDayStart, type Lang, type Verdict } from './compat';
 import { CompatService, langOf, type Item } from './compat.service';
-import { OVERLAP_TEXT, applyOverlapFloor, overlapsForProducts, rulesForProducts, withParents, type RuleKind, type When } from './knowledge';
+import { OVERLAP_TEXT, applyOverlapFloor, overlapsForProducts, ruleTiming, rulesForProducts, timingText, withParents, type RuleKind, type When } from './knowledge';
 
 /** Up to this many products in stock are offered to the model for a cart of one product. */
 const CANDIDATES_MAX = 10;
@@ -60,7 +60,7 @@ export interface AiView {
 interface Knowledge {
   names: Map<string, { ru: string; uz: string; kind: string }>;
   parentOf: Map<string, string | null>;
-  rules: { id: string; substance_a_id: string; substance_b_id: string; kind: string; interval_hours: number | null; when_a: string | null; when_b: string | null; text_ru: string; text_uz: string }[];
+  rules: { id: string; substance_a_id: string; substance_b_id: string; kind: string; interval_hours: number | null; when_a: string | null; when_b: string | null; time_a: string | null; time_b: string | null; meal_a: string | null; meal_b: string | null; text_ru: string; text_uz: string }[];
 }
 
 /**
@@ -393,6 +393,7 @@ export class AiService {
       interval_hours: r.interval_hours,
       when_a: r.when_a as When | null,
       when_b: r.when_b as When | null,
+      ...((t) => ({ timing_a: timingText(t.a, lang), timing_b: timingText(t.b, lang) }))(ruleTiming(r)),
       text: lang === 'uz' ? r.text_uz : r.text_ru,
     });
 

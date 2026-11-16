@@ -13,6 +13,33 @@ import { findForbidden, inLanguage } from './ai';
 export const GOALS = ['sleep', 'stress', 'energy', 'joints', 'immunity', 'sport'] as const;
 export type Goal = (typeof GOALS)[number];
 
+/**
+ * Goals a product is tagged with in its card (ветка 1 VITALO AI): the chip goals above and three more. The chips and the
+ * «Цели» table stay on GOALS until the chat learns the new ones.
+ */
+export const PRODUCT_GOALS = [...GOALS, 'skin_hair', 'heart', 'cognitive'] as const;
+export type ProductGoal = (typeof PRODUCT_GOALS)[number];
+export const PRODUCT_GOAL_LABELS: Record<ProductGoal, Record<Lang, string>> = {
+  sleep: { ru: 'Сон', uz: 'Uyqu' },
+  stress: { ru: 'Стресс', uz: 'Stress' },
+  energy: { ru: 'Энергия', uz: 'Energiya' },
+  joints: { ru: 'Суставы', uz: 'Boʻgʻimlar' },
+  immunity: { ru: 'Иммунитет', uz: 'Immunitet' },
+  sport: { ru: 'Спорт', uz: 'Sport' },
+  skin_hair: { ru: 'Кожа и волосы', uz: 'Teri va soch' },
+  heart: { ru: 'Сердце и сосуды', uz: 'Yurak va qon tomirlari' },
+  cognitive: { ru: 'Память и внимание', uz: 'Xotira va diqqat' },
+};
+
+/** Who a product is for: взрослым, детям, всем. */
+export const AUDIENCES = ['adult', 'child', 'any'] as const;
+export type Audience = (typeof AUDIENCES)[number];
+export const AUDIENCE_LABELS: Record<Audience, Record<Lang, string>> = {
+  adult: { ru: 'Взрослым', uz: 'Kattalar uchun' },
+  child: { ru: 'Детям', uz: 'Bolalar uchun' },
+  any: { ru: 'Всем', uz: 'Hamma uchun' },
+};
+
 export const DURATIONS = ['lt2w', '2to4w', 'gt1m'] as const;
 export type Duration = (typeof DURATIONS)[number];
 

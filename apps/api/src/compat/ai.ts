@@ -239,6 +239,9 @@ export interface AiRule {
   interval_hours: number | null;
   when_a: When | null;
   when_b: When | null;
+  /** «Утро, с жирной едой» — time of day and meal (ветка 1); without them the old one field is shown */
+  timing_a?: string;
+  timing_b?: string;
   text: string;
 }
 
@@ -260,7 +263,7 @@ const line = (p: AiProduct) =>
 
 const ruleLine = (r: AiRule, lang: Lang) => {
   const w = (v: When | null) => (v ? WHEN_LABELS[v][lang] : '—');
-  return `- ${r.a} + ${r.b} | ${RULE_KIND_LABELS[r.kind].ru}${r.interval_hours ? ` | интервал ${r.interval_hours} ч` : ''} | ${r.a} — ${w(r.when_a)}, ${r.b} — ${w(r.when_b)} | «${r.text}»`;
+  return `- ${r.a} + ${r.b} | ${RULE_KIND_LABELS[r.kind].ru}${r.interval_hours ? ` | интервал ${r.interval_hours} ч` : ''} | ${r.a} — ${r.timing_a ?? w(r.when_a)}, ${r.b} — ${r.timing_b ?? w(r.when_b)} | «${r.text}»`;
 };
 
 /** The <данные> block: only products and rules, no customer data (D-45). */
