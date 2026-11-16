@@ -119,14 +119,15 @@ export class EnrichService {
     });
   }
 
-  /** «Обогатить все товары»: products without a pending draft, in the background; the list shows the progress. */
+  /** «Заполнить пустое»: products with gaps and no pending draft; «Перепроверить все»: every product. In the background. */
   async enrichAll(staffId: string, onlyMissing: boolean, now = new Date()) {
     if (this.batch.running) throw new HttpException({ code: 'BATCH_RUNNING', message: 'Обогащение уже идёт' }, HttpStatus.CONFLICT);
     await this.assertCanCall(now);
     const rows = await this.prisma.products.findMany({
       where: {
         status: { not: 'archived' },
-        enrichments: { none: { status: 'pending' } },
+        // «Перепроверить все» replaces pending drafts too (enrichOne marks the old one stale)
+        ...(onlyMissing && { enrichments: { none: { status: 'pending' } } }),
         ...(onlyMissing && { OR: [{ substances: { none: {} } }, { goals: { isEmpty: true } }, { audience: null }, { substances: { some: { dose_amount: null } } }] }),
       },
       orderBy: { sku: 'asc' },
