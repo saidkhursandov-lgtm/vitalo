@@ -102,7 +102,7 @@ describe('D-70: переписка с VITALO AI — проверки', () => {
     expect(topicOrder([])).toEqual(['sleep', 'stress', 'energy', 'joints', 'immunity', 'sport']);
   });
 
-  it('D-74: the catalogue may be offered — up to 3 with an empty cart, 1 on top of a cart', () => {
+  it('D-74: the catalogue may be offered — up to 3 with an empty cart, 2 on top of a cart; more are dropped', () => {
     const empty = data({ cart: [], cartBlock: '', evidence: [] });
     const fromCatalog = (ids: string[]) => answer({ products: ids.map((id) => ({ productId: id, fit: 'helps', text: 'Мягкая форма, подходит для вечера.' })) });
     const r = checkChatAnswer(fromCatalog(['GLY-1']), empty);
@@ -111,7 +111,16 @@ describe('D-70: переписка с VITALO AI — проверки', () => {
     const cart = answer({ products: [...answer().products as object[], { productId: 'GLY-1', fit: 'maybe', text: 'Если захотите, есть мягкая форма магния.' }] });
     expect(checkChatAnswer(cart, data()).ok).toBe(true);
     const two = answer({ products: [...answer().products as object[], { productId: 'GLY-1', fit: 'maybe', text: 'Мягкая форма магния.' }, { productId: 'CRE-1', fit: 'maybe', text: 'Креатин для спорта.' }] });
-    expect(checkChatAnswer(two, data())).toEqual({ ok: false, error: 'products' });
+    expect(checkChatAnswer(two, data()).ok).toBe(true);
+    const three = answer({ products: [...(two.products as object[]), { productId: 'GLY-1', fit: 'maybe', text: 'Ещё раз магний.' }] });
+    expect(checkChatAnswer(three, data())).toEqual({ ok: false, error: 'products' }); // the same product twice
+    const extra = data({ catalog: [...data().catalog, item({ ref: 'ZN-1', name: 'Цинк', brand: null, substances: ['Цинк'] })] });
+    const many = answer({ products: [...(two.products as object[]), { productId: 'ZN-1', fit: 'maybe', text: 'Цинк для иммунитета.' }] });
+    const trimmed = checkChatAnswer(many, extra);
+    expect(trimmed.ok && trimmed.answer.products.map((p) => p.ref)).toEqual(['MAG-1', 'D3-1', 'GLY-1', 'CRE-1']);
+    // our SKUs never reach the customer: they become names
+    const sku = checkChatAnswer(answer({ text: 'Из корзины для вечера больше подходит MAG-1, а GLY-1 мягче для желудка.' }), data());
+    expect(sku.ok && sku.answer.text).toBe('Из корзины для вечера больше подходит Магний 400 мг, а Магний глицинат мягче для желудка.');
   });
 
   it('D-74: English words are refused; names of our products and abbreviations are fine', () => {

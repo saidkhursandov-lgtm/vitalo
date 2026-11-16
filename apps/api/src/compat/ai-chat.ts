@@ -117,7 +117,7 @@ export const SYSTEM_CHAT = `СЦЕНАРИЙ: переписка покупат�
      1–2 предложения, почему он подходит, и чем хороша его форма вещества (например, «глицинат — мягкая для желудка форма»).
      Учитывай «кому»: детские товары не предлагай взрослому и наоборот.
    - Есть корзина: КАЖДЫЙ товар корзины одной записью. Если ни один товар корзины не подходит для этой цели — можно
-     добавить ОДИН товар из каталога, спокойно, без давления («если захотите…»).
+     добавить 1–2 товара из каталога, спокойно, без давления («если захотите…»).
    - fit: "helps" — может помочь именно в этом случае; "maybe" — помогает только при условии (назови его); "unlikely" —
      не про эту цель или не тот случай; "no_data" — о веществе для этой цели почти ничего не известно.
      Не начинай text товара словами «Данных немного» — метку покажет приложение.
@@ -138,10 +138,12 @@ export const SYSTEM_CHAT = `СЦЕНАРИЙ: переписка покупат�
    followups — 2–3 вопроса о подборе добавок.
 9. Никогда: диагнозы и названия болезней, «это может быть…», анализы, лечение, дозировки и единицы (мг, МЕ), обещания
    («гарантирует», «вылечит»), сравнение с лекарствами, цены. Строку про врача и кнопку «Спросить специалиста»
-   приложение добавит само. Товары — только из каталога и корзины, по их id.
+   приложение добавит само. Товары — только из каталога и корзины: id пиши только в productId, а в текстах называй товар
+   его коротким названием из данных.
 10. ЯЗЫК: весь ответ — только на языке из данных. ru — по-русски, без английских слов (названия товаров и брендов
     оставляй как есть). uz — узбекский латиницей, без английских и русских слов. Пиши тепло и по делу, как живой
-    консультант, без канцелярита.`;
+    консультант, без канцелярита. О себе не пиши в мужском или женском роде («я бы рассматривала») — пиши «можно»,
+    «стоит», «лучше».`;
 
 export const CHAT_SCHEMA = {
   type: 'object',
@@ -286,7 +288,7 @@ const STEP_MAX = 180;
 const FOLLOWUP = [5, 90] as const;
 /** an empty cart: products of the catalogue in one answer; a cart: products of the catalogue on top of it */
 const CATALOG_MAX_EMPTY = 3;
-const CATALOG_MAX_CART = 1;
+const CATALOG_MAX_CART = 2;
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 const strs = (v: unknown) => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
@@ -352,10 +354,10 @@ export function checkChatAnswer(raw: unknown, d: ChatData): { ok: true; answer: 
       // D-74: without an approved row the model may lean on general research, but «может помочь» needs our base
       const modelFit = str(o.fit) as Fit;
       const fit: Fit | null = isGoalTopic(goal) ? (modelFit === 'helps' && !a.goals.has(goal) ? 'maybe' : modelFit) : null;
+      // too many products of the catalogue: the first ones stay, the rest are dropped (no pressure, D-68)
+      if (!a.inCart && products.filter((p) => !allowed.get(p.ref)!.inCart).length >= (d.cart.length ? CATALOG_MAX_CART : CATALOG_MAX_EMPTY)) continue;
       products.push({ ref, fit, text: ptext });
     }
-    const fromCatalog = products.filter((p) => !allowed.get(p.ref)!.inCart).length;
-    if (fromCatalog > (d.cart.length ? CATALOG_MAX_CART : CATALOG_MAX_EMPTY)) return { ok: false, error: 'products' };
   }
   const steps = kind === 'answer' ? strs(r.steps) : [];
   if (steps.length > 3 || steps.some((s) => s.length > STEP_MAX)) return { ok: false, error: 'steps' };
@@ -382,7 +384,14 @@ export function checkChatAnswer(raw: unknown, d: ChatData): { ok: true; answer: 
   if (findGoalForbidden(scrubbed).length || findForbidden(scrubbed).length) return { ok: false, error: 'forbidden_words' };
   if (!inLanguage(all, d.lang) || hasEnglish(scrubbed, d.lang)) return { ok: false, error: 'language' };
   if (kind !== 'clarify' && followups.length < 2) followups = readyFollowups(d, goal, followups);
-  return { ok: true, answer: { kind, goal, text, options, products, steps, followups } };
+  // the customer never sees our SKUs: «OZN-A022» in a text becomes the name of the product (16.11 check)
+  const refName = new Map([...d.catalog.map((c) => [c.ref, c.name] as const), ...d.cart.map((p) => [p.ref, p.name] as const)]);
+  const refs = [...refName.keys()].sort((a, b) => b.length - a.length);
+  const named = (t: string) => refs.reduce((acc, ref) => acc.split(ref).join(refName.get(ref)!), t);
+  return {
+    ok: true,
+    answer: { kind, goal, text: named(text), options, products: products.map((p) => ({ ...p, text: named(p.text) })), steps, followups: followups.map(named) },
+  };
 }
 
 // ---------------- suggested questions ----------------
