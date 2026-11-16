@@ -53,6 +53,26 @@ describe('VITALO AI enrichment: the check of the answer', () => {
     expect(r.payload.goals).toEqual(['sleep', 'stress']);
   });
 
+  it('«unknown» drops nutrition facts and what the draft already has (with its parent), keeps the really new', () => {
+    const omega = [e('o3', 'omega3', 'Омега-3', null, { synonyms: ['дгк', 'dha', 'эпк'] }), e('o3r', 'omega3_rtg', 'Омега-3 rTG', 'o3')];
+    const r = checkEnrichAnswer(
+      {
+        substances: [{ code: 'omega3_rtg', dose_amount: 1000, dose_unit: 'mg', in_label: true }],
+        unknown: [
+          { name: 'Углеводы', dose: '4,8 г' },
+          { name: 'Сахара', dose: null },
+          { name: 'ДГК (DHA)', dose: '250 мг' },
+          { name: 'Холин', dose: '50 мг' },
+        ],
+        audience: 'any',
+        goals: [],
+        note: '',
+      },
+      [...dict, ...omega],
+    );
+    expect(r.ok && r.payload.unknown).toEqual([{ name: 'Холин', dose: '50 мг' }]);
+  });
+
   it('nothing found is a failure; a wrong audience becomes «any»', () => {
     expect(checkEnrichAnswer({ substances: [], unknown: [], audience: 'x', goals: [], note: '' }, dict)).toEqual({ ok: false, error: 'empty' });
     const r = checkEnrichAnswer({ substances: [{ code: 'vitamin_d3', dose_amount: 600, dose_unit: 'iu', in_label: true }], unknown: [], audience: 'x', goals: [], note: '' }, dict);

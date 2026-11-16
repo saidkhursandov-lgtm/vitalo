@@ -65,6 +65,15 @@ export async function buildFormsPlan(db: PrismaClient | Prisma.TransactionClient
   }
   for (const ch of input.synonyms) {
     const d = byCode.get(ch.code);
+    const created = !d && plan.create.find((s) => s.code === ch.code);
+    if (created) {
+      // created in this same run (the server gets the forms later than vitalo_dev): the change goes into the new record
+      const rm = new Set((ch.remove ?? []).map(normalizeText));
+      const syn = created.synonyms.filter((s) => !rm.has(normalizeText(s)));
+      for (const a of ch.add ?? []) if (!syn.some((s) => normalizeText(s) === normalizeText(a))) syn.push(a);
+      plan.create[plan.create.indexOf(created)] = { ...created, synonyms: syn };
+      continue;
+    }
     if (!d) {
       plan.errors.push(`синонимы: нет вещества ${ch.code}`);
       continue;

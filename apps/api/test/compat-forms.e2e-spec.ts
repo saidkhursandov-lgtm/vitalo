@@ -29,6 +29,31 @@ describe('compat:forms loader (e2e)', () => {
     ]);
   });
 
+  it('a synonym change for a record created in the same run goes into the new record, not an error', async () => {
+    const plan = await buildFormsPlan(prisma, {
+      substances: [{ code: `${code}_new`, kind: 'substance', name_ru: 'Новое E2E', name_uz: 'Yangi E2E', synonyms: ['новое e2e', 'старое e2e'] }],
+      synonyms: [{ code: `${code}_new`, add: ['ещё e2e'], remove: ['старое e2e'] }],
+      products: {},
+    });
+    expect(plan.errors).toEqual([]);
+    expect(plan.synonyms).toEqual([]);
+    expect(plan.create[0].synonyms).toEqual(['новое e2e', 'ещё e2e']);
+  });
+
+  it('the default plan: unique codes, a synonym belongs to one new record only', async () => {
+    const { DEFAULT_FORMS_INPUT } = await import('../src/compat/forms-load');
+    const subs = DEFAULT_FORMS_INPUT.substances;
+    expect(new Set(subs.map((s) => s.code)).size).toBe(subs.length);
+    const owner = new Map<string, string>();
+    const clash: string[] = [];
+    for (const s of subs)
+      for (const syn of s.synonyms.map((x) => x.toLowerCase())) {
+        if (owner.has(syn) && owner.get(syn) !== s.code) clash.push(`${syn}: ${owner.get(syn)} / ${s.code}`);
+        owner.set(syn, s.code);
+      }
+    expect(clash).toEqual([]);
+  });
+
   it('check writes nothing; apply makes the form, the label and the synonyms; a second run changes nothing; rollback restores', async () => {
     const mg = await prisma.substances.findFirstOrThrow({ where: { name_ru: 'Магний' } });
     const b6 = await prisma.substances.findFirstOrThrow({ where: { name_ru: 'Витамин B6' } });

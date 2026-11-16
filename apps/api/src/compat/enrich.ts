@@ -5,7 +5,11 @@
  */
 import { DOSE_UNITS, type DoseUnit } from '../iherb/iherb-fields';
 import { AUDIENCES, PRODUCT_GOALS, PRODUCT_GOAL_LABELS, type Audience, type ProductGoal } from './ai-goal';
+import { matchSubstances, normalizeText } from './knowledge';
 import { buildFormLabelSafe } from './substance-label';
+
+/** Nutrition facts and fillers, not active substances: never «предложить в справочник». */
+const NUTRITION = /^(углеводы|сахара?|жиры|белки?|калории|энергетическая ценность|пищевые волокна|(не)?растворимые волокна|натрий|хлориды|мальтодекстрины?|фруктоза|стевия|оливковое масло|какао-порошок)(\s|\(|$)/;
 
 /** Product texts the draft is made from (and that start a new draft when they change). */
 export const ENRICH_TEXTS = [
@@ -39,7 +43,8 @@ export const ENRICH_SYSTEM = `Ты — фармацевт-аналитик ка�
    карточки. Если форма не названа — выбирай общее вещество (например, «Омега-3», а не «Омега-3 rTG»). Не угадывай форму
    по бренду или цене.
    Вспомогательные вещества (желатин, целлюлоза, стеарат магния, диоксид кремния, вода, глицерин, ароматизаторы,
-   красители, подсластители, оболочка капсулы) не включай.
+   красители, подсластители, оболочка капсулы) не включай. Пищевую ценность (углеводы, сахара, жиры, белки, калории,
+   волокна) не включай никуда, даже в unknown. ЭПК и ДГК (EPA, DHA) — это Омега-3.
 2. Дозу каждого вещества — ровно как написано в составе этикетки (на 1 таблетку, капсулу или порцию из состава): число и
    единица (mg, mcg, iu — МЕ, g, ml, cfu_bn — миллиарды КОЕ). НЕ пересчитывай дозу по способу применения или описанию
    (½ таблетки, 2 капсулы в день) — противоречия опиши в note. Если дозы нет в составе — null. Не выдумывай и не
@@ -184,8 +189,12 @@ export function checkEnrichAnswer(json: unknown, dict: EnrichDictEntry[]): { ok:
     else s.in_label = false;
   }
 
+  // the dictionary entries already in the draft, with their parents («ДГК (DHA)» is Омега-3 when Омега-3 rTG is picked)
+  const inDraft = new Set(substances.flatMap((s) => [s.code, byId.get(byId.get(s.id)?.parent_id ?? '')?.code].filter((x): x is string => !!x)));
   const unknown = (a.unknown as Record<string, unknown>[])
     .filter((u) => typeof u?.name === 'string' && u.name.trim().length >= 2)
+    .filter((u) => !NUTRITION.test(normalizeText(u.name as string)))
+    .filter((u) => !matchSubstances(u.name as string, [...byCode.values()]).some((c) => inDraft.has(c)))
     .map((u) => ({ name: (u.name as string).trim().slice(0, 120), dose: typeof u.dose === 'string' && u.dose.trim() ? u.dose.trim().slice(0, 60) : null }))
     .slice(0, UNKNOWN_MAX);
   const audience = (AUDIENCES as readonly string[]).includes(a.audience as string) ? (a.audience as Audience) : 'any';

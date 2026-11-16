@@ -62,6 +62,22 @@ export const NEW_SUBSTANCES: NewSubstance[] = [
   { code: 'nac', kind: 'substance', name_ru: 'NAC (N-ацетилцистеин)', name_uz: 'NAC (N-atsetilsistein)', synonyms: ['nac', 'n-ацетилцистеин', 'ацетилцистеин', 'n-acetyl cysteine', 'n-acetylcysteine'] },
   { code: 'glycine', kind: 'substance', name_ru: 'Глицин', name_uz: 'Glitsin', synonyms: ['глицин', 'glycine', 'glitsin'] },
   { code: 'quercetin', kind: 'substance', name_ru: 'Кверцетин', name_uz: 'Kversetin', synonyms: ['кверцетин', 'quercetin', 'kversetin'] },
+  // 16.11.2026 (question 160): what «Перепроверить все товары» found in the labels and the dictionary lacked
+  { code: 'vitamin_b1', kind: 'substance', name_ru: 'Витамин B1 (тиамин)', name_uz: 'B1 vitamini (tiamin)', synonyms: ['витамин b1', 'витамин в1', 'b1', 'в1', 'тиамин', 'тиамина мононитрат', 'тиамина гидрохлорид', 'thiamine', 'vitamin b1', 'b1 vitamini'] },
+  { code: 'vitamin_b2', kind: 'substance', name_ru: 'Витамин B2 (рибофлавин)', name_uz: 'B2 vitamini (riboflavin)', synonyms: ['витамин b2', 'витамин в2', 'b2', 'в2', 'рибофлавин', 'riboflavin', 'vitamin b2', 'b2 vitamini'] },
+  { code: 'vitamin_b3', kind: 'substance', name_ru: 'Витамин B3 (ниацин)', name_uz: 'B3 vitamini (niatsin)', synonyms: ['витамин b3', 'витамин в3', 'b3', 'в3', 'ниацин', 'никотинамид', 'никотиновая кислота', 'витамин pp', 'niacin', 'niacinamide', 'nicotinamide', 'vitamin b3', 'b3 vitamini'] },
+  { code: 'vitamin_b5', kind: 'substance', name_ru: 'Витамин B5 (пантотеновая кислота)', name_uz: 'B5 vitamini (pantoten kislotasi)', synonyms: ['витамин b5', 'витамин в5', 'b5', 'в5', 'пантотеновая кислота', 'пантотенат кальция', 'кальция d-пантотенат', 'pantothenic acid', 'calcium pantothenate', 'vitamin b5', 'b5 vitamini'] },
+  { code: 'choline', kind: 'substance', name_ru: 'Холин', name_uz: 'Xolin', synonyms: ['холин', 'холина битартрат', 'холин битартрат', 'choline', 'choline bitartrate', 'xolin'] },
+  { code: 'manganese', kind: 'substance', name_ru: 'Марганец', name_uz: 'Marganets', synonyms: ['марганец', 'марганца', 'глюконат марганца', 'марганца глюконат', 'manganese', 'marganets'] },
+  { code: 'boron', kind: 'substance', name_ru: 'Бор', name_uz: 'Bor (mineral)', synonyms: ['бор', 'тетраборат натрия', 'натрия тетраборат', 'boron'] }, // not «bor»: in Uzbek it is «there is»
+  { code: 'molybdenum', kind: 'substance', name_ru: 'Молибден', name_uz: 'Molibden', synonyms: ['молибден', 'молибдат натрия', 'molybdenum', 'molibden'] },
+  { code: 'prebiotics', kind: 'substance', name_ru: 'Пребиотики (инулин, ФОС)', name_uz: 'Prebiotiklar (inulin, FOS)', synonyms: ['пребиотики', 'пребиотик', 'инулин', 'фос', 'фруктоолигосахариды', 'prebiotic', 'prebiotics', 'inulin', 'fos', 'prebiotiklar'] },
+  { code: 'shilajit', kind: 'substance', name_ru: 'Шиладжит (мумиё)', name_uz: 'Shilajit (mumiyo)', synonyms: ['шиладжит', 'мумиё', 'мумие', 'shilajit', 'primavie', 'mumiyo'] },
+  // forms: the rules and goals of the parent apply to them
+  { code: 'vitamin_k2_mk4', kind: 'form', parent: 'vitamin_k2', name_ru: 'Витамин K2 (MK-4)', name_uz: 'K2 vitamini (MK-4)', synonyms: ['mk-4', 'мк-4', 'менатетренон', 'menatetrenone'] },
+  { code: 'b_lactis', kind: 'form', parent: 'probiotiklar', name_ru: 'Bifidobacterium lactis', name_uz: 'Bifidobacterium lactis', synonyms: ['bifidobacterium lactis', 'b. lactis', 'bi-07', 'bb-12', 'бифидобактерии лактис'] },
+  { code: 'l_acidophilus', kind: 'form', parent: 'probiotiklar', name_ru: 'Lactobacillus acidophilus', name_uz: 'Lactobacillus acidophilus', synonyms: ['lactobacillus acidophilus', 'l. acidophilus', 'ncfm', 'лактобактерии ацидофилус', 'ацидофилус'] },
+  { code: 's_salivarius_k12', kind: 'form', parent: 'probiotiklar', name_ru: 'Streptococcus salivarius K12', name_uz: 'Streptococcus salivarius K12', synonyms: ['streptococcus salivarius k12', 's. salivarius k12', 'blis k12'] },
 ];
 
 export const SYNONYM_CHANGES: SynonymChange[] = [
@@ -86,6 +102,11 @@ export const SYNONYM_CHANGES: SynonymChange[] = [
   { code: 'protein', add: ['whey protein', 'plant protein', 'pea protein'] },
   { code: 'vitamin_e', add: ['d-alpha tocopherol', 'tocopherols'] },
   { code: 'elektrolitlar', add: ['electrolyte'] },
+  // 16.11.2026 (question 160): inulin is a prebiotic, not a probiotic; full names of DHA/EPA; enzymes and Metafolin
+  { code: 'probiotiklar', remove: ['инулин'] },
+  { code: 'omega3', add: ['докозагексаеновая кислота', 'эйкозапентаеновая кислота', 'docosahexaenoic acid', 'eicosapentaenoic acid'] },
+  { code: 'ovqat_hazm_qilish_fermentlari', add: ['целлюлаза', 'инвертаза', 'amylase', 'lipase', 'protease', 'lactase'] },
+  { code: 'methylfolate', add: ['metafolin', 'метафолин', 'l-5-mthf'] },
 ];
 
 const MG_CIT = { magnesium: 'magnesium_citrate' };
