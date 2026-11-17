@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time link of the nightly backup to the owner's Google Drive (17.11.2026). Run on the server as `vitalo`:
 #   /opt/vitalo/app/scripts/server/gdrive-setup.sh
-# Before that, on the laptop (PowerShell):  rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ=="
+# Before that, on the laptop (PowerShell):  rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ"
 # -> the browser opens, sign in to Google, allow; PowerShell prints a code in braces {"access_token":...}.
 # This script asks to paste that code (input is hidden), saves it only in ~/.config/rclone/rclone.conf (rights 600)
 # and checks the folder VITALO-backups. Access is "drive.file": rclone sees only the files it created itself.
