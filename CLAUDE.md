@@ -75,12 +75,16 @@ VITALO — интернет-магазин БАДов и витаминов в �
 
 ## Сервер (боевой)
 
-- VPS Hostmaster (Узбекистан), Ubuntu 24.04, IP `91.213.99.230`. Данные магазина должны храниться в Узбекистане.
-- Пользователи SSH: `saidkomolkhursandov` — администратор (sudo); `vitalo` — деплой и службы. Вход только по ключу.
-- Отпечаток ключа сервера (не секрет, для сверки при первом входе): `ED25519 SHA256:yBrdO38Hvel7iiMHGJ1B3dVfKPXLgEiwiQHCvmAJbMw`.
+- С 17.11.2026: OVHcloud VPS-2 (Канада, Beauharnois; 4 vCore, 8 ГБ, 75 ГБ NVMe), Ubuntu 24.04, IP `144.217.85.105`,
+  имя `vps-22e082d9.vps.ovh.ca`, $10/мес с автопродлением. Хранить данные в Узбекистане не обязательно (решение
+  владельца 17.11.2026). Старый Hostmaster (91.213.99.230) остановлен; домен `vitalo.uz` и DNS остаются в Hostmaster —
+  следить за оплатой домена.
+- Пользователи SSH: `ubuntu` — администратор (sudo без пароля, так выдаёт OVH); `vitalo` — деплой и службы.
+  Вход только по ключу, пароль и root закрыты; ufw (22, 80, 443) и fail2ban.
+- Отпечаток ключа сервера (не секрет, для сверки при первом входе): `ED25519 SHA256:llYQB44O7VPH+eiGI/3Ax2J62pf7e6RB3lPi05nQjWw`.
 - Папки: код `/opt/vitalo/app`, git-хранилище `/opt/vitalo/repo.git` (remote `server`), фото `/var/lib/vitalo`,
   настройки `/opt/vitalo/app/apps/api/.env`.
-- Службы: `vitalo-api`, `vitalo-bot`, `vitalo-backup.timer` (каждую ночь 03:30, хранение 14 дней), nginx, postgresql.
+- Службы: `vitalo-api`, `vitalo-bot`, `vitalo-backup.timer` (каждую ночь 03:00, хранение 14 дней на сервере и 14 копий в Google Drive `VITALO-backups`), nginx, postgresql.
   Перезапуск: `sudo systemctl restart vitalo-api vitalo-bot` (`update.sh` делает это сам).
 - Адреса: `vitalo.uz` (Mini App), `admin.vitalo.uz`, `api.vitalo.uz`; проверка `https://api.vitalo.uz/api/health`.
 
@@ -117,7 +121,7 @@ VITALO — интернет-магазин БАДов и витаминов в �
 | `vitalo_test` | Docker на компьютере | Автотесты (`npm run test:e2e`): каждый запуск очищает её и заполняет заново. Работать с ней можно без отдельного разрешения. |
 | `vitalo_dev` | Docker на компьютере, `DATABASE_URL` в `apps/api/.env` | Рабочая база разработки с настоящими данными. `npm run seed`, `npx prisma db seed`, `ts-node prisma/seed.ts`, миграции и любые скрипты (`import:*`, `photos:*`, `staff:add`, `dev:*`) — только с прямого разрешения, каждый раз отдельно. |
 | `vitalo` (старая локальная) | Docker на компьютере | Остаётся после переименования (`scripts/rename-local-db.ps1`) как запасная копия. Ничего не запускать и не удалять без разрешения. |
-| `vitalo` на сервере | Production (91.213.99.230) | Настоящий магазин. Seed, тесты и dev-скрипты — никогда. Миграции, `update.sh`, `bootstrap:prod`, `staff:add`, `import:products` — только по прямому разрешению пользователя, и только он сам запускает их на сервере. |
+| `vitalo` на сервере | Production (144.217.85.105, OVH) | Настоящий магазин. Seed, тесты и dev-скрипты — никогда. Миграции, `update.sh`, `bootstrap:prod`, `staff:add`, `import:products` — только по прямому разрешению пользователя, и только он сам запускает их на сервере. |
 
 - Разрешение спрашивай каждый раз отдельно; прошлое разрешение не переносится на следующий запуск.
 - Защита в коде: seed и `dev:*` отказываются работать, если имя базы не оканчивается на `_dev` или `_test`,

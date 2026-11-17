@@ -65,8 +65,8 @@
 6. Подключить сервер, чтобы и дальше выкладывать код (`git push server main`):
 
    ```powershell
-   git remote add server vitalo@91.213.99.230:/opt/vitalo/repo.git
-   ssh saidkomolkhursandov@91.213.99.230
+   git remote add server vitalo@144.217.85.105:/opt/vitalo/repo.git
+   ssh ubuntu@144.217.85.105
    ```
 
    При первом входе SSH спросит пароль от ключа (тот, что вы вводите сейчас).

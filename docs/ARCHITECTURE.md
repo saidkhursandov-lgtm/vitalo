@@ -106,7 +106,7 @@
 
 ## Сервер
 
-- VPS Hostmaster в Узбекистане, Ubuntu 24.04, IP `91.213.99.230`; данные должны храниться в Узбекистане.
+- VPS OVHcloud VPS-2 (Канада, Beauharnois; 4 vCore, 8 ГБ, 75 ГБ NVMe), Ubuntu 24.04, IP `144.217.85.105` — с 17.11.2026 (до этого Hostmaster, 91.213.99.230). Хранить данные в Узбекистане не обязательно (решение владельца 17.11.2026).
 - Службы: `nginx`, `postgresql` (база `vitalo`, вход через локальный сокет), `vitalo-api`, `vitalo-bot`,
   `vitalo-backup.timer`, `certbot.timer`, `fail2ban`, `ufw` (открыты только 22/80/443).
 - Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `/var/lib/vitalo/receipts` (чеки клиентов, закрытая папка `RECEIPTS_DIR`, nginx её не раздаёт; с 3.1, на сервере — с 31.10, папка создаётся при первом чеке), `/var/lib/vitalo/reviews` (фото отзывов до публикации; закрытая папка `REVIEWS_DIR`; с 13.11, 3.10-Б; папка создаётся при первом отзыве с фото), `.env` в `apps/api`.
@@ -122,8 +122,12 @@
 
 ## Бэкапы
 
-- Сервер: `scripts/server/backup.sh` каждую ночь в 03:30 (таймер) и перед каждым `update.sh`: база (сразу
+- Сервер: `scripts/server/backup.sh` каждую ночь в 03:00 (таймер) и перед каждым `update.sh`: база (сразу
   проверяется), фото, чеки (`receipts-*.tar.gz`, с 3.1), отзывы (`reviews-*.tar.gz`, с 3.10-Б; появится после первого отзыва с фото), `.env`; хранение 14 дней. Проверка восстановления — `restore-check.sh`.
+- Google Drive (с 17.11.2026): тот же `backup.sh` после ночной копии собирает её файлы в один архив
+  `vitalo-<время>.tar` (без шифрования, решение владельца) и загружает через rclone в `gdrive:VITALO-backups`;
+  хранится 14 последних. Подключение — `scripts/server/gdrive-setup.sh` (доступ `drive.file`, код только в
+  `~vitalo/.config/rclone/rclone.conf`). Ошибка Drive не ломает копию на сервере. Плюс автобэкап OVH (в подарок к тарифу).
 - Ноутбук: копии `vitalo_dev` в папке `backups\` (в git не попадают). Копии с сервера забирать к себе по
   [DEPLOY_RUNBOOK](DEPLOY_RUNBOOK.md), фаза 7.3.
 

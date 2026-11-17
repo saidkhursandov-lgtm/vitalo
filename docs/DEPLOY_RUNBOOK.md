@@ -4,7 +4,7 @@
 
 | Что | Значение |
 | --- | --- |
-| Сервер | Hostmaster VPS, Ubuntu 24.04, IP `91.213.99.230` |
+| Сервер | OVHcloud VPS-2 (Канада), Ubuntu 24.04, IP `144.217.85.105` (с 17.11.2026; до этого Hostmaster 91.213.99.230) |
 | Магазин (Mini App) | https://vitalo.uz |
 | Админка | https://admin.vitalo.uz |
 | API | https://api.vitalo.uz |
@@ -29,10 +29,10 @@
 на сервере. Вход на сервер с компьютера:
 
 ```powershell
-ssh saidkomolkhursandov@91.213.99.230
+ssh ubuntu@144.217.85.105
 ```
 
-Что делает: открывает окно сервера. Хорошо: строка начинается с `saidkomolkhursandov@vitalo:~$`. Пароль не
+Что делает: открывает окно сервера. Хорошо: строка начинается с `ubuntu@vps-22e082d9:~$`. Пароль не
 спрашивается (вход по ключу; может спросить фразу-пароль ключа).
 
 ## Что должно работать на сервере
@@ -43,7 +43,7 @@ ssh saidkomolkhursandov@91.213.99.230
 | `postgresql` | база данных `vitalo` |
 | `vitalo-api` | API. **Внутри него же** работают: резерв на 12 часов, очередь сообщений Telegram, опрос Яндекса, приём уведомлений Яндекса, напоминания о налоге и зарплатах (12-го и 14-го) |
 | `vitalo-bot` | боевой бот (сам опрашивает Telegram, входящий порт ему не нужен) |
-| `vitalo-backup.timer` | ночная резервная копия в 03:30 |
+| `vitalo-backup.timer` | ночная резервная копия в 03:00 |
 | `certbot.timer` | продление сертификата HTTPS |
 | `fail2ban`, `ufw` | защита входа и брандмауэр |
 
@@ -128,7 +128,7 @@ sudo install -m 600 -o vitalo -g vitalo /opt/vitalo/app/apps/api/.env /var/backu
 
 ```powershell
 mkdir D:\VITALO-backups -Force
-scp "vitalo@91.213.99.230:/var/backups/vitalo/db-*.dump" D:\VITALO-backups\
+scp "vitalo@144.217.85.105:/var/backups/vitalo/db-*.dump" D:\VITALO-backups\
 ```
 
 Что делает: скачивает копии базы на диск D. Папка специально **не внутри проекта**, чтобы копии не попали в git.
@@ -298,8 +298,8 @@ powershell -ExecutionPolicy Bypass -File scripts\export-dev-db.ps1
 ### 3.3 Отправить копию и фото на сервер
 
 ```powershell
-scp (Get-ChildItem backups\vitalo_dev-for-server-*.dump | Sort-Object LastWriteTime | Select-Object -Last 1).FullName vitalo@91.213.99.230:/opt/vitalo/import/
-scp -r apps\api\uploads\products vitalo@91.213.99.230:/var/lib/vitalo/uploads/
+scp (Get-ChildItem backups\vitalo_dev-for-server-*.dump | Sort-Object LastWriteTime | Select-Object -Last 1).FullName vitalo@144.217.85.105:/opt/vitalo/import/
+scp -r apps\api\uploads\products vitalo@144.217.85.105:/var/lib/vitalo/uploads/
 ```
 
 Что делает: первая команда отправляет самую свежую копию базы, вторая — фото товаров (в базе хранятся только адреса
@@ -699,7 +699,7 @@ sudo -u vitalo sed -n 's|^YANDEX_WEBHOOK_SECRET=|https://api.vitalo.uz/api/yande
 
 ### 7.1 Что делается само
 
-Каждую ночь в 03:30 служба `vitalo-backup.timer` сохраняет в `/var/backups/vitalo`:
+Каждую ночь в 03:00 служба `vitalo-backup.timer` сохраняет в `/var/backups/vitalo`:
 
 - `db-ГГГГММДД-ЧЧММ.dump` — база (сразу проверяется, что файл читается);
 - `uploads-….tar.gz` — фото товаров;
@@ -713,7 +713,7 @@ sudo -iu vitalo /opt/vitalo/app/deploy/scripts/backup.sh
 sudo -iu vitalo ls -lh /var/backups/vitalo | tail -n 6
 ```
 
-Хорошо: у таймера в колонке NEXT — ближайшие 03:30; вторая команда вывела «База: … проверена»; в списке свежие файлы.
+Хорошо: у таймера в колонке NEXT — ближайшие 03:00; вторая команда вывела «База: … проверена»; в списке свежие файлы.
 
 ### 7.2 Проверка, что из копии можно восстановиться
 
@@ -727,13 +727,42 @@ sudo /opt/vitalo/app/scripts/server/restore-check.sh
 Хорошо: таблица, где колонки «в копии» и «сейчас» близки (в рабочей может быть чуть больше — она новее), и строка
 **«ХОРОШО: копия восстанавливается»**. Делайте эту проверку раз в месяц и после каждого крупного обновления.
 
-### 7.3 Забирать копии к себе
+### 7.3 Копия в Google Drive (само, с 17.11.2026)
+
+После ночной копии `backup.sh` упаковывает её файлы (база, фото, чеки, `.env`) в один архив `vitalo-ГГГГММДД-ЧЧММ.tar`
+и загружает в папку **VITALO-backups** на Google Drive владельца; там хранятся 14 последних. Архив не шифруется
+(решение владельца): внутри `.env` с секретами — Google-аккаунт держать с двухфакторной защитой.
+
+```bash
+sudo -iu vitalo rclone lsl gdrive:VITALO-backups
+```
+
+Хорошо: последний файл — сегодняшний (или вчерашний до 03:00). В журнале копии строка «Google Drive: … размер сверен»
+(`journalctl -u vitalo-backup.service -n 20`). Если Google отозвал доступ («invalid_grant», «empty token»), подключите
+заново: на ноутбуке `rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ"` → войти в Google → «Разрешить», затем
+на сервере под `vitalo`: `/opt/vitalo/app/scripts/server/gdrive-setup.sh` и вставить код. Новый rclone (1.7x) выдаёт
+код в виде длинной строки base64, а на сервере rclone 1.60 ждёт JSON `{"access_token":…}`: строку нужно раскодировать
+(внутри поле `token`).
+
+**Восстановление из Drive** (на новом сервере после шагов DEPLOY.md 1–7):
+
+```bash
+sudo -iu vitalo bash -c 'mkdir -p /opt/vitalo/import/drive && cd /opt/vitalo/import/drive && rclone copy gdrive:VITALO-backups/vitalo-ГГГГММДД-ЧЧММ.tar . && tar -xf vitalo-*.tar && ls'
+sudo /opt/vitalo/app/scripts/server/restore-check.sh /opt/vitalo/import/drive/db-ГГГГММДД-ЧЧММ.dump
+```
+
+Дальше база — как в 7.4 (`transfer-restore.sh` → `transfer-swap.sh`) или в пустую базу через `lib-restore.sh`
+(так сделан переезд 17.11.2026); фото — `sudo -u vitalo tar -xzf uploads-….tar.gz -C /var/lib/vitalo`; `.env` —
+в `/opt/vitalo/app/apps/api/.env` с правами 600. Проверено 17.11.2026: архив из Drive скачан, распакован, база
+восстановилась во временную (102 товара, 59 миграций — как в рабочей).
+
+### 7.3а Забирать копии к себе
 
 Копии на самом сервере не спасут, если сервер пропадёт целиком. Раз в неделю (и перед любым обновлением):
 
 ```powershell
-scp "vitalo@91.213.99.230:/var/backups/vitalo/db-*.dump" D:\VITALO-backups\
-scp "vitalo@91.213.99.230:/var/backups/vitalo/uploads-*.tar.gz" D:\VITALO-backups\
+scp "vitalo@144.217.85.105:/var/backups/vitalo/db-*.dump" D:\VITALO-backups\
+scp "vitalo@144.217.85.105:/var/backups/vitalo/uploads-*.tar.gz" D:\VITALO-backups\
 ```
 
 Хорошо: в `D:\VITALO-backups` появились свежие файлы. Старые удаляйте вручную, оставляя несколько последних.
