@@ -111,7 +111,8 @@
 
 - VPS OVHcloud VPS-2 (Канада, Beauharnois; 4 vCore, 8 ГБ, 75 ГБ NVMe), Ubuntu 24.04, IP `144.217.85.105` — с 17.11.2026 (до этого Hostmaster, 91.213.99.230). Хранить данные в Узбекистане не обязательно (решение владельца 17.11.2026).
 - Службы: `nginx`, `postgresql` (база `vitalo`, вход через локальный сокет), `vitalo-api`, `vitalo-bot`,
-  `vitalo-backup.timer`, `certbot.timer`, `fail2ban`, `ufw` (открыты только 22/80/443).
+  `vitalo-backup.timer`, `vitalo-monitor.timer`, `certbot.timer`, `fail2ban`, `ufw` (открыты только 22/80/443).
+- Мониторинг (с 17.11.2026): `scripts/server/monitor.sh` — отчёт в технический чат в 09:00 и 21:00 (всё из `healthcheck.sh`, копия в Google Drive, срок HTTPS и домена). Внешняя проверка — `.github/workflows/uptime.yml`, в 04:00 и 16:00 UTC; при сбое приходит письмо от GitHub.
 - Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `/var/lib/vitalo/receipts` (чеки клиентов, закрытая папка `RECEIPTS_DIR`, nginx её не раздаёт; с 3.1, на сервере — с 31.10, папка создаётся при первом чеке), `/var/lib/vitalo/reviews` (фото отзывов до публикации; закрытая папка `REVIEWS_DIR`; с 13.11, 3.10-Б; папка создаётся при первом отзыве с фото), `.env` в `apps/api`.
 - Файлы настроек сервера в репозитории: `deploy/nginx`, `deploy/systemd`, `deploy/sudoers-vitalo`.
 
