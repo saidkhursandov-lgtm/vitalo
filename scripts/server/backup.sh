@@ -59,5 +59,25 @@ if [ "${1:-all}" != "db" ]; then
   fi
 fi
 
+# Google Drive (17.11.2026): when the rclone remote `gdrive` is set up (scripts/server/gdrive-setup.sh), this night's
+# files go into one archive vitalo-<stamp>.tar in the folder VITALO-backups; only the newest GDRIVE_KEEP copies stay.
+# The upload never makes the local backup fail: if Drive is unreachable, the copy on this server is still there.
+GDRIVE_REMOTE=${GDRIVE_REMOTE:-gdrive:VITALO-backups}
+GDRIVE_KEEP=${GDRIVE_KEEP:-14}
+if [ "${1:-all}" != "db" ] && command -v rclone >/dev/null && rclone listremotes 2>/dev/null | grep -qx 'gdrive:'; then
+  ARCH="$DIR/vitalo-$STAMP.tar"
+  ( cd "$DIR" && tar -cf "$ARCH.part" $(ls -1 "db-$STAMP.dump" "uploads-$STAMP.tar.gz" "receipts-$STAMP.tar.gz" \
+      "reviews-$STAMP.tar.gz" "returns-$STAMP.tar.gz" "env-$STAMP.env" 2>/dev/null) ) && mv "$ARCH.part" "$ARCH"
+  if [ -f "$ARCH" ] && rclone copy "$ARCH" "$GDRIVE_REMOTE" && \
+     [ "$(rclone size --json "$GDRIVE_REMOTE/$(basename "$ARCH")" | grep -o '"bytes":[0-9]*' | cut -d: -f2)" = "$(stat -c %s "$ARCH")" ]; then
+    echo "Google Drive: $GDRIVE_REMOTE/$(basename "$ARCH") ($(du -h "$ARCH" | cut -f1)), размер сверен"
+    rclone lsf --files-only --include 'vitalo-*.tar' "$GDRIVE_REMOTE" | sort -r | tail -n +"$((GDRIVE_KEEP + 1))" |
+      while read -r OLD; do rclone deletefile "$GDRIVE_REMOTE/$OLD" && echo "Google Drive: удалена старая копия $OLD"; done
+  else
+    echo "ВНИМАНИЕ: копия в Google Drive не загрузилась. Копия на сервере есть: $DIR" >&2
+  fi
+  rm -f "$ARCH" "$ARCH.part"
+fi
+
 find "$DIR" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'uploads-*.tar.gz' -o -name 'receipts-*.tar.gz' -o -name 'reviews-*.tar.gz' -o -name 'returns-*.tar.gz' -o -name 'env-*.env' \) -mtime +"$KEEP_DAYS" -delete
 find "$DIR" -maxdepth 1 -type f -name '*.part' -mmin +120 -delete
