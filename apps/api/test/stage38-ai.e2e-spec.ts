@@ -263,6 +263,42 @@ describe('Stage 3.8 VITALO AI cart check (e2e)', () => {
     await prisma.compat_answers.update({ where: { id: saved.id }, data: { enabled: false } });
   });
 
+  it('ветка 3: synergy inside one product, a children product, doses by the label, time and meal of the cheat sheet', async () => {
+    const kid = await createTestProduct(prisma, { price: 40_000, stock: 5, name: `AI kid ${run}` });
+    await prisma.products.update({ where: { id: kid.id }, data: { audience: 'child' } });
+    await prisma.product_substances.createMany({
+      data: [
+        { product_id: kid.id, substance_id: s.x, dose_amount: 400, dose_unit: 'iu', position: 0 },
+        { product_id: kid.id, substance_id: s.w, position: 1 },
+      ],
+    });
+    const token = await customer();
+    await add(token, kid.id);
+    await add(token, p.d.id);
+    fake.reply = (data: string) => {
+      const skus = [...data.matchAll(/- id (\S+) \|/g)].map((m) => m[1]);
+      return {
+        verdict: 'compatible',
+        text: 'В детском товаре X и W уже вместе — они дополняют друг друга.',
+        timing: skus.map((id, i) => ({ productId: id, time: i ? 'evening' : 'morning', meal: 'with_fat', when: i ? 'Вечером' : 'Утром, с жирной едой' })),
+        productIds: [],
+      };
+    };
+    const res = (await check(token).expect(200)).body;
+    const sent = fake.calls.at(-1)!.data;
+    expect(sent).toContain('синергия внутри одного товара');
+    expect(sent).toContain(`- товар ${kid.sku}: `);
+    expect(sent).toContain('кому: детям');
+    expect(sent).toContain(`Вещество X ${run} 400 МЕ`);
+    expect(res.answer.reasons.synergy).toBe(true);
+    expect(res.answer.child_text).toBe('Детские товары принимают по этикетке или по совету педиатра');
+    expect(res.answer.overlap_text).toContain('разных членов семьи');
+    expect(res.answer.timing.map((t: { time: string; meal: string }) => [t.time, t.meal])).toEqual([
+      ['morning', 'with_fat'],
+      ['evening', 'with_fat'],
+    ]);
+  });
+
   it('the home banner has the VITALO AI slide after the built-in ones (migration 20261110100000, safe to repeat)', async () => {
     // the test database is truncated and seeded before the run: the migration's own SQL is applied here, twice
     const sql = readFileSync(join(__dirname, '../prisma/migrations/20261110100000_stage38_ai_banner/migration.sql'), 'utf8');

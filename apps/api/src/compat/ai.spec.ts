@@ -152,7 +152,15 @@ describe('architect edits 02.11', () => {
   it('an amount in the time only when the memo has it', () => {
     const t = (when: string) => answer({ timing: [{ productId: 'A003', when }, { productId: 'A014', when: 'Вечер' }] });
     expect(checkCartAnswer(t('Утро, 1 капсула с едой'), data(), 'compatible')).toMatchObject({ ok: true });
-    expect(checkCartAnswer(t('Утро, 2 капсулы с едой'), data(), 'compatible')).toEqual({ ok: false, error: 'timing_amount' });
+    // ветка 3: an amount not in the memo — the line becomes «time, meal», the answer is kept
+    const unsure = answer({ timing: [{ productId: 'A003', time: 'morning', meal: 'with_food', when: 'Утро, 2 капсулы с едой' }, { productId: 'A014', when: 'Вечер' }] });
+    expect(checkCartAnswer(unsure, data(), 'compatible')).toMatchObject({ ok: true, answer: { timing: [{ ref: 'A003', when: 'Утро, с едой' }, { ref: 'A014', when: 'Вечер', time: 'any' }] } });
+    expect(checkCartAnswer(t('Утро, 2 капсулы с едой'), data(), 'compatible')).toMatchObject({ ok: true, answer: { timing: [{ when: 'Любое время' }, {}] } });
+  });
+
+  it('ветка 3: our SKUs in the text become the names of the products', () => {
+    const r = checkCartAnswer(answer({ text: 'Магний и D3: состав A003 продуман, принимайте по памятке.' }), data(), 'compatible') as { answer: { text: string } };
+    expect(r.answer.text).not.toContain('A003');
   });
 
   it('Uzbek with a Cyrillic letter goes to the specialist', () => {

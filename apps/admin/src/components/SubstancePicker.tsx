@@ -15,7 +15,20 @@ export interface PickedSubstance {
   parent_name: string | null;
   enabled?: boolean;
   in_label: boolean;
+  /** dose per serving from the label (VITALO AI) */
+  dose_amount?: number | null;
+  dose_unit?: string | null;
 }
+
+/** The same units as apps/api iherb-fields.ts DOSE_UNITS. */
+const UNITS: [string, string][] = [
+  ['mg', 'мг'],
+  ['mcg', 'мкг'],
+  ['iu', 'МЕ'],
+  ['g', 'г'],
+  ['ml', 'мл'],
+  ['cfu_bn', 'млрд КОЕ'],
+];
 
 interface DictRow {
   id: string;
@@ -148,6 +161,34 @@ export function SubstancePicker({
                 />
                 в надпись
               </label>
+              <span className="substance-dose">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="any"
+                  placeholder="доза"
+                  aria-label={`Доза на порцию: ${s.name_ru}`}
+                  disabled={disabled}
+                  value={s.dose_amount ?? ''}
+                  onChange={(e) =>
+                    onChange(value.map((x) => (x.id === s.id ? { ...x, dose_amount: e.target.value === '' ? null : Number(e.target.value), dose_unit: x.dose_unit || 'mg' } : x)))
+                  }
+                />
+                <select
+                  aria-label={`Единица дозы: ${s.name_ru}`}
+                  disabled={disabled}
+                  value={s.dose_unit ?? ''}
+                  onChange={(e) => onChange(value.map((x) => (x.id === s.id ? { ...x, dose_unit: e.target.value || null } : x)))}
+                >
+                  <option value="">—</option>
+                  {UNITS.map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </span>
               {!disabled && (
                 <span className="substance-ops">
                   {i > 0 && (

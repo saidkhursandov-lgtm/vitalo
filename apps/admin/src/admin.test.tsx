@@ -49,7 +49,7 @@ describe('menu in 7 groups (генплан, этап 2)', () => {
     expect(at('/compat?tab=substances')).toBe('База знаний AI');
     expect(at('/compat?tab=answered')).toBe('Вопросы о совместимости');
     expect(at('/finance?tab=tax')).toBe('Финансы');
-    expect(all.length).toBeLessThanOrEqual(27); // 3.10-Б: + «Отзывы», 3.10-В: + «Возвраты»
+    expect(all.length).toBeLessThanOrEqual(28); // 3.10-Б: + «Отзывы», 3.10-В: + «Возвраты», 4.3: + «Сеты от врача»
   });
 });
 

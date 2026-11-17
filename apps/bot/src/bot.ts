@@ -4,6 +4,7 @@ import type { UserSummary, VitaloApi } from './api-client';
 import { installReceipts } from './receipts';
 import { installCompat } from './compat';
 import { installStaffLogin } from './staff-login';
+import { installCourse } from './course';
 import { bothLangs, langFromTelegram, money, t, type Lang, type TextKey } from './texts';
 
 /** Used when the API has no contact saved (the admin edits it in Настройки). */
@@ -101,6 +102,7 @@ export function createBot({ token, api, urls, botInfo, download }: BotDeps): Bot
   // 3.4: the specialist's answers to «Проверить совместимость» (buttons and own text)
   installCompat(bot, { api });
   installStaffLogin(bot, { api });
+  installCourse(bot, { api });
 
   async function replyWithShop(ctx: Context, lang: Lang, text: string, label: TextKey = 'openShop', path = '/', startParam?: string) {
     const kb = shopButton(lang, label, path, startParam);

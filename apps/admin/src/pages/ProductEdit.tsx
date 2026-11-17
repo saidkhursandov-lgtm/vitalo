@@ -12,6 +12,8 @@ import { BackIcon } from '../components/Icons';
 import { TestFlag } from '../components/TestFlag';
 import { SUPPLIER_KIND_LABELS, supplierTerms, useSuppliers } from '../components/SupplierTabs';
 import { FORM_LABEL_MAX, labelOf, SubstancePicker, type PickedSubstance } from '../components/SubstancePicker';
+import { AUDIENCE_LABELS, EnrichDraft, GOAL_LABELS, type Enrichment } from '../components/EnrichDraft';
+import { PairField, pairOf, type PairValue } from '../components/PairField';
 
 interface CategoryNode {
   id: string;
@@ -36,6 +38,9 @@ interface AdminProduct {
   yandex_payment_fee_percent?: number | null;
   yandex_logistics_uzs?: number | null;
   category_ids: string[];
+  /** 4.1 «Идеальная пара»: off, or chosen by hand (null = picked by the rules) */
+  pair_off?: boolean;
+  pair_product?: { id: string; sku: string; name_ru: string } | null;
   /** D-61: «Где берём» and «Если на складе ноль — под заказ у …» */
   supplier_ids: string[];
   on_zero_supplier_id: string | null;
@@ -47,6 +52,10 @@ interface AdminProduct {
   label_composition_uz?: string | null;
   /** «Состав» from the dictionary of VITALO AI; in_label → «Форма вещества» */
   substances?: PickedSubstance[];
+  /** VITALO AI: who the product is for and its goals; the latest draft waiting for «Принять» */
+  audience?: string | null;
+  goals?: string[];
+  enrichment?: Enrichment | null;
   [text: string]: unknown;
 }
 
@@ -215,6 +224,19 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   // «Состав» (VITALO AI): sent only when changed here — an old product keeps its hand-written label until then
   const [subs, setSubs] = useState<PickedSubstance[]>(product?.substances ?? []);
   const [subsTouched, setSubsTouched] = useState(false);
+  // VITALO AI: «Кому», «Цели» and the draft; aiTouched — sent with the save; draftId — the draft this save accepts
+  const [audience, setAudience] = useState<string | null>(product?.audience ?? null);
+  const [goals, setGoals] = useState<string[]>(product?.goals ?? []);
+  const [aiTouched, setAiTouched] = useState(false);
+  const [draft, setDraft] = useState<Enrichment | null>(product?.enrichment ?? null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [pair, setPair] = useState<PairValue>(() => pairOf(product));
+  const [pairTouched, setPairTouched] = useState(false);
+  const touchAi = () => {
+    setAiTouched(true);
+    setSaved(false);
+    setDirty(true);
+  };
   const yandexView = can('yandex.price.view');
   // what «Состав» looks for substances in (a hand-written old label counts too: «Цитрат магния» → Магний цитрат)
   const suggestTexts = useMemo(
@@ -261,7 +283,16 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       body.dose_amount = toNum(f.dose_amount);
       body.dose_unit = f.dose_unit || null;
       body.dose_per = f.dose_per || null;
-      if (subsTouched) body.substances = subs.map((s) => ({ id: s.id, in_label: s.in_label }));
+      if (subsTouched) body.substances = subs.map((s) => ({ id: s.id, in_label: s.in_label, dose_amount: s.dose_amount ?? null, dose_unit: s.dose_amount != null ? s.dose_unit || null : null }));
+      if (aiTouched) {
+        body.audience = audience;
+        body.goals = goals;
+      }
+      if (draftId) body.enrichment_id = draftId;
+      if (pairTouched) {
+        body.pair_off = pair.mode === 'off';
+        body.pair_product_id = pair.mode === 'manual' ? (pair.product?.id ?? null) : null;
+      }
       if (f.supply_touched === '1') {
         body.supplier_ids = f.supplier_ids ? f.supplier_ids.split(',') : [];
         body.on_zero_supplier_id = f.on_zero_supplier_id || null;
@@ -295,6 +326,11 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       }));
       setSubs(p.substances ?? []);
       setSubsTouched(false);
+      setAudience(p.audience ?? null);
+      setGoals(p.goals ?? []);
+      setAiTouched(false);
+      setDraft(p.enrichment ?? null);
+      setDraftId(null);
       void client.invalidateQueries({ queryKey: ['compat', 'products'] });
       if (!product) navigate(`/products/${p.id}`, { replace: true });
     },
@@ -690,6 +726,68 @@ function ProductForm({ product }: { product?: AdminProduct }) {
           ) : (
             <p>{labelOf(subs, 'ru') || f.substance_form_ru || '—'}</p>
           )}
+          {can('compat.view') && (
+            <>
+              {!draftId && (
+                <EnrichDraft
+                  productId={product?.id ?? null}
+                  draft={draft}
+                  onDraft={setDraft}
+                  current={subs}
+                  audience={audience}
+                  goals={goals}
+                  disabled={!editable}
+                  canRun={can('compat.answer')}
+                  onAccept={(next) => {
+                    setSubs(next.substances);
+                    setSubsTouched(true);
+                    setAudience(next.audience);
+                    setGoals(next.goals);
+                    setDraftId(next.draftId);
+                    touchAi();
+                  }}
+                />
+              )}
+              {draftId && <div className="alert alert-info small">Черновик AI перенесён в карточку — проверьте и нажмите «Сохранить».</div>}
+              <div className="ai-meta">
+                <Field label="Кому подходит" hint="Для VITALO AI: детские товары он не советует взрослым и наоборот">
+                  <select
+                    value={audience ?? ''}
+                    disabled={!editable}
+                    onChange={(e) => {
+                      setAudience(e.target.value || null);
+                      touchAi();
+                    }}
+                  >
+                    <option value="">— не указано —</option>
+                    {Object.entries(AUDIENCE_LABELS).map(([v, l]) => (
+                      <option key={v} value={v}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Цели" hint="По ним VITALO AI подбирает товар под вопрос покупателя">
+                  <div className="ai-goals">
+                    {Object.entries(GOAL_LABELS).map(([g, l]) => (
+                      <label key={g} className="check small">
+                        <input
+                          type="checkbox"
+                          disabled={!editable}
+                          checked={goals.includes(g)}
+                          onChange={(e) => {
+                            setGoals(e.target.checked ? [...goals, g] : goals.filter((x) => x !== g));
+                            touchAi();
+                          }}
+                        />
+                        {l}
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+              </div>
+            </>
+          )}
         </div>
         <div className="form-grid">
           <Field label="Количество в банке" hint="Капсул / таблеток / порций">
@@ -736,6 +834,20 @@ function ProductForm({ product }: { product?: AdminProduct }) {
             ))}
           </select>
           <p className="muted small">Видна на карточке и в списках магазина. Если на товар идёт акция, показывается значок акции.</p>
+        </div>
+        <div className="check-col">
+          <h3>Идеальная пара</h3>
+          <PairField
+            productId={product?.id ?? null}
+            value={pair}
+            disabled={!editable}
+            onChange={(v) => {
+              setPair(v);
+              setPairTouched(true);
+              setSaved(false);
+              setDirty(true);
+            }}
+          />
         </div>
         <div className="check-col">
           <h3>Стандарт VITALO</h3>

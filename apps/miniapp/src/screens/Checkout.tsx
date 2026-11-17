@@ -415,6 +415,7 @@ export function Checkout() {
                 campaigns={p.campaigns}
                 saleHint={!!p.promo && p.items.some((i) => (i.campaign?.discount_pct ?? 0) > 15)}
                 discount={p.totals.discount_total_uzs}
+                bundle={p.totals.bundle_discount_uzs}
                 promo={p.promo}
                 bonus={p.totals.bonus_used_uzs}
                 delivery={p.totals.delivery_cost_uzs}

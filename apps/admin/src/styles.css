@@ -713,9 +713,20 @@ textarea { resize: vertical; }
 .substance-block h3 { margin: 0 0 4px; font-size: 15px; }
 .substance-list { margin: 8px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .substance-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
-.substance-name { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.substance-name { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
 .substance-ops { display: inline-flex; gap: 2px; }
 .substance-ops .btn { min-width: 44px; min-height: 44px; }
+.substance-dose { display: inline-flex; gap: 4px; align-items: center; }
+.substance-dose input { width: 64px; min-height: 36px; }
+.substance-dose select { min-height: 36px; width: 84px; }
+.enrich-draft { margin: 12px 0; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; background: var(--panel); }
+.enrich-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.enrich-list { margin: 6px 0; padding-left: 18px; }
+.enrich-list li { margin: 2px 0; }
+.enrich-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-meta { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-start; margin: 8px 0; }
+.ai-goals { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.translate-button { display: block; margin-bottom: 4px; }
 .substance-label-preview { margin: 8px 0; padding: 8px; background: var(--panel); border-radius: 8px; overflow-wrap: anywhere; }
 .substance-label-preview.is-bad { border: 1px solid var(--bad); }
 .substance-suggest { margin: 8px 0; }
@@ -725,3 +736,13 @@ textarea { resize: vertical; }
 .substance-found { margin: 4px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); max-height: 280px; overflow-y: auto; }
 .substance-found .btn { width: 100%; justify-content: flex-start; text-align: left; min-height: 44px; }
 .return-items { margin: 0; padding-left: 18px; font-size: 14px; }
+
+/* 4.3 «Сеты от врача» */
+.bundle-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.bundle-grow { flex: 1; min-width: 0; }
+.bundle-qty { display: flex; align-items: center; gap: 6px; }
+.bundle-qty-input { width: 56px; min-height: 44px; }
+.bundle-summary { margin: 12px 0; display: grid; gap: 6px; }
+.bundle-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bundle-error { color: var(--bad); margin: 4px 0; }
+.bundle-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }

@@ -111,6 +111,15 @@ export class BotInternalController {
     return { saved: res.count > 0, phone };
   }
 
+  /** 4.2: «Не напоминать» under «Курс заканчивается» (switched back on in the Mini App profile). */
+  @Post('users/:telegramId/course-reminders')
+  @HttpCode(200)
+  async courseReminders(@Param('telegramId') raw: string, @Body() body: { on?: unknown }) {
+    if (typeof body.on !== 'boolean') throw new BadRequestException('on: boolean');
+    const res = await this.prisma.users.updateMany({ where: { telegram_user_id: telegramId(raw) }, data: { course_reminders: body.on } });
+    return { saved: res.count > 0, on: body.on };
+  }
+
   /** For /admin: only active employees get the admin panel button. */
   @Get('staff/:telegramId')
   async staff(@Param('telegramId') raw: string) {

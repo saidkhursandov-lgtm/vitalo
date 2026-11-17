@@ -360,6 +360,8 @@ model users {
   ai_chat_consent_at DateTime?
   /// 3.10-Б: «Просить оставить отзыв» — the bot asks 3 days after the delivery (switched off in the profile)
   review_requests  Boolean    @default(true)
+  /// 4.2: «Курс заканчивается» 5 days before the end of a delivered jar («Не напоминать» in the bot, profile switch)
+  course_reminders Boolean    @default(true)
   created_at       DateTime   @default(now())
   updated_at       DateTime   @updatedAt
   deleted_at       DateTime?
@@ -624,6 +626,9 @@ model products {
   warnings_uz          String?
   search_keywords      String?
   popularity_30d       Int           @default(0) // recalculated daily (30-day sold units)
+  /// 4.1 «Идеальная пара»: a pair chosen by hand (null = picked from the approved synergy rules); pair_off hides the block
+  pair_product_id      String?       @db.Uuid
+  pair_off             Boolean       @default(false)
   is_test              Boolean       @default(false) // аудит 10.11, п. 1.5: тестовый товар, скрыт в списках и сводках
   shipping_weight_g    Int?
   shipping_length_mm   Int?
@@ -693,6 +698,10 @@ model products {
   dose_unit             String? // mg | mcg | iu | g | ml | cfu_bn
   dose_per              String? // capsule | tablet | softgel | serving | drop
   match_form            String? // normalized chemical form, e.g. «цитрат», «бисглицинат», «D3 холекальциферол»
+  /// VITALO AI: who the product is for — adult | child | any (null — not set)
+  audience              String?
+  /// VITALO AI: health goals (ai-goal.ts PRODUCT_GOALS)
+  goals                 String[] @default([])
 
   brand_entry        brands?        @relation(fields: [brand_id], references: [id])
   manufacturer_entry manufacturers? @relation(fields: [manufacturer_id], references: [id])
@@ -703,6 +712,7 @@ model products {
   media                   product_media[]
   relations               product_relations[]       @relation("RelMain")
   related_to              product_relations[]       @relation("RelOther")
+  bundle_items            bundle_items[]
   inventory               inventory[]
   batches                 inventory_batches[]
   movements               inventory_movements[]
@@ -718,6 +728,7 @@ model products {
   block_items             content_block_items[]
   waitlist                product_waitlist[]
   substances              product_substances[]
+  enrichments             product_enrichments[]
   iherb_snapshots         iherb_price_snapshots[]
   suppliers               product_suppliers[]
   on_zero_supplier        suppliers?                @relation("on_zero_supplier", fields: [on_zero_supplier_id], references: [id])
@@ -1514,6 +1525,37 @@ model product_relations {
   @@unique([product_id, related_product_id, relation_type])
 }
 
+/// 4.3 «Сеты от врача»: 2–3 products with a doctor's text and a discount of their own (0–10%, margin ≥ 30% — D-75)
+model bundles {
+  id             String         @id @default(uuid()) @db.Uuid
+  slug           String         @unique
+  title_ru       String
+  title_uz       String?
+  /// a goal code of VITALO AI (sleep, immunity…), optional
+  goal           String?
+  doctor_text_ru String?
+  doctor_text_uz String?
+  discount_pct   Int            @default(0)
+  is_active      Boolean        @default(true)
+  sort_order     Int            @default(0)
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+  items          bundle_items[]
+}
+
+model bundle_items {
+  id         String   @id @default(uuid()) @db.Uuid
+  bundle_id  String   @db.Uuid
+  product_id String   @db.Uuid
+  qty        Int      @default(1)
+  sort_order Int      @default(0)
+  bundle     bundles  @relation(fields: [bundle_id], references: [id])
+  product    products @relation(fields: [product_id], references: [id])
+
+  @@unique([bundle_id, product_id])
+  @@index([product_id])
+}
+
 // ───────────── INVENTORY ─────────────
 model warehouses {
   id        String                @id @default(uuid()) @db.Uuid
@@ -2281,6 +2323,9 @@ model product_substances {
   position     Int        @default(0)
   /// shown in the label «Форма вещества» under the product name (the label is built from the dictionary names)
   in_label     Boolean    @default(false)
+  /// dose per serving from the label (VITALO AI); units as products.dose_unit (iherb-fields.ts DOSE_UNITS)
+  dose_amount  Decimal?   @db.Decimal(12, 3)
+  dose_unit    String?
   created_at   DateTime   @default(now())
   product      products   @relation(fields: [product_id], references: [id])
   substance    substances @relation(fields: [substance_id], references: [id])
@@ -2298,6 +2343,11 @@ model compat_rules {
   interval_hours Int?
   when_a         String?
   when_b         String?
+  /// «Время»: morning | day | evening | any; «Еда»: with_food | with_fat | empty_stomach | any (when_* kept in step)
+  time_a         String?
+  time_b         String?
+  meal_a         String?
+  meal_b         String?
   text_ru        String
   text_uz        String
   /// where the rule comes from (study, «комментарий врача»); staff only
@@ -2743,6 +2793,25 @@ model support_messages {
 /// Шаг 0б (D-69, архитектура 3.6): «вещество → цель → уровень доказательности → когда помогает / когда нет». Заполняет и
 /// одобряет врач («База знаний AI → Цели»); в ответ VITALO AI «Поможет ли этот набор для моей цели?» попадают только
 /// одобренные строки. Уровень A/B/C — только здесь и в админке; покупатель видит его словами (D-67).
+/// VITALO AI: a draft of the substances, doses, audience and goals of a product made by the model from the card texts.
+/// Nothing reaches customers until a person accepts it. status: pending | accepted | rejected | stale; trigger: manual | batch | auto
+model product_enrichments {
+  id         String    @id @default(uuid()) @db.Uuid
+  product_id String    @db.Uuid
+  status     String    @default("pending")
+  payload    Json
+  model      String
+  trigger    String    @default("manual")
+  created_by String?   @db.Uuid
+  decided_by String?   @db.Uuid
+  decided_at DateTime?
+  created_at DateTime  @default(now())
+  product    products  @relation(fields: [product_id], references: [id])
+
+  @@index([product_id, status])
+  @@index([status])
+}
+
 model goal_evidence {
   id           String       @id @default(uuid()) @db.Uuid
   substance_id String       @db.Uuid

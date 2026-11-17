@@ -17,6 +17,7 @@ import { tapHaptic } from '../lib/telegram';
 import { Picture, SafeImg } from '../components/Picture';
 import { ClampText } from '../components/ClampText';
 import { ProductReviewsBlock, RatingLine } from '../components/Reviews';
+import { PerfectPair } from '../components/PerfectPair';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip } from '../components/ui';
 
 /** Accordions; «Описание» comes first and is folded — the expert text on the first screen is the verdict (2.3 fixes). */
@@ -125,6 +126,8 @@ export function Product() {
         </section>
       )}
       <AskSpecialist id={p.id} name={short} />
+      {/* 4.1 «Идеальная пара»: by an approved synergy rule or chosen in the admin */}
+      <PerfectPair pair={p.pair} />
 
       {/* «Почему [бренд] отобран в VITALO» — its own navy card right before «О товаре»; no text, no card */}
       {brandWhy && (

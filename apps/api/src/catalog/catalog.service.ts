@@ -1,3 +1,4 @@
+import { PairService } from './pair.service';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { BonusSettings, normalizeBonusSettings } from '../bonus/bonus-rules';
 import { customerModes, onlineModes } from '../payments/online/online-providers';
@@ -65,6 +66,7 @@ export class CatalogService {
     private readonly settings: SettingsService,
     private readonly delivery: DeliveryService,
     private readonly campaigns: CampaignsService,
+    private readonly pairs: PairService,
   ) {}
 
   /** Both trees; every node carries product_count = products available to customers in it or below it. */
@@ -275,7 +277,17 @@ export class CatalogService {
     if (!product) throw new NotFoundException('Product not found');
     const card = await this.campaigns.decorateCard(toProductCard(product));
     // D-60/D-61: «Под заказ из США • 7–14 дней» / «Под заказ • 1–2 дня» and the guarantee, from the supplier
-    return { ...card, cross_border_terms: card.under_order };
+    return { ...card, cross_border_terms: card.under_order, pair: await this.pairCard(id) };
+  }
+
+  /** 4.1 «Идеальная пара»: the second jar with «почему вместе» (null = no block). */
+  private async pairCard(id: string) {
+    const pair = await this.pairs.pairOf(id);
+    if (!pair) return null;
+    const row = await this.prisma.products.findFirst({ where: { id: pair.product_id, status: 'active' }, include: listInclude });
+    if (!row) return null;
+    const [product] = await this.campaigns.decorate([toProductListItem(row)]);
+    return { product, why_ru: pair.why_ru, why_uz: pair.why_uz };
   }
 
   /**

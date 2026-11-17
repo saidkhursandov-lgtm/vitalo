@@ -42,6 +42,7 @@ function setup(opts: { user?: Partial<UserSummary> | 'down'; staff?: StaffInfo; 
       throw new Error('not used here');
     },
     staffLoginDecision: async () => ({ result: 'approved' }),
+    courseReminders: async () => ({ saved: true }),
     compatAnswer: async () => {
       throw new Error('not used here');
     },

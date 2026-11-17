@@ -9,15 +9,15 @@ const ADMIN_TG = 222_222_221;
 class FakeModel implements AiModel {
   key = true;
   fail = false;
-  calls: { model: string; system: string; data: string }[] = [];
-  reply: (data: string) => unknown = () => ({});
+  calls: { model: string; system: string; context?: string; data: string }[] = [];
+  reply: (data: string, context: string) => unknown = () => ({});
   ready() {
     return this.key;
   }
-  async complete(input: { model: string; system: string; data: string }): Promise<AiCompletion> {
+  async complete(input: { model: string; system: string; context?: string; data: string }): Promise<AiCompletion> {
     this.calls.push(input);
     if (this.fail) throw new (await import('../src/compat/ai-client')).AiCallError('timeout');
-    return { json: this.reply(input.data), inputTokens: 1200, outputTokens: 300, outcome: 'ok' };
+    return { json: this.reply(input.data, input.context ?? ''), inputTokens: 1200, outputTokens: 300, outcome: 'ok' };
   }
 }
 
@@ -120,7 +120,7 @@ describe('D-70: переписка с VITALO AI (e2e)', () => {
     const mag = ai.products.find((x: { product_id: string }) => x.product_id === p.mag.id);
     const d3 = ai.products.find((x: { product_id: string }) => x.product_id === p.d3.id);
     expect(mag).toMatchObject({ fit: 'helps', level: 'B', level_text: 'Есть данные исследований', in_cart: true });
-    expect(d3).toMatchObject({ fit: 'no_data', level: null }); // the model said «helps», our base has nothing
+    expect(d3).toMatchObject({ fit: 'maybe', level: null }); // the model said «helps», our base has nothing (D-74)
     expect(second.chat.questions).toBe(2);
     const chat = await prisma.ai_chats.findUniqueOrThrow({ where: { id: first.chat.id } });
     expect(chat).toMatchObject({ topic: 'sleep', outcome: 'answered', questions: 2, empty_cart: false });
@@ -163,24 +163,49 @@ describe('D-70: переписка с VITALO AI (e2e)', () => {
     await prisma.settings.deleteMany({ where: { key: 'vitalo_ai' } });
   });
 
-  it('an empty cart: products of the catalogue approved for the goal, «В корзину»', async () => {
+  it('an empty cart: the catalogue in stock goes as the cached block; approved products carry the level (D-74)', async () => {
     const token = await customer();
-    fake.reply = (data: string) => ({
+    fake.reply = (_data: string, context: string) => ({
       kind: 'answer',
       goal: 'sleep',
       text: 'Для сна можно присмотреться к магнию из нашего каталога.',
       clarify_options: [],
-      products: skusOf(data).slice(0, 1).map((id) => ({ productId: id, fit: 'maybe', text: 'Может помочь при напряжении после дня.' })),
+      products: [{ productId: p.mag.sku, fit: 'helps', text: 'Может помочь при напряжении после дня.' }].filter((x) => context.includes(`- id ${x.productId} |`)),
       steps: [],
       followups: ['Как принимать магний?'],
     });
     const res = (await say(token, 'Что выпить при бессоннице?').expect(200)).body;
     expect(fake.calls.at(-1)!.data).toContain('корзина пуста');
-    expect(fake.calls.at(-1)!.data).toContain('<товары каталога для целей>');
+    const context = fake.calls.at(-1)!.context!;
+    expect(context).toContain('<каталог VITALO в наличии>');
+    expect(context).toContain(`- id ${p.mag.sku} |`);
+    expect(context).toContain('одобрено врачом: сон (sleep), уровень B');
+    expect(fake.calls.at(-1)!.data).not.toContain('<каталог');
     const ai = res.chat.messages.at(-1);
     expect(ai.products.length).toBe(1);
-    expect(ai.products[0]).toMatchObject({ in_cart: false, fit: 'maybe' });
+    expect(ai.products[0]).toMatchObject({ product_id: p.mag.id, in_cart: false, fit: 'helps', level: 'B' });
     expect((await prisma.ai_chats.findUniqueOrThrow({ where: { id: res.chat.id } })).empty_cart).toBe(true);
+  });
+
+  it('an answer with English words gets one more try with a reminder; both requests are logged (D-74)', async () => {
+    const token = await customer();
+    await add(token, p.mag.id);
+    let n = 0;
+    fake.reply = (data: string) => {
+      n++;
+      const a = answer(data);
+      return n === 1 ? { ...a, text: 'Магний influences качество сна по данным исследований.' } : a;
+    };
+    const res = (await say(token, 'Мне трудно заснуть').expect(200)).body;
+    expect(n).toBe(2);
+    expect(fake.calls.at(-1)!.data).toContain('в прошлом ответе были английские слова');
+    expect(res.chat.messages.at(-1).kind).toBe('answer');
+    const user = await prisma.ai_chats.findUniqueOrThrow({ where: { id: res.chat.id }, select: { user_id: true } });
+    const logs = await prisma.ai_requests.findMany({ where: { user_id: user.user_id, scenario: 'cart_chat' }, orderBy: { created_at: 'asc' } });
+    expect(logs.map((l) => [l.status, l.error])).toEqual([
+      ['invalid', 'language'],
+      ['ok', null],
+    ]);
   });
 
   it('«Переписки»: the admin and a specialist see them by month, opening is audited, the mark; a manager cannot; the customer deletes', async () => {

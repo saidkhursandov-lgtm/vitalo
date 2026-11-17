@@ -58,7 +58,7 @@ export function bonusSpend(input: { balance_uzs: number; lines: PricingLine[]; g
   const eligible = input.lines.filter((l) => shownDiscountPct(l) <= PROMO_MAX_PRODUCT_DISCOUNT_PCT);
   if (!eligible.length) return none('big_sale');
 
-  const base = eligible.reduce((sum, l) => sum + l.unit_price_uzs * l.qty, 0);
+  const base = eligible.reduce((sum, l) => sum + l.unit_price_uzs * l.qty - (l.taken_uzs ?? 0), 0);
   const room = eligible.map((l) => lineHeadroom(l, input.guard));
   const roomSum = room.reduce((a, b) => a + b, 0);
   const cap = Math.min(input.balance_uzs, Math.floor((base * Math.min(s.max_spend_pct, 100)) / 100), roomSum);

@@ -7,6 +7,7 @@ import { HelpButton, HomeCarousel, HowToOrder } from '../components/HomeBlocks';
 import { BrandStrip, CategoryLink } from '../components/CatalogLayers';
 import { ManifestEntry } from '../components/Sheets';
 import { ActiveOrderBar } from '../components/OrderNotices';
+import { BundleStrip } from '../components/Bundles';
 
 /**
  * Home (Flow §3, ТЗ 2.1 and 2.2; 6а-Б: no trust line under the search): search, the navy banner, needs, then «Популярное» already on the
@@ -57,6 +58,8 @@ export function Home() {
         more={<Link to="/catalog/products?sort=popular" className="link">{t('home.all')}</Link>}
       />
       {strips.isPending && <Loading variant="strip" />}
+      {/* 4.3: «Сеты от врача» — right after «Популярное» (nothing when no set is shown) */}
+      <BundleStrip />
       {/* 2.4: «Как VITALO отбирает добавки» right under «Популярное» */}
       <ManifestEntry />
 

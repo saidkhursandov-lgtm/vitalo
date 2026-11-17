@@ -288,6 +288,7 @@ export function Cart() {
           campaigns={data.campaigns}
           saleHint={!!data.promo && data.items.some((i) => (i.campaign?.discount_pct ?? 0) > 15)}
           discount={data.discount_total_uzs}
+          bundle={data.bundle_discount_uzs}
           promo={data.promo}
           bonus={data.bonus_used_uzs}
           delivery={delivery ? (delivery.is_free ? 0 : delivery.cost_uzs) : null}

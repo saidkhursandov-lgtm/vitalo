@@ -53,11 +53,13 @@ export function OrderItems({ items, note }: { items: OrderItemLine[]; note?: (it
  * Goods, the promo discount as its own line (3.3), delivery («Бесплатно» as an accent, the first-order or promo badge)
  * and a big «Итого». delivery null = city not chosen. `goods` is before the discount.
  */
-export function OrderTotals({ goods, goodsCount, discount = 0, promo, bonus = 0, delivery, firstOrder = false, total, campaigns, saleHint = false }: {
+export function OrderTotals({ goods, goodsCount, discount = 0, bundle = 0, promo, bonus = 0, delivery, firstOrder = false, total, campaigns, saleHint = false }: {
   /** 3.7: at regular prices when there are sale lines (they follow it) */
   goods: number;
   goodsCount?: number;
   discount?: number;
+  /** 4.3: «Скидка сета» — a part of the discount (the rest is the promo code) */
+  bundle?: number;
   promo?: { code: string; free_delivery: boolean } | null;
   /** 3.10-А: bonuses spent on the order */
   bonus?: number;
@@ -77,10 +79,16 @@ export function OrderTotals({ goods, goodsCount, discount = 0, promo, bonus = 0,
         <span>{money(goods, lang)}</span>
       </div>
       <CampaignRows campaigns={campaigns} />
-      {discount > 0 && (
+      {bundle > 0 && (
+        <div className="sum-row promo-row">
+          <span>{t('set.line')}</span>
+          <span className="promo-amount">−{money(bundle, lang)}</span>
+        </div>
+      )}
+      {discount - bundle > 0 && (
         <div className="sum-row promo-row">
           <span>{promo ? t('promo.line', { code: promo.code }) : t('promo.label')}</span>
-          <span className="promo-amount">−{money(discount, lang)}</span>
+          <span className="promo-amount">−{money(discount - bundle, lang)}</span>
         </div>
       )}
       {saleHint && <p className="hint small sale-hint">{t('promo.saleHint')}</p>}

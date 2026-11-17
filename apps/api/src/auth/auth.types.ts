@@ -21,6 +21,8 @@ export interface UserProfile {
   marketing_opt_in: boolean;
   /** 3.10-Б */
   review_requests: boolean;
+  /** 4.2 */
+  course_reminders: boolean;
   created_at: Date;
 }
 
@@ -35,6 +37,7 @@ export function toUserProfile(u: users): UserProfile {
     language: u.language,
     marketing_opt_in: u.marketing_opt_in,
     review_requests: u.review_requests,
+    course_reminders: u.course_reminders,
     created_at: u.created_at,
   };
 }

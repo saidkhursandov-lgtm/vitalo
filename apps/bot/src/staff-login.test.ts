@@ -23,6 +23,7 @@ function setup(decide: (approve: boolean) => Promise<{ result: string }>) {
     rejectReceipt: unused,
     compatAnswer: unused,
     staffLoginDecision: async (id, requestId, approve) => (asked.push([id, requestId, approve]), decide(approve)),
+    courseReminders: async () => ({ saved: true }),
   };
   const bot = createBot({
     token: '1:TEST',

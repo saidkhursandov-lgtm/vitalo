@@ -23,6 +23,7 @@ import { AdminSearchController, AdminSearchService } from './admin-search';
 import { AdminExportController, AdminExportService } from './admin-export';
 import { AdminPromoCodesController, AdminPromoCodesService } from './admin-promo-codes';
 import { AdminCampaignsController, AdminCampaignsService } from './admin-campaigns';
+import { AdminBundlesController, AdminBundlesService } from './admin-bundles';
 import { PromoModule } from '../promo/promo.module';
 import { PromoController, PromoService } from '../notifications/notification-centre';
 import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from './admin-receipts';
@@ -30,6 +31,7 @@ import { BotSecretGuard } from '../bot-internal/bot-internal.module';
 import { AdminCompatController, BotCompatController, CompatController, CompatService } from '../compat/compat.service';
 import { AdminSupportController, SupportController, SupportService } from '../support/support';
 import { AdminKnowledgeController, KnowledgeService } from '../compat/knowledge.service';
+import { AdminEnrichController, EnrichService } from '../compat/enrich.service';
 import { AdminAiController, AiController, AiService } from '../compat/ai.service';
 import { AdminGoalEvidenceController, AiGoalController, AiGoalService, GoalEvidenceService } from '../compat/ai-goal.service';
 import { AdminAiChatsController, AiChatAdminService, AiChatController, AiChatService } from '../compat/ai-chat.service';
@@ -108,6 +110,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminExportController,
     AdminPromoCodesController,
     AdminCampaignsController,
+    AdminBundlesController,
     PromoController,
     AdminReceiptsController,
     BotReceiptsController,
@@ -123,6 +126,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminAiChatsController,
     AdminGoalEvidenceController,
     AdminKnowledgeController,
+    AdminEnrichController,
     IherbPricesController,
     CompetitorsController,
     AiAnalystController,
@@ -133,6 +137,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     TestFlagsService,
     AdminPromoCodesService,
     AdminCampaignsService,
+    AdminBundlesService,
     StaffAuthService,
     StaffWebAuthService,
     CsrfHeaderGuard,
@@ -172,6 +177,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     CompatService,
     SupportService,
     KnowledgeService,
+    EnrichService,
     AiService,
     AiGoalService,
     AiChatService,

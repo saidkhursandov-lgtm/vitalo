@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
-import type { Lang, BonusAccount, OrderReturns, ProductReviews, ReviewableItem, ReviewFormInfo } from './types';
+import type { Lang, BonusAccount, ShopBundle, OrderReturns, ProductReviews, ReviewableItem, ReviewFormInfo } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
 import type { Address, AiState, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo, SupportThread } from './types';
 
@@ -119,6 +119,10 @@ export const useUpsell = (city: CityRef | null, goodsTotal: number) =>
     enabled: !!city && goodsTotal > 0,
     placeholderData: (prev) => prev,
   });
+
+/** 4.3 «Сеты от врача»: the sets shown now (every jar in stock) and one set by its address. */
+export const useBundles = () => useQuery({ queryKey: ['bundles'], queryFn: () => api<ShopBundle[]>('/catalog/bundles'), staleTime: 60_000 });
+export const useBundle = (slug: string) => useQuery({ queryKey: ['bundles', slug], queryFn: () => api<ShopBundle>(`/catalog/bundles/${encodeURIComponent(slug)}`) });
 
 /** Home slide: the free-delivery threshold (from the tariff) and the first-order offer for this customer. */
 export const useFreeShipping = () => useQuery({ queryKey: ['free-shipping'], queryFn: () => api<FreeShipping>('/delivery/free-shipping'), staleTime: 60_000 });

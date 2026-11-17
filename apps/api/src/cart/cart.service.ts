@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import type { BundleApplied } from '../bundles/bundles';
 import { Prisma } from '@prisma/client';
 import { listInclude, ShopCampaign, toProductListItem } from '../catalog/product.mapper';
 import { DeliveryService } from '../delivery/delivery.service';
@@ -43,6 +44,8 @@ export interface CartView {
   /** 3.7: goods at regular prices and «Акция 11.11: −X сум» lines */
   goods_list_total_uzs: number;
   campaign_discount_uzs: number;
+  bundle_discount_uzs: number;
+  bundles: BundleApplied[];
   campaigns: CampaignLine[];
   discount_total_uzs: number; // 3.3: the promo code's goods discount
   items_count: number;
@@ -177,6 +180,9 @@ export class CartService {
       campaign_discount_uzs: calc.totals.campaign_discount_uzs,
       campaigns: calc.snapshot.campaigns ?? [],
       discount_total_uzs: calc.totals.discount_total_uzs,
+      // 4.3: «Скидка сета» (a part of discount_total_uzs)
+      bundle_discount_uzs: calc.totals.bundle_discount_uzs,
+      bundles: calc.snapshot.bundles ?? [],
       items_count: sellable.reduce((s, l) => s + l.qty, 0),
       can_checkout: sellable.length > 0,
       delivery: calc.delivery,

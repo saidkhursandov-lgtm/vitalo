@@ -19,7 +19,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { randomUUID } from 'crypto';
 import { shellRule } from '../catalog/card-content';
-import { RULE_KIND_LABELS, WHEN_LABELS, normalizeText } from '../compat/knowledge';
+import { RULE_KIND_LABELS, WHEN_LABELS, normalizeText, whenColumns } from '../compat/knowledge';
 import { DICTIONARY_COLUMNS, matchKey, type DictionaryKind } from '../dictionaries/dictionary-names';
 import type { PrismaService } from '../prisma/prisma.service';
 import { ensureDictionaryValue, freeBrandSlug } from '../staff/admin-dictionaries';
@@ -404,7 +404,7 @@ export async function applyCatalogLoad(prisma: PrismaService, audit: AuditServic
         const fields = { kind: kindOf.get(lc(clean(v.kind)))!, interval_hours: interval == null ? null : interval, text_ru: clean(v.text_ru), text_uz: clean(v.text_uz), source: textOrNull(v.source) };
         const approved = { status: 'approved', approved_by: null, approved_at: now };
         if (action === RULE_ACTION.create) {
-          const rule = await tx.compat_rules.create({ data: { substance_a_id: a, substance_b_id: b, when_a: whenA, when_b: whenB, ...fields, origin: 'xlsx', ...(approve ? approved : { status: 'draft' }) } });
+          const rule = await tx.compat_rules.create({ data: { substance_a_id: a, substance_b_id: b, when_a: whenA, when_b: whenB, ...whenColumns(whenA, whenB), ...fields, origin: 'xlsx', ...(approve ? approved : { status: 'draft' }) } });
           await log(tx, 'compat_rule.created', 'compat_rules', rule.id, null, rule);
           result.rules.created++;
           continue;
@@ -420,7 +420,7 @@ export async function applyCatalogLoad(prisma: PrismaService, audit: AuditServic
         } else {
           // the stored rule keeps its A → B order
           const swapped = before.substance_a_id === b && before.substance_b_id === a;
-          data = { substance_a_id: swapped ? b : a, substance_b_id: swapped ? a : b, when_a: swapped ? whenB : whenA, when_b: swapped ? whenA : whenB, ...fields, ...(approve && before.status !== 'approved' && approved) };
+          data = { substance_a_id: swapped ? b : a, substance_b_id: swapped ? a : b, when_a: swapped ? whenB : whenA, when_b: swapped ? whenA : whenB, ...(swapped ? whenColumns(whenB, whenA, before) : whenColumns(whenA, whenB, before)), ...fields, ...(approve && before.status !== 'approved' && approved) };
           result.rules.updated++;
         }
         const after = await tx.compat_rules.update({ where: { id: before.id }, data });

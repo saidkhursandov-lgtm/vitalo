@@ -22,9 +22,12 @@ import {
   cartDataBlock,
   checkCartAnswer,
   costUsd,
+  doseText,
   mergeAiSettings,
   ruleFloor,
   tashkentMonthStart,
+  type Meal,
+  type Time,
   type AiProduct,
   type AiRule,
   type AiSettings,
@@ -33,7 +36,21 @@ import {
 import { AI_MODEL, AiCallError, type AiModel } from './ai-client';
 import { setKeyOf, tashkentDayStart, type Lang, type Verdict } from './compat';
 import { CompatService, langOf, type Item } from './compat.service';
-import { OVERLAP_TEXT, applyOverlapFloor, overlapsForProducts, rulesForProducts, withParents, type RuleKind, type When } from './knowledge';
+import {
+  CHILD_TEXT,
+  MEALS,
+  OVERLAP_TEXT,
+  TIMES,
+  applyOverlapFloor,
+  innerSynergy,
+  overlapsForProducts,
+  ruleTiming,
+  rulesForProducts,
+  timingText,
+  withParents,
+  type RuleKind,
+  type When,
+} from './knowledge';
 
 /** Up to this many products in stock are offered to the model for a cart of one product. */
 const CANDIDATES_MAX = 10;
@@ -46,7 +63,10 @@ export interface AiView {
   answer_id: string;
   verdict: Verdict;
   text: string;
-  timing: { product_id: string; name: string; when: string }[];
+  /** time and meal (ветка 3) — the cheat sheet «Утро / День / Вечер»; answers made before have only `when` */
+  timing: { product_id: string; name: string; when: string; time: Time | null; meal: Meal | null }[];
+  /** a children's product in the cart: «по этикетке или по совету педиатра» (D-73 (б)) */
+  child_text: string | null;
   suggestions: { product_id: string; name: string }[];
   /** substances found in 2+ products of the cart (D-47) and the fixed line about them */
   overlaps: string[];
@@ -60,7 +80,7 @@ export interface AiView {
 interface Knowledge {
   names: Map<string, { ru: string; uz: string; kind: string }>;
   parentOf: Map<string, string | null>;
-  rules: { id: string; substance_a_id: string; substance_b_id: string; kind: string; interval_hours: number | null; when_a: string | null; when_b: string | null; text_ru: string; text_uz: string }[];
+  rules: { id: string; substance_a_id: string; substance_b_id: string; kind: string; interval_hours: number | null; when_a: string | null; when_b: string | null; time_a: string | null; time_b: string | null; meal_a: string | null; meal_b: string | null; text_ru: string; text_uz: string }[];
 }
 
 /**
@@ -245,7 +265,7 @@ export class AiService {
           lang,
           verdict: a.verdict,
           text: a.text,
-          timing: a.timing.map((t) => ({ product_id: refs.get(t.ref)!, when: t.when })),
+          timing: a.timing.map((t) => ({ product_id: refs.get(t.ref)!, when: t.when, time: t.time, meal: t.meal })),
           suggested_ids: a.suggested.map((r) => refs.get(r)!),
           model: s.model,
           ai_request_id: req.id,
@@ -357,7 +377,8 @@ export class AiService {
         doctor_verdict_ru: true,
         doctor_verdict_uz: true,
         brand: true,
-        substances: { select: { substance_id: true } },
+        audience: true,
+        substances: { orderBy: { position: 'asc' }, select: { substance_id: true, dose_amount: true, dose_unit: true } },
       },
     });
   }
@@ -380,7 +401,9 @@ export class AiService {
       ref: p.sku,
       name: productTitle(p, lang),
       brand: p.brand || null,
-      substances: own(p).map(name),
+      // ветка 3: the dose by the label next to the substance («Витамин D3 2000 МЕ»)
+      substances: p.substances.filter((x) => k.names.has(x.substance_id)).map((x) => [name(x.substance_id), doseText(x.dose_amount, x.dose_unit)].filter(Boolean).join(' ')),
+      audience: p.audience === 'adult' || p.audience === 'child' || p.audience === 'any' ? p.audience : null,
       form: (lang === 'uz' ? p.substance_form_uz || p.substance_form_ru : p.substance_form_ru) ?? null,
       servings_per_day: p.servings_per_day,
       memo: (lang === 'uz' ? p.intake_memo_uz || p.intake_memo_ru : p.intake_memo_ru) ?? null,
@@ -393,6 +416,7 @@ export class AiService {
       interval_hours: r.interval_hours,
       when_a: r.when_a as When | null,
       when_b: r.when_b as When | null,
+      ...((t) => ({ timing_a: timingText(t.a, lang), timing_b: timingText(t.b, lang) }))(ruleTiming(r)),
       text: lang === 'uz' ? r.text_uz : r.text_ru,
     });
 
@@ -430,6 +454,7 @@ export class AiService {
     const overlaps = overlapsForProducts(withSubs, k.parentOf);
     floor = applyOverlapFloor(floor, overlaps);
     const skuOf = new Map(cart.map((p) => [p.id, p.sku]));
+    const inner = innerSynergy(withSubs, supplementRules).map((x) => ({ ref: skuOf.get(x.product)!, rule: toRule(x.rule) }));
     return {
       data: {
         lang,
@@ -437,6 +462,7 @@ export class AiService {
         rules: rules.map(toRule),
         drugRules: drugRules.map(toRule),
         overlaps: overlaps.map((o) => ({ substance: name(o.substance), refs: o.products.map((id) => skuOf.get(id)!) })),
+        inner,
         candidates,
       },
       floor,
@@ -459,8 +485,17 @@ export class AiService {
     // rules between different products of the cart (one product: none) — what the badge says
     const supplements = k.rules.filter((r) => r.kind !== 'drug_caution' && !isDrug(r.substance_a_id) && !isDrug(r.substance_b_id));
     const between = withSubs.length >= 2 ? rulesForProducts(withSubs, supplements).map((r) => r.kind) : [];
+    const inner = innerSynergy(withSubs, supplements).length > 0;
     const itemName = new Map(items.map((i) => [i.product_id, lang === 'uz' ? i.name_uz || i.name_ru : i.name_ru]));
-    const timing = (Array.isArray(a.timing) ? (a.timing as { product_id: string; when: string }[]) : []).map((t) => ({ product_id: t.product_id, name: itemName.get(t.product_id) ?? '', when: t.when }));
+    type Saved = { product_id: string; when: string; time?: string; meal?: string };
+    const timing = (Array.isArray(a.timing) ? (a.timing as Saved[]) : []).map((t) => ({
+      product_id: t.product_id,
+      name: itemName.get(t.product_id) ?? '',
+      when: t.when,
+      time: (TIMES as readonly string[]).includes(t.time ?? '') ? (t.time as Time) : null,
+      meal: (MEALS as readonly string[]).includes(t.meal ?? '') ? (t.meal as Meal) : null,
+    }));
+    const child = rows.some((p) => p.audience === 'child');
     const sugg = a.suggested_ids.length
       ? await this.prisma.products.findMany({
           where: { id: { in: a.suggested_ids }, status: 'active' },
@@ -475,8 +510,9 @@ export class AiService {
       suggestions: sugg.filter((p) => availableQty(p.inventory) > 0).map((p) => ({ product_id: p.id, name: productTitle(p, lang) })),
       overlaps,
       overlap_text: overlaps.length ? OVERLAP_TEXT[lang] : null,
+      child_text: child ? CHILD_TEXT[lang] : null,
       drugs: [...new Set(drugs)],
-      reasons: { synergy: between.includes('synergy'), spread: between.includes('spread'), avoid: between.includes('avoid'), overlap: overlaps.length > 0 },
+      reasons: { synergy: between.includes('synergy') || inner, spread: between.includes('spread'), avoid: between.includes('avoid'), overlap: overlaps.length > 0 },
     };
   }
 

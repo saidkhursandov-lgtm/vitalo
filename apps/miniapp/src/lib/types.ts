@@ -29,6 +29,8 @@ export interface UserProfile {
   marketing_opt_in: boolean;
   /** 3.10-Б: «Просить оставить отзыв» — the bot asks once, 3 days after delivery */
   review_requests?: boolean;
+  /** 4.2: «Курс заканчивается» 5 days before the jars run out */
+  course_reminders?: boolean;
 }
 
 export interface CategoryNode extends Named {
@@ -257,6 +259,15 @@ export interface ProductCard extends ProductListItem {
   categories: { id: string; slug: string; tree_type: 'need' | 'product_type'; name_ru: string; name_uz: string }[];
   similar: ProductListItem[];
   also_bought: ProductListItem[];
+  /** 4.1 «Идеальная пара» (null — no block) */
+  pair?: ProductPair | null;
+}
+
+/** 4.1: the second jar and «почему вместе» (the text of the approved synergy rule; null for a pair chosen by hand without a rule) */
+export interface ProductPair {
+  product: ProductListItem;
+  why_ru: string | null;
+  why_uz: string | null;
 }
 
 export interface Page<T> {
@@ -420,6 +431,9 @@ export interface Cart {
   /** 3.10-А */
   bonus?: BonusView;
   bonus_used_uzs?: number;
+  /** 4.3: «Скидка сета» — a part of discount_total_uzs, and the sets it came from */
+  bundle_discount_uzs?: number;
+  bundles?: BundleApplied[];
 }
 
 /** 3.10-А: why bonuses cannot be spent on this order. */
@@ -528,6 +542,33 @@ export interface Totals {
   /** 3.7: goods at regular prices (goods_total_uzs is at sale prices) and the sale discount */
   goods_list_total_uzs?: number;
   campaign_discount_uzs?: number;
+  /** 4.3: «Скидка сета» (a part of discount_total_uzs) */
+  bundle_discount_uzs?: number;
+}
+
+/** 4.3: a doctor's set the cart or the order got. */
+export interface BundleApplied {
+  bundle_id: string;
+  title_ru: string;
+  title_uz: string | null;
+  times: number;
+  amount_uzs: number;
+}
+
+/** 4.3 «Сеты от врача»: 2–3 jars with the doctor's text and a discount of their own. */
+export interface ShopBundle {
+  id: string;
+  slug: string;
+  title_ru: string;
+  title_uz: string | null;
+  goal: string | null;
+  doctor_text_ru: string | null;
+  doctor_text_uz: string | null;
+  discount_pct: number;
+  list_total_uzs: number;
+  sale_total_uzs: number;
+  days: number | null;
+  items: { qty: number; product: ProductListItem }[];
 }
 
 export interface Order {
@@ -548,6 +589,8 @@ export interface Order {
   cross_border_cancel?: { allowed: boolean; reason: 'not_ordered' | 'guarantee' | null; guarantee_date: string | null } | null;
   /** 3.7: «Акция 11.11: −X сум», frozen at creation */
   campaigns?: CampaignLine[];
+  /** 4.3: «Скидка сета», frozen at creation */
+  bundles?: BundleApplied[];
   /** 3.3: the order's promo code (frozen at creation) */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null } | null;
@@ -738,15 +781,19 @@ export interface CartUpsell {
 }
 
 /** 3.8: VITALO AI in the cart (GET /api/compat/ai). */
+export type AiTime = 'morning' | 'day' | 'evening' | 'any';
 export interface AiAnswer {
   answer_id: string;
   verdict: CompatVerdict;
   text: string;
-  timing: { product_id: string; name: string; when: string }[];
+  /** time and meal (ветка 3): the cheat sheet «Утро / День / Вечер»; older answers have only `when` */
+  timing: { product_id: string; name: string; when: string; time?: AiTime | null; meal?: string | null }[];
   suggestions: { product_id: string; name: string }[];
   /** substances in 2+ products of the cart and the fixed line about them (D-47) */
   overlaps: string[];
   overlap_text: string | null;
+  /** a children's product in the cart: «по этикетке или по совету педиатра» (D-73) */
+  child_text?: string | null;
   /** approved «осторожно с лекарствами» rules for the substances of the cart */
   drugs: string[];
   /** why the label is what it is: the badge words (3.8 fix) */

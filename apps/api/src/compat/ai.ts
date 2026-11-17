@@ -4,7 +4,24 @@
  * The instruction text is the one in docs/releases/vitalo-ai-prompt.md — change it there first.
  */
 import type { Lang, Verdict } from './compat';
-import { RULE_KIND_LABELS, WHEN_LABELS, type RuleKind, type When } from './knowledge';
+import { MEALS, RULE_KIND_LABELS, TIMES, TIME_LABELS, WHEN_LABELS, timingText, type RuleKind, type When } from './knowledge';
+
+/** the units of a dose for the model (ветка 1: product_substances.dose_unit) */
+const DOSE_UNIT_TEXT: Record<string, string> = { mg: 'мг', mcg: 'мкг', iu: 'МЕ', g: 'г', ml: 'мл', cfu_bn: 'млрд КОЕ' };
+/** «200 мг» — the dose of a substance per serving by the label, or '' */
+export function doseText(amount: unknown, unit: string | null): string {
+  return amount != null && unit ? `${Number(amount)} ${DOSE_UNIT_TEXT[unit] ?? unit}` : '';
+}
+
+export type Time = (typeof TIMES)[number];
+export type Meal = (typeof MEALS)[number];
+/** one line of «Когда принимать»: time of day and meal for the morning / day / evening cheat sheet (ветка 3) */
+export interface TimingLine {
+  ref: string;
+  when: string;
+  time: Time;
+  meal: Meal;
+}
 
 // ---------------- settings («Настройки → VITALO AI») ----------------
 
@@ -66,9 +83,25 @@ export const MODEL_PRICES: Record<string, { input: number; output: number }> = {
   'claude-opus-5-5': { input: 4, output: 20 },
 };
 
-export function costUsd(model: string, inputTokens: number, outputTokens: number): number {
+/** Prompt caching: a token read from the cache costs 0.1 of an input token, a token written to it 1.25. */
+export function costUsd(model: string, inputTokens: number, outputTokens: number, cacheRead = 0, cacheWrite = 0): number {
   const p = MODEL_PRICES[model] ?? MODEL_PRICES['claude-opus-5-5'];
-  return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
+  return ((inputTokens + cacheRead * 0.1 + cacheWrite * 1.25) * p.input + outputTokens * p.output) / 1_000_000;
+}
+
+/**
+ * English words in an answer (16.11: «influences», «the» in a Russian answer). Russian: a Latin word of 3+ small letters
+ * outside our product, brand and substance names (abbreviations like «BCAA», «MSM», «D3» are fine). Uzbek is Latin
+ * itself: frequent English words only.
+ */
+const EN_WORDS = new Set(
+  'the is are was were and or of for with without this that these those which what your you it its may might can could should would will helps help support supports influence influences improve improves effect effects also only because however sleep quality level levels body daily take taking'.split(' '),
+);
+export function hasEnglish(text: string, lang: Lang, names: string[] = []): boolean {
+  const t = names.filter(Boolean).reduce((acc, n) => acc.split(n).join(' '), text);
+  const words = t.match(/[A-Za-z][A-Za-z'-]*/g) ?? [];
+  if (lang === 'uz') return words.some((w) => EN_WORDS.has(w.toLowerCase()));
+  return words.some((w) => w.length >= 3 && /[a-z]{3}/.test(w) && !/^[A-Z]/.test(w)) || words.some((w) => EN_WORDS.has(w.toLowerCase()) && w.length > 2 && w !== w.toUpperCase());
 }
 
 const TASHKENT_OFFSET_MS = 5 * 3600_000;
@@ -196,9 +229,15 @@ export const SYSTEM_CART = `СЦЕНАРИЙ: проверка совмести�
    «В наших правилах нет известных конфликтов между этими добавками» (по-узбекски: «Bizning qoidalarimizda bu
    qoʻshimchalar orasida maʼlum ziddiyatlar yoʻq»). Никогда не пиши «полностью совместимы» или «безопасно сочетать».
    Если есть правило «синергия» — объясни пользу сочетания по тексту правила.
-3. timing — для КАЖДОГО товара корзины одна короткая строка, когда принимать: только время (утро, день, вечер,
-   перед сном) и «с едой», «натощак», «за N минут до сна» — по правилам и памятке приёма товара. Количество
-   (капсулы, таблетки) — только если оно дословно есть в памятке товара.
+   Если есть «синергия внутри одного товара» — одной фразой похвали состав этого товара (например, «в нём D3 и K2
+   уже вместе — они дополняют друг друга»).
+   Детские товары («кому: детям»): о их дозах и сочетаниях не советуй — это делает приложение отдельной строкой.
+3. timing — для КАЖДОГО товара корзины одна запись:
+   - time — время суток: "morning" (утро), "day" (день), "evening" (вечер, перед сном), "any" (не важно);
+   - meal — еда: "with_food" (с едой), "with_fat" (с жирной едой), "empty_stomach" (натощак), "any" (не важно);
+   - when — короткая строка для покупателя, как раньше («Утром, с едой», «За 30 минут до сна»).
+   Время и еду бери из правил («A — утро, с жирной едой») и из памятки приёма товара; если правил и памятки нет —
+   "any". Количество (капсулы, таблетки) — только если оно дословно есть в памятке товара.
 4. Если в корзине один товар: productIds — 2–3 товара из списка «можно предложить», которые по правилам «синергия»
    хорошо с ним сочетаются; text — коротко почему. Если подходящих нет — пустой список и «пока нечего добавить».
    Если товаров в корзине больше одного — productIds пустой.`;
@@ -210,7 +249,12 @@ export const CART_SCHEMA = {
     text: { type: 'string' },
     timing: {
       type: 'array',
-      items: { type: 'object', properties: { productId: { type: 'string' }, when: { type: 'string' } }, required: ['productId', 'when'], additionalProperties: false },
+      items: {
+        type: 'object',
+        properties: { productId: { type: 'string' }, time: { type: 'string', enum: [...TIMES] }, meal: { type: 'string', enum: [...MEALS] }, when: { type: 'string' } },
+        required: ['productId', 'time', 'meal', 'when'],
+        additionalProperties: false,
+      },
     },
     productIds: { type: 'array', items: { type: 'string' } },
   },
@@ -230,6 +274,8 @@ export interface AiProduct {
   servings_per_day: number | null;
   memo: string | null;
   verdict: string | null;
+  /** D-73 (б): «детям» — no advice on its doses and combinations */
+  audience?: 'adult' | 'child' | 'any' | null;
 }
 
 export interface AiRule {
@@ -239,6 +285,9 @@ export interface AiRule {
   interval_hours: number | null;
   when_a: When | null;
   when_b: When | null;
+  /** «Утро, с жирной едой» — time of day and meal (ветка 1); without them the old one field is shown */
+  timing_a?: string;
+  timing_b?: string;
   text: string;
 }
 
@@ -249,6 +298,8 @@ export interface CartData {
   drugRules: AiRule[];
   /** substance name → the refs of the products that have it */
   overlaps: { substance: string; refs: string[] }[];
+  /** ветка 3: «синергия» inside one product (D3 + K2 in one capsule) — praise the formula, the label does not change */
+  inner?: { ref: string; rule: AiRule }[];
   /** one product in the cart: what may be offered with it */
   candidates: AiProduct[];
 }
@@ -256,17 +307,19 @@ export interface CartData {
 const line = (p: AiProduct) =>
   `- id ${p.ref} | ${p.name}${p.brand ? ` (${p.brand})` : ''} | вещества: ${p.substances.join(', ') || '—'}` +
   `${p.form ? ` | форма: ${p.form}` : ''}${p.servings_per_day ? ` | порций в день: ${p.servings_per_day}` : ''}` +
-  `${p.memo ? ` | памятка: ${p.memo}` : ''}${p.verdict ? ` | вердикт врача: ${p.verdict}` : ''}`;
+  `${p.memo ? ` | памятка: ${p.memo}` : ''}${p.verdict ? ` | вердикт врача: ${p.verdict}` : ''}` +
+  `${p.audience && p.audience !== 'any' ? ` | кому: ${p.audience === 'child' ? 'детям' : 'взрослым'}` : ''}`;
 
 const ruleLine = (r: AiRule, lang: Lang) => {
   const w = (v: When | null) => (v ? WHEN_LABELS[v][lang] : '—');
-  return `- ${r.a} + ${r.b} | ${RULE_KIND_LABELS[r.kind].ru}${r.interval_hours ? ` | интервал ${r.interval_hours} ч` : ''} | ${r.a} — ${w(r.when_a)}, ${r.b} — ${w(r.when_b)} | «${r.text}»`;
+  return `- ${r.a} + ${r.b} | ${RULE_KIND_LABELS[r.kind].ru}${r.interval_hours ? ` | интервал ${r.interval_hours} ч` : ''} | ${r.a} — ${r.timing_a ?? w(r.when_a)}, ${r.b} — ${r.timing_b ?? w(r.when_b)} | «${r.text}»`;
 };
 
 /** The <данные> block: only products and rules, no customer data (D-45). */
 export function cartDataBlock(d: CartData): string {
   const out = ['<данные>', `язык: ${d.lang === 'uz' ? 'uz (узбекский, латиница)' : 'ru (русский)'}`, 'товары корзины:', ...d.cart.map(line)];
   out.push('правила между товарами:', ...(d.rules.length ? d.rules.map((r) => ruleLine(r, d.lang)) : ['- нет']));
+  if (d.inner?.length) out.push('синергия внутри одного товара (похвали состав, метку не меняет):', ...d.inner.map((x) => `- товар ${x.ref}: ${ruleLine(x.rule, d.lang).slice(2)}`));
   if (d.drugRules.length) out.push('предупреждения о лекарствах:', ...d.drugRules.map((r) => ruleLine(r, d.lang)));
   out.push('повторы веществ (только для метки, в text не упоминать):', ...(d.overlaps.length ? d.overlaps.map((o) => `- ${o.substance} — ${o.refs.join(', ')}`) : ['- нет']));
   if (d.candidates.length) out.push('можно предложить (в наличии):', ...d.candidates.map(line));
@@ -279,7 +332,7 @@ export function cartDataBlock(d: CartData): string {
 export interface CartAnswer {
   verdict: Verdict;
   text: string;
-  timing: { ref: string; when: string }[];
+  timing: TimingLine[];
   suggested: string[];
 }
 
@@ -305,13 +358,18 @@ export function checkCartAnswer(raw: unknown, d: CartData, floor: Verdict): { ok
   if (d.cart.length >= 2 && !d.rules.length && !d.overlaps.length && verdict === 'compatible' && !text.startsWith(lead)) text = `${lead}. ${text}`;
   if (text.length > TEXT_MAX) return { ok: false, error: 'text_length' };
   const memo = new Map(d.cart.map((p) => [p.ref, (p.memo ?? '').toLowerCase()]));
-  const timing: { ref: string; when: string }[] = [];
+  const timing: TimingLine[] = [];
   for (const t of Array.isArray(r.timing) ? r.timing : []) {
-    const ref = String((t as Record<string, unknown>)?.productId ?? '').trim();
-    const when = String((t as Record<string, unknown>)?.when ?? '').trim();
+    const o = (t ?? {}) as Record<string, unknown>;
+    const ref = String(o.productId ?? '').trim();
+    const when = String(o.when ?? '').trim();
     if (!memo.has(ref) || !when || when.length > WHEN_MAX || timing.some((x) => x.ref === ref)) return { ok: false, error: 'timing' };
-    if ([...when.matchAll(AMOUNT)].some((m) => !memo.get(ref)!.includes(m[0].toLowerCase()))) return { ok: false, error: 'timing_amount' };
-    timing.push({ ref, when });
+    const time = (TIMES as readonly string[]).includes(String(o.time)) ? (o.time as Time) : 'any';
+    const meal = (MEALS as readonly string[]).includes(String(o.meal)) ? (o.meal as Meal) : 'any';
+    // an amount that the memo does not have word for word: the line becomes «time, meal» (ветка 3), the answer stays
+    const unsure = [...when.matchAll(AMOUNT)].some((m) => !memo.get(ref)!.includes(m[0].toLowerCase()));
+    const plain = timingText({ time, meal }, d.lang);
+    timing.push({ ref, when: unsure ? (plain === '—' ? TIME_LABELS.any[d.lang] : plain) : when, time, meal });
   }
   if (timing.length !== memo.size) return { ok: false, error: 'timing' };
   const offered = new Set(d.candidates.map((p) => p.ref));
@@ -319,5 +377,7 @@ export function checkCartAnswer(raw: unknown, d: CartData, floor: Verdict): { ok
   const all = [text, ...timing.map((t) => t.when)].join(' ');
   if (findForbidden(all).length) return { ok: false, error: 'forbidden_words' };
   if (!inLanguage(all, d.lang)) return { ok: false, error: 'language' };
-  return { ok: true, answer: { verdict, text, timing, suggested } };
+  // the customer never sees our SKUs: «OZN-A005» becomes the name of the product (ветка 3)
+  const named = [...d.cart, ...d.candidates].sort((a, b) => b.ref.length - a.ref.length).reduce((t, p) => t.split(p.ref).join(p.name), text);
+  return { ok: true, answer: { verdict, text: named, timing, suggested } };
 }

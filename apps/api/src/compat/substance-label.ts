@@ -28,9 +28,22 @@ export function buildFormLabel(parts: LabelPart[]): { ru: string | null; uz: str
   return { ru, uz };
 }
 
+/** true when the label of these parts fits in FORM_LABEL_MAX (RU and UZ). */
+export function buildFormLabelSafe(parts: LabelPart[]): boolean {
+  try {
+    buildFormLabel(parts);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface ProductSubstanceInput {
   id: string;
   in_label?: boolean;
+  /** dose per serving from the label; undefined — leave as stored, null — clear */
+  dose_amount?: number | null;
+  dose_unit?: string | null;
 }
 
 /**
@@ -52,10 +65,12 @@ export async function writeProductSubstances(
   const before = (await tx.product_substances.findMany({ where: { product_id: productId }, select: { substance_id: true } })).map((r) => r.substance_id);
   await tx.product_substances.deleteMany({ where: { product_id: productId, substance_id: { notIn: ids } } });
   for (const [position, i] of list.entries()) {
+    // a dose needs its unit: one without the other is not kept
+    const dose = i.dose_amount !== undefined || i.dose_unit !== undefined ? (i.dose_amount != null && i.dose_unit ? { dose_amount: i.dose_amount, dose_unit: i.dose_unit } : { dose_amount: null, dose_unit: null }) : {};
     await tx.product_substances.upsert({
       where: { product_id_substance_id: { product_id: productId, substance_id: i.id } },
-      create: { product_id: productId, substance_id: i.id, position, in_label: !!i.in_label },
-      update: { position, ...(i.in_label !== undefined && { in_label: i.in_label }) },
+      create: { product_id: productId, substance_id: i.id, position, in_label: !!i.in_label, ...dose },
+      update: { position, ...(i.in_label !== undefined && { in_label: i.in_label }), ...dose },
     });
   }
   const label = await refreshFormLabel(tx, productId, opts);

@@ -19,6 +19,12 @@ export function Profile() {
     setMarketing(on);
     api('/auth/me', { method: 'PATCH', body: { marketing_opt_in: on } }).catch(() => setMarketing(!on));
   };
+  // 4.2: the same switch as «Не напоминать» under the bot's message
+  const [course, setCourse] = useState(user.course_reminders ?? true);
+  const toggleCourse = (on: boolean) => {
+    setCourse(on);
+    api('/auth/me', { method: 'PATCH', body: { course_reminders: on } }).catch(() => setCourse(!on));
+  };
 
   return (
     <div className="page">
@@ -59,6 +65,10 @@ export function Profile() {
         <label className="list-row switch-row">
           <span>{t('profile.marketingRow')}</span>
           <input type="checkbox" role="switch" className="switch" checked={marketing} onChange={(e) => toggleMarketing(e.target.checked)} />
+        </label>
+        <label className="list-row switch-row">
+          <span>{t('profile.courseRow')}</span>
+          <input type="checkbox" role="switch" className="switch" checked={course} onChange={(e) => toggleCourse(e.target.checked)} />
         </label>
       </section>
 

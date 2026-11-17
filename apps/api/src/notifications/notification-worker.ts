@@ -3,7 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import { Prisma, notifications } from '@prisma/client';
 import { VERDICT_CODES, VERDICT_LABELS, VERDICTS } from '../compat/compat';
 import { PrismaService } from '../prisma/prisma.service';
-import { ADMIN_BUTTON, MAP_BUTTON, SUPPORT_BUTTON, openButtonText, renderNotification, type TemplatePayload } from './notification-templates';
+import { ADMIN_BUTTON, COURSE_OFF_BUTTON, COURSE_OFF_DATA, MAP_BUTTON, SUPPORT_BUTTON, openButtonText, renderNotification, type TemplatePayload } from './notification-templates';
 import { TELEGRAM_SENDER, TelegramSendError, type TelegramSender } from './telegram-sender';
 import { ConfigService } from '@nestjs/config';
 import { adminUrl, miniAppUrl } from './mini-app-url';
@@ -128,7 +128,9 @@ export class NotificationWorker {
             : undefined;
         // 3.4: the specialist answers with buttons of the bot; at night the message comes without a sound
         const compat = n.template === 'staff.compat_request' && payload.compat_id ? { buttons: compatButtons(payload.compat_id), silent: !!quietUntil(now) } : {};
-        const messageId = await this.sender.sendMessage(n.chat_id, text, { ...(button && { webApp: button }), ...(link && { link }), ...compat });
+        // 4.2: «Не напоминать» under «Курс заканчивается» (the bot switches users.course_reminders off)
+        const courseOff = n.template === 'course.ending' ? { buttons: [[{ text: COURSE_OFF_BUTTON[lang], data: COURSE_OFF_DATA }]] } : {};
+        const messageId = await this.sender.sendMessage(n.chat_id, text, { ...(button && { webApp: button }), ...(link && { link }), ...compat, ...courseOff });
         await this.prisma.notifications.update({
           where: { id: n.id },
           data: {
