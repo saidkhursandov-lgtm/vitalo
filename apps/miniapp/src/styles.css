@@ -266,6 +266,7 @@ p { margin: 0 0 8px; }
 /* room for the fixed bar: its measured height (+ safe-area when there is no bottom menu under it) */
 html.has-action .content { padding-bottom: calc(var(--action-h, 72px) + 8px); }
 html.has-action .app:not(.with-nav) .content { padding-bottom: calc(var(--action-h, 72px) + 8px); }
+html.has-action .app.with-nav .content { padding-bottom: calc(var(--action-h, 72px) + var(--nav-h) + var(--safe-b) + 8px); } /* 4.3: the bar sits above the bottom menu */
 
 /* ---------- forms ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; flex: 1; min-width: 0; }
@@ -1973,3 +1974,32 @@ a.bonus-wallet { text-decoration: none; margin: 0 0 12px; }
 .pair-price { font-size: 14px; font-weight: 600; color: var(--primary-text); }
 .pair-add { flex: none; width: 112px; }
 .pair-why { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+
+/* 4.3 «Сеты от врача» */
+.set-strip { display: flex; gap: 12px; }
+.set-card { position: relative; flex: none; width: 220px; max-width: 72vw; display: flex; flex-direction: column; gap: 6px; padding: 12px; color: var(--text); text-decoration: none; }
+.set-photos { display: flex; gap: 4px; height: 72px; }
+.set-photo { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: var(--surface-2); border-radius: 10px; overflow: hidden; }
+.set-photo img, .set-photo picture { max-width: 100%; max-height: 72px; object-fit: contain; }
+.set-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; }
+.set-card .set-badge { position: absolute; top: 8px; left: 8px; }
+.set-card-title { font-weight: 700; color: var(--primary-text); line-height: 1.3; }
+.set-days { font-size: 13px; color: var(--muted); }
+.set-price { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.set-price b { font-size: 16px; color: var(--text); }
+.set-price s { font-size: 13px; color: var(--muted); }
+.set-page .set-title { margin: 8px 0 4px; color: var(--primary-text); font-size: 20px; line-height: 1.25; }
+.set-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.set-items, .set-doctor { padding: 12px 14px; margin: 12px 0; }
+.set-items h2, .set-doctor h2 { margin: 0 0 8px; font-size: 15px; color: var(--primary-text); }
+.set-doctor p { margin: 0; white-space: pre-line; line-height: 1.5; }
+.set-item { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 6px 0; color: var(--text); text-decoration: none; border-top: 1px solid var(--border); }
+.set-item:first-of-type { border-top: 0; }
+.set-item-img { flex: none; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; background: var(--surface-2); border-radius: 10px; overflow: hidden; }
+.set-item-img img, .set-item-img picture { max-width: 100%; max-height: 52px; object-fit: contain; }
+.set-item-text { display: flex; flex-direction: column; min-width: 0; }
+.set-item-name { font-weight: 600; overflow-wrap: anywhere; }
+.set-item-price { font-size: 14px; color: var(--muted); }
+.set-buy-sum { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.set-save { font-size: 13px; color: var(--primary-text); font-weight: 600; }
+.set-hint { margin: 6px 0 0; }

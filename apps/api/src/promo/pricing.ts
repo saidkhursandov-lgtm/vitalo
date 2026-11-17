@@ -30,6 +30,8 @@ export interface PricingLine {
   /** 3.7: in a running sale — the regular price (unit_price_uzs is then the sale price) and the sale's percent. */
   list_price_uzs?: number;
   campaign_pct?: number | null;
+  /** 4.3: the discount already given on this line (a doctor's set): a promo or bonuses take the rest of the room only */
+  taken_uzs?: number;
 }
 
 export type PromoKind = 'percent' | 'fixed' | 'free_delivery';
@@ -74,7 +76,7 @@ export function minUnitPrice(line: Pick<PricingLine, 'unit_price_uzs' | 'cost_uz
 
 /** How much a promo may take off a whole line (never negative). */
 export function lineHeadroom(line: PricingLine, guard: PromoGuard): number {
-  return Math.max(0, (line.unit_price_uzs - minUnitPrice(line, guard)) * line.qty);
+  return Math.max(0, (line.unit_price_uzs - minUnitPrice(line, guard)) * line.qty - (line.taken_uzs ?? 0));
 }
 
 export interface LineDiscount {
@@ -99,7 +101,7 @@ export interface GoodsDiscount {
  * 4. the total is rounded down to 100 sum and split back into whole sums by the largest remainder.
  */
 export function goodsDiscount(kind: 'percent' | 'fixed', value: number, lines: PricingLine[], guard: PromoGuard): GoodsDiscount {
-  const total = (l: PricingLine) => l.unit_price_uzs * l.qty;
+  const total = (l: PricingLine) => l.unit_price_uzs * l.qty - (l.taken_uzs ?? 0);
   const base = lines.reduce((s, l) => s + total(l), 0);
   if (!lines.length || base <= 0 || value <= 0) return { total_uzs: 0, lines: lines.map((l) => ({ product_id: l.product_id, discount_uzs: 0, capped: false })), capped: false };
 

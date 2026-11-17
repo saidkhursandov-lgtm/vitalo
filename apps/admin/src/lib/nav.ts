@@ -77,6 +77,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: '/campaigns', label: 'Акции', permission: 'promo.view' },
       // 3.3: promo codes — admin, marketer (change), manager (view only)
       { to: '/promo-codes', label: 'Промокоды', permission: 'promo.view' },
+      // 4.3: doctor's sets with their own discount — admin only (the margin shows purchase costs)
+      { to: '/bundles', label: 'Сеты от врача', permission: 'bundles.manage' },
       // 3.2: messages to customers with «Получать акции и новости» — admin and marketer
       { to: '/promo', label: 'Рассылки', permission: 'promo.send' },
     ],

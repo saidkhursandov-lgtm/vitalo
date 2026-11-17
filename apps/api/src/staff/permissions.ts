@@ -72,6 +72,7 @@ export const PERMISSIONS = {
   'finance.manage': [], // Stage 3: expenses, tax, payroll, analytics, test flag and own delivery cost of an order — admin only
   'yandex.sync': [],
   'promo.view': ['manager', 'marketer'], // 3.3: «Промокоды» — the table and stats (D-39 Б: the manager only looks)
+  'bundles.manage': [], // 4.3: «Сеты от врача» — the margin over purchase costs is shown, admin only
   'promo.manage': ['marketer'], // 3.3: create / change / switch off promo codes
   'compat.view': ['manager'], // 3.4: «Совместимость» — requests and answers, without the customer's comment (D-40)
   'support.view': ['manager'], // 6а-Д: «Обращения» — questions from «Спросить специалиста» (medical ones: admins and specialists only, D-40)

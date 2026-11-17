@@ -712,6 +712,7 @@ model products {
   media                   product_media[]
   relations               product_relations[]       @relation("RelMain")
   related_to              product_relations[]       @relation("RelOther")
+  bundle_items            bundle_items[]
   inventory               inventory[]
   batches                 inventory_batches[]
   movements               inventory_movements[]
@@ -1522,6 +1523,37 @@ model product_relations {
   related            products     @relation("RelOther", fields: [related_product_id], references: [id])
 
   @@unique([product_id, related_product_id, relation_type])
+}
+
+/// 4.3 «Сеты от врача»: 2–3 products with a doctor's text and a discount of their own (0–10%, margin ≥ 30% — D-75)
+model bundles {
+  id             String         @id @default(uuid()) @db.Uuid
+  slug           String         @unique
+  title_ru       String
+  title_uz       String?
+  /// a goal code of VITALO AI (sleep, immunity…), optional
+  goal           String?
+  doctor_text_ru String?
+  doctor_text_uz String?
+  discount_pct   Int            @default(0)
+  is_active      Boolean        @default(true)
+  sort_order     Int            @default(0)
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+  items          bundle_items[]
+}
+
+model bundle_items {
+  id         String   @id @default(uuid()) @db.Uuid
+  bundle_id  String   @db.Uuid
+  product_id String   @db.Uuid
+  qty        Int      @default(1)
+  sort_order Int      @default(0)
+  bundle     bundles  @relation(fields: [bundle_id], references: [id])
+  product    products @relation(fields: [product_id], references: [id])
+
+  @@unique([bundle_id, product_id])
+  @@index([product_id])
 }
 
 // ───────────── INVENTORY ─────────────

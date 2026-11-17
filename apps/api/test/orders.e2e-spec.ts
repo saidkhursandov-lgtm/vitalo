@@ -91,6 +91,7 @@ describe('Orders (e2e)', () => {
         campaign_discount_uzs: 0,
         goods_total_uzs: 200_000,
         discount_total_uzs: 0,
+        bundle_discount_uzs: 0, // 4.3
         bonus_used_uzs: 0,
         goods_paid_uzs: 200_000,
         delivery_cost_uzs: 20_000,

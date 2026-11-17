@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import type { BundleApplied } from '../bundles/bundles';
 import { listImage, listInclude } from '../catalog/product.mapper';
 import type { CampaignLine, PricingSnapshot } from '../promo/promo.service';
 import { CUSTOMER_CANCELLABLE } from './order-state';
@@ -77,6 +78,8 @@ export function toOrderView(o: OrderForView) {
       campaign_discount_uzs: campaignsOf(o).reduce((s, c) => s + c.amount_uzs, 0),
       goods_total_uzs: num(o.goods_total_uzs),
       discount_total_uzs: num(o.discount_total_uzs),
+      // 4.3: «Скидка сета» (a part of discount_total_uzs)
+      bundle_discount_uzs: bundlesOf(o).reduce((s, b) => s + b.amount_uzs, 0),
       bonus_used_uzs: num(o.bonus_used_uzs),
       goods_paid_uzs: num(o.goods_paid_uzs),
       delivery_cost_uzs: num(o.delivery_cost_uzs),
@@ -84,6 +87,7 @@ export function toOrderView(o: OrderForView) {
     },
     promo: promoOf(o),
     campaigns: campaignsOf(o),
+    bundles: bundlesOf(o),
     payment: payment
       ? {
           method: payment.method.code,
@@ -192,6 +196,11 @@ export function crossBorderStageOf(o: { paid_at: Date | null; status: string; it
 /** 3.7: «Акция 11.11: −X сум» lines of the order, from its frozen calculation (older orders: none). */
 export function campaignsOf(o: { pricing_json: Prisma.JsonValue | null }): CampaignLine[] {
   return (o.pricing_json as unknown as PricingSnapshot | null)?.campaigns ?? [];
+}
+
+/** 4.3: the doctor's sets of the order from its frozen calculation. */
+export function bundlesOf(o: { pricing_json: Prisma.JsonValue | null }): BundleApplied[] {
+  return (o.pricing_json as unknown as PricingSnapshot | null)?.bundles ?? [];
 }
 
 /** 3.3: the order's promo code from its frozen calculation: «Промокод VITALO10: −20 000 сум» / free delivery. */

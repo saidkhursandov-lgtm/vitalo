@@ -8,6 +8,7 @@ import { SettingsService } from '../settings/settings.service';
 import { BonusService } from '../bonus/bonus.service';
 import { BonusBlock, bonusSpend, cashbackOf } from '../bonus/bonus-rules';
 import { purchaseCosts } from './purchase-costs';
+import { bundleDiscount, BundleApplied, BundleRule } from '../bundles/bundles';
 import { eligibleLines, goodsDiscount, GoodsDiscount, normalizePromoCode, PricingLine, PROMO_CODE_RE, PromoGuard, PromoKind, PromoTargets } from './pricing';
 
 type Db = Prisma.TransactionClient | PrismaService;
@@ -85,6 +86,18 @@ export class PromoCodesService {
     private readonly delivery: DeliveryService,
     private readonly bonusService: BonusService,
   ) {}
+
+  /** 4.3: the active sets whose products are all in the cart (in the shop's order of the sets). */
+  async bundleRules(db: Db, priced: { product_id: string }[]): Promise<BundleRule[]> {
+    if (priced.length < 2) return [];
+    const ids = priced.map((l) => l.product_id);
+    const rows = await db.bundles.findMany({
+      where: { is_active: true, discount_pct: { gt: 0 }, items: { some: { product_id: { in: ids } } } },
+      orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
+      select: { id: true, title_ru: true, title_uz: true, discount_pct: true, items: { select: { product_id: true, qty: true } } },
+    });
+    return rows.filter((b) => b.items.every((i) => ids.includes(i.product_id)));
+  }
 
   async guard(): Promise<PromoGuard> {
     return this.settings.getOrDefault('promo_guard');
@@ -171,13 +184,19 @@ export class PromoCodesService {
     let rejection: PromoRejection | null = null;
     let pricing: PricingLine[] | null = null;
     const pricingOnce = async () => (pricing ??= await this.pricingLines(db, priced));
+    // 4.3: the doctor's sets first (a set in the cart gets its own discount); the promo code and bonuses take the rest
+    const sets = await this.bundleRules(db, priced);
+    const setOff = sets.length ? bundleDiscount(await pricingOnce(), sets, await this.guard()) : { total_uzs: 0, lines: new Map<string, number>(), applied: [] as BundleApplied[] };
+    if (setOff.total_uzs > 0) pricing = pricing!.map((l) => ({ ...l, taken_uzs: setOff.lines.get(l.product_id) ?? 0 }));
+    const bundleTotal = setOff.total_uzs;
     if (opts.code) {
       const r = await this.evaluate(db, userId, opts.code, await pricingOnce(), { lock: opts.lock });
       if (r.ok) applied = r;
       else rejection = r;
     }
 
-    const discount = applied?.goods.total_uzs ?? 0;
+    const promoGoods = applied?.goods.total_uzs ?? 0;
+    const discount = promoGoods + bundleTotal;
     let delivery: DeliveryQuote | null = opts.address ? await this.delivery.quote(opts.address.region_id, opts.address.city_id, goods - discount, db, { userId }) : null;
     let deliverySaved = 0;
     if (applied?.kind === 'free_delivery' && delivery) {
@@ -216,12 +235,12 @@ export class PromoCodesService {
       code: applied.code,
       kind: applied.kind,
       value: applied.value,
-      discount_uzs: applied.kind === 'free_delivery' ? deliverySaved : discount,
+      discount_uzs: applied.kind === 'free_delivery' ? deliverySaved : promoGoods,
       free_delivery: applied.kind === 'free_delivery',
       capped: applied.goods.capped,
       description_ru: applied.description_ru,
       description_uz: applied.description_uz,
-      ...appliedText(applied.code, applied.kind === 'free_delivery' ? deliverySaved : discount, applied.kind === 'free_delivery'),
+      ...appliedText(applied.code, applied.kind === 'free_delivery' ? deliverySaved : promoGoods, applied.kind === 'free_delivery'),
     };
 
     const snapshot: PricingSnapshot = {
@@ -238,14 +257,16 @@ export class PromoCodesService {
           line_total_uzs: l.unit_price_uzs * l.qty,
           promo_discount_uzs: d?.discount_uzs ?? 0,
           promo_capped: d?.capped ?? false,
+          bundle_discount_uzs: setOff.lines.get(l.product_id) ?? 0,
           bonus_uzs: spend.lines.get(l.product_id) ?? 0,
           // the basis of a refund and of the fiscal receipt: what the customer really paid (bonuses are a discount too)
-          paid_line_total_uzs: l.unit_price_uzs * l.qty - (d?.discount_uzs ?? 0) - (spend.lines.get(l.product_id) ?? 0),
+          paid_line_total_uzs: l.unit_price_uzs * l.qty - (d?.discount_uzs ?? 0) - (setOff.lines.get(l.product_id) ?? 0) - (spend.lines.get(l.product_id) ?? 0),
         };
       }),
       goods_total_uzs: goods,
       goods_list_total_uzs: goods + campaignDiscount,
       campaigns,
+      bundles: setOff.applied,
       discounts: applied
         ? [{ kind: 'promo', promotion_id: applied.promotion_id, code: applied.code, type: applied.kind, value: applied.value, target: applied.kind === 'free_delivery' ? 'delivery' : 'goods', amount_uzs: promo!.discount_uzs, capped: applied.goods.capped }]
         : [],
@@ -261,7 +282,7 @@ export class PromoCodesService {
     };
 
     return {
-      totals: { goods_list_total_uzs: goods + campaignDiscount, campaign_discount_uzs: campaignDiscount, goods_total_uzs: goods, discount_total_uzs: discount, bonus_used_uzs: bonus, goods_paid_uzs: goodsPaid, delivery_cost_uzs: deliveryCost, total_uzs: goodsPaid + deliveryCost },
+      totals: { goods_list_total_uzs: goods + campaignDiscount, campaign_discount_uzs: campaignDiscount, goods_total_uzs: goods, discount_total_uzs: discount, bundle_discount_uzs: bundleTotal, bonus_used_uzs: bonus, goods_paid_uzs: goodsPaid, delivery_cost_uzs: deliveryCost, total_uzs: goodsPaid + deliveryCost },
       delivery,
       promo,
       promo_rejection: rejection,
@@ -335,11 +356,13 @@ export interface PromoView {
  */
 export interface PricingSnapshot {
   version: 1 | 2;
-  lines: { product_id: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; campaign_id?: string | null; campaign_discount_uzs?: number; line_total_uzs: number; promo_discount_uzs: number; promo_capped: boolean; bonus_uzs?: number; paid_line_total_uzs: number }[];
+  lines: { product_id: string; qty: number; unit_price_uzs: number; list_price_uzs?: number; campaign_id?: string | null; campaign_discount_uzs?: number; line_total_uzs: number; promo_discount_uzs: number; promo_capped: boolean; bundle_discount_uzs?: number; bonus_uzs?: number; paid_line_total_uzs: number }[];
   goods_total_uzs: number;
   /** 3.7: goods at regular prices (goods_total_uzs + the sales) */
   goods_list_total_uzs?: number;
   campaigns?: CampaignLine[];
+  /** 4.3: «Скидка сета» — each doctor's set the order got, with its sum */
+  bundles?: BundleApplied[];
   discounts: { kind: 'promo'; promotion_id: string; code: string; type: PromoKind; value: number; target: 'goods' | 'delivery'; amount_uzs: number; capped: boolean }[];
   bonus_used_uzs: number;
   /** 3.10-А: the cashback percent of the order (0 — VITALO Bonus off) */
@@ -350,7 +373,8 @@ export interface PricingSnapshot {
 }
 
 export interface Calculation {
-  totals: { goods_list_total_uzs: number; campaign_discount_uzs: number; goods_total_uzs: number; discount_total_uzs: number; bonus_used_uzs: number; goods_paid_uzs: number; delivery_cost_uzs: number; total_uzs: number };
+  /** discount_total_uzs: the promo code and the sets together (bundle_discount_uzs — the sets alone, 4.3) */
+  totals: { goods_list_total_uzs: number; campaign_discount_uzs: number; goods_total_uzs: number; discount_total_uzs: number; bundle_discount_uzs: number; bonus_used_uzs: number; goods_paid_uzs: number; delivery_cost_uzs: number; total_uzs: number };
   delivery: DeliveryQuote | null;
   promo: PromoView | null;
   promo_rejection: PromoRejection | null;

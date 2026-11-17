@@ -88,6 +88,11 @@ function cancelBase(o: { paid_at: Date | null; history: { to_status: string; cre
   return o.paid_at ?? o.history.find((h) => h.to_status === 'paid')?.created_at ?? null;
 }
 
+/** The discount kept on an order line: the promo code and (4.3) the doctor's set. */
+function lineDiscount(s: { promo_discount_uzs: number; bundle_discount_uzs?: number } | undefined): number {
+  return (s?.promo_discount_uzs ?? 0) + (s?.bundle_discount_uzs ?? 0);
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -134,7 +139,7 @@ export class OrdersService {
     return {
       items: priced.map((l) => ({
         ...l,
-        discount_uzs: calc.snapshot.lines.find((s) => s.product_id === l.product_id)?.promo_discount_uzs ?? 0,
+        discount_uzs: lineDiscount(calc.snapshot.lines.find((s) => s.product_id === l.product_id)),
         cross_border: !!available.get(l.product_id)?.cross_border,
         under_order: underOrderMark(available.get(l.product_id)?.terms),
       })),
@@ -571,7 +576,8 @@ export class OrdersService {
               qty: l.qty,
               unit_price_uzs: BigInt(l.unit_price_uzs),
               line_total_uzs: BigInt(l.line_total_uzs),
-              discount_uzs: BigInt(s.promo_discount_uzs),
+              // 3.3 / 4.3: the promo code and the set discount of the line together
+              discount_uzs: BigInt(lineDiscount(s)),
               // the basis of a refund: what the customer really paid for the line
               paid_line_total_uzs: BigInt(s.paid_line_total_uzs),
               source: crossBorderIds.has(l.product_id) ? 'cross_border' : 'local',

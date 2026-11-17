@@ -23,6 +23,7 @@ import { AdminSearchController, AdminSearchService } from './admin-search';
 import { AdminExportController, AdminExportService } from './admin-export';
 import { AdminPromoCodesController, AdminPromoCodesService } from './admin-promo-codes';
 import { AdminCampaignsController, AdminCampaignsService } from './admin-campaigns';
+import { AdminBundlesController, AdminBundlesService } from './admin-bundles';
 import { PromoModule } from '../promo/promo.module';
 import { PromoController, PromoService } from '../notifications/notification-centre';
 import { AdminReceiptsController, BotReceiptsController, ReceiptsService } from './admin-receipts';
@@ -109,6 +110,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminExportController,
     AdminPromoCodesController,
     AdminCampaignsController,
+    AdminBundlesController,
     PromoController,
     AdminReceiptsController,
     BotReceiptsController,
@@ -135,6 +137,7 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     TestFlagsService,
     AdminPromoCodesService,
     AdminCampaignsService,
+    AdminBundlesService,
     StaffAuthService,
     StaffWebAuthService,
     CsrfHeaderGuard,

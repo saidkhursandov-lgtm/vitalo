@@ -26,6 +26,7 @@ import { BonusModule } from './bonus/bonus.service';
 import { ReviewsModule } from './reviews/reviews.module';
 import { ReturnsModule } from './returns/returns.module';
 import { CourseModule } from './course/course-reminder.service';
+import { BundlesModule } from './bundles/bundles.service';
 
 // forRoot() loads .env into process.env synchronously, so JOBS_ENABLED from .env is visible below.
 const config = ConfigModule.forRoot({ isGlobal: true });
@@ -42,6 +43,7 @@ const jobs = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.forRoot
     ReviewsModule,
     ReturnsModule,
     CourseModule,
+    BundlesModule,
     StorageModule,
     NotificationsModule,
     NotificationCentreModule,

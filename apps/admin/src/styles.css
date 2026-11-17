@@ -736,3 +736,13 @@ textarea { resize: vertical; }
 .substance-found { margin: 4px 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); max-height: 280px; overflow-y: auto; }
 .substance-found .btn { width: 100%; justify-content: flex-start; text-align: left; min-height: 44px; }
 .return-items { margin: 0; padding-left: 18px; font-size: 14px; }
+
+/* 4.3 «Сеты от врача» */
+.bundle-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.bundle-grow { flex: 1; min-width: 0; }
+.bundle-qty { display: flex; align-items: center; gap: 6px; }
+.bundle-qty-input { width: 56px; min-height: 44px; }
+.bundle-summary { margin: 12px 0; display: grid; gap: 6px; }
+.bundle-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.bundle-error { color: var(--bad); margin: 4px 0; }
+.bundle-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }

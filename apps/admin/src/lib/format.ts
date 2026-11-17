@@ -191,6 +191,11 @@ export const AUDIT_ACTION: Record<string, string> = {
   'brand.logo_uploaded': 'Загружен логотип бренда',
   'brand.logo_removed': 'Удалён логотип бренда',
   'campaign.created': 'Создана акция',
+  // 4.3
+  'bundle.created': 'Создан сет от врача',
+  'bundle.updated': 'Изменён сет от врача',
+  'bundle.enabled': 'Сет от врача включён',
+  'bundle.disabled': 'Сет от врача выключен',
   'campaign.updated': 'Изменена акция',
   'catalog.content_loaded': 'Загружены тексты каталога из таблицы',
   'catalog.content_rolled_back': 'Тексты каталога возвращены к прежней версии',

@@ -431,6 +431,9 @@ export interface Cart {
   /** 3.10-А */
   bonus?: BonusView;
   bonus_used_uzs?: number;
+  /** 4.3: «Скидка сета» — a part of discount_total_uzs, and the sets it came from */
+  bundle_discount_uzs?: number;
+  bundles?: BundleApplied[];
 }
 
 /** 3.10-А: why bonuses cannot be spent on this order. */
@@ -539,6 +542,33 @@ export interface Totals {
   /** 3.7: goods at regular prices (goods_total_uzs is at sale prices) and the sale discount */
   goods_list_total_uzs?: number;
   campaign_discount_uzs?: number;
+  /** 4.3: «Скидка сета» (a part of discount_total_uzs) */
+  bundle_discount_uzs?: number;
+}
+
+/** 4.3: a doctor's set the cart or the order got. */
+export interface BundleApplied {
+  bundle_id: string;
+  title_ru: string;
+  title_uz: string | null;
+  times: number;
+  amount_uzs: number;
+}
+
+/** 4.3 «Сеты от врача»: 2–3 jars with the doctor's text and a discount of their own. */
+export interface ShopBundle {
+  id: string;
+  slug: string;
+  title_ru: string;
+  title_uz: string | null;
+  goal: string | null;
+  doctor_text_ru: string | null;
+  doctor_text_uz: string | null;
+  discount_pct: number;
+  list_total_uzs: number;
+  sale_total_uzs: number;
+  days: number | null;
+  items: { qty: number; product: ProductListItem }[];
 }
 
 export interface Order {
@@ -559,6 +589,8 @@ export interface Order {
   cross_border_cancel?: { allowed: boolean; reason: 'not_ordered' | 'guarantee' | null; guarantee_date: string | null } | null;
   /** 3.7: «Акция 11.11: −X сум», frozen at creation */
   campaigns?: CampaignLine[];
+  /** 4.3: «Скидка сета», frozen at creation */
+  bundles?: BundleApplied[];
   /** 3.3: the order's promo code (frozen at creation) */
   promo?: { code: string; discount_uzs: number; free_delivery: boolean } | null;
   payment: { method: string; status: string; amount_uzs: number; customer_reported_paid_at: string | null } | null;

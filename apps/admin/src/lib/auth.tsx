@@ -62,6 +62,7 @@ export type Permission =
   | 'promo.send'
   | 'promo.view'
   | 'promo.manage'
+  | 'bundles.manage'
   | 'compat.view'
   | 'support.view'
   | 'reviews.moderate'
