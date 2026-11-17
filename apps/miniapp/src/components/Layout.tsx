@@ -14,7 +14,7 @@ import { ToastProvider } from './Toast';
 const TABS = ['/', '/catalog', '/favorites', '/profile'];
 /** Focused flows hide the bottom navigation. */
 // 6б-Б: a conversation is a full-screen chat with its own input bar at the bottom — no menu, no floating cart
-const NO_NAV = [/^\/checkout/, /^\/orders\/[^/]+\/pay/, /^\/product\//, /^\/support\/[^/]+/];
+const NO_NAV = [/^\/checkout/, /^\/orders\/[^/]+\/pay/, /^\/product\//, /^\/set\//, /^\/support\/[^/]+/];
 /** Product page: the buy panel takes the bottom of the screen instead of the navigation (F2). */
 const BUY_PANEL = /^\/product\//;
 
