@@ -1,0 +1,32 @@
+# Outside check of the shop twice a day (09:00 and 21:00 Tashkent = 04:00 and 16:00 UTC), 17.11.2026.
+# Covers what scripts/server/monitor.sh cannot: the whole server being down. When a check fails, the run fails and
+# GitHub e-mails the owner of the repository (Settings → Notifications → Actions: «Failed workflows only»).
+# GitHub may start a scheduled run a little late, and switches the schedule off after 60 days without commits.
+name: uptime
+
+on:
+  schedule:
+    - cron: "0 4,16 * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: API, Mini App and admin answer
+        run: |
+          fail=0
+          check() { # url, expected text (optional); three tries a minute apart
+            for i in 1 2 3; do
+              body=$(curl -sS -m 20 "$1") && { [ -z "$2" ] || printf '%s' "$body" | grep -q "$2"; } && { echo "OK   $1"; return 0; }
+              sleep 60
+            done
+            echo "FAIL $1"; fail=1
+          }
+          check https://api.vitalo.uz/api/health '"db":true'
+          check https://vitalo.uz/ ''
+          check https://admin.vitalo.uz/ ''
+          exit $fail

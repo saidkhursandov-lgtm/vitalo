@@ -1,0 +1,10 @@
+[Unit]
+Description=VITALO report to the technical Telegram chat (scripts/server/monitor.sh)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vitalo
+Group=vitalo
+ExecStart=/opt/vitalo/app/scripts/server/monitor.sh

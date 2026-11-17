@@ -1,0 +1,10 @@
+[Unit]
+Description=VITALO report twice a day (09:00 and 21:00, server time = Tashkent)
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+OnCalendar=*-*-* 21:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
