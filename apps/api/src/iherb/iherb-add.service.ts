@@ -94,7 +94,7 @@ export function onlyCountDiffers(a: string | null, b: string | null): boolean {
 /** D-79: the pack size in a name of the other pack size → this one («…, 120 капсул» → «…, 60 капсул»). */
 export function swapCount(text: string | null, from: number, to: number): string | null {
   if (!text) return text;
-  return text.replace(new RegExp(`(^|[^\\d])${from}(?=\\s*(?:капс|таб|шт|мягк|жеват|пастил|kaps|tab|dona|softgel|caps|count|veg))`, 'gi'), `$1${to}`);
+  return text.replace(new RegExp(`(^|[^\\d])${from}(?=\\s*(?:кап|таб|шт|мягк|жеват|пастил|kap|tab|dona|softgel|caps|count|veg))`, 'gi'), `$1${to}`);
 }
 
 export function priceFromIherb(iherbPrice: number, markup = DEFAULT_MARKUP, roundTo = DEFAULT_ROUND): number {

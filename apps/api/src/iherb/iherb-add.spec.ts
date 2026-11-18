@@ -205,6 +205,7 @@ describe('D-79 «Фасовки» on the iHerb page', () => {
     expect(variantLabel('5000 IU · 360 count', 'uz')).toBe('5000 XB · 360 dona');
     expect(swapCount('Life Extension, Мультивитамины Two-Per-Day, 120 капсул', 120, 60)).toBe('Life Extension, Мультивитамины Two-Per-Day, 60 капсул');
     expect(swapCount('Two-Per-Day multivitaminlari, 120 kapsula; 1200 mg', 120, 60)).toBe('Two-Per-Day multivitaminlari, 60 kapsula; 1200 mg');
+    expect(swapCount('Two-Per-Day, 120 кап.', 120, 60)).toBe('Two-Per-Day, 60 кап.');
     expect(onlyCountDiffers('5000 IU · 180 count', '5000 IU · 360 count')).toBe(true);
     expect(onlyCountDiffers('1000 IU · 180 count', '5000 IU · 180 count')).toBe(false);
     expect(onlyCountDiffers('60 count', '120 count')).toBe(true);
