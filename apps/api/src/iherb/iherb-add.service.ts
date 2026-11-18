@@ -196,7 +196,8 @@ export class IherbAddService {
       s,
     );
     const payload = enr.payload;
-    if (!payload) problems.push('AI не нашёл в составе действующих веществ из справочника — выберите их вручную');
+    if (enr.failed) problems.push('AI не смог разобрать вещества состава — выберите их вручную в блоке «Состав для VITALO AI»');
+    else if (!payload) problems.push('AI не нашёл в составе действующих веществ из справочника — выберите их вручную');
 
     // price: the page's own data block first, the model's reading only as a fallback (then it must be checked)
     const iherbPrice = page.price_uzs ?? c.price_uzs;

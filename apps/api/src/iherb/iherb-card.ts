@@ -33,8 +33,10 @@ export const CARD_SYSTEM = `Ты — редактор каталога мага�
 7. brand — как на странице латиницей; если бренд есть в списке брендов — ровно как в списке. manufacturer — компания-
    производитель (обычно как бренд). country — страна производства по-русски, только если она написана на странице
    (например «Made in USA» → «США»); если есть в списке стран — ровно как в списке. form — из списка форм, если подходит.
-8. pack_count — количество капсул/таблеток/порций в банке (для порошка — порций). servings_per_day — сколько порций
-   в день по способу применения (если написан диапазон — меньшее число). dose_per — к чему относится доза в составе:
+8. pack_count — количество капсул/таблеток/порций в банке (для порошка — порций). servings_per_day — сколько ТЕХ ЖЕ
+   единиц, что в pack_count, принимают в день по способу применения (дни курса = pack_count / servings_per_day):
+   «по 2 капсулы в день» → 2, «по 2 таблетки 2 раза в день» → 4, «1 мерная ложка в день» → 1; если написан
+   диапазон — меньшее число. dose_per — к чему относится доза в составе:
    capsule, tablet, softgel, serving, drop.
 9. match_form — химическая форма главного вещества строчными буквами по-русски («цитрат», «бисглицинат»,
    «холекальциферол»), если она написана; иначе null.
@@ -42,7 +44,7 @@ export const CARD_SYSTEM = `Ты — редактор каталога мага�
     Размеры упаковки в миллиметрах, если написаны (Dimensions: 6.4 x 6.4 x 12.2 cm → 64, 64, 122).
 11. price_uzs — цена товара в сумах, если она явно написана на странице для ЭТОГО товара (не для рекомендованных);
     иначе null. in_stock — false, если написано «нет в наличии» / «out of stock», иначе true или null.
-12. category_keys — 1–3 ключа подходящих категорий из списка (и «по потребности», и «по типу товара»).
+12. category_keys — 1–3 ключа подходящих категорий из списка: «по потребности» и РОВНО ОДНА «по типу товара».
 13. shell_ru / shell_uz — оболочка капсулы, если написана («говяжий желатин», «растительная (HPMC)»).
 14. actives — все действующие вещества состава (без вспомогательных): название по-русски, по-узбекски и по-английски,
     как на странице.
@@ -200,8 +202,13 @@ export function checkCardAnswer(json: unknown, lists: CardLists): { ok: true; ca
     return v;
   };
   const exact = (v: string | null, list: string[]) => (v ? (list.find((x) => x.toLowerCase() === v.toLowerCase()) ?? v) : null);
-  const byKey = new Map(lists.categories.map((c) => [c.key, c.id]));
-  const category_ids = [...new Set((Array.isArray(a.category_keys) ? a.category_keys : []).map((k) => byKey.get(String(k).trim())).filter((x): x is string => !!x))].slice(0, 3);
+  const byKey = new Map(lists.categories.map((c) => [c.key, c]));
+  // a product has only one «по типу» category (ONE_PRODUCT_TYPE): the model's first one is kept
+  let typeTaken = false;
+  const category_ids = [...new Set((Array.isArray(a.category_keys) ? a.category_keys : []).map((k) => byKey.get(String(k).trim())).filter((x) => !!x))]
+    .filter((c) => c!.tree !== 'product_type' || (!typeTaken && (typeTaken = true)))
+    .map((c) => c!.id)
+    .slice(0, 3);
   const actives = (Array.isArray(a.actives) ? a.actives : [])
     .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object' && typeof (x as Record<string, unknown>).name_ru === 'string')
     .map((x) => ({ name_ru: String(x.name_ru).trim().slice(0, 120), name_uz: String(x.name_uz ?? '').trim().slice(0, 120), name_en: String(x.name_en ?? '').trim().slice(0, 120) }))

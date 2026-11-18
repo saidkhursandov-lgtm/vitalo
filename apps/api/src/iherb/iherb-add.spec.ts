@@ -83,6 +83,7 @@ const LISTS: CardLists = {
   categories: [
     { key: 'c1', id: 'cat-sleep', name_ru: 'Сон', tree: 'need' },
     { key: 'c2', id: 'cat-min', name_ru: 'Минералы', tree: 'product_type' },
+    { key: 'c3', id: 'cat-vit', name_ru: 'Витамины', tree: 'product_type' },
   ],
   brands: ['NOW Foods'],
   countries: ['США'],
@@ -118,7 +119,7 @@ const ANSWER = {
   price_uzs: 154210,
   dose_per: 'tablet',
   in_stock: true,
-  category_keys: ['c2', 'c9', 'c2'],
+  category_keys: ['c2', 'c9', 'c2', 'c3', 'c1'],
   actives: [{ name_ru: 'Магний (цитрат)', name_uz: 'Magniy (sitrat)', name_en: 'Magnesium Citrate' }],
   note: '',
 };
@@ -127,7 +128,7 @@ describe('D-78: the card answer of the model', () => {
   it('cleans the answer: names from the lists, known categories only, empty texts null, Cyrillic in Uzbek flagged', () => {
     const r = checkCardAnswer(ANSWER, LISTS);
     if (!r.ok) throw new Error(r.error);
-    expect(r.card).toMatchObject({ brand: 'NOW Foods', country: 'США', form: 'Таблетки', match_form: 'цитрат', warnings_ru: null, category_ids: ['cat-min'], pack_count: 100, dose_per: 'tablet' });
+    expect(r.card).toMatchObject({ brand: 'NOW Foods', country: 'США', form: 'Таблетки', match_form: 'цитрат', warnings_ru: null, category_ids: ['cat-min', 'cat-sleep'], pack_count: 100, dose_per: 'tablet' });
     expect(r.problems).toEqual(['«warnings_uz»: в узбекском тексте есть кириллица — проверьте']);
   });
 

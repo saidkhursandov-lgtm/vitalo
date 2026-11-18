@@ -12,6 +12,8 @@ import { writeProductSubstances } from './substance-label';
 
 
 const MAX_TOKENS = 3000;
+/** «Добавить из iHerb»: a multivitamin has 20–30 substances, 3000 tokens is not enough for them. */
+const DRAFT_MAX_TOKENS = 8000;
 /** «Обогатить все»: this many products are asked at once */
 const BATCH_PARALLEL = 3;
 
@@ -109,14 +111,14 @@ export class EnrichService {
   async draftFromTexts(texts: EnrichTexts, setKey: string, s: AiSettings) {
     const dict = await this.dict();
     const r = await this.callLogged(
-      { scenario: 'enrich', setKey, model: s.model, system: ENRICH_SYSTEM, data: enrichDataBlock(texts, dict), schema: ENRICH_SCHEMA as never, maxTokens: MAX_TOKENS },
+      { scenario: 'enrich', setKey, model: s.model, system: ENRICH_SYSTEM, data: enrichDataBlock(texts, dict), schema: ENRICH_SCHEMA as never, maxTokens: DRAFT_MAX_TOKENS },
       (json) => {
         const c = checkEnrichAnswer(json, dict);
         return c.ok ? { ok: true, value: c.payload } : c;
       },
     );
-    if (!r.ok && r.error !== 'empty') throw new EnrichUnavailable('AI_FAILED', 'AI ответил не по форме, попробуйте ещё раз');
-    return { payload: r.ok ? r.value : null, cost_usd: r.cost_usd };
+    // the card is already paid for: a failed substances answer does not lose it, the person picks substances by hand
+    return { payload: r.ok ? r.value : null, failed: !r.ok && r.error !== 'empty', cost_usd: r.cost_usd };
   }
 
   /** One product → a new pending draft (an older pending one becomes «stale»). */
