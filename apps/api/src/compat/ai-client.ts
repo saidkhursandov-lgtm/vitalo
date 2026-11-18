@@ -28,6 +28,8 @@ export interface AiInput {
   data: string;
   schema: Record<string, unknown>;
   maxTokens: number;
+  /** a longer wait for a long answer (the iHerb card): ms per attempt; default 20 s */
+  timeoutMs?: number;
 }
 
 export const AI_MODEL = Symbol('AI_MODEL');
@@ -70,7 +72,7 @@ export class AnthropicModel implements AiModel {
           : input.system,
         messages: [{ role: 'user', content: input.data }],
         output_config: { effort: 'low', format: { type: 'json_schema', schema: input.schema } },
-      });
+      }, input.timeoutMs ? { timeout: input.timeoutMs } : undefined);
     } catch (e) {
       if (e instanceof Anthropic.APIConnectionTimeoutError) throw new AiCallError('timeout');
       if (e instanceof Anthropic.RateLimitError) throw new AiCallError('rate_limit');

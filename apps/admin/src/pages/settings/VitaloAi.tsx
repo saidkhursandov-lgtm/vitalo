@@ -17,6 +17,8 @@ export interface AiSettings {
   chat_max_chars?: number;
   chat_max_turns?: number;
   chat_retention_days?: number;
+  /** D-78: the model that writes the card from an iHerb page */
+  card_model?: string;
 }
 export interface AiSettingsView {
   settings: AiSettings;
@@ -104,6 +106,15 @@ export function VitaloAiSettings() {
           </Field>
           <Field label="Модель для переписки" hint="«Спросить VITALO AI о корзине» и «Поможет ли этот набор для моей цели?». Проверка совместимости всегда на модели выше.">
             <select value={form.goal_model ?? 'claude-haiku-5-5'} onChange={(e) => set('goal_model', e.target.value)}>
+              {s.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {MODEL_NAME[m.id] ?? m.id}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Модель для «Добавить из iHerb»" hint="Пишет карточку товара на русском и узбекском и предлагает правила для новых веществ. Вещества и дозы — на основной модели.">
+            <select value={form.card_model ?? 'claude-sonnet-5-5'} onChange={(e) => set('card_model', e.target.value)}>
               {s.models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {MODEL_NAME[m.id] ?? m.id}

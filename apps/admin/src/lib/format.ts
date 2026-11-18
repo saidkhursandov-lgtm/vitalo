@@ -207,6 +207,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   'compat.substance_created': 'Добавлено вещество (совместимость)',
   'compat.substance_updated': 'Изменено вещество (совместимость)',
   'compat.rule_created': 'Добавлено правило базы знаний AI',
+  'compat.rule_suggested': 'AI предложил правило совместимости (черновик)',
   'compat.rule_updated': 'Изменено правило базы знаний AI',
   'compat.rule_draft': 'Правило базы знаний AI возвращено в черновики',
   'compat.rule_approved': 'Правило базы знаний AI одобрено',

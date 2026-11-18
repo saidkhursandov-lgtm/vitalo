@@ -108,9 +108,14 @@ export function Products() {
     <>
       <PageHead title="Товары">
         {can('products.edit') && (
-          <Link to="/products/new" className="btn">
-            + Новый товар
-          </Link>
+          <>
+            <Link to="/products/iherb" className="btn btn-ghost">
+              Добавить из iHerb
+            </Link>
+            <Link to="/products/new" className="btn">
+              + Новый товар
+            </Link>
+          </>
         )}
       </PageHead>
       <SupplierTabs value={supplier} onChange={(v) => set('supplier', v)} />

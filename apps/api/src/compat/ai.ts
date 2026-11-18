@@ -43,6 +43,8 @@ export interface AiSettings {
   chat_max_chars: number;
   chat_max_turns: number;
   chat_retention_days: number;
+  /** D-78 «Добавить из iHerb»: the model that writes the card RU + UZ (the substances stay on `model`) */
+  card_model: string;
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -55,6 +57,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   chat_max_chars: 300,
   chat_max_turns: 6,
   chat_retention_days: 365,
+  card_model: 'claude-sonnet-5-5',
 };
 
 export const AI_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'] as const;
@@ -73,6 +76,7 @@ export function mergeAiSettings(saved: unknown): AiSettings {
     chat_max_chars: Math.round(num(s.chat_max_chars, DEFAULT_AI_SETTINGS.chat_max_chars, 50, 1000)),
     chat_max_turns: Math.round(num(s.chat_max_turns, DEFAULT_AI_SETTINGS.chat_max_turns, 1, 20)),
     chat_retention_days: Math.round(num(s.chat_retention_days, DEFAULT_AI_SETTINGS.chat_retention_days, 30, 3650)),
+    card_model: typeof s.card_model === 'string' && (AI_MODELS as readonly string[]).includes(s.card_model) ? s.card_model : DEFAULT_AI_SETTINGS.card_model,
   };
 }
 

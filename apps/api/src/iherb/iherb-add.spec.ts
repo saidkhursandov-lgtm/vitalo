@@ -1,0 +1,176 @@
+import { checkRulesAnswer } from '../compat/rule-suggest';
+import { priceFromIherb, unknownSuggestions } from './iherb-add.service';
+import { checkCardAnswer, type CardLists } from './iherb-card';
+import { htmlToText, nextIherbSku, productPhotos, readIherbPage } from './iherb-page';
+
+const IMG = 'https://cloudinary.images-iherb.com/image/upload/f_auto,q_auto:eco/images/now/now01282';
+const page = (ld: object, extra = '') => `<!doctype html><html><head><title>NOW Foods</title>
+<link rel="canonical" href="https://uz.iherb.com/pr/now-foods-magnesium-citrate-200-mg-100-tablets/69359">
+<script type="application/ld+json">${JSON.stringify(ld)}</script>
+<script>var junk = "ignore me";</script></head>
+<body><h1>NOW Foods, Magnesium Citrate, 200 mg, 100 Tablets</h1>
+<div class="gallery"><img src="${IMG}/s/12.jpg"><img src="${IMG}/s/13.jpg"><img src="${IMG}/l/12.jpg"></div>
+<ul><li>Shipping Weight: 0.25 kg</li><li>Product code: NOW-01282</li></ul>
+<div>Supplement Facts</div><p>Magnesium (from Magnesium Citrate) 200 mg &amp; more</p>
+<div class="recommended"><a href="/pr/other/12345"><img src="https://cloudinary.images-iherb.com/image/upload/images/cgn/cgn01065/s/4.jpg"></a></div>
+${extra}</body></html>`;
+const LD = {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: 'NOW Foods, Magnesium Citrate, 200 mg, 100 Tablets',
+  brand: { '@type': 'Brand', name: 'NOW Foods' },
+  sku: 'NOW-01282',
+  gtin12: '733739012821',
+  image: `${IMG}/l/50.jpg`,
+  offers: { '@type': 'Offer', price: '154210.00', priceCurrency: 'UZS', availability: 'https://schema.org/InStock' },
+};
+
+describe('D-78 «Добавить из iHerb»: reading the saved page', () => {
+  it('takes the name, brand, price in sum, stock and this product’s photos from the data block', () => {
+    const p = readIherbPage(page(LD), '69359');
+    expect(p).toMatchObject({ format: 'html', title: LD.name, brand: 'NOW Foods', price_uzs: 154210, in_stock: true, wrong_currency: false, iherb_code: 'NOW-01282', upc: '733739012821', same_product: true });
+    // main first, small gallery pictures as large ones, one per file, the recommended product’s picture left out
+    expect(p.photos).toEqual([`${IMG}/l/50.jpg`, `${IMG}/l/12.jpg`, `${IMG}/l/13.jpg`]);
+    expect(p.text).toContain('Shipping Weight: 0.25 kg');
+    expect(p.text).toContain('Magnesium (from Magnesium Citrate) 200 mg & more');
+    expect(p.text).not.toContain('ignore me');
+  });
+
+  it('dollars are reported, not converted; out of stock is read; another product’s page is caught', () => {
+    const usd = readIherbPage(page({ ...LD, offers: { price: '12.50', priceCurrency: 'USD', availability: 'https://schema.org/OutOfStock' } }), '69359');
+    expect(usd).toMatchObject({ price_uzs: null, wrong_currency: true, in_stock: false });
+    expect(readIherbPage(page(LD), '11111').same_product).toBe(false);
+  });
+
+  it('copied text: no data block, no photos, the product cannot be told', () => {
+    const p = readIherbPage('NOW Foods, Magnesium Citrate\nЦена 154 210 сум\nSupplement Facts\nMagnesium 200 mg', '69359');
+    expect(p).toMatchObject({ format: 'text', price_uzs: null, photos: [], same_product: null, wrong_currency: false });
+    expect(readIherbPage('NOW Foods\nPrice $12.50\nSupplement Facts', '69359').wrong_currency).toBe(true);
+  });
+
+  it('og:image is the fallback for photos; text keeps blocks on their own lines', () => {
+    const html = `<html><head><meta property="og:image" content="${IMG}/l/7.jpg"></head><body><p>a</p><p>a</p><div>b <b>c</b></div></body></html>`;
+    expect(readIherbPage(html, '69359').photos).toEqual([`${IMG}/l/7.jpg`]);
+    expect(htmlToText(html)).toBe('a\nb c');
+    expect(productPhotos('<img src="https://example.com/x/y/l/1.jpg">', [])).toEqual([]);
+  });
+
+  it('«Веб-страница, один файл» (.mhtml, quoted-printable) is read like the HTML', () => {
+    const qp = (s: string) =>
+      [...Buffer.from(s, 'utf8')]
+        .map((b) => (b === 61 || b > 126 ? `=${b.toString(16).toUpperCase().padStart(2, '0')}` : String.fromCharCode(b)))
+        .join('')
+        .replace(/(.{70})/g, '$1=\r\n');
+    const html = page(LD, '<p>Магний — 200 мг</p>');
+    const mhtml = `From: <Saved by Blink>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related;\r\n\ttype="text/html";\r\n\tboundary="----MultipartBoundary--abc"\r\n\r\n------MultipartBoundary--abc\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n${qp(html)}\r\n------MultipartBoundary--abc--\r\n`;
+    const p = readIherbPage(mhtml, '69359');
+    expect(p).toMatchObject({ format: 'html', price_uzs: 154210, same_product: true });
+    expect(p.text).toContain('Магний — 200 мг');
+  });
+
+  it('the next free iHerb SKU', () => {
+    expect(nextIherbSku([])).toBe('VTL-H001');
+    expect(nextIherbSku(['VTL-H001', 'VTL-H017', 'VTL-HG001', 'VTL-GH020', 'OZN-A001'])).toBe('VTL-H018');
+  });
+
+  it('VITALO price by the auto pricing rule: iHerb × 1.8, to the nearest 1 000', () => {
+    expect(priceFromIherb(154_210)).toBe(278_000);
+    expect(priceFromIherb(100_000, 50, 5000)).toBe(150_000);
+  });
+});
+
+const LISTS: CardLists = {
+  categories: [
+    { key: 'c1', id: 'cat-sleep', name_ru: 'Сон', tree: 'need' },
+    { key: 'c2', id: 'cat-min', name_ru: 'Минералы', tree: 'product_type' },
+  ],
+  brands: ['NOW Foods'],
+  countries: ['США'],
+  forms: ['Таблетки'],
+};
+const ANSWER = {
+  name_ru: 'NOW Foods, Магний цитрат, 200 мг, 100 таблеток',
+  name_uz: 'NOW Foods, Magniy sitrat, 200 mg, 100 tabletka',
+  short_name_ru: 'Магний цитрат 200 мг, 100 таб.',
+  short_name_uz: 'Magniy sitrat 200 mg',
+  brand: 'now foods',
+  manufacturer: 'NOW Foods',
+  country: 'сша',
+  form: 'таблетки',
+  short_description_ru: 'Магний в форме цитрата.',
+  short_description_uz: 'Sitrat shaklidagi magniy.',
+  composition_ru: 'Размер порции: 1 таблетка\nМагний (цитрат) — 200 мг',
+  composition_uz: 'Porsiya: 1 tabletka\nMagniy (sitrat) — 200 mg',
+  directions_ru: 'По 1 таблетке в день.',
+  directions_uz: 'Kuniga 1 tabletka.',
+  warnings_ru: '',
+  warnings_uz: 'Болалардан узоқда сақланг',
+  match_form: 'Цитрат',
+  shell_ru: null,
+  shell_uz: null,
+  search_keywords: 'magnesium, магний',
+  pack_count: 100,
+  servings_per_day: 1,
+  shipping_weight_g: 250,
+  shipping_length_mm: 64,
+  shipping_width_mm: 64,
+  shipping_height_mm: 122,
+  price_uzs: 154210,
+  dose_per: 'tablet',
+  in_stock: true,
+  category_keys: ['c2', 'c9', 'c2'],
+  actives: [{ name_ru: 'Магний (цитрат)', name_uz: 'Magniy (sitrat)', name_en: 'Magnesium Citrate' }],
+  note: '',
+};
+
+describe('D-78: the card answer of the model', () => {
+  it('cleans the answer: names from the lists, known categories only, empty texts null, Cyrillic in Uzbek flagged', () => {
+    const r = checkCardAnswer(ANSWER, LISTS);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.card).toMatchObject({ brand: 'NOW Foods', country: 'США', form: 'Таблетки', match_form: 'цитрат', warnings_ru: null, category_ids: ['cat-min'], pack_count: 100, dose_per: 'tablet' });
+    expect(r.problems).toEqual(['«warnings_uz»: в узбекском тексте есть кириллица — проверьте']);
+  });
+
+  it('no name or brand → nothing to show; missing course data is reported', () => {
+    expect(checkCardAnswer({ ...ANSWER, brand: ' ' }, LISTS)).toEqual({ ok: false, error: 'empty' });
+    const r = checkCardAnswer({ ...ANSWER, pack_count: 0, servings_per_day: null, warnings_uz: '', category_keys: [] }, LISTS);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.problems).toEqual([
+      'Не указано количество в банке — без него не работает напоминание о конце курса',
+      'Не указано порций в день — без него не работает напоминание о конце курса',
+      'AI не подобрал категорию — выберите вручную',
+    ]);
+  });
+
+  it('an unknown substance gets the model’s Uzbek and English names', () => {
+    expect(unknownSuggestions([{ name: 'Магний', dose: '200 мг' }, { name: 'Таурин', dose: null }], ANSWER.actives)).toEqual([
+      { name: 'Магний', dose: '200 мг', name_uz: 'Magniy (sitrat)', synonyms: ['Magnesium Citrate'] },
+      { name: 'Таурин', dose: null, name_uz: '', synonyms: [] },
+    ]);
+  });
+});
+
+describe('D-78: suggested compatibility rules', () => {
+  const dict = [
+    { id: 'k2', code: 'k2', name_ru: 'Витамин K2', synonyms: [], enabled: true, kind: 'substance' },
+    { id: 'd3', code: 'd3', name_ru: 'Витамин D3', synonyms: [], enabled: true, kind: 'substance' },
+    { id: 'ca', code: 'ca', name_ru: 'Кальций', synonyms: [], enabled: true, kind: 'substance' },
+    { id: 'fe', code: 'fe', name_ru: 'Железо', synonyms: [], enabled: true, kind: 'substance' },
+    { id: 'warf', code: 'warf', name_ru: 'Варфарин', synonyms: [], enabled: true, kind: 'drug_group' },
+  ];
+  const rule = (code: string, kind: string, extra: object = {}) => ({ code, kind, interval_hours: null, time_a: null, meal_a: 'with_fat', time_b: null, meal_b: null, text_ru: 'Лучше вместе.', text_uz: 'Birga yaxshiroq.', source: null, ...extra });
+
+  it('keeps known pairs once, skips itself, drug groups, existing pairs and Cyrillic Uzbek; spread gets an interval', () => {
+    const r = checkRulesAnswer(
+      { rules: [rule('d3', 'synergy'), rule('d3', 'synergy'), rule('k2', 'synergy'), rule('warf', 'avoid'), rule('ca', 'spread'), rule('fe', 'spread', { text_uz: 'Бирга' }), rule('nope', 'synergy')] },
+      dict[0],
+      dict,
+      new Set(['ca']),
+    );
+    if (!r.ok) throw new Error(r.error);
+    expect(r.value).toEqual([expect.objectContaining({ substance_b_id: 'd3', kind: 'synergy', interval_hours: null, meal_a: 'with_fat', when_a: 'with_food' })]);
+    const s = checkRulesAnswer({ rules: [rule('fe', 'spread')] }, dict[2], dict, new Set());
+    expect(s.ok && s.value[0]).toMatchObject({ substance_b_id: 'fe', kind: 'spread', interval_hours: 2 });
+    expect(checkRulesAnswer({}, dict[0], dict, new Set())).toEqual({ ok: false, error: 'shape' });
+  });
+});

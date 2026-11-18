@@ -62,7 +62,7 @@ const STRUCK_TAG = /^(del|s|strike)$/i;
 const STRUCK_CLASS = /class\s*=\s*["'][^"']*(?:old|strike|original|was-price|regular|list-price|crossed)[^"']*["']/i;
 
 const ENTITIES: Record<string, string> = { nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' };
-const decode = (s: string) =>
+export const decode = (s: string) =>
   s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
     if (e[0] === '#') return String.fromCharCode(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
     return ENTITIES[e.toLowerCase()] ?? m;
@@ -72,7 +72,7 @@ const decode = (s: string) =>
  * The visible text of a piece of the page, and for every character whether it sits inside a crossed-out element
  * (<del>, <s>, or a class like "price-old"). Scripts and styles are dropped.
  */
-function visible(html: string): { text: string; struck: boolean[] } {
+export function visible(html: string): { text: string; struck: boolean[] } {
   const src = html.replace(/<(script|style|svg|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
   let text = '';
   const struck: boolean[] = [];
@@ -105,14 +105,14 @@ function visible(html: string): { text: string; struck: boolean[] } {
 const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
 const digits = (s: string) => Number(s.replace(/\D/g, ''));
 
-interface Sum {
+export interface Sum {
   value: number;
   at: number;
   struck: boolean;
 }
 
 /** All sums in a piece of the page, in order of appearance. */
-function sumsIn(text: string, struck: boolean[]): Sum[] {
+export function sumsIn(text: string, struck: boolean[]): Sum[] {
   const out: Sum[] = [];
   for (const re of [PRICE_AFTER, PRICE_BEFORE]) {
     re.lastIndex = 0;

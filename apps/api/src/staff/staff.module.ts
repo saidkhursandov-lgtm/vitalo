@@ -57,6 +57,8 @@ import { FinanceController, OrderFinanceService } from '../finance/finance.contr
 import { FinanceRemindersService } from '../finance/finance-reminders.service';
 import { FinanceService } from '../finance/finance.service';
 import { IherbPricesController, IherbPricesService } from '../iherb/iherb-prices';
+import { IherbAddController, IherbAddService } from '../iherb/iherb-add.service';
+import { RuleSuggestController, RuleSuggestService } from '../compat/rule-suggest.service';
 import { CompetitorsController, CompetitorsService } from '../iherb/competitors';
 import { AiAnalystController, AdminAiService } from '../ai-analyst/admin-ai.service';
 import { ADMIN_AI_MODEL, AnthropicAdminModel } from '../ai-analyst/admin-ai-client';
@@ -128,6 +130,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     AdminKnowledgeController,
     AdminEnrichController,
     IherbPricesController,
+    IherbAddController,
+    RuleSuggestController,
     CompetitorsController,
     AiAnalystController,
   ],
@@ -163,6 +167,8 @@ import { OrderLabelController, OrderLabelService, PrintOrderLabelController } fr
     OrderFinanceService,
     FinanceRemindersService,
     IherbPricesService,
+    IherbAddService,
+    RuleSuggestService,
     CompetitorsService,
     AdminAiService,
     { provide: ADMIN_AI_MODEL, useClass: AnthropicAdminModel },

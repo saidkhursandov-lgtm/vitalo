@@ -746,3 +746,11 @@ textarea { resize: vertical; }
 .bundle-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .bundle-error { color: var(--bad); margin: 4px 0; }
 .bundle-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+/* D-78 «Добавить из iHerb» */
+.iherb-photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.iherb-photos .check { border: 1.5px solid var(--border); border-radius: 12px; padding: 6px; background: var(--panel); }
+.iherb-photos img { width: 96px; height: 96px; object-fit: contain; display: block; }
+.unknown-row { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.unknown-row .form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.unknown-row .form-row input { flex: 1 1 160px; min-height: 44px; }
+.dims { display: flex; gap: 6px; } .dims input { min-width: 0; flex: 1 1 0; }

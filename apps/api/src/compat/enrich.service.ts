@@ -7,7 +7,7 @@ import { AuditService } from '../staff/audit.service';
 import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '../staff/staff-auth';
 import { SETTING_AI, costUsd, inLanguage, mergeAiSettings, tashkentMonthStart, type AiSettings } from './ai';
 import { AI_MODEL, AiCallError, type AiModel } from './ai-client';
-import { ENRICH_SCHEMA, ENRICH_SYSTEM, ENRICH_TEXTS, checkEnrichAnswer, enrichDataBlock, mergeEnrichment, type EnrichPayload } from './enrich';
+import { ENRICH_SCHEMA, ENRICH_SYSTEM, ENRICH_TEXTS, checkEnrichAnswer, enrichDataBlock, mergeEnrichment, type EnrichPayload, type EnrichTexts } from './enrich';
 import { writeProductSubstances } from './substance-label';
 
 
@@ -23,7 +23,7 @@ export async function markEnrichmentAccepted(tx: Prisma.TransactionClient, id: s
 }
 
 /** Why no draft was made — the admin shows it in words. */
-class EnrichUnavailable extends HttpException {
+export class EnrichUnavailable extends HttpException {
   constructor(code: 'AI_DISABLED' | 'AI_NO_KEY' | 'AI_BUDGET' | 'AI_FAILED' | 'AI_EMPTY', message: string) {
     super({ code, message }, code === 'AI_FAILED' ? HttpStatus.BAD_GATEWAY : HttpStatus.CONFLICT);
   }
@@ -54,7 +54,8 @@ export class EnrichService {
     return mergeAiSettings(row?.value);
   }
 
-  private async assertCanCall(now: Date): Promise<AiSettings> {
+  /** VITALO AI is on, the key is there and the month's budget is not spent (also «Добавить из iHerb»). */
+  async assertCanCall(now: Date): Promise<AiSettings> {
     const s = await this.settings();
     if (!s.enabled) throw new EnrichUnavailable('AI_DISABLED', 'VITALO AI выключен в настройках');
     if (!this.model.ready()) throw new EnrichUnavailable('AI_NO_KEY', 'Нет ключа Claude API на сервере');
@@ -63,11 +64,59 @@ export class EnrichService {
     return s;
   }
 
-  private async dict() {
+  async dict() {
     return this.prisma.substances.findMany({
       orderBy: [{ sort_order: 'asc' }, { name_ru: 'asc' }],
       select: { id: true, code: true, kind: true, name_ru: true, name_uz: true, synonyms: true, parent_id: true, enabled: true },
     });
+  }
+
+  /**
+   * One call to the model with its line in «Расход AI» (ai_requests): `check` turns the answer into a value or an
+   * error name. A call that fails → AI_FAILED. Returns the cost of the call too.
+   */
+  async callLogged<T>(
+    q: { scenario: string; setKey: string | null; model: string; system: string; data: string; schema: Record<string, unknown>; maxTokens: number; timeoutMs?: number },
+    check: (json: unknown) => { ok: true; value: T } | { ok: false; error: string },
+  ): Promise<{ ok: true; value: T; cost_usd: number } | { ok: false; error: string; cost_usd: number }> {
+    const started = Date.now();
+    const log = { scenario: q.scenario, user_id: null, set_key: q.setKey, lang: 'ru', model: q.model };
+    let completion;
+    try {
+      completion = await this.model.complete({ model: q.model, system: q.system, data: q.data, schema: q.schema, maxTokens: q.maxTokens, timeoutMs: q.timeoutMs });
+    } catch (e) {
+      const code = e instanceof AiCallError ? e.code : 'error';
+      await this.prisma.ai_requests.create({ data: { ...log, status: code === 'timeout' ? 'timeout' : 'error', latency_ms: Date.now() - started, error: code } });
+      throw new EnrichUnavailable('AI_FAILED', `Claude API не ответил (${code}), попробуйте ещё раз`);
+    }
+    const checked = completion.outcome === 'ok' ? check(completion.json) : ({ ok: false, error: completion.outcome } as const);
+    const cost = costUsd(q.model, completion.inputTokens, completion.outputTokens);
+    await this.prisma.ai_requests.create({
+      data: {
+        ...log,
+        status: checked.ok ? 'ok' : 'invalid',
+        input_tokens: completion.inputTokens,
+        output_tokens: completion.outputTokens,
+        cost_usd: new Prisma.Decimal(cost.toFixed(6)),
+        latency_ms: Date.now() - started,
+        error: checked.ok ? null : checked.error,
+      },
+    });
+    return checked.ok ? { ok: true, value: checked.value, cost_usd: cost } : { ok: false, error: checked.error, cost_usd: cost };
+  }
+
+  /** The substances draft of card texts that are not a product yet («Добавить из iHerb»); payload null — none found. */
+  async draftFromTexts(texts: EnrichTexts, setKey: string, s: AiSettings) {
+    const dict = await this.dict();
+    const r = await this.callLogged(
+      { scenario: 'enrich', setKey, model: s.model, system: ENRICH_SYSTEM, data: enrichDataBlock(texts, dict), schema: ENRICH_SCHEMA as never, maxTokens: MAX_TOKENS },
+      (json) => {
+        const c = checkEnrichAnswer(json, dict);
+        return c.ok ? { ok: true, value: c.payload } : c;
+      },
+    );
+    if (!r.ok && r.error !== 'empty') throw new EnrichUnavailable('AI_FAILED', 'AI ответил не по форме, попробуйте ещё раз');
+    return { payload: r.ok ? r.value : null, cost_usd: r.cost_usd };
   }
 
   /** One product → a new pending draft (an older pending one becomes «stale»). */
@@ -79,29 +128,15 @@ export class EnrichService {
     });
     if (!product) throw new NotFoundException('Product not found');
     const dict = await this.dict();
-    const started = Date.now();
-    const log = { scenario: 'enrich', user_id: null, set_key: productId, lang: 'ru', model: s.model };
-    let completion;
-    try {
-      completion = await this.model.complete({ model: s.model, system: ENRICH_SYSTEM, data: enrichDataBlock(product as never, dict), schema: ENRICH_SCHEMA as never, maxTokens: MAX_TOKENS });
-    } catch (e) {
-      const code = e instanceof AiCallError ? e.code : 'error';
-      await this.prisma.ai_requests.create({ data: { ...log, status: code === 'timeout' ? 'timeout' : 'error', latency_ms: Date.now() - started, error: code } });
-      throw new EnrichUnavailable('AI_FAILED', `Claude API не ответил (${code}), попробуйте ещё раз`);
-    }
-    const checked = completion.outcome === 'ok' ? checkEnrichAnswer(completion.json, dict) : ({ ok: false, error: completion.outcome } as const);
-    await this.prisma.ai_requests.create({
-      data: {
-        ...log,
-        status: checked.ok ? 'ok' : 'invalid',
-        input_tokens: completion.inputTokens,
-        output_tokens: completion.outputTokens,
-        cost_usd: new Prisma.Decimal(costUsd(s.model, completion.inputTokens, completion.outputTokens).toFixed(6)),
-        latency_ms: Date.now() - started,
-        error: checked.ok ? null : checked.error,
+    const r = await this.callLogged(
+      { scenario: 'enrich', setKey: productId, model: s.model, system: ENRICH_SYSTEM, data: enrichDataBlock(product as never, dict), schema: ENRICH_SCHEMA as never, maxTokens: MAX_TOKENS },
+      (json) => {
+        const c = checkEnrichAnswer(json, dict);
+        return c.ok ? { ok: true, value: c.payload } : c;
       },
-    });
-    if (!checked.ok) throw new EnrichUnavailable(checked.error === 'empty' ? 'AI_EMPTY' : 'AI_FAILED', checked.error === 'empty' ? 'AI не нашёл в тексте карточки действующих веществ' : 'AI ответил не по форме, попробуйте ещё раз');
+    );
+    if (!r.ok) throw new EnrichUnavailable(r.error === 'empty' ? 'AI_EMPTY' : 'AI_FAILED', r.error === 'empty' ? 'AI не нашёл в тексте карточки действующих веществ' : 'AI ответил не по форме, попробуйте ещё раз');
+    const checked = { payload: r.value };
     return this.prisma.$transaction(async (tx) => {
       await tx.product_enrichments.updateMany({ where: { product_id: productId, status: 'pending' }, data: { status: 'stale', decided_at: now } });
       return tx.product_enrichments.create({

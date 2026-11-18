@@ -1,7 +1,7 @@
 import { SkuAliases } from './SkuAliases';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DictionarySelect, type DictionaryKind } from '../components/DictionarySelect';
 import { Badge, ErrorBox, Field, Loading, Modal, PageHead, toInt } from '../components/ui';
 import { api } from '../lib/api';
@@ -14,6 +14,7 @@ import { SUPPLIER_KIND_LABELS, supplierTerms, useSuppliers } from '../components
 import { FORM_LABEL_MAX, labelOf, SubstancePicker, type PickedSubstance } from '../components/SubstancePicker';
 import { AUDIENCE_LABELS, EnrichDraft, GOAL_LABELS, type Enrichment } from '../components/EnrichDraft';
 import { PairField, pairOf, type PairValue } from '../components/PairField';
+import { IherbDraftPanel, type IherbDraft } from '../components/IherbDraftPanel';
 
 interface CategoryNode {
   id: string;
@@ -97,7 +98,7 @@ const PLAIN = [
   'match_form',
 ] as const;
 /** 2.3: numbers of the card; course days = pack / per day. */
-const INTS = ['pack_count', 'servings_per_day', 'market_advantage_percent'] as const;
+const INTS = ['pack_count', 'servings_per_day', 'market_advantage_percent', 'shipping_weight_g', 'shipping_length_mm', 'shipping_width_mm', 'shipping_height_mm'] as const;
 /** 2.3: «Стандарт VITALO» checkboxes */
 const STANDARDS = [
   ['std_bioavailability', 'Высокая биодоступность'],
@@ -202,11 +203,24 @@ export function ProductEdit() {
   const isNew = !id || id === 'new';
   const q = useQuery({ queryKey: ['product', id], queryFn: () => api<AdminProduct>(`/staff/products/${id}`), enabled: !isNew });
   if (!isNew && q.isPending) return <Loading />;
+  // D-78: «Добавить из iHerb» opens a new product with the AI draft (router state; a reload starts empty)
+  const state = useLocation().state as { iherbDraft?: IherbDraft } | null;
+  const iherb = isNew ? (state?.iherbDraft ?? null) : null;
+  if (!isNew && q.isPending) return <Loading />;
   if (!isNew && q.isError) return <ErrorBox error={q.error} onRetry={() => void q.refetch()} />;
-  return <ProductForm key={id} product={isNew ? undefined : q.data} />;
+  return <ProductForm key={id} product={isNew ? undefined : q.data} iherb={iherb?.draft ? iherb : null} />;
 }
 
-function ProductForm({ product }: { product?: AdminProduct }) {
+/** D-78: the form of a new product filled from the iHerb draft (Payme codes and «Где берём» stay the new-product defaults). */
+export function formFromDraft(d: Record<string, unknown>): Form {
+  const base = toForm();
+  const fromDraft = toForm({ ...d, min_stock: 0, supplier_ids: [], on_zero_supplier_id: null } as unknown as AdminProduct);
+  for (const [k, v] of Object.entries(fromDraft)) if (v !== '' && !['ikpu_code', 'package_code', 'supply_touched', 'supplier_ids', 'on_zero_supplier_id'].includes(k)) base[k] = v;
+  if (!d.auto_pricing_enabled) base.auto_pricing_enabled = '';
+  return base;
+}
+
+function ProductForm({ product, iherb }: { product?: AdminProduct; iherb?: IherbDraft | null }) {
   const { can } = useSession();
   const editable = can('products.edit');
   // D-53: a marketer changes names, descriptions, search words, categories and photos only
@@ -215,19 +229,21 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   const navigate = useNavigate();
   const client = useQueryClient();
   const categories = useQuery({ queryKey: ['categories', 'all'], queryFn: () => api<{ need: CategoryNode[]; product_type: CategoryNode[] }>('/catalog/categories?include_empty=true') });
-  const [f, setF] = useState<Form>(() => toForm(product));
-  const [cats, setCats] = useState<Set<string>>(new Set(product?.category_ids ?? []));
+  const [f, setF] = useState<Form>(() => (iherb?.draft ? formFromDraft(iherb.draft) : toForm(product)));
+  const [cats, setCats] = useState<Set<string>>(new Set(product?.category_ids ?? iherb?.draft?.category_ids ?? []));
+  // D-78: the iHerb photos to download after «Создать товар»
+  const [iherbPhotos, setIherbPhotos] = useState<string[]>(iherb?.photos ?? []);
   const [lang, setLang] = useState<'ru' | 'uz'>('ru');
   const [saved, setSaved] = useState(false);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(!!iherb);
   const [askSync, setAskSync] = useState(false);
   // «Состав» (VITALO AI): sent only when changed here — an old product keeps its hand-written label until then
-  const [subs, setSubs] = useState<PickedSubstance[]>(product?.substances ?? []);
-  const [subsTouched, setSubsTouched] = useState(false);
+  const [subs, setSubs] = useState<PickedSubstance[]>(product?.substances ?? iherb?.enrichment?.substances ?? []);
+  const [subsTouched, setSubsTouched] = useState(!!iherb);
   // VITALO AI: «Кому», «Цели» and the draft; aiTouched — sent with the save; draftId — the draft this save accepts
-  const [audience, setAudience] = useState<string | null>(product?.audience ?? null);
-  const [goals, setGoals] = useState<string[]>(product?.goals ?? []);
-  const [aiTouched, setAiTouched] = useState(false);
+  const [audience, setAudience] = useState<string | null>(product?.audience ?? ((iherb?.draft?.audience as string | null | undefined) ?? null));
+  const [goals, setGoals] = useState<string[]>(product?.goals ?? ((iherb?.draft?.goals as string[] | undefined) ?? []));
+  const [aiTouched, setAiTouched] = useState(!!iherb);
   const [draft, setDraft] = useState<Enrichment | null>(product?.enrichment ?? null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [pair, setPair] = useState<PairValue>(() => pairOf(product));
@@ -308,9 +324,21 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       body.old_price_uzs = toInt(f.old_price_uzs) ?? null;
       if (can('costs.view')) body.cost_uzs = toInt(f.cost_uzs) ?? null; // the server refuses it from other roles
       body.min_stock = toInt(f.min_stock) ?? 0;
-      return product
-        ? api<AdminProduct>(`/staff/products/${product.id}`, { method: 'PATCH', body })
-        : api<AdminProduct>('/staff/products', { method: 'POST', body });
+      if (product) return api<AdminProduct>(`/staff/products/${product.id}`, { method: 'PATCH', body });
+      if (!iherb) return api<AdminProduct>('/staff/products', { method: 'POST', body });
+      // D-78: the substances are drafted already (no second AI draft); then the chosen iHerb photos are downloaded
+      body.ai_filled = true;
+      return api<AdminProduct>('/staff/products', { method: 'POST', body }).then(async (p) => {
+        if (!iherbPhotos.length) return p;
+        try {
+          const r = await api<{ added: number; failed: string[]; product: AdminProduct }>(`/staff/products/${p.id}/photos/iherb`, { method: 'POST', body: { urls: iherbPhotos } });
+          if (r.failed.length) window.alert(`Товар создан. Не скачалось фото: ${r.failed.length} — добавьте их вручную в блоке «Фото».`);
+          return r.product;
+        } catch {
+          window.alert('Товар создан, но фото с iHerb не скачались — добавьте их вручную в блоке «Фото».');
+          return p;
+        }
+      });
     },
     onSuccess: (p) => {
       client.setQueryData(['product', p.id], p);
@@ -425,7 +453,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
   return (
     <>
     <form onSubmit={submit}>
-      <PageHead title={product ? `Товар: ${product.name_ru as string}` : 'Новый товар'}>
+      <PageHead title={product ? `Товар: ${product.name_ru as string}` : iherb ? 'Новый товар из iHerb' : 'Новый товар'}>
         <Link to="/products" className="btn btn-ghost" onClick={leave}>
           <BackIcon /> К списку
         </Link>
@@ -475,6 +503,18 @@ function ProductForm({ product }: { product?: AdminProduct }) {
       {f.status === 'archived' && <div className="alert alert-warn">Товар в архиве: он не виден в магазине.</div>}
       {product?.admin_note ? <div className="alert alert-warn">Комментарий: {product.admin_note as string}</div> : null}
       {saved && <div className="alert alert-ok">Сохранено</div>}
+      {iherb && !product && (
+        <IherbDraftPanel
+          data={iherb}
+          photos={iherbPhotos}
+          onPhotos={setIherbPhotos}
+          onSubstanceAdded={(s) => {
+            setSubs((x) => (x.some((y) => y.id === s.id) ? x : [...x, s]));
+            setSubsTouched(true);
+            setDirty(true);
+          }}
+        />
+      )}
       <ErrorBox error={save.error ?? archive.error ?? remove.error ?? markSynced.error} />
       {askSync && (
         <Modal title="Цена на Яндекс Маркете" onClose={() => setAskSync(false)}>
@@ -799,6 +839,16 @@ function ProductForm({ product }: { product?: AdminProduct }) {
           >
             {input('servings_per_day', { inputMode: 'numeric' })}
           </Field>
+          <Field label="Вес с упаковкой, г" hint="Для доставки">
+            {input('shipping_weight_g', { inputMode: 'numeric' })}
+          </Field>
+          <Field label="Размеры упаковки, мм" hint="Длина × ширина × высота">
+            <span className="dims">
+              {input('shipping_length_mm', { inputMode: 'numeric', 'aria-label': 'Длина, мм' })}
+              {input('shipping_width_mm', { inputMode: 'numeric', 'aria-label': 'Ширина, мм' })}
+              {input('shipping_height_mm', { inputMode: 'numeric', 'aria-label': 'Высота, мм' })}
+            </span>
+          </Field>
           <Field label="Выгоднее Маркета, %" hint="Не показывается покупателям (D-67: Яндекс Маркет закрыт)">
             {input('market_advantage_percent', { inputMode: 'numeric' })}
           </Field>
@@ -886,7 +936,7 @@ function ProductForm({ product }: { product?: AdminProduct }) {
         <div className="sticky-save">
           <span className={dirty ? 'text-warn' : 'muted'}>{dirty ? 'Есть несохранённые изменения' : saved ? 'Сохранено' : 'Изменений нет'}</span>
           <button type="submit" className="btn" disabled={save.isPending}>
-            {save.isPending ? 'Сохранение…' : 'Сохранить'}
+            {save.isPending ? 'Сохранение…' : iherb && !product ? 'Создать товар (скрытым)' : 'Сохранить'}
           </button>
         </div>
       )}

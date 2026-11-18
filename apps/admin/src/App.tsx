@@ -40,6 +40,7 @@ const Finance = page(() => import('./pages/Finance'), 'Finance');
 const Inventory = page(() => import('./pages/Inventory'), 'Inventory');
 const OrderDetail = page(() => import('./pages/OrderDetail'), 'OrderDetail');
 const ProductEdit = page(() => import('./pages/ProductEdit'), 'ProductEdit');
+const IherbAdd = page(() => import('./pages/IherbAdd'), 'IherbAdd');
 const Products = page(() => import('./pages/Products'), 'Products');
 const Brands = page(() => import('./pages/Brands'), 'Brands');
 const PurchaseDetail = page(() => import('./pages/Purchases'), 'PurchaseDetail');
@@ -76,6 +77,7 @@ export function App() {
         <Route path="products" element={<Guard perm="products.view"><Products /></Guard>} />
         <Route path="brands" element={<Guard perm="settings.dictionaries"><Brands /></Guard>} />
         <Route path="products/new" element={<Guard perm="products.edit"><ProductEdit /></Guard>} />
+        <Route path="products/iherb" element={<Guard perm="products.edit"><IherbAdd /></Guard>} />
         <Route path="products/:id" element={<Guard perm="products.view"><ProductEdit /></Guard>} />
         <Route path="iherb" element={<Guard perm="iherb.prices"><Iherb /></Guard>} />
         <Route path="cross-border" element={<Guard perm="cross_border.view"><CrossBorder /></Guard>} />

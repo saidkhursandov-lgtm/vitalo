@@ -141,6 +141,11 @@ export class ProductInput {
   @ApiPropertyOptional() @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(60) substance_form_uz?: string | null;
   @ApiPropertyOptional({ nullable: true, description: 'Количество в банке' }) @IsOptional() @IsInt() @Min(1) @Max(10000) pack_count?: number | null;
   @ApiPropertyOptional({ nullable: true, description: 'Порций в день' }) @IsOptional() @IsInt() @Min(1) @Max(50) servings_per_day?: number | null;
+  // D-78: weight and size with the packing — for delivery (filled by the catalog import and «Добавить из iHerb»)
+  @ApiPropertyOptional({ nullable: true, description: 'Вес с упаковкой, г' }) @IsOptional() @IsInt() @Min(1) @Max(30000) shipping_weight_g?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Длина упаковки, мм' }) @IsOptional() @IsInt() @Min(1) @Max(2000) shipping_length_mm?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Ширина упаковки, мм' }) @IsOptional() @IsInt() @Min(1) @Max(2000) shipping_width_mm?: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Высота упаковки, мм' }) @IsOptional() @IsInt() @Min(1) @Max(2000) shipping_height_mm?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() std_bioavailability?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() std_tested?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() std_original?: boolean;
@@ -232,6 +237,8 @@ export class ProductInput {
   @IsOptional() @IsArray() @ArrayMaxSize(PRODUCT_GOALS.length) @IsIn([...PRODUCT_GOALS], { each: true }) goals?: ProductGoal[];
   /** The VITALO AI draft this save accepts (it is marked «принят» in the same transaction). Not stored itself. */
   @ApiPropertyOptional() @IsOptional() @IsUUID() enrichment_id?: string;
+  /** D-78: the card came from «Добавить из iHerb» with its substances already drafted — no second AI draft. Not stored. */
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() ai_filled?: boolean;
 }
 
 export class ProductSubstanceItem {
@@ -560,7 +567,7 @@ export class AdminProductsService {
 
   async create(staffId: string | null, dto: ProductInput) {
     const id = await this.write(async (tx) => {
-      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, null, data as Record<string, unknown>);
       const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, withDefaultPaymeCodes(data) as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
@@ -575,7 +582,7 @@ export class AdminProductsService {
       );
       return p.id;
     });
-    if (!dto.enrichment_id) this.enrich?.queue(id, 'auto', staffId);
+    if (!dto.enrichment_id && !dto.ai_filled) this.enrich?.queue(id, 'auto', staffId);
     return this.get(id);
   }
 
@@ -585,7 +592,7 @@ export class AdminProductsService {
     await this.write(async (tx) => {
       const before = await tx.products.findUnique({ where: { id }, include: { categories: true, suppliers: { select: { supplier_id: true } } } });
       if (!before) throw new NotFoundException('Product not found');
-      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, before, data as Record<string, unknown>);
       await assertPair(tx, id, data.pair_product_id);
