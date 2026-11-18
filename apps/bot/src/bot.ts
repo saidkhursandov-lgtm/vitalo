@@ -5,7 +5,7 @@ import { installReceipts } from './receipts';
 import { installCompat } from './compat';
 import { installStaffLogin } from './staff-login';
 import { installCourse } from './course';
-import { siteLoginHandler } from './site-login';
+import { SITE_LINK_RE, siteLoginHandler } from './site-login';
 import { bothLangs, langFromTelegram, money, t, type Lang, type TextKey } from './texts';
 
 /** Used when the API has no contact saved (the admin edits it in Настройки). */
@@ -117,6 +117,12 @@ export function createBot({ token, api, urls, botInfo, download }: BotDeps): Bot
     const payload = ctx.match.trim(); // /start <referral code>, or rc_<order> from «Отправить скриншот чека в бот»
     if (await receipts.start(ctx, payload)) return;
     if (await siteLogin(ctx, payload)) return;
+    // Release 6: «Продолжить в Telegram» on vitalo.uz — the same product or the cart in the Mini App
+    const site = SITE_LINK_RE.exec(payload);
+    if (site) {
+      if (payload === 'cart') return replyWithShop(ctx, lang, t(lang, 'siteCart'), 'openCart', '/cart');
+      return replyWithShop(ctx, lang, t(lang, 'siteProduct'), 'openProduct', `/product/${site[1]}`);
+    }
     const ref = REFERRAL_RE.test(payload) ? payload : undefined;
     await ctx.reply(t(lang, 'welcome', { name: ctx.from?.first_name ?? '' }), { reply_markup: menu(lang) });
     await replyWithShop(ctx, lang, t(lang, 'openShopHint'), 'openShop', '/', ref);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Context } from 'grammy';
 import type { VitaloApi } from './api-client';
-import { siteLoginHandler } from './site-login';
+import { SITE_LINK_RE, siteLoginHandler } from './site-login';
 
 const ctx = (lang = 'ru') => {
   const reply = vi.fn().mockResolvedValue(undefined);
@@ -31,5 +31,14 @@ describe('site login from /start login_<id>', () => {
     const { c, reply } = ctx();
     await siteLoginHandler({ customerLogin: vi.fn().mockRejectedValue(new Error('down')) } as unknown as VitaloApi)(c, `login_${HEX}`);
     expect(reply.mock.calls[0][0]).toContain('Не получилось');
+  });
+});
+
+describe('site links «Продолжить в Telegram»', () => {
+  it('accepts a product id or slug and the cart, nothing else', () => {
+    expect(SITE_LINK_RE.exec('p_6f1c2a7e-0d5b-4c1a-9a2e-1b2c3d4e5f60')?.[1]).toBe('6f1c2a7e-0d5b-4c1a-9a2e-1b2c3d4e5f60');
+    expect(SITE_LINK_RE.exec('p_magniy-b6')?.[1]).toBe('magniy-b6');
+    expect(SITE_LINK_RE.test('cart')).toBe(true);
+    for (const bad of ['p_', 'p_../admin', 'P_ABC', 'cart2', `login_${HEX}`, 'p_' + 'a'.repeat(63)]) expect(SITE_LINK_RE.test(bad)).toBe(false);
   });
 });
