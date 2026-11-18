@@ -66,6 +66,7 @@ local_only() { # port, name
 local_only 5432 "PostgreSQL"
 local_only 6379 "Redis"
 local_only 3000 "API"
+systemctl cat vitalo-site >/dev/null 2>&1 && local_only 3002 "Сайт"
 
 head1 "Вход по SSH"
 SSHD=$(sudo sshd -T 2>/dev/null)
@@ -76,7 +77,7 @@ systemctl is-enabled --quiet unattended-upgrades 2>/dev/null && ok "автооб
 
 head1 "Магазин"
 [ -d "$APP/.git" ] && echo "          код: $(sudo -u vitalo git -C "$APP" log -1 --format='%h %s (%cr)' 2>/dev/null)" || bad "нет папки с кодом $APP"
-for s in vitalo-api vitalo-bot nginx postgresql; do
+for s in vitalo-api vitalo-bot $(systemctl cat vitalo-site >/dev/null 2>&1 && echo vitalo-site) nginx postgresql; do
   systemctl is-active --quiet "$s" && ok "служба $s работает" || warn "служба $s не работает"
 done
 systemctl is-active --quiet vitalo-backup.timer && ok "ночной бэкап включён" || bad "ночной бэкап не включён: sudo systemctl enable --now vitalo-backup.timer"
@@ -104,7 +105,7 @@ if sudo test -f "$CERT"; then
   DAYS=$((($(date -d "$END" +%s) - $(date +%s)) / 86400))
   [ "$DAYS" -ge 15 ] && ok "сертификат действует ещё $DAYS дн." || bad "сертификат истекает через $DAYS дн.: sudo certbot renew"
   NAMES=$(sudo openssl x509 -noout -ext subjectAltName -in "$CERT" 2>/dev/null | tr -d ' \n')
-  for d in vitalo.uz admin.vitalo.uz api.vitalo.uz; do
+  for d in vitalo.uz app.vitalo.uz admin.vitalo.uz api.vitalo.uz; do
     echo "$NAMES" | grep -q "DNS:$d" && ok "сертификат включает $d" || bad "в сертификате нет $d"
   done
   systemctl is-active --quiet certbot.timer && ok "автопродление сертификата включено" || warn "таймер certbot не работает: systemctl list-timers | grep certbot"

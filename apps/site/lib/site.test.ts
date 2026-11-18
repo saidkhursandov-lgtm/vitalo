@@ -5,7 +5,7 @@ import { qs } from './server-api';
 import { formatUzPhone, safeNext } from '../app/login/LoginForm';
 import { hrefWith, parseQuery } from '../components/CatalogView';
 import { cardGroups, dedupeHistory } from '../app/order/[id]/OrderView';
-import { sitePath } from '../components/AccountShell';
+import { legacyRedirect, miniAppPath, sitePath } from './paths';
 import { opKey } from '../app/account/bonus/BonusView';
 import { acceptPhotos } from '../components/PhotoPicker';
 import { createIdempotencyKeys } from './idempotency';
@@ -135,5 +135,34 @@ describe('catalog addresses', () => {
   it('API query string skips empty values', () => {
     expect(qs({ category: 'sleep', brand: ['A', 'B'], in_stock: false, page: undefined })).toBe('?category=sleep&brand=A%2CB');
     expect(qs({})).toBe('');
+  });
+});
+
+describe('release 6.6: old Mini App addresses', () => {
+  const ID = '0b6f2c1e-4d2a-4f7e-9a1b-2c3d4e5f6a7b';
+  const q = (s = '') => new URLSearchParams(s);
+  it('old Mini App paths on vitalo.uz go to the site pages', () => {
+    expect(legacyRedirect(`/orders/${ID}`, q())).toBe(`/order/${ID}`);
+    expect(legacyRedirect(`/orders/${ID}/return`, q())).toBe(`/order/${ID}/return`);
+    expect(legacyRedirect('/orders', q())).toBe('/account/orders');
+    expect(legacyRedirect('/bonus', q())).toBe('/account/bonus');
+    expect(legacyRedirect(`/support/${ID}`, q())).toBe(`/account/support/${ID}`);
+    expect(legacyRedirect('/profile', q())).toBe('/account');
+    expect(legacyRedirect('/profile/addresses/new', q())).toBe('/account/addresses');
+    expect(legacyRedirect('/catalog/products', q('category=vitamin-d&sort=new'))).toBe('/catalog/vitamin-d?sort=new');
+    expect(legacyRedirect('/catalog/products', q())).toBe('/catalog');
+    expect(legacyRedirect('/campaign/autumn', q())).toBe('/');
+    expect(legacyRedirect('/product/omega-3', q())).toBeNull();
+    expect(legacyRedirect('/catalog', q())).toBeNull();
+  });
+  it('a site page opened in Telegram maps to the Mini App screen', () => {
+    expect(miniAppPath(`/order/${ID}`)).toBe(`/orders/${ID}`);
+    expect(miniAppPath(`/order/${ID}/return`)).toBe(`/orders/${ID}/return`);
+    expect(miniAppPath('/account/bonus')).toBe('/bonus');
+    expect(miniAppPath('/account')).toBe('/profile');
+    expect(miniAppPath(`/account/support/${ID}`)).toBe(`/support/${ID}`);
+    expect(miniAppPath('/catalog/vitamin-d')).toBe('/catalog/products?category=vitamin-d');
+    expect(miniAppPath('/product/omega-3', '?x=1')).toBe('/product/omega-3?x=1');
+    expect(miniAppPath('/legal/offer')).toBe('/');
   });
 });

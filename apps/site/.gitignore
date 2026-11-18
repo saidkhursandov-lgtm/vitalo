@@ -2,3 +2,5 @@
 next-env.d.ts
 *.tsbuildinfo
 .next-build/
+.next-next/
+.next-prev/

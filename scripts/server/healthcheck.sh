@@ -62,6 +62,11 @@ if [ "${URL#http://127.0.0.1}" != "$URL" ]; then
   for s in vitalo-api vitalo-bot nginx postgresql; do
     if systemctl is-active --quiet "$s"; then ok "служба $s работает"; else bad "служба $s не работает: systemctl status $s"; fi
   done
+  # Release 6.6: the website vitalo.uz (only once its service is installed)
+  if systemctl cat vitalo-site >/dev/null 2>&1; then
+    if systemctl is-active --quiet vitalo-site; then ok "служба vitalo-site (сайт) работает"; else bad "служба vitalo-site не работает: journalctl -u vitalo-site -n 50 --no-pager"; fi
+    if curl -fsS -m 10 -o /dev/null http://127.0.0.1:3002/; then ok "сайт отвечает"; else bad "сайт не отвечает (127.0.0.1:3002)"; fi
+  fi
 
   FREE_GB=$(df -BG --output=avail / | tail -n 1 | tr -dc '0-9')
   if [ "${FREE_GB:-0}" -ge "$MIN_FREE_GB" ]; then ok "свободно на диске: ${FREE_GB} ГБ"; else bad "мало места на диске: ${FREE_GB:-?} ГБ (нужно от $MIN_FREE_GB)"; fi

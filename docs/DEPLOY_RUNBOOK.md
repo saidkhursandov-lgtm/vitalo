@@ -941,6 +941,133 @@ sudo /opt/vitalo/app/scripts/server/healthcheck.sh
 
 ---
 
+## Релиз 6.6: сайт на vitalo.uz, Mini App на app.vitalo.uz (один раз)
+
+Что меняется: по адресу `vitalo.uz` открывается сайт (Next.js, служба `vitalo-site`). Mini App переезжает на
+`app.vitalo.uz`. Кнопку «Магазин» бот переставит сам. Заказы, корзина, бонусы и вход общие, база одна.
+Старые ссылки Mini App на vitalo.uz (например `/orders/<номер>`) сайт сам переводит на свои страницы. Если такую ссылку
+открыли внутри Telegram (старые кнопки в чатах), человек попадает в Mini App на app.vitalo.uz.
+
+Кто что делает: **Claude** — шаги на ноутбуке, `git push server main` и `update.sh`, каждый раз после вашего «да».
+**Вы** — DNS, команды с `sudo`, правку `.env` и @BotFather.
+
+### 6.6.1 DNS (вы, заранее: запись расходится до нескольких часов)
+
+У регистратора домена добавьте A-запись: имя `app`, значение `144.217.85.105` (как у `admin` и `api`).
+Проверка на ноутбуке (должен прийти адрес 144.217.85.105):
+
+```powershell
+nslookup app.vitalo.uz 8.8.8.8
+```
+
+### 6.6.2 Код на сервер (Claude, после вашего «да» на каждую команду)
+
+1. На ноутбуке: ветка `site-web` сливается в `main`, ставится метка `pre-release-site`.
+2. Копия боевой базы и её копия на ноутбук (правило 2).
+3. `git push server main`, затем `update.sh --check`. Он покажет миграцию `20261209100000_site_slugs_login`
+   (адреса-slug у товаров и брендов, вход на сайт). Она только добавляет.
+4. `update.sh --migrate`. При этом запуске работает ещё **старый** update.sh: он обновит API, Mini App, админку и бота.
+   Сайт он не собирает, это нормально. Mini App пока остаётся на vitalo.uz.
+
+### 6.6.3 Служба сайта (вы, команды с sudo)
+
+```bash
+cd /opt/vitalo/app
+sudo cp deploy/systemd/vitalo-site.service /etc/systemd/system/
+sudo cp deploy/sudoers-vitalo /tmp/vitalo-sudoers && sudo visudo -cf /tmp/vitalo-sudoers && sudo install -m 440 /tmp/vitalo-sudoers /etc/sudoers.d/vitalo
+sudo systemctl daemon-reload
+sudo systemctl enable vitalo-site
+```
+
+`enable` только включает автозапуск, службу запустит update.sh. Должно быть `parsed OK` и
+`Created symlink …vitalo-site.service`.
+
+### 6.6.4 Сборка сайта (Claude, после вашего «да»)
+
+Ещё раз `update.sh`, теперь уже новый. Новых коммитов нет, он заново соберёт всё вместе с сайтом и запустит
+`vitalo-site`. Это 3–6 минут, магазин всё это время работает. В конце: «API отвечает», «Сайт отвечает. Готово.».
+Пока сайт слышно только внутри сервера (127.0.0.1:3002), покупатели его ещё не видят.
+
+### 6.6.5 Сертификат с app.vitalo.uz (вы)
+
+Только когда 6.6.1 показывает правильный адрес.
+
+```bash
+sudo certbot certonly --webroot -w /var/www/certbot --cert-name vitalo.uz --expand \
+  -d vitalo.uz -d admin.vitalo.uz -d api.vitalo.uz -d app.vitalo.uz
+```
+
+Должно быть `Successfully received certificate`.
+
+### 6.6.6 nginx: переключение адресов (вы)
+
+Сначала копия старой настройки (для отката), потом новая:
+
+```bash
+cd /opt/vitalo/app
+sudo cp /etc/nginx/sites-available/vitalo.conf /etc/nginx/vitalo.conf.before-6.6
+sudo cp deploy/nginx/snippets/vitalo-site-proxy.conf /etc/nginx/snippets/
+sudo cp deploy/nginx/vitalo.conf /etc/nginx/sites-available/vitalo.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+С этой минуты `https://vitalo.uz` — сайт, `https://app.vitalo.uz` — Mini App.
+
+### 6.6.7 Файл настроек и перезапуск (вы)
+
+```bash
+sudo -u vitalo nano /opt/vitalo/app/apps/api/.env
+```
+
+Поменять или дописать три строки. Остальное не трогать, значения секретов не показывать:
+
+```
+MINIAPP_URL=https://app.vitalo.uz
+CORS_ORIGINS=https://vitalo.uz,https://app.vitalo.uz,https://admin.vitalo.uz
+SITE_URL=https://vitalo.uz
+```
+
+Сохранить (Ctrl+O, Enter, Ctrl+X) и перезапустить:
+
+```bash
+sudo systemctl restart vitalo-api vitalo-bot
+```
+
+Бот при запуске сам поставит кнопку «Магазин» на `https://app.vitalo.uz/`.
+
+### 6.6.8 @BotFather (вы)
+
+Боевой бот → **Bot Settings → Configure Mini App → Edit Mini App URL** → `https://app.vitalo.uz`.
+Если там пусто или Mini App не включён, этот шаг можно пропустить: кнопку меню бот ставит сам.
+
+### 6.6.9 Проверка
+
+```bash
+sudo /opt/vitalo/app/scripts/server/healthcheck.sh
+```
+
+Должно быть «служба vitalo-site (сайт) работает» и «сайт отвечает». Затем руками:
+
+- `https://vitalo.uz` в обычном браузере: главная сайта, каталог, товар, «Войти через Telegram».
+- `https://vitalo.uz/legal/offer`: оферта; `https://vitalo.uz/sitemap.xml`: список товаров.
+- В боевом боте кнопка «Магазин» открывает Mini App (адрес app.vitalo.uz), каталог и корзина на месте.
+- Старая кнопка «Магазин» в старом сообщении бота тоже открывает Mini App (через переход).
+- Заказ с сайта картой или Payme. После оплаты Payme возвращает на `https://vitalo.uz/order/<номер>`.
+
+### Откат 6.6
+
+Вернуть Mini App на vitalo.uz (сайт остаётся установленным, но его не видно):
+
+```bash
+sudo cp /etc/nginx/vitalo.conf.before-6.6 /etc/nginx/sites-available/vitalo.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+В `.env` вернуть `MINIAPP_URL=https://vitalo.uz` и выполнить `sudo systemctl restart vitalo-api vitalo-bot`.
+Миграцию откатывать не нужно: старый код её просто не замечает.
+
+---
+
 ## Шпаргалка: обычное обновление после переезда
 
 ```powershell
@@ -954,6 +1081,8 @@ sudo /opt/vitalo/app/scripts/server/healthcheck.sh
 ```
 
 Если `--check` показал новые миграции — сначала спросите, что они делают, затем `update.sh --migrate`.
+
+С релиза 6.6 `update.sh` собирает и перезапускает и сайт (`vitalo-site`). Сайт собирается в отдельную папку, поэтому во время сборки он продолжает работать.
 
 ## Чего на сервере не делать
 

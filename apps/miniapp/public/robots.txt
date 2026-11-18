@@ -1,14 +1,3 @@
+# Release 6.6: the Mini App lives on app.vitalo.uz inside Telegram; search engines index the website vitalo.uz.
 User-agent: *
-Allow: /
-Disallow: /cart
-Disallow: /checkout
-Disallow: /orders
-Disallow: /profile
-Disallow: /favorites
-Disallow: /notifications
-Disallow: /support
-Disallow: /bonus
-Disallow: /login
-Disallow: /review
-
-Sitemap: https://vitalo.uz/sitemap.xml
+Disallow: /

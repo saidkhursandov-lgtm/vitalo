@@ -5,9 +5,10 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { AiFab, BottomNav } from '@/components/BottomNav';
 import { SessionProvider } from '@/components/Session';
+import { TelegramRedirect } from '@/components/TelegramRedirect';
 import { catalog } from '@/lib/server-api';
 import { t } from '@/lib/i18n';
-import { botUsername, getLang, siteUrl } from '@/lib/lang';
+import { botUsername, getLang, miniAppUrl, siteUrl } from '@/lib/lang';
 
 export async function generateMetadata(): Promise<Metadata> {
   const lang = await getLang();
@@ -29,6 +30,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang={lang === 'uz' ? 'uz-Latn' : 'ru'}>
       <body className="has-bottom-nav">
+        <TelegramRedirect appUrl={miniAppUrl()} />
         <SessionProvider lang={lang} botUsername={bot}>
           <Suspense>
             <Header categories={categories} />

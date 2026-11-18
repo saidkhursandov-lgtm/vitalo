@@ -81,7 +81,7 @@ if [ "$MODE" = "check" ]; then
   else
     echo "Новых миграций нет: обычный запуск обновит код, соберёт и перезапустит службы."
   fi
-  echo "Шаги обычного запуска: копия базы -> замена кода -> зависимости -> сборка API, магазина и админки -> перезапуск vitalo-api и vitalo-bot -> проверка."
+  echo "Шаги обычного запуска: копия базы -> замена кода -> зависимости -> сборка API, Mini App, админки и сайта -> перезапуск vitalo-api, vitalo-bot и vitalo-site -> проверка."
   exit 0
 fi
 
@@ -116,7 +116,7 @@ git reset --quiet --hard "origin/$BRANCH"
 git log -1 --format='    %h %s (%cr)'
 
 echo "5/9 Зависимости"
-for a in api miniapp admin bot; do
+for a in api miniapp admin bot site; do
   (cd "apps/$a" && npm ci --include=dev --no-audit --no-fund --loglevel=error)
 done
 
@@ -133,7 +133,7 @@ echo "6/9 Prisma-клиент$([ -n "$PENDING" ] && echo ' и миграции')
 echo "7/9 Сборка API"
 (cd apps/api && npm run build --silent)
 
-echo "8/9 Сборка магазина и админки (в отдельную папку, затем быстрая замена)"
+echo "8/9 Сборка Mini App, админки и сайта (в отдельную папку, затем быстрая замена)"
 for a in miniapp admin; do
   (
     cd "apps/$a"
@@ -146,14 +146,53 @@ for a in miniapp admin; do
   )
 done
 
+# Release 6.6: the website vitalo.uz (Next.js). Built into .next-next while the live site keeps serving .next,
+# then the folders are swapped and vitalo-site restarted. Skipped until the service is installed (first deploy of 6.6).
+SITE=no
+if systemctl cat vitalo-site >/dev/null 2>&1; then SITE=yes; fi
+if [ "$SITE" = yes ]; then
+  echo "    сборка сайта vitalo.uz"
+  (
+    cd apps/site
+    rm -rf .next-next
+    NEXT_DIST_DIR=.next-next NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 npx next build >/dev/null
+    git checkout --quiet -- tsconfig.json 2>/dev/null || true
+    rm -rf .next-prev
+    if [ -d .next ]; then mv .next .next-prev; fi
+    mv .next-next .next
+  )
+else
+  echo "    служба vitalo-site не установлена — сайт не собирается (см. DEPLOY_RUNBOOK, «Релиз 6.6»)"
+fi
+
 echo "9/9 Перезапуск служб и проверка"
-sudo /usr/bin/systemctl restart vitalo-api vitalo-bot
+if [ "$SITE" = yes ]; then
+  sudo /usr/bin/systemctl restart vitalo-api vitalo-bot vitalo-site
+else
+  sudo /usr/bin/systemctl restart vitalo-api vitalo-bot
+fi
+ok_api=no
 for i in $(seq 1 20); do
-  if curl -fsS -o /dev/null http://127.0.0.1:3000/api/catalog/texts; then
-    echo "    API отвечает. Готово."
-    exit 0
-  fi
+  if curl -fsS -o /dev/null http://127.0.0.1:3000/api/catalog/texts; then ok_api=yes; break; fi
   sleep 1
 done
-echo "    API не ответил за 20 секунд. Смотрите: journalctl -u vitalo-api -n 50" >&2
-exit 1
+if [ "$ok_api" != yes ]; then
+  echo "    API не ответил за 20 секунд. Смотрите: journalctl -u vitalo-api -n 50" >&2
+  exit 1
+fi
+echo "    API отвечает."
+if [ "$SITE" = yes ]; then
+  for i in $(seq 1 30); do
+    if curl -fsS -o /dev/null http://127.0.0.1:3002/; then
+      rm -rf apps/site/.next-prev
+      echo "    Сайт отвечает. Готово."
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "    Сайт не ответил за 30 секунд. Смотрите: journalctl -u vitalo-site -n 50" >&2
+  echo "    Прошлая сборка сайта лежит в apps/site/.next-prev" >&2
+  exit 1
+fi
+echo "    Готово."
+exit 0

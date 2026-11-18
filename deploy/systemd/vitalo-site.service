@@ -1,0 +1,29 @@
+# /etc/systemd/system/vitalo-site.service — VITALO website vitalo.uz (Next.js, release 6).
+# Listens only on 127.0.0.1:3002; nginx passes vitalo.uz to it (and /api, /uploads to the API).
+# Needs no secrets: it reads the public catalog from the API on 127.0.0.1:3000.
+[Unit]
+Description=VITALO website (vitalo.uz)
+After=network-online.target vitalo-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vitalo
+Group=vitalo
+WorkingDirectory=/opt/vitalo/app/apps/site
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=API_INTERNAL_URL=http://127.0.0.1:3000
+Environment=SITE_URL=https://vitalo.uz
+Environment=MINIAPP_URL=https://app.vitalo.uz
+Environment=BOT_USERNAME=vitalo_uz_bot
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 3002 -H 127.0.0.1
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

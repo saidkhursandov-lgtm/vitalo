@@ -81,20 +81,4 @@ export function AccountShell({ section, title, children }: { section: AccountSec
   );
 }
 
-/** Notification and bot links are Mini App addresses; on the site some pages live elsewhere. */
-export function sitePath(path: string | null): string | null {
-  if (!path) return null;
-  const order = /^\/orders\/([0-9a-f-]{36})(?:\/(?:pay|payme))?$/.exec(path);
-  if (order) return `/order/${order[1]}`;
-  const ret = /^\/orders\/([0-9a-f-]{36})\/return$/.exec(path);
-  if (ret) return `/order/${ret[1]}/return`;
-  if (path === '/orders') return '/account/orders';
-  if (path === '/bonus') return '/account/bonus';
-  if (path === '/favorites') return '/account/favorites';
-  if (path === '/notifications') return '/account/notifications';
-  if (path === '/profile/addresses') return '/account/addresses';
-  const support = /^\/support(?:\/([0-9a-f-]{36}))?$/.exec(path);
-  if (support) return support[1] ? `/account/support/${support[1]}` : '/account/support';
-  if (/^\/(product|review|set|brand)\/[^/]+$/.test(path) || path === '/cart' || path === '/catalog') return path;
-  return '/';
-}
+export { sitePath } from '@/lib/paths';

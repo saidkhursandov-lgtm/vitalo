@@ -720,3 +720,11 @@ p { margin: 0; }
 
 .sec-head { min-width: 0; }
 .sec-head .chip-row { flex: 1 1 0; min-width: 0; }
+
+/* /legal/offer, /legal/privacy */
+.legal { max-width: 820px; }
+.legal-card { padding: 20px; margin-top: 16px; }
+.markdown { font-size: 15px; line-height: 1.65; overflow-wrap: break-word; }
+.markdown p { margin: 0 0 12px; }
+.markdown h3 { font-size: 17px; margin: 20px 0 8px; color: var(--primary-text); }
+.markdown ul, .markdown ol { margin: 0 0 12px; padding-left: 22px; }
