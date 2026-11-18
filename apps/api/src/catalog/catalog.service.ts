@@ -292,6 +292,7 @@ export class CatalogService {
       orderBy: [{ pack_count: 'asc' }, { price_uzs: 'asc' }, { sku: 'asc' }],
     });
     if (rows.length < 2) return [];
+    rows.sort(variantOrder);
     const items = await this.campaigns.decorate(rows.map(toProductListItem));
     return items.map((v, i) => ({
       id: v.id,
@@ -348,4 +349,25 @@ export class CatalogService {
     });
     return toPage(await this.campaigns.decorate(items), total, q.page);
   }
+}
+
+/**
+ * D-79: the pack size buttons in order — by dose first (1000 → 2000 → 5000 МЕ, from the label «5000 МЕ · 180 шт»), then
+ * by the count in the jar, then by price. A label without a dose («60 шт») sorts by count alone.
+ */
+export function variantOrder(
+  a: { variant_label_ru: string | null; pack_count: number | null; price_uzs: unknown; sku: string },
+  b: { variant_label_ru: string | null; pack_count: number | null; price_uzs: unknown; sku: string },
+): number {
+  const dose = (l: string | null) => {
+    const part = (l ?? '').split(' · ').find((x) => !/(шт|dona)\.?$/i.test(x.trim()));
+    const m = part ? /(\d+(?:[.,]\d+)?)/.exec(part) : null;
+    return m ? Number(m[1].replace(',', '.')) : 0;
+  };
+  return (
+    dose(a.variant_label_ru) - dose(b.variant_label_ru) ||
+    (a.pack_count ?? 0) - (b.pack_count ?? 0) ||
+    Number(a.price_uzs ?? 0) - Number(b.price_uzs ?? 0) ||
+    a.sku.localeCompare(b.sku)
+  );
 }
