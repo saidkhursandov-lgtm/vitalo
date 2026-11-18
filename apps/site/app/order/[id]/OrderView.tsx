@@ -2,19 +2,25 @@
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { CircleCheck, Copy, CreditCard, Phone, Send, Smartphone } from 'lucide-react';
+import { CircleCheck, Copy, CreditCard, LifeBuoy, Phone, Send, Smartphone, Star } from 'lucide-react';
 import { api, ApiError } from '@/lib/client';
 import { dateTime, money, nameOf, orderNo, prettyPhone, shortNameOf } from '@/lib/format';
 import { errorText } from '@/lib/i18n';
-import type { BankTransfer, Order } from '@/lib/types';
+import type { Key } from '@/lib/i18n';
+import type { BankTransfer, Order, OrderReturns } from '@/lib/types';
 import { useSession } from '@/components/Session';
+import { StatusBadge } from '@/components/OrderBits';
 import { startPayme } from '../../checkout/CheckoutView';
 
-const STATUS_TONE: Record<string, string> = { awaiting_payment: 'warn', cancelled: 'muted', return: 'muted', delivered: 'ok', paid: 'ok' };
 /** While the order can still change by itself (payment, receipt check), the page asks the server every 10 s. */
 const LIVE = new Set(['new', 'awaiting_payment']);
 
 /** «1234 5678 9012 3456» — the card number in groups of four, easy to retype in a bank app. */
+/** The same status twice in a row (e.g. new -> awaiting_payment) is shown once. */
+export function dedupeHistory<T extends { to_status: string }>(history: T[]): T[] {
+  return history.filter((h, i) => i === 0 || h.to_status !== history[i - 1].to_status);
+}
+
 export const cardGroups = (n: string) => n.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ');
 
 /**
@@ -25,13 +31,16 @@ export function OrderView({ id }: { id: string }) {
   const { t, lang, user, botUsername } = useSession();
   const router = useRouter();
   const path = usePathname();
-  const isNew = useSearchParams().get('new') === '1';
+  const params = useSearchParams();
+  const isNew = params.get('new') === '1';
   const [order, setOrder] = useState<Order | null>(null);
   const [transfer, setTransfer] = useState<BankTransfer | null>(null);
   const [missing, setMissing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [returns, setReturns] = useState<OrderReturns | null>(null);
+  const returned = params.get('returned') === '1';
 
   useEffect(() => {
     if (user === null) router.replace(`/login?next=${encodeURIComponent(path)}`);
@@ -45,6 +54,7 @@ export function OrderView({ id }: { id: string }) {
       if ((m === 'card_transfer' || m === 'bank_transfer') && o.status === 'awaiting_payment') {
         setTransfer(await api<BankTransfer>(`/orders/${id}/payment/bank-transfer`).catch(() => null));
       } else setTransfer(null);
+      if (o.status === 'delivered' || o.status === 'return') setReturns(await api<OrderReturns>(`/returns/order/${id}`).catch(() => null));
     } catch (e) {
       if (e instanceof ApiError && (e.status === 404 || e.status === 400)) setMissing(true);
     }
@@ -115,7 +125,6 @@ export function OrderView({ id }: { id: string }) {
     }
   }
 
-  const tone = STATUS_TONE[order.status] ?? 'info';
   return (
     <div className="order-layout">
       <div style={{ display: 'grid', gap: 16 }}>
@@ -131,8 +140,10 @@ export function OrderView({ id }: { id: string }) {
               <h1 className="page-title" style={{ margin: 0 }}>{t('order.title', { n: orderNo(order.order_number) })}</h1>
               <p className="hint">{dateTime(order.created_at, lang)}</p>
             </div>
-            <span className={`status-badge is-${tone}`}>{t(`status.${order.status}`)}</span>
+            <StatusBadge status={order.status} reported={!!order.payment?.customer_reported_paid_at} />
           </div>
+          {returned ? <div className="notice notice-ok">{t('acc.returnSent')}</div> : null}
+          {order.status === 'paid' && !order.cross_border ? <p className="hint">{t('orders.paidNoCancel')}</p> : null}
 
           {waiting && method === 'payme' ? (
             <div className="pay-box">
@@ -205,6 +216,30 @@ export function OrderView({ id }: { id: string }) {
             ))}
           </ul>
         </section>
+
+        {returns?.returns.length ? (
+          <section className="card ck-section">
+            <h2>{t('return.card')}</h2>
+            {returns.returns.map((x) => (
+              <p key={x.id} className={`return-status is-${x.status}`}>
+                {t(`return.status.${x.status}` as Key, { sum: money(x.refund_amount_uzs ?? 0, lang), reason: x.reject_reason ?? '' })}
+                <span className="hint"> · {dateTime(x.created_at, lang)}</span>
+              </p>
+            ))}
+          </section>
+        ) : null}
+
+        <section className="card ck-section">
+          <h2>{t('orders.history')}</h2>
+          <ol className="timeline">
+            {dedupeHistory(order.history).map((h, i) => (
+              <li key={i}>
+                <b>{t(`status.${h.to_status}`)}</b>
+                <span className="hint">{dateTime(h.created_at, lang)}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
       </div>
 
       <aside className="summary-box">
@@ -245,7 +280,20 @@ export function OrderView({ id }: { id: string }) {
             <span>{t('cart.total')}</span>
             <span>{money(order.totals.total_uzs, lang)}</span>
           </div>
-          <a className="btn btn-secondary btn-block" href={`https://t.me/${botUsername}?start=o_${order.id}`} target="_blank" rel="noopener noreferrer">
+          {order.status === 'delivered' ? (
+            <Link className="btn btn-block" href={`/review/${order.id}`}>
+              <Star size={18} strokeWidth={1.8} /> {t('review.rateOrder')}
+            </Link>
+          ) : null}
+          {order.status === 'delivered' && returns?.can_request ? (
+            <Link className="btn btn-secondary btn-block" href={`/order/${order.id}/return`}>
+              {t('return.button')}
+            </Link>
+          ) : null}
+          <Link className="btn btn-secondary btn-block" href={`/account/support?order=${order.id}&n=${encodeURIComponent(order.order_number)}`}>
+            <LifeBuoy size={18} strokeWidth={1.8} /> {t('orders.ask')}
+          </Link>
+          <a className="btn btn-ghost btn-block" href={`https://t.me/${botUsername}?start=o_${order.id}`} target="_blank" rel="noopener noreferrer">
             <Send size={18} strokeWidth={1.8} /> {t('order.inTelegram')}
           </a>
           {order.can_cancel ? (

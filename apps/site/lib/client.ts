@@ -41,19 +41,21 @@ export const setUnauthorizedHandler = (fn: (() => void) | null) => {
 
 export async function api<T>(path: string, opts: { method?: string; body?: unknown; auth?: boolean; headers?: Record<string, string> } = {}): Promise<T> {
   const token = opts.auth === false ? null : getToken();
+  // a form with photos (reviews, returns) goes as multipart and gets more time on a slow network
+  const form = typeof FormData !== 'undefined' && opts.body instanceof FormData;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15_000);
+  const timer = setTimeout(() => ctrl.abort(), form ? 60_000 : 15_000);
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
       method: opts.method ?? 'GET',
       headers: {
         accept: 'application/json',
-        ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(opts.body !== undefined && !form ? { 'content-type': 'application/json' } : {}),
         ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...opts.headers,
       },
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.body === undefined ? undefined : form ? (opts.body as FormData) : JSON.stringify(opts.body),
       signal: ctrl.signal,
     });
   } catch {

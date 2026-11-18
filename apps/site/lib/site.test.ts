@@ -4,7 +4,10 @@ import { addToGuestCart, setGuestQty } from './client';
 import { qs } from './server-api';
 import { formatUzPhone, safeNext } from '../app/login/LoginForm';
 import { hrefWith, parseQuery } from '../components/CatalogView';
-import { cardGroups } from '../app/order/[id]/OrderView';
+import { cardGroups, dedupeHistory } from '../app/order/[id]/OrderView';
+import { sitePath } from '../components/AccountShell';
+import { opKey } from '../app/account/bonus/BonusView';
+import { acceptPhotos } from '../components/PhotoPicker';
 import { createIdempotencyKeys } from './idempotency';
 
 describe('texts', () => {
@@ -78,6 +81,42 @@ describe('checkout and order page', () => {
     const a = keys.keyFor({ source: 'cart', city_id: 'x' });
     expect(keys.keyFor({ source: 'cart', city_id: 'x' })).toBe(a);
     expect(keys.keyFor({ source: 'cart', city_id: 'y' })).not.toBe(a);
+  });
+});
+
+describe('account (stage 6.4)', () => {
+  const ID = '6f1c2a7e-0d5b-4c1a-9a2e-1b2c3d4e5f60';
+
+  it('opens notification links on the site, not Mini App addresses', () => {
+    expect(sitePath(`/orders/${ID}`)).toBe(`/order/${ID}`);
+    expect(sitePath(`/orders/${ID}/pay`)).toBe(`/order/${ID}`);
+    expect(sitePath(`/orders/${ID}/return`)).toBe(`/order/${ID}/return`);
+    expect(sitePath(`/support/${ID}`)).toBe(`/account/support/${ID}`);
+    expect(sitePath('/bonus')).toBe('/account/bonus');
+    expect(sitePath(`/review/${ID}`)).toBe(`/review/${ID}`);
+    expect(sitePath('/product/magniy-b6')).toBe('/product/magniy-b6');
+    expect(sitePath('/campaign/black-friday')).toBe('/');
+    expect(sitePath(null)).toBeNull();
+  });
+
+  it('names bonus history lines like the Mini App', () => {
+    expect(opKey({ op: 'reversal', amount_uzs: 5000 })).toBe('bonus.op.refund');
+    expect(opKey({ op: 'reversal', amount_uzs: -5000 })).toBe('bonus.op.unpurchase');
+    expect(opKey({ op: 'referral', amount_uzs: 10000 })).toBe('bonus.op.manual_add');
+    expect(opKey({ op: 'purchase', amount_uzs: 3000 })).toBe('bonus.op.purchase');
+  });
+
+  it('keeps only JPG/PNG/WEBP photos up to 10 MB and the limit', () => {
+    const file = (type: string, size = 1000) => ({ type, size }) as File;
+    const r = acceptPhotos([file('image/jpeg')], [file('image/png'), file('application/pdf'), file('image/webp', 11 * 1024 * 1024), file('image/webp')], 2);
+    expect(r.photos.length).toBe(2);
+    expect(r.rejected).toBe(true);
+    expect(acceptPhotos([], [file('image/webp')], 3).rejected).toBe(false);
+  });
+
+  it('shows a repeated status once in the order history', () => {
+    const h = [{ to_status: 'new' }, { to_status: 'new' }, { to_status: 'awaiting_payment' }, { to_status: 'paid' }];
+    expect(dedupeHistory(h).map((x) => x.to_status)).toEqual(['new', 'awaiting_payment', 'paid']);
   });
 });
 

@@ -147,7 +147,7 @@ export function Header({ categories }: { categories: CategoryTrees | null }) {
                 <User size={22} strokeWidth={1.8} />
                 <span className="lbl">{user ? user.first_name : t('nav.login')}</span>
               </Link>
-              <Link className="header-action" href="/cart" aria-label={t('nav.cart')}>
+              <Link className="header-action header-cart" href="/cart" aria-label={t('nav.cart')}>
                 <ShoppingBag size={22} strokeWidth={1.8} />
                 {cartCount > 0 && <span className="badge-count">{cartCount > 99 ? '99+' : cartCount}</span>}
                 <span className="lbl">{t('nav.cart')}</span>
