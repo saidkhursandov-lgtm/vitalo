@@ -10,6 +10,7 @@
 | API | Node.js 24, NestJS 11, Prisma 6, TypeScript; фото — sharp | `apps/api` |
 | База | PostgreSQL 16 (расширения `pg_trgm`, `unaccent` для поиска) | `apps/api/prisma/schema.prisma`, `migrations/` |
 | Mini App | React 19, Vite 7, React Query, React Router 7; шрифт Montserrat | `apps/miniapp` |
+| Сайт vitalo.uz (релиз 6, D-81) | Next.js 15, React 19; страницы собираются на сервере; шрифт Montserrat; ещё не выложен | `apps/site` |
 | Админка | React 19, Vite 7, React Query | `apps/admin` |
 | Бот | grammY (long polling), tsx | `apps/bot` |
 | AI (3.8) | Claude API (Anthropic) через `@anthropic-ai/sdk`; модель — настройка в админке, ключ — только `ANTHROPIC_API_KEY` в `.env` | `apps/api/src/compat` |
@@ -104,7 +105,8 @@
 
 | Адрес | Что |
 | --- | --- |
-| `vitalo.uz` | основной: сейчас Mini App (`apps/miniapp/dist`). Лендинг — временная страница до релиза 6; сайт = тот же Mini App в браузере (релиз 6, D-30), отдельного сайта нет |
+| `vitalo.uz` | сайт (релиз 6, D-81, `apps/site`) — ещё не выложен; сейчас открывает Mini App (`apps/miniapp/dist`) |
+| `app.vitalo.uz` | Mini App после переезда (релиз 6, этап 6.6) — ещё не выложен |
 | `admin.vitalo.uz` | админка (`apps/admin/dist`) |
 | `api.vitalo.uz` | API (nginx → `vitalo-api` на порту 3000, наружу порт не открыт) |
 | `vitalostore.uz` | должен перенаправлять на `vitalo.uz` (29.10 не ответил — проверить) |
