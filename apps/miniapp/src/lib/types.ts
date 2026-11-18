@@ -261,6 +261,18 @@ export interface ProductCard extends ProductListItem {
   also_bought: ProductListItem[];
   /** 4.1 «Идеальная пара» (null — no block) */
   pair?: ProductPair | null;
+  /** D-79 «Фасовка»: the pack sizes / doses on sale, this one included (empty — no buttons) */
+  variants?: ProductVariant[];
+}
+
+/** D-79: one «Фасовка» button — another product (its own SKU, stock and price) */
+export interface ProductVariant {
+  id: string;
+  label_ru: string;
+  label_uz: string;
+  price_uzs: number;
+  in_stock: boolean;
+  current: boolean;
 }
 
 /** 4.1: the second jar and «почему вместе» (the text of the approved synergy rule; null for a pair chosen by hand without a rule) */

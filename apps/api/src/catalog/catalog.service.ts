@@ -277,7 +277,30 @@ export class CatalogService {
     if (!product) throw new NotFoundException('Product not found');
     const card = await this.campaigns.decorateCard(toProductCard(product));
     // D-60/D-61: «Под заказ из США • 7–14 дней» / «Под заказ • 1–2 дня» and the guarantee, from the supplier
-    return { ...card, cross_border_terms: card.under_order, pair: await this.pairCard(id) };
+    return { ...card, cross_border_terms: card.under_order, pair: await this.pairCard(id), variants: await this.variants(product) };
+  }
+
+  /**
+   * D-79 «Фасовка»: the pack sizes / doses of this product that are on sale, this one included, with the price the
+   * customer pays (promotions applied). Empty when the product has no other pack size on sale.
+   */
+  private async variants(p: { id: string; variant_group_id: string | null }) {
+    if (!p.variant_group_id) return [];
+    const rows = await this.prisma.products.findMany({
+      where: { variant_group_id: p.variant_group_id, status: 'active', is_test: false },
+      include: listInclude,
+      orderBy: [{ pack_count: 'asc' }, { price_uzs: 'asc' }, { sku: 'asc' }],
+    });
+    if (rows.length < 2) return [];
+    const items = await this.campaigns.decorate(rows.map(toProductListItem));
+    return items.map((v, i) => ({
+      id: v.id,
+      label_ru: rows[i].variant_label_ru ?? v.short_name_ru ?? v.name_ru,
+      label_uz: rows[i].variant_label_uz ?? rows[i].variant_label_ru ?? v.short_name_uz ?? v.name_uz ?? v.name_ru,
+      price_uzs: v.price_uzs,
+      in_stock: v.in_stock || !!v.under_order,
+      current: v.id === p.id,
+    }));
   }
 
   /** 4.1 «Идеальная пара»: the second jar with «почему вместе» (null = no block). */

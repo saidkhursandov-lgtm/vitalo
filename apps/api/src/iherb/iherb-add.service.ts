@@ -14,7 +14,7 @@ import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '
 import { autoPrice } from './auto-price';
 import { CARD_SCHEMA, CARD_SYSTEM, cardDataBlock, checkCardAnswer, type CardLists } from './iherb-card';
 import { parseIherbUrl } from './iherb-fields';
-import { nextIherbSku, readIherbPage, PHOTOS_MAX } from './iherb-page';
+import { nextIherbSku, readIherbPage, PHOTOS_MAX, variantLabel, type IherbPage } from './iherb-page';
 
 /** The saved page with its pictures can be big; its text is what matters. */
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
@@ -80,6 +80,23 @@ async function fetchPhoto(start: URL): Promise<Response> {
 }
 
 /** VITALO price from the iHerb price: the auto pricing rule of a new product (no purchase cost, nothing on the shelf). */
+/** D-79: «120 count» → 120; the pack size part of a variant label. */
+const countOf = (label: string | null) => {
+  const m = /(?:^|· )([\d.,]+) count$/i.exec(label ?? '');
+  return m ? Number(m[1].replace(/[.,]/g, '')) : null;
+};
+/** D-79: two variant labels differ only in the pack size («5000 IU · 180 count» / «5000 IU · 360 count»). */
+export function onlyCountDiffers(a: string | null, b: string | null): boolean {
+  if (!a || !b || countOf(a) == null || countOf(b) == null || countOf(a) === countOf(b)) return false;
+  const rest = (x: string) => x.split(' · ').slice(0, -1).join(' · ');
+  return rest(a) === rest(b);
+}
+/** D-79: the pack size in a name of the other pack size → this one («…, 120 капсул» → «…, 60 капсул»). */
+export function swapCount(text: string | null, from: number, to: number): string | null {
+  if (!text) return text;
+  return text.replace(new RegExp(`(^|[^\\d])${from}(?=\\s*(?:капс|таб|шт|мягк|жеват|пастил|kaps|tab|dona|softgel|caps|count|veg))`, 'gi'), `$1${to}`);
+}
+
 export function priceFromIherb(iherbPrice: number, markup = DEFAULT_MARKUP, roundTo = DEFAULT_ROUND): number {
   return autoPrice({
     iherb_price_uzs: iherbPrice,
@@ -154,6 +171,107 @@ export class IherbAddService {
     return { brand_id: await find(b, card.brand), manufacturer_id: await find(m, card.manufacturer), country_id: await find(c, card.country), form_id: await find(f, card.form) };
   }
 
+  /** D-79: the other pack sizes of the page that are already in the shop. */
+  private async variantsInShop(page: IherbPage) {
+    const pids = page.variants.map((v) => v.product_id);
+    const ours = pids.length
+      ? await this.prisma.products.findMany({ where: { iherb_product_id: { in: pids } }, select: { id: true, sku: true, name_ru: true, status: true, iherb_product_id: true, variant_group_id: true } })
+      : [];
+    const list = page.variants.map((v) => ({ ...v, label_ru: variantLabel(v.label, 'ru'), ours: ours.find((o) => o.iherb_product_id === v.product_id) ?? null }));
+    const join = list.find((v) => v.ours?.variant_group_id)?.ours ?? list.find((v) => v.ours)?.ours ?? null;
+    return { list, variant_of: join?.id ?? null };
+  }
+
+  /**
+   * D-79: the same product in another pack size is already in the shop → its card is copied (no AI, nothing paid):
+   * names get this pack size, the price, the link and the photos are this page's. Only when the two differ in the
+   * pack size alone — another dose is another composition, that goes through AI.
+   */
+  private async copyFromVariant(me: StaffContext, link: { productId: string; url: string }, page: IherbPage, vars: { list: { label: string; ours: { id: string } | null }[] }, otherPage = false) {
+    const src = vars.list.find((v) => v.ours && onlyCountDiffers(v.label, page.variant_label));
+    if (!src?.ours) return null;
+    const p = await this.prisma.products.findUnique({
+      where: { id: src.ours.id },
+      include: { categories: { select: { category_id: true } }, substances: { orderBy: { position: 'asc' }, select: { substance_id: true, in_label: true, dose_amount: true, dose_unit: true } } },
+    });
+    if (!p) return null;
+    const from = countOf(src.label)!;
+    const to = countOf(page.variant_label)!;
+    const problems = [`Карточка скопирована с фасовки ${p.sku} (${variantLabel(src.label, 'ru')}) — AI не вызывался. Проверьте название, количество в банке, вес и фото.`];
+    // the price of this pack size from its button; the page's own price only when the page is of this pack size
+    const iherbPrice = page.variant_price_uzs ?? (otherPage ? null : page.price_uzs);
+    if (otherPage) problems.push(`Сохранена страница другой фасовки (iHerb ${page.canonical_id}): цена взята с кнопки фасовки, фото не взяты — добавьте их вручную или сохраните страницу этой фасовки`);
+    if (page.wrong_currency) problems.push('Страница iHerb в долларах — переключите iHerb на сумы (UZS), сохраните страницу заново, иначе цену не посчитать');
+    if (!iherbPrice) problems.push('Не нашёл цену iHerb в сумах — впишите цену VITALO вручную');
+    if (page.in_stock === false && !otherPage) problems.push('На iHerb товара сейчас нет в наличии');
+    problems.push('Вес и размеры упаковки не скопированы — у другой фасовки они другие, впишите с iHerb');
+    const skus = await this.prisma.products.findMany({ where: { sku: { startsWith: 'VTL-H', mode: 'insensitive' } }, select: { sku: true } });
+    const admin = can(me.staff.role, 'costs.view');
+    const n = (v: Prisma.Decimal | null) => (v == null ? null : Number(v));
+    const draft = {
+      sku: nextIherbSku(skus.map((x) => x.sku)),
+      status: 'hidden' as const,
+      name_ru: swapCount(p.name_ru, from, to)!,
+      name_uz: swapCount(p.name_uz, from, to),
+      short_name_ru: swapCount(p.short_name_ru, from, to),
+      short_name_uz: swapCount(p.short_name_uz, from, to),
+      brand: p.brand,
+      manufacturer: p.manufacturer,
+      country: p.country,
+      form: p.form,
+      brand_id: p.brand_id,
+      manufacturer_id: p.manufacturer_id,
+      country_id: p.country_id,
+      form_id: p.form_id,
+      short_description_ru: p.short_description_ru,
+      short_description_uz: p.short_description_uz,
+      composition_ru: p.composition_ru,
+      composition_uz: p.composition_uz,
+      directions_ru: p.directions_ru,
+      directions_uz: p.directions_uz,
+      warnings_ru: p.warnings_ru,
+      warnings_uz: p.warnings_uz,
+      search_keywords: p.search_keywords,
+      shell_ru: p.shell_ru,
+      shell_uz: p.shell_uz,
+      pack_count: p.pack_count && p.pack_count !== from ? Math.round((p.pack_count * to) / from) : to,
+      servings_per_day: p.servings_per_day,
+      shipping_weight_g: null,
+      shipping_length_mm: null,
+      shipping_width_mm: null,
+      shipping_height_mm: null,
+      price_uzs: iherbPrice ? priceFromIherb(iherbPrice) : 0,
+      category_ids: p.categories.map((c) => c.category_id),
+      iherb_url: link.url,
+      ...(admin && { auto_pricing_enabled: true, markup_percent: p.markup_percent, price_round_to: p.price_round_to }),
+      dose_amount: n(p.dose_amount),
+      dose_unit: p.dose_unit,
+      dose_per: p.dose_per,
+      match_form: p.match_form,
+      substances: p.substances.map((x) => ({ id: x.substance_id, in_label: x.in_label, dose_amount: n(x.dose_amount), dose_unit: x.dose_unit })),
+      audience: p.audience,
+      goals: p.goals,
+      variant_of: p.id,
+      variant_label_ru: variantLabel(page.variant_label, 'ru'),
+      variant_label_uz: variantLabel(page.variant_label, 'uz'),
+      ai_filled: true,
+    };
+    return {
+      duplicate: null,
+      copied_from: { id: p.id, sku: p.sku, name_ru: p.name_ru },
+      draft,
+      photos: otherPage ? [] : page.photos,
+      iherb: { product_id: link.productId, url: link.url, price_uzs: iherbPrice, price_source: iherbPrice ? ('page' as const) : null, in_stock: otherPage ? null : page.in_stock, title: page.title, iherb_code: page.iherb_code, upc: page.upc },
+      variants: vars.list,
+      enrichment: null,
+      unknown: [],
+      similar: [],
+      problems,
+      note: '',
+      cost_usd: 0,
+    };
+  }
+
   async draft(me: StaffContext, rawUrl: string, input: string, now = new Date()) {
     const link = parseIherbUrl(rawUrl ?? '');
     if (!link) throw new BadRequestException({ code: 'BAD_IHERB_URL', message: 'Ссылка iHerb должна вести на страницу товара, например https://uz.iherb.com/pr/…/12345' });
@@ -164,6 +282,12 @@ export class IherbAddService {
     const page = readIherbPage(input, link.productId);
     if (page.text.length < 300) throw new BadRequestException({ code: 'PAGE_EMPTY', message: 'На странице почти нет текста — сохраните страницу товара целиком (Ctrl+S) или скопируйте весь текст (Ctrl+A, Ctrl+C)' });
     if (page.same_product === false) throw new BadRequestException({ code: 'WRONG_PAGE', message: `Сохранённая страница — не товар ${link.productId}. Откройте ссылку, которую вставили, и сохраните её` });
+    // D-79: the page saved is of another pack size of the link: only a copy from a pack size in the shop can use it
+    const otherPage = !!page.canonical_id && page.canonical_id !== link.productId;
+    const vars = await this.variantsInShop(page);
+    const copied = await this.copyFromVariant(me, link, page, vars, otherPage);
+    if (copied) return copied;
+    if (otherPage) throw new BadRequestException({ code: 'WRONG_PAGE', message: `Сохранённая страница — другая фасовка (iHerb ${page.canonical_id}), а не товар ${link.productId}. Откройте ссылку, которую вставили, и сохраните её` });
 
     const s = await this.enrich.assertCanCall(now);
     const lists = await this.lists();
@@ -211,7 +335,8 @@ export class IherbAddService {
 
     const skus = await this.prisma.products.findMany({ where: { sku: { startsWith: 'VTL-H', mode: 'insensitive' } }, select: { sku: true } });
     const ids = await this.dictionaryIds(c);
-    const similar = await this.similar(c.brand, [c.name_ru, page.title ?? ''], link.productId);
+    const similar = (await this.similar(c.brand, [c.name_ru, page.title ?? ''], link.productId)).filter((x) => !vars.list.some((v) => v.ours?.id === x.id));
+    if (page.sizes_of_other_variant) problems.push('Вес и размеры на странице iHerb могут относиться к другой фасовке — сверьте с iHerb');
     const main = payload?.substances.find((x) => x.in_label && x.dose_amount != null) ?? payload?.substances.find((x) => x.dose_amount != null) ?? null;
     const admin = can(me.staff.role, 'costs.view');
 
@@ -255,6 +380,9 @@ export class IherbAddService {
       substances: (payload?.substances ?? []).map((x) => ({ id: x.id, in_label: x.in_label, dose_amount: x.dose_amount, dose_unit: x.dose_unit })),
       audience: payload?.audience ?? null,
       goals: payload?.goals ?? [],
+      variant_of: vars.variant_of,
+      variant_label_ru: variantLabel(page.variant_label, 'ru'),
+      variant_label_uz: variantLabel(page.variant_label, 'uz'),
       ai_filled: true,
     };
     return {
@@ -262,6 +390,7 @@ export class IherbAddService {
       draft,
       photos: page.photos,
       iherb: { product_id: link.productId, url: link.url, price_uzs: iherbPrice ?? null, price_source: priceSource, in_stock: inStock, title: page.title, iherb_code: page.iherb_code, upc: page.upc },
+      variants: vars.list,
       enrichment: payload,
       unknown: payload ? unknownSuggestions(payload.unknown, c.actives) : [],
       similar,

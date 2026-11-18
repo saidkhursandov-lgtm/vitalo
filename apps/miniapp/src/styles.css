@@ -2003,3 +2003,17 @@ a.bonus-wallet { text-decoration: none; margin: 0 0 12px; }
 .set-buy-sum { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .set-save { font-size: 13px; color: var(--primary-text); font-weight: 600; }
 .set-hint { margin: 6px 0 0; }
+
+/* D-79 «Фасовка»: pack size buttons on the product card */
+.variants { margin: 4px 0 12px; }
+.variants-title { font-size: 14px; font-weight: 600; color: var(--muted); margin: 0 0 8px; }
+.variants .chips { margin: 0; }
+.variant-chip {
+  flex: none; display: inline-flex; flex-direction: column; justify-content: center; min-height: 52px; min-width: 88px; padding: 6px 14px;
+  border-radius: 12px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--text); text-decoration: none;
+}
+.variant-chip .variant-label { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.variant-chip .variant-price { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.variant-chip.is-on { border: 2px solid var(--primary); padding: 5px 13px; }
+.variant-chip.is-on .variant-label { color: var(--primary); }
+.variant-chip.is-out .variant-label { color: var(--muted); }

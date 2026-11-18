@@ -1,7 +1,7 @@
 import { checkRulesAnswer } from '../compat/rule-suggest';
-import { priceFromIherb, unknownSuggestions } from './iherb-add.service';
+import { onlyCountDiffers, priceFromIherb, swapCount, unknownSuggestions } from './iherb-add.service';
 import { checkCardAnswer, type CardLists } from './iherb-card';
-import { htmlToText, nextIherbSku, productPhotos, readIherbPage } from './iherb-page';
+import { htmlToText, nextIherbSku, productPhotos, readIherbPage, readVariants, variantLabel } from './iherb-page';
 
 const IMG = 'https://cloudinary.images-iherb.com/image/upload/f_auto,q_auto:eco/images/now/now01282';
 const page = (ld: object, extra = '') => `<!doctype html><html><head><title>NOW Foods</title>
@@ -173,5 +173,40 @@ describe('D-78: suggested compatibility rules', () => {
     const s = checkRulesAnswer({ rules: [rule('fe', 'spread')] }, dict[2], dict, new Set());
     expect(s.ok && s.value[0]).toMatchObject({ substance_b_id: 'fe', kind: 'spread', interval_hours: 2 });
     expect(checkRulesAnswer({}, dict[0], dict, new Set())).toEqual({ ok: false, error: 'shape' });
+  });
+});
+
+describe('D-79 «Фасовки» on the iHerb page', () => {
+  const tile = (val: string, pid: string, selected: boolean, price = '') =>
+    `<div class="attribute-tile combo-shaded stock-onsale  " data-val="${val}" data-pid="${pid}" data-url="https://uz.iherb.com/pr/x/${pid}" role="option" aria-selected="${selected}" tabindex="0">
+      <div class="item-details"><div class="attribute-name" data-val="${val}">${val}</div>${price ? `<div class="price-container"><span>${price}</span></div>` : ''}
+      </div></div>`;
+  // iHerb renders the buttons of the pack size shown first (here 180), whatever the link is
+  const html = `<html><body><div class="attribute-tile-group">${tile('1000 IU', '17137', false)}${tile('5000 IU', '21367', true)}</div>
+    <div class="attribute-tile-group">${tile('180 count', '21367', true, '90&nbsp;466,19 сум')}${tile('360 count', '36580', false, '152&nbsp;454,79 сум')}${tile('720 count', '56653', false, '284&nbsp;419,01 сум')}</div>
+    <div id="modelProperties" data-product-id="21367" data-shipping-weight-kg="0.06 kg"></div></body></html>`;
+
+  it('the link’s own pack size and the others, with their iHerb prices; the dose button is the dose alone', () => {
+    expect(readVariants(html, '36580')).toEqual({
+      label: '5000 IU · 360 count',
+      price_uzs: 152454,
+      variants: [
+        { product_id: '21367', label: '5000 IU · 180 count', price_uzs: 90466, url: 'https://uz.iherb.com/pr/x/21367' },
+        { product_id: '56653', label: '5000 IU · 720 count', price_uzs: 284419, url: 'https://uz.iherb.com/pr/x/56653' },
+        { product_id: '17137', label: '1000 IU', price_uzs: null, url: 'https://uz.iherb.com/pr/x/17137' },
+      ],
+    });
+    expect(readIherbPage(html.replace('<body>', '<body><a href="/pr/x/36580">x</a>'), '36580').sizes_of_other_variant).toBe(true);
+    expect(readVariants('<html></html>', '1')).toEqual({ variants: [], label: null, price_uzs: null });
+  });
+
+  it('labels in the shop’s words; names get the other pack size; only a pack size difference is copied', () => {
+    expect(variantLabel('5000 IU · 360 count', 'ru')).toBe('5000 МЕ · 360 шт');
+    expect(variantLabel('5000 IU · 360 count', 'uz')).toBe('5000 XB · 360 dona');
+    expect(swapCount('Life Extension, Мультивитамины Two-Per-Day, 120 капсул', 120, 60)).toBe('Life Extension, Мультивитамины Two-Per-Day, 60 капсул');
+    expect(swapCount('Two-Per-Day multivitaminlari, 120 kapsula; 1200 mg', 120, 60)).toBe('Two-Per-Day multivitaminlari, 60 kapsula; 1200 mg');
+    expect(onlyCountDiffers('5000 IU · 180 count', '5000 IU · 360 count')).toBe(true);
+    expect(onlyCountDiffers('1000 IU · 180 count', '5000 IU · 180 count')).toBe(false);
+    expect(onlyCountDiffers('60 count', '120 count')).toBe(true);
   });
 });

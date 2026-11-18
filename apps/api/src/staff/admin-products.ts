@@ -239,6 +239,11 @@ export class ProductInput {
   @ApiPropertyOptional() @IsOptional() @IsUUID() enrichment_id?: string;
   /** D-78: the card came from «Добавить из iHerb» with its substances already drafted — no second AI draft. Not stored. */
   @ApiPropertyOptional() @IsOptional() @IsBoolean() ai_filled?: boolean;
+  @ApiPropertyOptional({ nullable: true, description: 'D-79: подпись фасовки на кнопке, напр. «60 капсул», «5000 МЕ · 180 шт»' })
+  @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(40) variant_label_ru?: string | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(textOrNull) @IsString() @MaxLength(40) variant_label_uz?: string | null;
+  /** D-79: join the «Фасовки» of this product (its group); null — leave the group. Not stored itself. */
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() variant_of?: string | null;
 }
 
 export class ProductSubstanceItem {
@@ -413,6 +418,29 @@ function toAdminProduct(p: ProductRow) {
   };
 }
 
+/**
+ * D-79 «Фасовки»: `variantOf` — another product whose group this one joins (the group is created when that product has
+ * none); null — this product leaves its group. A group of one is cleared, so a lone product never shows «Фасовка».
+ */
+async function setVariantGroup(tx: Prisma.TransactionClient, id: string, variantOf: string | null | undefined) {
+  if (variantOf === undefined) return;
+  const self = await tx.products.findUniqueOrThrow({ where: { id }, select: { variant_group_id: true } });
+  let group: string | null = null;
+  if (variantOf !== null) {
+    if (variantOf === id) throw new BadRequestException({ code: 'BAD_VARIANT', message: 'Товар не может быть фасовкой самого себя' });
+    const other = await tx.products.findUnique({ where: { id: variantOf }, select: { id: true, variant_group_id: true } });
+    if (!other) throw new BadRequestException({ code: 'BAD_VARIANT', message: 'Товар для фасовки не найден' });
+    group = other.variant_group_id ?? randomUUID();
+    if (!other.variant_group_id) await tx.products.update({ where: { id: other.id }, data: { variant_group_id: group } });
+  }
+  if (self.variant_group_id === group) return;
+  await tx.products.update({ where: { id }, data: { variant_group_id: group } });
+  if (self.variant_group_id) {
+    const left = await tx.products.findMany({ where: { variant_group_id: self.variant_group_id }, select: { id: true } });
+    if (left.length === 1) await tx.products.update({ where: { id: left[0].id }, data: { variant_group_id: null } });
+  }
+}
+
 /** 4.1: a pair chosen by hand is another active product. */
 async function assertPair(tx: Prisma.TransactionClient, id: string, pairId: string | null | undefined) {
   if (!pairId) return;
@@ -562,16 +590,25 @@ export class AdminProductsService {
     if (!p) throw new NotFoundException('Product not found');
     // 4.1: the pair chosen by hand, by name (the card shows «Идеальная пара: …»)
     const pair = p.pair_product_id ? await this.prisma.products.findUnique({ where: { id: p.pair_product_id }, select: { id: true, sku: true, name_ru: true, status: true } }) : null;
-    return { ...toAdminProduct(p), pair_product: pair };
+    // D-79: the other pack sizes of this product
+    const variants = p.variant_group_id
+      ? await this.prisma.products.findMany({
+          where: { variant_group_id: p.variant_group_id, id: { not: id } },
+          select: { id: true, sku: true, name_ru: true, status: true, price_uzs: true, variant_label_ru: true, variant_label_uz: true },
+          orderBy: [{ pack_count: 'asc' }, { price_uzs: 'asc' }],
+        })
+      : [];
+    return { ...toAdminProduct(p), pair_product: pair, variants: variants.map((v) => ({ ...v, price_uzs: Number(v.price_uzs) })) };
   }
 
   async create(staffId: string | null, dto: ProductInput) {
     const id = await this.write(async (tx) => {
-      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, variant_of, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, null, data as Record<string, unknown>);
       const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, withDefaultPaymeCodes(data) as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
       if (category_ids?.length) await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: p.id, category_id: c })) });
+      await setVariantGroup(tx, p.id, variant_of);
       const sup = supplier_ids === undefined && on_zero_supplier_id === undefined ? await defaultSuppliers(tx, p.sku) : { supplier_ids, on_zero_supplier_id };
       const supplies = await this.setSuppliers(tx, p.id, sup.supplier_ids, sup.on_zero_supplier_id);
       const subs = substances ? await writeProductSubstances(tx, p.id, substances, { clearLabel: true }) : null;
@@ -592,10 +629,11 @@ export class AdminProductsService {
     await this.write(async (tx) => {
       const before = await tx.products.findUnique({ where: { id }, include: { categories: true, suppliers: { select: { supplier_id: true } } } });
       if (!before) throw new NotFoundException('Product not found');
-      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, ...data } = dto;
+      const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, variant_of, ...data } = dto;
       await this.assertCategories(tx, category_ids);
       await this.applyDictionaries(tx, before, data as Record<string, unknown>);
       await assertPair(tx, id, data.pair_product_id);
+      await setVariantGroup(tx, id, variant_of);
       const after = await tx.products.update({ where: { id }, data: this.toData(this.applyYandexSync(before, data as Record<string, unknown>)) });
       if (category_ids) {
         await tx.product_categories.deleteMany({ where: { product_id: id } });

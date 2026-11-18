@@ -14,6 +14,7 @@ import { SUPPLIER_KIND_LABELS, supplierTerms, useSuppliers } from '../components
 import { FORM_LABEL_MAX, labelOf, SubstancePicker, type PickedSubstance } from '../components/SubstancePicker';
 import { AUDIENCE_LABELS, EnrichDraft, GOAL_LABELS, type Enrichment } from '../components/EnrichDraft';
 import { PairField, pairOf, type PairValue } from '../components/PairField';
+import { VariantsField, type VariantOf, type VariantRow } from '../components/VariantsField';
 import { IherbDraftPanel, type IherbDraft } from '../components/IherbDraftPanel';
 
 interface CategoryNode {
@@ -42,6 +43,8 @@ interface AdminProduct {
   /** 4.1 «Идеальная пара»: off, or chosen by hand (null = picked by the rules) */
   pair_off?: boolean;
   pair_product?: { id: string; sku: string; name_ru: string } | null;
+  /** D-79: the other pack sizes of this product */
+  variants?: VariantRow[];
   /** D-61: «Где берём» and «Если на складе ноль — под заказ у …» */
   supplier_ids: string[];
   on_zero_supplier_id: string | null;
@@ -96,6 +99,8 @@ const PLAIN = [
   'package_code',
   'iherb_url',
   'match_form',
+  'variant_label_ru',
+  'variant_label_uz',
 ] as const;
 /** 2.3: numbers of the card; course days = pack / per day. */
 const INTS = ['pack_count', 'servings_per_day', 'market_advantage_percent', 'shipping_weight_g', 'shipping_length_mm', 'shipping_width_mm', 'shipping_height_mm'] as const;
@@ -211,6 +216,14 @@ export function ProductEdit() {
   return <ProductForm key={id} product={isNew ? undefined : q.data} iherb={iherb?.draft ? iherb : null} />;
 }
 
+/** D-79: the iHerb draft joins the pack size already in the shop (named from the draft's list of pack sizes). */
+function draftVariantOf(iherb: IherbDraft | null | undefined): VariantOf {
+  const id = iherb?.draft?.variant_of as string | null | undefined;
+  if (!id) return undefined;
+  const v = iherb?.variants?.find((x) => x.ours?.id === id)?.ours ?? (iherb?.copied_from?.id === id ? iherb.copied_from : null);
+  return { id, sku: v?.sku ?? '', name_ru: v?.name_ru ?? '' };
+}
+
 /** D-78: the form of a new product filled from the iHerb draft (Payme codes and «Где берём» stay the new-product defaults). */
 export function formFromDraft(d: Record<string, unknown>): Form {
   const base = toForm();
@@ -248,6 +261,8 @@ function ProductForm({ product, iherb }: { product?: AdminProduct; iherb?: Iherb
   const [draftId, setDraftId] = useState<string | null>(null);
   const [pair, setPair] = useState<PairValue>(() => pairOf(product));
   const [pairTouched, setPairTouched] = useState(false);
+  // D-79 «Фасовки»: from the iHerb draft — the pack size already in the shop this one joins
+  const [variantOf, setVariantOf] = useState<VariantOf>(() => draftVariantOf(iherb));
   const touchAi = () => {
     setAiTouched(true);
     setSaved(false);
@@ -309,6 +324,7 @@ function ProductForm({ product, iherb }: { product?: AdminProduct; iherb?: Iherb
         body.pair_off = pair.mode === 'off';
         body.pair_product_id = pair.mode === 'manual' ? (pair.product?.id ?? null) : null;
       }
+      if (variantOf !== undefined) body.variant_of = variantOf?.id ?? null;
       if (f.supply_touched === '1') {
         body.supplier_ids = f.supplier_ids ? f.supplier_ids.split(',') : [];
         body.on_zero_supplier_id = f.on_zero_supplier_id || null;
@@ -884,6 +900,27 @@ function ProductForm({ product, iherb }: { product?: AdminProduct; iherb?: Iherb
             ))}
           </select>
           <p className="muted small">Видна на карточке и в списках магазина. Если на товар идёт акция, показывается значок акции.</p>
+        </div>
+        <div className="check-col">
+          <h3>Фасовки</h3>
+          <VariantsField
+            productId={product?.id ?? null}
+            variants={product?.variants ?? []}
+            value={variantOf}
+            disabled={!editable}
+            labelRu={f.variant_label_ru}
+            labelUz={f.variant_label_uz}
+            onLabel={(l, v) => {
+              setF((x) => ({ ...x, [`variant_label_${l}`]: v }));
+              setSaved(false);
+              setDirty(true);
+            }}
+            onChange={(v) => {
+              setVariantOf(v);
+              setSaved(false);
+              setDirty(true);
+            }}
+          />
         </div>
         <div className="check-col">
           <h3>Идеальная пара</h3>

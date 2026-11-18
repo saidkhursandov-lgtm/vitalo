@@ -207,4 +207,55 @@ describe('«Добавить из iHerb» (e2e)', () => {
     const again = await http().post(`/api/staff/compat/substances/${s.mg}/suggest-rules`).set(bearer(tokens.admin)).expect(200);
     expect(again.body.created).toBe(0);
   });
+  it('D-79 «Фасовки»: another pack size of a product in the shop — the card is copied without AI and joins its pack sizes', async () => {
+    const pid2 = String(Number(pid) + 1);
+    const url2 = `https://uz.iherb.com/pr/now-foods-magnesium-citrate-200/${pid2}`;
+    const tile = (val: string, id: string, sel: boolean, price: string) =>
+      `<div class="attribute-tile combo-shaded" data-val="${val}" data-pid="${id}" data-url="https://uz.iherb.com/pr/x/${id}" aria-selected="${sel}"><div class="item-details"><div class="attribute-name">${val}</div><div class="price-container"><span>${price}</span></div></div></div>`;
+    const page2 = pageHtml(pid2)
+      .replace('154210.00', '250000.00')
+      .replace('<body>', `<body><div class="attribute-group attribute-tile-group">${tile('100 count', pid, true, '154&nbsp;210,00 сум')}${tile('200 count', pid2, false, '250&nbsp;000,00 сум')}</div>`);
+    await prisma.products.update({ where: { id: s.product }, data: { status: 'active' } });
+    fake.calls = [];
+    const r = await http().post('/api/staff/products/iherb/draft').set(bearer(tokens.admin)).send({ url: url2, text: page2 }).expect(200);
+    expect(fake.calls).toHaveLength(0);
+    expect(r.body).toMatchObject({ cost_usd: 0, copied_from: { id: s.product } });
+    expect(r.body.variants).toEqual([expect.objectContaining({ product_id: pid, label: '100 count', label_ru: '100 шт', price_uzs: 154_210, ours: expect.objectContaining({ id: s.product }) })]);
+    expect(r.body.draft).toMatchObject({
+      name_ru: `${TEST_BRAND}, Магний цитрат ${run}, 200 мг, 200 таблеток`,
+      name_uz: `${TEST_BRAND}, Magniy sitrat ${run}, 200 mg, 200 tabletka`,
+      pack_count: 200,
+      servings_per_day: 1,
+      price_uzs: 450_000,
+      iherb_url: url2,
+      substances: [{ id: s.mgc, in_label: true, dose_amount: 200, dose_unit: 'mg' }],
+      variant_of: s.product,
+      variant_label_ru: '200 шт',
+      variant_label_uz: '200 dona',
+      shipping_weight_g: null,
+    });
+    const created = await http()
+      .post('/api/staff/products')
+      .set(bearer(tokens.admin))
+      .send({ ...r.body.draft, sku: `${r.body.draft.sku}-${run}2`.slice(0, 50), status: 'active' })
+      .expect(201);
+    expect(created.body.variants).toEqual([expect.objectContaining({ id: s.product })]);
+    // the original gets a label too; the shop shows both as «Фасовка» buttons, the current one marked
+    await http().patch(`/api/staff/products/${s.product}`).set(bearer(tokens.admin)).send({ variant_label_ru: '100 шт', variant_label_uz: '100 dona' }).expect(200);
+    const card = (await http().get(`/api/catalog/products/${created.body.id}`).expect(200)).body;
+    expect(card.variants).toEqual([
+      expect.objectContaining({ id: s.product, label_ru: '100 шт', label_uz: '100 dona', current: false }),
+      expect.objectContaining({ id: created.body.id, label_ru: '200 шт', current: true }),
+    ]);
+    // a hidden pack size is not a button; with one left there are none
+    await http().patch(`/api/staff/products/${s.product}`).set(bearer(tokens.admin)).send({ status: 'hidden' }).expect(200);
+    expect((await http().get(`/api/catalog/products/${created.body.id}`).expect(200)).body.variants).toEqual([]);
+    // leaving the group: a group of one is cleared
+    const left = await http().patch(`/api/staff/products/${created.body.id}`).set(bearer(tokens.admin)).send({ variant_of: null }).expect(200);
+    expect(left.body.variants).toEqual([]);
+    expect((await prisma.products.findUniqueOrThrow({ where: { id: s.product } })).variant_group_id).toBeNull();
+    const self = await http().patch(`/api/staff/products/${s.product}`).set(bearer(tokens.admin)).send({ variant_of: s.product }).expect(400);
+    expect(self.body.code).toBe('BAD_VARIANT');
+    await prisma.products.update({ where: { id: created.body.id }, data: { iherb_product_id: null, iherb_url: null } });
+  });
 });

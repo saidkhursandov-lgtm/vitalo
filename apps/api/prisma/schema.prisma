@@ -703,6 +703,11 @@ model products {
   /// VITALO AI: health goals (ai-goal.ts PRODUCT_GOALS)
   goals                 String[] @default([])
 
+  // D-79 «Фасовки»: products with the same group id are pack sizes / doses of one product («60 капсул», «5000 МЕ · 180 шт»)
+  variant_group_id String? @db.Uuid
+  variant_label_ru String?
+  variant_label_uz String?
+
   brand_entry        brands?        @relation(fields: [brand_id], references: [id])
   manufacturer_entry manufacturers? @relation(fields: [manufacturer_id], references: [id])
   country_entry      countries?     @relation(fields: [country_id], references: [id])
@@ -749,6 +754,7 @@ model products {
   @@index([manufacturer_id])
   @@index([country_id])
   @@index([form_id])
+  @@index([variant_group_id])
 }
 
 /// Stage 1 dictionaries: unique name_ru ignoring case and extra spaces (expression index in the migration).

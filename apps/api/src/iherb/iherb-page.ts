@@ -26,6 +26,100 @@ export interface IherbPage {
   upc: string | null;
   /** The saved page is the page of this product (the link number is on it); null — cannot tell (copied text). */
   same_product: boolean | null;
+  /**
+   * D-79: the other pack sizes / doses iHerb offers (the «Package quantity» / «Potency» buttons), this product excluded.
+   * `label` — what this button means for the product of the link, e.g. «5000 IU · 360 count».
+   */
+  variants: IherbVariant[];
+  /** D-79: the label of the product of the link itself among those buttons; null — the page has no such buttons. */
+  variant_label: string | null;
+  /**
+   * D-79: the weight and size block of the saved page belongs to another pack size (iHerb fills it for the size shown
+   * first, not always the one of the link) — they must be checked.
+   */
+  sizes_of_other_variant: boolean;
+  /** D-79: the iHerb number of the page itself (its canonical link); the page may be another pack size of the link. */
+  canonical_id: string | null;
+  /** D-79: the iHerb price of the link's own pack size from its button, sum (the same on the page of any pack size). */
+  variant_price_uzs: number | null;
+}
+
+export interface IherbVariant {
+  product_id: string;
+  label: string;
+  price_uzs: number | null;
+  url: string | null;
+}
+
+interface Tile {
+  val: string;
+  pid: string;
+  url: string | null;
+  selected: boolean;
+  price: number | null;
+}
+
+/** «180 count» buttons are the pack size, the rest (IU, mcg, flavour…) the dose/kind — two independent choices. */
+const isCount = (v: string) => /\bcount\b/i.test(v);
+
+function variantTiles(html: string): Tile[] {
+  const out: Tile[] = [];
+  const re = /<div\b[^>]*class="attribute-tile(?:\s[^"]*)?"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/g;
+  for (let m; (m = re.exec(html)); ) {
+    const tag = /^<div\b[^>]*>/.exec(m[0])![0];
+    const attr = (n: string) => new RegExp(`\\s${n}="([^"]*)"`).exec(tag)?.[1] ?? null;
+    const val = attr('data-val');
+    const pid = attr('data-pid');
+    if (!val || !pid || !/^\d+$/.test(pid)) continue;
+    const body = decode(m[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
+    const sum = sumsIn(body, [])[0];
+    out.push({ val: decode(val).trim(), pid, url: attr('data-url'), selected: attr('aria-selected') === 'true' || /\bselected\b/.test(attr('class') ?? ''), price: sum ? Math.round(sum.value) : null });
+  }
+  return out;
+}
+
+/**
+ * D-79: the variant buttons → labels. Within one choice (pack size, or dose) the button of the link's product is its
+ * value; when the link's product is not among the buttons of a choice, it has the value selected on the page (iHerb
+ * shows the pack sizes of the selected dose).
+ */
+export function readVariants(html: string, productId: string): { variants: IherbVariant[]; label: string | null; price_uzs: number | null } {
+  const tiles = variantTiles(html);
+  if (!tiles.length) return { variants: [], label: null, price_uzs: null };
+  const groups = [tiles.filter((t) => !isCount(t.val)), tiles.filter((t) => isCount(t.val))].filter((g) => g.length > 1);
+  if (!groups.length) return { variants: [], label: null, price_uzs: null };
+  const own = groups.map((g) => (g.find((t) => t.pid === productId) ?? g.find((t) => t.selected) ?? null)?.val ?? null);
+  const label = own.every(Boolean) ? own.join(' · ') : null;
+  const variants: IherbVariant[] = [];
+  const seen = new Set([productId]);
+  // pack sizes first: they are of the selected dose, so their label is exact; a dose button leads to that dose in
+  // some pack size iHerb picks — its label is the dose alone
+  const counts = groups.length === 2 ? 1 : isCount(groups[0][0].val) ? 0 : -1;
+  for (const gi of [counts, ...groups.keys()].filter((i, k, a) => i >= 0 && a.indexOf(i) === k)) {
+    for (const t of groups[gi]) {
+      if (seen.has(t.pid)) continue;
+      seen.add(t.pid);
+      const lbl = gi === counts ? own.map((v, i) => (i === gi ? t.val : v)).filter(Boolean).join(' · ') : t.val;
+      variants.push({ product_id: t.pid, label: lbl, price_uzs: t.price, url: t.url });
+    }
+  }
+  return { variants, label, price_uzs: tiles.find((t) => t.pid === productId && t.price)?.price ?? null };
+}
+
+/** D-79: an iHerb button value in the shop's words: «180 count» → «180 шт» / «180 dona», «5000 IU» → «5000 МЕ» / «5000 XB». */
+export function variantLabel(v: string | null, lang: 'ru' | 'uz'): string | null {
+  if (!v) return null;
+  return v
+    .split(' · ')
+    .map((p) =>
+      p
+        .replace(/^([\d.,]+)\s*count$/i, lang === 'ru' ? '$1 шт' : '$1 dona')
+        .replace(/\bIU\b/g, lang === 'ru' ? 'МЕ' : 'XB')
+        .replace(/\bmcg\b/gi, lang === 'ru' ? 'мкг' : 'mkg')
+        .replace(/\bmg\b/gi, lang === 'ru' ? 'мг' : 'mg'),
+    )
+    .join(' · ')
+    .slice(0, 40);
 }
 
 /** The text the model reads: enough for the card, the composition and the label (the reviews below are cut). */
@@ -140,6 +234,11 @@ export function readIherbPage(raw: string, productId: string): IherbPage {
     iherb_code: null,
     upc: null,
     same_product: null,
+    variants: [],
+    variant_label: null,
+    sizes_of_other_variant: false,
+    canonical_id: null,
+    variant_price_uzs: null,
   };
   if (isHtml) {
     const product = jsonLdObjects(input).find((o) => isType(o, 'Product'));
@@ -166,6 +265,13 @@ export function readIherbPage(raw: string, productId: string): IherbPage {
       page.photos = productPhotos(input, og ? [og[1]] : []);
     }
     if (!page.title) page.title = str(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(input)?.[1]?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ') ?? null);
+    const v = readVariants(input, productId);
+    page.variants = v.variants;
+    page.variant_label = v.label;
+    page.variant_price_uzs = v.price_uzs;
+    page.canonical_id = /<link\b[^>]*rel="canonical"[^>]*href="[^"]*\/pr\/[^"]*?\/(\d+)(?:[?#"])/.exec(input)?.[1] ?? null;
+    const modelPid = /\bid="modelProperties"[^>]*\bdata-product-id="(\d+)"/.exec(input)?.[1] ?? /\bdata-product-id="(\d+)"[^>]*\bid="modelProperties"/.exec(input)?.[1];
+    page.sizes_of_other_variant = !!modelPid && modelPid !== productId && /data-shipping-weight-kg|data-dimensions-cm/.test(input);
     page.same_product = new RegExp(`/pr/(?:[^"'/?#\\s]+/)?${productId}(?![0-9])`).test(input);
   }
   if (!page.price_uzs && !page.wrong_currency && DOLLARS.test(text.slice(0, 6000)) && !sumsIn(text.slice(0, 6000), []).length) page.wrong_currency = true;

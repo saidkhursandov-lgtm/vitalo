@@ -19,6 +19,10 @@ export interface IherbDraft {
   problems?: string[];
   note?: string;
   cost_usd?: number;
+  /** D-79: the other pack sizes on the iHerb page; ours — already in the shop */
+  variants?: { product_id: string; label: string; label_ru: string | null; price_uzs: number | null; url: string | null; ours: { id: string; sku: string; name_ru: string; status: string } | null }[];
+  /** D-79: the card was copied from this pack size (no AI) */
+  copied_from?: { id: string; sku: string; name_ru: string } | null;
 }
 
 const STATUS: Record<string, string> = { active: 'в продаже', hidden: 'скрыт', archived: 'в архиве' };
@@ -69,6 +73,29 @@ export function IherbDraftPanel({
         </div>
       )}
       {data.note && <p className="small">Заметка AI: {data.note}</p>}
+      {!!data.variants?.length && (
+        <div>
+          <h3>Другие фасовки на iHerb</h3>
+          <p className="muted small">
+            Эта фасовка: <strong>{String(data.draft?.variant_label_ru ?? '—')}</strong>. Фасовки, которые уже есть в магазине, связываются с новым товаром сами (блок «Фасовки» ниже).
+          </p>
+          <ul className="small" aria-label="Фасовки на iHerb">
+            {data.variants.map((v) => (
+              <li key={v.product_id}>
+                {v.label_ru ?? v.label}
+                {v.price_uzs ? ` — ${money(v.price_uzs)} на iHerb` : ''}{' '}
+                {v.ours ? (
+                  <Link to={`/products/${v.ours.id}`} target="_blank">
+                    есть в магазине: {v.ours.sku}
+                  </Link>
+                ) : (
+                  <span className="muted">нет в магазине</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {!!data.similar?.length && (
         <div className="alert alert-warn">
           <strong>Похожие товары уже есть — не дубль ли это?</strong>

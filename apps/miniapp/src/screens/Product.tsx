@@ -18,6 +18,7 @@ import { Picture, SafeImg } from '../components/Picture';
 import { ClampText } from '../components/ClampText';
 import { ProductReviewsBlock, RatingLine } from '../components/Reviews';
 import { PerfectPair } from '../components/PerfectPair';
+import { VariantChips } from '../components/Variants';
 import { Empty, ErrorState, FavoriteButton, Loading, Price, ProductStrip } from '../components/ui';
 
 /** Accordions; «Описание» comes first and is folded — the expert text on the first screen is the verdict (2.3 fixes). */
@@ -40,6 +41,7 @@ export function Product() {
   const [imageIdx, setImageIdx] = useState(0);
   useEffect(() => {
     if (id) track('product_view', { product_id: id });
+    setImageIdx(0); // D-79: another pack size is another product — its photos start from the first
   }, [id]);
 
   if (product.isPending) return <div className="page"><Loading variant="product" /></div>;
@@ -107,6 +109,8 @@ export function Product() {
           <div className="stock is-out">{t('product.outOfStock')}</div>
         )}
       </div>
+      {/* D-79 «Фасовка»: 60 / 120 капсул — each button opens that pack size (its own price and stock) */}
+      <VariantChips variants={p.variants} />
       {/* D-60: what «под заказ» means before the customer pays */}
       {p.cross_border && !p.in_stock && (
         <div className="notice notice-info usa-note">{uo('note', p.cross_border_terms ?? p.under_order, { days: (p.cross_border_terms ?? p.under_order)?.guarantee_days ?? 21 })}</div>
