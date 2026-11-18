@@ -1,7 +1,7 @@
 import { checkRulesAnswer } from '../compat/rule-suggest';
 import { onlyCountDiffers, priceFromIherb, swapCount, unknownSuggestions } from './iherb-add.service';
 import { checkCardAnswer, type CardLists } from './iherb-card';
-import { htmlToText, nextIherbSku, productPhotos, readIherbPage, readVariants, variantLabel } from './iherb-page';
+import { htmlToText, nextIherbSku, packSizeSku, productPhotos, readIherbPage, readVariants, variantLabel } from './iherb-page';
 
 const IMG = 'https://cloudinary.images-iherb.com/image/upload/f_auto,q_auto:eco/images/now/now01282';
 const page = (ld: object, extra = '') => `<!doctype html><html><head><title>NOW Foods</title>
@@ -71,6 +71,16 @@ describe('D-78 «Добавить из iHerb»: reading the saved page', () => {
   it('the next free iHerb SKU', () => {
     expect(nextIherbSku([])).toBe('VTL-H001');
     expect(nextIherbSku(['VTL-H001', 'VTL-H017', 'VTL-HG001', 'VTL-GH020', 'OZN-A001'])).toBe('VTL-H018');
+    // pack sizes count as their number; a product with pack sizes on iHerb starts its own family
+    expect(nextIherbSku(['VTL-H001', 'VTL-H020-2'], true)).toBe('VTL-H021-1');
+  });
+
+  it('D-79: a new pack size gets the number of its product with the next «-N»; a SKU never repeats', () => {
+    expect(packSizeSku(['VTL-H001'], ['VTL-H001'])).toBe('VTL-H001-2');
+    expect(packSizeSku(['VTL-H007-1', 'VTL-H007-2'], [])).toBe('VTL-H007-3');
+    // an old SKU (alias) of another product is taken too
+    expect(packSizeSku(['VTL-H007-1'], ['VTL-H007-2'])).toBe('VTL-H007-3');
+    expect(packSizeSku(['OZN-A001'], [])).toBeNull();
   });
 
   it('VITALO price by the auto pricing rule: iHerb × 1.8, to the nearest 1 000', () => {

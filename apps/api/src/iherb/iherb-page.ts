@@ -279,10 +279,31 @@ export function readIherbPage(raw: string, productId: string): IherbPage {
 }
 
 /** The next free iHerb SKU: VTL-H001, VTL-H002 … (the owner's rule, 09.11.2026). */
-export function nextIherbSku(skus: string[]): string {
+/**
+ * The next free iHerb SKU. `skus` — every SKU and old SKU (alias) of the shop starting with VTL-H, so a number is
+ * never given twice; pack sizes «VTL-H007-2» count as their number 7. D-79: `packSizes` — the product has other pack
+ * sizes on iHerb: it starts its own family, «VTL-H008-1».
+ */
+export function nextIherbSku(skus: string[], packSizes = false): string {
   const max = skus.reduce((m, s) => {
-    const x = /^VTL-H(\d+)$/i.exec(s);
+    const x = /^VTL-H(\d+)(?:-\d+)?$/i.exec(s.trim());
     return x ? Math.max(m, Number(x[1])) : m;
   }, 0);
-  return `VTL-H${String(max + 1).padStart(3, '0')}`;
+  return `VTL-H${String(max + 1).padStart(3, '0')}${packSizes ? '-1' : ''}`;
+}
+
+/**
+ * D-79: the SKU of a new pack size of a product already in the shop: the same number with the next «-N»
+ * (VTL-H001 or VTL-H001-1 → VTL-H001-2, then -3). `family` — the SKUs of that product's pack sizes; `taken` — every
+ * SKU and old SKU of the shop (a SKU is never given twice). null — the product's SKU is not an iHerb one (VTL-H…):
+ * then the next free iHerb SKU is used.
+ */
+export function packSizeSku(family: string[], taken: string[]): string | null {
+  const bases = family.map((s) => /^(VTL-G?H\d+)(?:-(\d+))?$/i.exec(s.trim())).filter((x): x is RegExpExecArray => !!x);
+  if (!bases.length) return null;
+  const base = bases[0][1].toUpperCase();
+  const used = new Set(taken.map((s) => s.trim().toUpperCase()));
+  let n = Math.max(...bases.filter((b) => b[1].toUpperCase() === base).map((b) => (b[2] ? Number(b[2]) : 1))) + 1;
+  while (used.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
 }

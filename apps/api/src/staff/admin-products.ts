@@ -62,6 +62,7 @@ import { AUDIENCES, PRODUCT_GOALS, type Audience, type ProductGoal } from '../co
 import { ENRICH_TEXTS } from '../compat/enrich';
 import { EnrichService, markEnrichmentAccepted } from '../compat/enrich.service';
 import { can } from './permissions';
+import { normSku } from './sku-aliases';
 import { CurrentStaff, RequirePermission, StaffContext, StaffGuard } from './staff-auth';
 
 const PAGE_SIZE = 50;
@@ -441,6 +442,13 @@ async function setVariantGroup(tx: Prisma.TransactionClient, id: string, variant
   }
 }
 
+/** A SKU is never given twice: not the old SKU (alias) of another product either. */
+async function assertSkuFree(tx: Prisma.TransactionClient, id: string | null, sku: string | undefined) {
+  if (!sku) return;
+  const a = await tx.product_sku_aliases.findUnique({ where: { alias_norm: normSku(sku) }, select: { product_id: true, product: { select: { sku: true } } } });
+  if (a && a.product_id !== id) throw new ConflictException({ code: 'SKU_TAKEN', message: `Артикул ${sku} — старый артикул товара ${a.product.sku}. Выберите другой.` });
+}
+
 /** 4.1: a pair chosen by hand is another active product. */
 async function assertPair(tx: Prisma.TransactionClient, id: string, pairId: string | null | undefined) {
   if (!pairId) return;
@@ -605,6 +613,7 @@ export class AdminProductsService {
     const id = await this.write(async (tx) => {
       const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, variant_of, ...data } = dto;
       await this.assertCategories(tx, category_ids);
+      await assertSkuFree(tx, null, data.sku);
       await this.applyDictionaries(tx, null, data as Record<string, unknown>);
       const p = await tx.products.create({ data: this.toData(this.applyYandexSync(null, withDefaultPaymeCodes(data) as Record<string, unknown>)) as Prisma.productsUncheckedCreateInput });
       if (category_ids?.length) await tx.product_categories.createMany({ data: category_ids.map((c) => ({ product_id: p.id, category_id: c })) });
@@ -631,6 +640,7 @@ export class AdminProductsService {
       if (!before) throw new NotFoundException('Product not found');
       const { category_ids, supplier_ids, on_zero_supplier_id, substances, enrichment_id, ai_filled: _aiFilled, variant_of, ...data } = dto;
       await this.assertCategories(tx, category_ids);
+      if (data.sku && data.sku !== before.sku) await assertSkuFree(tx, id, data.sku);
       await this.applyDictionaries(tx, before, data as Record<string, unknown>);
       await assertPair(tx, id, data.pair_product_id);
       await setVariantGroup(tx, id, variant_of);

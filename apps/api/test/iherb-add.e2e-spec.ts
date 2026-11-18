@@ -215,7 +215,8 @@ describe('«Добавить из iHerb» (e2e)', () => {
     const page2 = pageHtml(pid2)
       .replace('154210.00', '250000.00')
       .replace('<body>', `<body><div class="attribute-group attribute-tile-group">${tile('100 count', pid, true, '154&nbsp;210,00 сум')}${tile('200 count', pid2, false, '250&nbsp;000,00 сум')}</div>`);
-    await prisma.products.update({ where: { id: s.product }, data: { status: 'active' } });
+    await prisma.products.update({ where: { id: s.product }, data: { status: 'active', sku: `VTL-H9${pid.slice(-4)}` } });
+    const draft0 = await prisma.products.findUniqueOrThrow({ where: { id: s.product }, select: { sku: true } });
     fake.calls = [];
     const r = await http().post('/api/staff/products/iherb/draft').set(bearer(tokens.admin)).send({ url: url2, text: page2 }).expect(200);
     expect(fake.calls).toHaveLength(0);
@@ -229,6 +230,8 @@ describe('«Добавить из iHerb» (e2e)', () => {
       price_uzs: 450_000,
       iherb_url: url2,
       substances: [{ id: s.mgc, in_label: true, dose_amount: 200, dose_unit: 'mg' }],
+      // the same number as the product in the shop, with «-2»
+      sku: `${draft0.sku}-2`,
       variant_of: s.product,
       variant_label_ru: '200 шт',
       variant_label_uz: '200 dona',
@@ -237,7 +240,7 @@ describe('«Добавить из iHerb» (e2e)', () => {
     const created = await http()
       .post('/api/staff/products')
       .set(bearer(tokens.admin))
-      .send({ ...r.body.draft, sku: `${r.body.draft.sku}-${run}2`.slice(0, 50), status: 'active' })
+      .send({ ...r.body.draft, status: 'active' })
       .expect(201);
     expect(created.body.variants).toEqual([expect.objectContaining({ id: s.product })]);
     // the original gets a label too; the shop shows both as «Фасовка» buttons, the current one marked

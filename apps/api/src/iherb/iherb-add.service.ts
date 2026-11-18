@@ -14,7 +14,7 @@ import { CurrentStaff, RequirePermission, StaffGuard, type StaffContext } from '
 import { autoPrice } from './auto-price';
 import { CARD_SCHEMA, CARD_SYSTEM, cardDataBlock, checkCardAnswer, type CardLists } from './iherb-card';
 import { parseIherbUrl } from './iherb-fields';
-import { nextIherbSku, readIherbPage, PHOTOS_MAX, variantLabel, type IherbPage } from './iherb-page';
+import { nextIherbSku, packSizeSku, readIherbPage, PHOTOS_MAX, variantLabel, type IherbPage } from './iherb-page';
 
 /** The saved page with its pictures can be big; its text is what matters. */
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
@@ -171,6 +171,26 @@ export class IherbAddService {
     return { brand_id: await find(b, card.brand), manufacturer_id: await find(m, card.manufacturer), country_id: await find(c, card.country), form_id: await find(f, card.form) };
   }
 
+  /**
+   * The SKU of the new product. D-79: a pack size of a product in the shop — its number with the next «-N»
+   * (VTL-H001-2); a product with other pack sizes on iHerb — a new number with «-1»; otherwise the next VTL-H number.
+   * Old SKUs (aliases) count as taken, so a SKU never repeats.
+   */
+  private async newSku(variantOf: string | null, page: IherbPage) {
+    const [rows, aliases] = await Promise.all([
+      this.prisma.products.findMany({ where: { sku: { startsWith: 'VTL-', mode: 'insensitive' } }, select: { sku: true } }),
+      this.prisma.product_sku_aliases.findMany({ where: { alias: { startsWith: 'VTL-', mode: 'insensitive' } }, select: { alias: true } }),
+    ]);
+    const taken = [...rows.map((r) => r.sku), ...aliases.map((a) => a.alias)];
+    if (variantOf) {
+      const v = await this.prisma.products.findUnique({ where: { id: variantOf }, select: { sku: true, variant_group_id: true } });
+      const family = v?.variant_group_id ? (await this.prisma.products.findMany({ where: { variant_group_id: v.variant_group_id }, select: { sku: true }, orderBy: { created_at: 'asc' } })).map((x) => x.sku) : v ? [v.sku] : [];
+      const sku = packSizeSku(family, taken);
+      if (sku) return sku;
+    }
+    return nextIherbSku(taken, page.variants.length > 0);
+  }
+
   /** D-79: the other pack sizes of the page that are already in the shop. */
   private async variantsInShop(page: IherbPage) {
     const pids = page.variants.map((v) => v.product_id);
@@ -205,11 +225,10 @@ export class IherbAddService {
     if (!iherbPrice) problems.push('Не нашёл цену iHerb в сумах — впишите цену VITALO вручную');
     if (page.in_stock === false && !otherPage) problems.push('На iHerb товара сейчас нет в наличии');
     problems.push('Вес и размеры упаковки не скопированы — у другой фасовки они другие, впишите с iHerb');
-    const skus = await this.prisma.products.findMany({ where: { sku: { startsWith: 'VTL-H', mode: 'insensitive' } }, select: { sku: true } });
     const admin = can(me.staff.role, 'costs.view');
     const n = (v: Prisma.Decimal | null) => (v == null ? null : Number(v));
     const draft = {
-      sku: nextIherbSku(skus.map((x) => x.sku)),
+      sku: await this.newSku(p.id, page),
       status: 'hidden' as const,
       name_ru: swapCount(p.name_ru, from, to)!,
       name_uz: swapCount(p.name_uz, from, to),
@@ -333,7 +352,6 @@ export class IherbAddService {
     if (inStock === false) problems.push('На iHerb товара сейчас нет в наличии');
     if (!page.photos.length) problems.push(page.format === 'text' ? 'Из скопированного текста фото не взять — сохраните страницу (Ctrl+S) или добавьте фото вручную' : 'На странице не нашлось фото товара — добавьте вручную');
 
-    const skus = await this.prisma.products.findMany({ where: { sku: { startsWith: 'VTL-H', mode: 'insensitive' } }, select: { sku: true } });
     const ids = await this.dictionaryIds(c);
     const similar = (await this.similar(c.brand, [c.name_ru, page.title ?? ''], link.productId)).filter((x) => !vars.list.some((v) => v.ours?.id === x.id));
     if (page.sizes_of_other_variant) problems.push('Вес и размеры на странице iHerb могут относиться к другой фасовке — сверьте с iHerb');
@@ -341,7 +359,7 @@ export class IherbAddService {
     const admin = can(me.staff.role, 'costs.view');
 
     const draft = {
-      sku: nextIherbSku(skus.map((x) => x.sku)),
+      sku: await this.newSku(vars.variant_of, page),
       status: 'hidden' as const,
       name_ru: c.name_ru,
       name_uz: c.name_uz,
