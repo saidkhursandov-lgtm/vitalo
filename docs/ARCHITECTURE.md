@@ -80,6 +80,7 @@
 | Релиз 4, «Идеальная пара» (4.1, D-75) | `products.pair_product_id` (ручная пара), `products.pair_off` (не показывать пару) | миграция `20261205100000_r4_pair`, только добавляющая; на `vitalo_dev` 16.11, на сервере нет |
 | Релиз 4, «Сеты от врача» (4.3, D-75) | `bundles` (сет: название, адрес, скидка 0–10%, вкл/выкл), `bundle_items` (товары сета, 2–3 шт.) | миграция `20261207100000_r4_bundles`, только добавляющая; на `vitalo_dev` 17.11, на сервере нет |
 | Фасовки товара (D-79) | `products` (новые поля `variant_group_id`, `variant_label_ru`, `variant_label_uz`) | одна группа у товаров одного продукта в разных фасовках; миграция `20261208100000_d79_variants`, только добавляющая |
+| Сайт vitalo.uz (релиз 6, D-80, в работе) | `products.slug` (адрес товара; у брендов slug был; заполняется триггерами при создании, при переименовании не меняется, дубли получают -2/-3), `customer_login_requests` (вход покупателя на сайте: Telegram или телефон с кодом от бота, 5 минут, 5 попыток) | миграция `20261209100000_site_slugs_login`: добавляющая, плюс заполнение `slug` у существующих товаров и брендов; на `vitalo_test` — да, на `vitalo_dev` и сервере — нет |
 | Сотрудники и аудит | `staff_users` (3.4: поле `is_specialist`), `staff_sessions` (устройство, IP, последний вход; 4.8: сессия без действий 30 дней завершается сама; миграция `20261113100000`, применена на сервере 08.11), `staff_devices` и `staff_login_requests`, `staff_backup_codes` (вход в браузере), `audit_logs`, `system_errors`, `legal_documents`, `legal_acceptances` | — |
 
 ## API (основное)
@@ -87,6 +88,7 @@
 Все адреса начинаются с `/api`. Полный список — Swagger `http://localhost:3000/api/docs` (локально).
 
 - Вход: `POST /auth/telegram`, `GET /auth/me`; сотрудники — `POST /staff/auth/telegram`.
+- Вход на сайте (релиз 6, D-80, в работе): `POST /auth/web/telegram/start`, `POST /auth/web/poll`, `POST /auth/web/phone/start`, `POST /auth/web/phone/verify`; бот подтверждает `POST /internal/bot/customer-login/:hex`. `GET /sitemap.xml` (nginx отдаёт его с `vitalo.uz`). `/catalog/products/:id` принимает id или slug товара.
 - Каталог: `/catalog/products`, `/catalog/products/:id`, `/catalog/search`, `/catalog/categories`, `/catalog/brands`, `/catalog/brands/showcase` (лента «Проверенные бренды», 2.2), `/catalog/brands/:slug` (страница бренда, 2.2).
 - Корзина и заказы: `/cart`, `/cart/upsell` (допродажа, 3.1), `POST /cart/promo` и `DELETE /cart/promo` (промокод: «Применить» и [✕], 3.3), `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`. Настройка допродажи (админка): `GET/PUT /staff/settings/cart-upsell` (3.1).
 - Промокоды (админка, 3.3): `/staff/promo-codes` — список, генерация кода, создание, `PUT /:id`, смена статуса, `POST margin-check` (проверка защиты маржи); настройка `promo_guard`: `GET/PUT /staff/promo-codes/settings`. Права: смотрит менеджер, меняют админ и маркетолог, защиту маржи — только админ.
