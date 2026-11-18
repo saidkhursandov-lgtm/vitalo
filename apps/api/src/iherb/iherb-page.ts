@@ -62,6 +62,19 @@ interface Tile {
 /** «180 count» buttons are the pack size, the rest (IU, mcg, flavour…) the dose/kind — two independent choices. */
 const isCount = (v: string) => /\bcount\b/i.test(v);
 
+/**
+ * The value of a button in iHerb's words whatever the language of the page: uz.iherb.com in Russian shows «180 шт.»,
+ * «5000 МЕ», «125 мкг»; in Uzbek «180 dona», «5000 XB» — the same as «180 count», «5000 IU», «125 mcg».
+ */
+export function normTileVal(v: string): string {
+  return v
+    .trim()
+    .replace(/^([\d.,\s]+?)\s*(?:шт\.?|штук[аи]?|dona|ta|count)$/i, (_, n: string) => `${n.replace(/\s/g, '')} count`)
+    .replace(/(\d)\s*(?:МЕ|ME|XB)(?!\p{L})/gu, '$1 IU')
+    .replace(/(\d)\s*мкг(?!\p{L})/giu, '$1 mcg')
+    .replace(/(\d)\s*мг(?!\p{L})/giu, '$1 mg');
+}
+
 function variantTiles(html: string): Tile[] {
   const out: Tile[] = [];
   const re = /<div\b[^>]*class="attribute-tile(?:\s[^"]*)?"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/g;
@@ -73,7 +86,9 @@ function variantTiles(html: string): Tile[] {
     if (!val || !pid || !/^\d+$/.test(pid)) continue;
     const body = decode(m[1].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
     const sum = sumsIn(body, [])[0];
-    out.push({ val: decode(val).trim(), pid, url: attr('data-url'), selected: attr('aria-selected') === 'true' || /\bselected\b/.test(attr('class') ?? ''), price: sum ? Math.round(sum.value) : null });
+    // «360 шт. --»: this pack size is not made in the selected dose; the button leads to another dose — not a variant
+    if (!sum && /(^|\s)--(\s|$)/.test(body)) continue;
+    out.push({ val: normTileVal(decode(val)), pid, url: attr('data-url'), selected: attr('aria-selected') === 'true' || /\bselected\b/.test(attr('class') ?? ''), price: sum ? Math.round(sum.value) : null });
   }
   return out;
 }
@@ -86,8 +101,9 @@ function variantTiles(html: string): Tile[] {
 export function readVariants(html: string, productId: string): { variants: IherbVariant[]; label: string | null; price_uzs: number | null } {
   const tiles = variantTiles(html);
   if (!tiles.length) return { variants: [], label: null, price_uzs: null };
-  const groups = [tiles.filter((t) => !isCount(t.val)), tiles.filter((t) => isCount(t.val))].filter((g) => g.length > 1);
-  if (!groups.length) return { variants: [], label: null, price_uzs: null };
+  // a choice of one button (1000 МЕ is made only in 180) is no variant, but it is still part of the label
+  const groups = [tiles.filter((t) => !isCount(t.val)), tiles.filter((t) => isCount(t.val))].filter((g) => g.length > 0);
+  if (!groups.some((g) => g.length > 1)) return { variants: [], label: null, price_uzs: null };
   const own = groups.map((g) => (g.find((t) => t.pid === productId) ?? g.find((t) => t.selected) ?? null)?.val ?? null);
   const label = own.every(Boolean) ? own.join(' · ') : null;
   const variants: IherbVariant[] = [];

@@ -210,6 +210,21 @@ describe('D-79 «Фасовки» on the iHerb page', () => {
     expect(readVariants('<html></html>', '1')).toEqual({ variants: [], label: null, price_uzs: null });
   });
 
+  it('uz.iherb.com in Russian («180 шт.», «5000 МЕ») reads like English; «--» buttons of another dose are skipped', () => {
+    // the 1000 МЕ page: 360 and 720 are made only in 5000 МЕ — iHerb shows them with «--», leading to the 5000 МЕ jars
+    const ru = `<html><body>${tile('1000 МЕ', '17137', true)}${tile('5000 МЕ', '21367', false)}
+      ${tile('180 шт.', '17137', true, '91&nbsp;770,70 сум')}${tile('360 шт.', '36580', false, '--')}${tile('720 шт.', '56653', false, '--')}</body></html>`;
+    expect(readVariants(ru, '17137')).toEqual({
+      label: '1000 IU · 180 count',
+      price_uzs: 91770,
+      variants: [{ product_id: '21367', label: '5000 IU', price_uzs: null, url: 'https://uz.iherb.com/pr/x/21367' }],
+    });
+    expect(variantLabel('1000 IU · 180 count', 'uz')).toBe('1000 XB · 180 dona');
+    const ru5000 = html.replace(/(\d+) count/g, '$1 шт.').replace(/(\d+) IU/g, '$1 МЕ');
+    expect(readVariants(ru5000, '36580').label).toBe('5000 IU · 360 count');
+    expect(onlyCountDiffers(readVariants(ru5000, '21367').label, readVariants(ru5000, '36580').label)).toBe(true);
+  });
+
   it('labels in the shop’s words; names get the other pack size; only a pack size difference is copied', () => {
     expect(variantLabel('5000 IU · 360 count', 'ru')).toBe('5000 МЕ · 360 шт');
     expect(variantLabel('5000 IU · 360 count', 'uz')).toBe('5000 XB · 360 dona');

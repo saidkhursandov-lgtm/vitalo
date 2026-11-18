@@ -550,6 +550,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://vitalo.uz
 
 ```bash
 sudo cp /etc/nginx/sites-available/vitalo.conf /etc/nginx/sites-available/vitalo.conf.bak-$(date +%Y%m%d)
+sudo cp /opt/vitalo/app/deploy/nginx/snippets/*.conf /etc/nginx/snippets/
 sudo cp /opt/vitalo/app/deploy/nginx/vitalo.conf /etc/nginx/sites-available/vitalo.conf
 sudo nginx -t && sudo systemctl reload nginx
 curl -sI https://admin.vitalo.uz | grep -i -E 'permissions-policy|content-security'
