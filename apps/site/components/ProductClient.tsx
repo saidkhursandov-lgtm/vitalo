@@ -112,7 +112,13 @@ export function BuyBox({ p }: { p: ProductCard }) {
         ) : null}
         <div className="buy-row">
           {canBuy ? (
-            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void add(true)}>
+            <button type="button" className="btn btn-secondary" 
+              disabled={busy}
+              onClick={() => {
+                const to = `/checkout?buy=${p.id}&qty=${qty}`;
+                router.push(user ? to : `/login?next=${encodeURIComponent(to)}`);
+              }}
+            >
               {t('product.buyNow')}
             </button>
           ) : null}

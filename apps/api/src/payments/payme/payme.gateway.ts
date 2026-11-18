@@ -18,10 +18,10 @@ export class PaymeGateway implements OnlinePaymentGateway {
     private readonly bot: BotInfoService,
   ) {}
 
-  async createPayment(input: { paymentId: string; orderNumber: string; amountUzs: number; lang: 'ru' | 'uz' }): Promise<CreatedOnlinePayment> {
-    const username = await this.bot.username();
-    // after paying, Payme sends the customer back to the shop bot (it also brings the «Оплачен» message)
-    const returnUrl = username ? `https://t.me/${username}` : null;
+  async createPayment(input: { paymentId: string; orderNumber: string; amountUzs: number; lang: 'ru' | 'uz'; returnUrl?: string | null }): Promise<CreatedOnlinePayment> {
+    const username = input.returnUrl ? null : await this.bot.username();
+    // after paying, Payme sends the customer back to the site order page (paid on vitalo.uz) or to the shop bot
+    const returnUrl = input.returnUrl ?? (username ? `https://t.me/${username}` : null);
     return { checkoutUrl: paymeCheckoutUrl(paymeConfig(), { orderNumber: input.orderNumber, amountUzs: input.amountUzs, lang: input.lang, returnUrl }) };
   }
 

@@ -83,7 +83,7 @@ export interface CallbackReply {
  */
 export interface OnlinePaymentGateway {
   readonly provider: OnlineProvider;
-  createPayment(input: { paymentId: string; orderNumber: string; amountUzs: number; lang: 'ru' | 'uz' }): Promise<CreatedOnlinePayment>;
+  createPayment(input: { paymentId: string; orderNumber: string; amountUzs: number; lang: 'ru' | 'uz'; returnUrl?: string | null }): Promise<CreatedOnlinePayment>;
   /** Checks the signature and the amount; must not trust anything in the request before that. */
   handleCallback(input: { headers: Record<string, string | string[] | undefined>; body: unknown; rawBody?: Buffer }): Promise<CallbackReply>;
 }

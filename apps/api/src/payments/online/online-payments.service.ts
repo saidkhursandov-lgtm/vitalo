@@ -70,7 +70,7 @@ export class OnlinePaymentsService {
   }
 
   /** Step 1: create a payment for the customer's unpaid order and get the payment page link. */
-  async start(userId: string, orderId: string, provider: string, lang: 'ru' | 'uz') {
+  async start(userId: string, orderId: string, provider: string, lang: 'ru' | 'uz', returnTo?: 'site') {
     if (!isOnlineProvider(provider)) throw new NotFoundException('Unknown payment system');
     const gateway = this.gateways.get(provider);
     const mode = (await this.modes())[provider];
@@ -101,7 +101,8 @@ export class OnlinePaymentsService {
       (await this.prisma.payments.create({
         data: { order_id: order.id, payment_method_id: method.id, amount_uzs: order.total_uzs, attempts: { create: { attempt_no: 1 } } },
       }));
-    const created = await gateway.createPayment({ paymentId: payment.id, orderNumber: order.order_number, amountUzs: Number(order.total_uzs), lang });
+    const returnUrl = returnTo === 'site' ? siteOrderUrl(order.id) : null;
+    const created = await gateway.createPayment({ paymentId: payment.id, orderNumber: order.order_number, amountUzs: Number(order.total_uzs), lang, returnUrl });
     await this.prisma.payments.update({
       where: { id: payment.id },
       data: {
@@ -135,4 +136,10 @@ export class OnlinePaymentsService {
     }, TX_OPTIONS);
     return reply;
   }
+}
+
+/** Release 6: the order page on the site (SITE_URL, https only); null — the gateway sends the customer to the bot. */
+export function siteOrderUrl(orderId: string, site = process.env.SITE_URL): string | null {
+  const base = site?.trim().replace(/\/$/, '');
+  return base && /^https:\/\/[^\s/]+$/.test(base) ? `${base}/order/${orderId}` : null;
 }

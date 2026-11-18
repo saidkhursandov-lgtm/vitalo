@@ -14,6 +14,8 @@ import { PaymeService } from '../payme/payme.service';
 
 class StartOnlinePaymentDto {
   @IsOptional() @IsIn(['ru', 'uz']) lang?: 'ru' | 'uz';
+  /** Release 6: paid on vitalo.uz — after paying, back to the order page of the site (else to the shop bot) */
+  @IsOptional() @IsIn(['site']) return_to?: 'site';
 }
 
 @ApiTags('payments')
@@ -27,7 +29,7 @@ export class OnlinePaymentsController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Создать онлайн-платёж и получить ссылку на страницу оплаты (в 2.1 — «не подключено»)' })
   start(@CurrentAuth() auth: AuthContext, @Param('provider') provider: string, @Param('orderId') orderId: string, @Body() dto: StartOnlinePaymentDto) {
-    return this.online.start(auth.user.id, orderId, provider, dto.lang ?? 'ru');
+    return this.online.start(auth.user.id, orderId, provider, dto.lang ?? 'ru', dto.return_to);
   }
 
   /** Address for confirmations from Payme / Click / Uzum. Public: each system module checks the signature itself. */

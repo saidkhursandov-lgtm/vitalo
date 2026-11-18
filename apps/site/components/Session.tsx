@@ -6,6 +6,7 @@ import type { CartCount, Lang, UserProfile } from '@/lib/types';
 import {
   addToGuestCart,
   api,
+  ApiError,
   getToken,
   mergeGuestCart,
   readGuestCart,
@@ -94,13 +95,27 @@ export function SessionProvider({ lang, botUsername, children }: { lang: Lang; b
       setUser(null);
       return;
     }
-    api<UserProfile>('/auth/me')
-      .then((me) => {
-        setUser(me);
-        return loadAccount();
-      })
-      .catch(() => dropSession());
-    return () => setUnauthorizedHandler(null);
+    // Only «not signed in» (401/403) ends the session; if the server is unreachable for a moment, the sign-in is kept
+    // and checked again in 5 s — otherwise a short API restart would log every customer out.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const restore = () =>
+      api<UserProfile>('/auth/me')
+        .then((me) => {
+          setUser(me);
+          return loadAccount();
+        })
+        .catch((e) => {
+          if (stopped) return;
+          if (e instanceof ApiError && (e.status === 401 || e.status === 403)) dropSession();
+          else timer = setTimeout(() => void restore(), 5_000);
+        });
+    void restore();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      setUnauthorizedHandler(null);
+    };
   }, [dropSession, loadAccount]);
 
   const signIn = useCallback(

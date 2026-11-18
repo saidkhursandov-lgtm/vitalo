@@ -8,8 +8,8 @@ import { langFromTelegram, type Lang } from './texts';
  */
 export const SITE_LOGIN_RE = /^login_([0-9a-f]{32})$/;
 
-/** «Продолжить в Telegram» on the site: /start p_<product slug or id> or /start cart (Telegram allows [A-Za-z0-9_-], 64 chars). */
-export const SITE_LINK_RE = /^(?:p_([a-z0-9-]{1,62})|cart)$/;
+/** «Продолжить в Telegram» on the site: /start p_<product slug or id>, /start o_<order id> or /start cart (Telegram allows [A-Za-z0-9_-], 64 chars). */
+export const SITE_LINK_RE = /^(?:p_([a-z0-9-]{1,62})|o_([0-9a-f-]{36})|cart)$/;
 
 const TEXT: Record<Lang, Record<string, string>> = {
   ru: {

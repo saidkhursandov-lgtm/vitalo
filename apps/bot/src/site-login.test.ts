@@ -39,6 +39,8 @@ describe('site links «Продолжить в Telegram»', () => {
     expect(SITE_LINK_RE.exec('p_6f1c2a7e-0d5b-4c1a-9a2e-1b2c3d4e5f60')?.[1]).toBe('6f1c2a7e-0d5b-4c1a-9a2e-1b2c3d4e5f60');
     expect(SITE_LINK_RE.exec('p_magniy-b6')?.[1]).toBe('magniy-b6');
     expect(SITE_LINK_RE.test('cart')).toBe(true);
+    expect(SITE_LINK_RE.exec('o_6f1c2a7e-0d5b-4c1a-9a2e-1b2c3d4e5f60')?.[2]).toBe('6f1c2a7e-0d5b-4c1a-9a2e-1b2c3d4e5f60');
+    expect(SITE_LINK_RE.test('o_123')).toBe(false);
     for (const bad of ['p_', 'p_../admin', 'P_ABC', 'cart2', `login_${HEX}`, 'p_' + 'a'.repeat(63)]) expect(SITE_LINK_RE.test(bad)).toBe(false);
   });
 });

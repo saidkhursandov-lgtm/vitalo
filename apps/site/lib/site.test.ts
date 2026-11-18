@@ -4,6 +4,8 @@ import { addToGuestCart, setGuestQty } from './client';
 import { qs } from './server-api';
 import { formatUzPhone, safeNext } from '../app/login/LoginForm';
 import { hrefWith, parseQuery } from '../components/CatalogView';
+import { cardGroups } from '../app/order/[id]/OrderView';
+import { createIdempotencyKeys } from './idempotency';
 
 describe('texts', () => {
   it('Russian plural for product counts, Uzbek without it', () => {
@@ -60,6 +62,22 @@ describe('sign-in helpers', () => {
     expect(safeNext('https://evil.example')).toBe('/account');
     expect(safeNext('/login?next=/cart')).toBe('/account');
     expect(safeNext(null)).toBe('/account');
+  });
+});
+
+describe('checkout and order page', () => {
+  it('shows the card number in groups of four', () => {
+    expect(cardGroups('8600123412341234')).toBe('8600 1234 1234 1234');
+    expect(cardGroups('8600 1234-1234 1234')).toBe('8600 1234 1234 1234');
+  });
+
+  it('one key per order body: a repeated click does not create a second order', () => {
+    const store = new Map<string, string>();
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+    const keys = createIdempotencyKeys(storage as Storage, () => 1000);
+    const a = keys.keyFor({ source: 'cart', city_id: 'x' });
+    expect(keys.keyFor({ source: 'cart', city_id: 'x' })).toBe(a);
+    expect(keys.keyFor({ source: 'cart', city_id: 'y' })).not.toBe(a);
   });
 });
 

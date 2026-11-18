@@ -25,7 +25,7 @@ interface Line {
  * which move into the account cart on sign-in.
  */
 export function CartView() {
-  const { t, lang, user, guestCart, setGuestLine, refreshCart, botUsername } = useSession();
+  const { t, lang, user, guestCart, setGuestLine, refreshCart } = useSession();
   const [cart, setCart] = useState<Cart | null>(null);
   const [guest, setGuest] = useState<Record<string, ProductCard | null>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -185,11 +185,11 @@ export function CartView() {
             <span>{money(total, lang)}</span>
           </div>
           {user ? (
-            <a className="btn btn-lg btn-block" href={`https://t.me/${botUsername}?start=cart`} target="_blank" rel="noopener noreferrer">
-              <Send size={18} strokeWidth={1.8} /> {t('cart.checkout')}
-            </a>
+            <Link className="btn btn-lg btn-block" href="/checkout">
+              {t('cart.checkout')}
+            </Link>
           ) : (
-            <Link className="btn btn-lg btn-block" href="/login?next=/cart">
+            <Link className="btn btn-lg btn-block" href="/login?next=/checkout">
               {t('cart.loginToCheckout')}
             </Link>
           )}

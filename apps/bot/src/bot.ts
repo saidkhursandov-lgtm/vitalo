@@ -121,6 +121,7 @@ export function createBot({ token, api, urls, botInfo, download }: BotDeps): Bot
     const site = SITE_LINK_RE.exec(payload);
     if (site) {
       if (payload === 'cart') return replyWithShop(ctx, lang, t(lang, 'siteCart'), 'openCart', '/cart');
+      if (site[2]) return replyWithShop(ctx, lang, t(lang, 'siteOrder'), 'openOrder', `/orders/${site[2]}`);
       return replyWithShop(ctx, lang, t(lang, 'siteProduct'), 'openProduct', `/product/${site[1]}`);
     }
     const ref = REFERRAL_RE.test(payload) ? payload : undefined;

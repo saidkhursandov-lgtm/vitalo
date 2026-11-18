@@ -1,5 +1,6 @@
 import { orderNumberFromAccount, paymeAccount, paymeCheckoutUrl, paymeConfig, PAYME_CHECKOUT_LIVE, PAYME_CHECKOUT_TEST } from './payme-config';
 import { fiscalGaps, paymeReceipt, type FiscalOrder } from './payme-fiscal';
+import { siteOrderUrl } from '../online/online-payments.service';
 
 const cfg = { deliveryIkpu: '10112006002000000', deliveryPackageCode: '1209885', vatPercent: 12 };
 const line = (o: Partial<FiscalOrder['lines'][number]> = {}): FiscalOrder['lines'][number] => ({
@@ -65,5 +66,14 @@ describe('Payme receipt (detail)', () => {
     expect(fiscalGaps({ delivery_cost_uzs: 0, lines: [line({ sku: 'X', ikpu_code: null }), line({ sku: 'Y', package_code: ' ' })] }, cfg).skus).toEqual(['X', 'Y']);
     expect(fiscalGaps({ delivery_cost_uzs: 25_000, lines: [line()] }, { deliveryIkpu: null, deliveryPackageCode: null })).toMatchObject({ delivery: true, ok: false });
     expect(fiscalGaps({ delivery_cost_uzs: 0, lines: [line()] }, { deliveryIkpu: null, deliveryPackageCode: null }).ok).toBe(true);
+  });
+});
+
+describe('return to the site after paying (release 6)', () => {
+  it('the order page on an https SITE_URL, nothing for anything else', () => {
+    expect(siteOrderUrl('o-1', 'https://vitalo.uz/')).toBe('https://vitalo.uz/order/o-1');
+    expect(siteOrderUrl('o-1', 'http://localhost:5175')).toBeNull();
+    expect(siteOrderUrl('o-1', 'https://evil.example/path')).toBeNull();
+    expect(siteOrderUrl('o-1', undefined)).toBeNull();
   });
 });
