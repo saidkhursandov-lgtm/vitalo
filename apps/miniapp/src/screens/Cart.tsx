@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui'
 import { RegionCitySelect } from '../components/PlacePicker';
 import { MapPickerButton } from '../components/MapPicker';
 import { OrderTotals } from '../components/OrderItems';
-import { formLabel, money, nameOf, shortNameOf } from '../lib/format';
+import { formLabel, money, nameOf, shortNameOf, productPath } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
 import { useCart, useCartActions, useCartBonus, useCartMapPick, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
 import { PromoBox } from '../components/Promo';
@@ -121,7 +121,7 @@ export function UpsellStrip({ city, goodsTotal, inCart }: { city: CityRef | null
       <ul className="upsell-list">
         {items.map((p) => (
           <li key={p.id}>
-            <Link to={`/product/${p.id}`} className="upsell-item">
+            <Link to={productPath(p)} className="upsell-item">
               <span className="upsell-img">{p.image_url && <SafeImg src={p.image_url} alt="" width={56} height={56} loading="lazy" decoding="async" />}</span>
               <span className="upsell-info">
                 <span className="upsell-name">{shortNameOf(p, lang)}</span>

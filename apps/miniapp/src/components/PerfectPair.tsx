@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { money, shortNameOf } from '../lib/format';
+import { money, shortNameOf, productPath } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import type { ProductPair } from '../lib/types';
 import { Picture, SafeImg } from './Picture';
@@ -16,7 +16,7 @@ export function PerfectPair({ pair }: { pair: ProductPair | null | undefined }) 
     <section className="pair card" aria-label={t('pair.title')}>
       <h2 className="pair-title">{t('pair.title')}</h2>
       <div className="pair-row">
-        <Link to={`/product/${p.id}`} className="pair-link">
+        <Link to={productPath(p)} className="pair-link">
           <span className="pair-img">{p.image ? <Picture src={p.image} /> : p.image_url && <SafeImg src={p.image_url} alt="" loading="lazy" decoding="async" />}</span>
           <span className="pair-text">
             <span className="pair-name">{shortNameOf(p, lang)}</span>

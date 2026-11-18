@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useAuthed, useLoginGate } from '../lib/auth';
 import { applyCart } from '../lib/cart-cache';
 import { money } from '../lib/format';
 import { useI18n } from '../lib/i18n';
@@ -71,7 +72,10 @@ export function AddBundleButton({ bundle }: { bundle: ShopBundle }) {
   const toast = useToast();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const authed = useAuthed();
+  const requireLogin = useLoginGate();
   const add = async () => {
+    if (!authed) return requireLogin();
     setBusy(true);
     try {
       let cart: Cart | null = null;

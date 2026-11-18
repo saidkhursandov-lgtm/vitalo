@@ -26,9 +26,17 @@ export class AuthService {
 
   async loginWithTelegram(initData: string, deviceInfo?: string, startParam?: string): Promise<LoginResult> {
     const data = this.initData.verify(initData);
-    const { user, isNew } = await this.upsertUser(data);
+    const { user, isNew } = await this.upsertTelegramUser(data.user);
     if (user.status !== 'active') throw new ForbiddenException('Account is not active');
 
+    const session = await this.createSession(user, deviceInfo);
+    // Referral attribution itself is a later stage; for now the code is validated and handed back.
+    const start_param = data.start_param ?? startParam ?? null;
+    return { ...session, start_param, is_new_user: isNew };
+  }
+
+  /** A new customer session (Mini App login and, release 6, the site login). */
+  async createSession(user: users, deviceInfo?: string): Promise<{ token: string; expires_at: string; user: UserProfile }> {
     const token = generateSessionToken();
     const ttlHours = Number(this.config.get('SESSION_TTL_HOURS') ?? 720);
     const expiresAt = new Date(Date.now() + ttlHours * 3600_000);
@@ -40,10 +48,7 @@ export class AuthService {
         expires_at: expiresAt,
       },
     });
-
-    // Referral attribution itself is a later stage; for now the code is validated and handed back.
-    const start_param = data.start_param ?? startParam ?? null;
-    return { token, start_param, expires_at: expiresAt.toISOString(), is_new_user: isNew, user: toUserProfile(user) };
+    return { token, expires_at: expiresAt.toISOString(), user: toUserProfile(user) };
   }
 
   async findActiveSession(token: string): Promise<AuthContext | null> {
@@ -64,7 +69,8 @@ export class AuthService {
     await this.prisma.user_sessions.update({ where: { id: sessionId }, data: { revoked_at: new Date() } });
   }
 
-  private async upsertUser({ user: tg }: ValidatedInitData): Promise<{ user: users; isNew: boolean }> {
+  /** The customer record for a Telegram account: found by telegram_user_id (name refreshed) or created. */
+  async upsertTelegramUser(tg: ValidatedInitData['user']): Promise<{ user: users; isNew: boolean }> {
     const telegramUserId = BigInt(tg.id);
     const profile = { first_name: tg.first_name, last_name: tg.last_name ?? null, username: tg.username ?? null };
 

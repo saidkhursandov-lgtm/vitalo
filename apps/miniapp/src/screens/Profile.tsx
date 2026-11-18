@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
 import { BonusCard } from '../components/Bonus';
 import { api } from '../lib/api';
-import { useUser } from '../lib/auth';
+import { useSignOut, useUser } from '../lib/auth';
 import { useI18n } from '../lib/i18n';
 import { useOrders } from '../lib/queries';
 import { OrderRow } from './Orders';
@@ -11,6 +11,7 @@ import { OrderRow } from './Orders';
 export function Profile() {
   const { t } = useI18n();
   const user = useUser();
+  const signOut = useSignOut();
   const orders = useOrders();
   const recent = orders.data?.pages[0].items.slice(0, 3) ?? [];
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
@@ -79,6 +80,13 @@ export function Profile() {
             <OrderRow key={o.id} order={o} />
           ))}
         </section>
+      )}
+
+      {/* release 6: only on the website — inside Telegram the account is the Telegram one */}
+      {signOut && (
+        <button type="button" className="btn btn-secondary btn-block" onClick={() => void signOut()}>
+          {t('login.logout')}
+        </button>
       )}
     </div>
   );

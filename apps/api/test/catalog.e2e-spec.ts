@@ -189,9 +189,10 @@ describe('Catalog (e2e)', () => {
       expect((await get('/products?brand=Hidden').expect(200)).body.total).toBe(0);
     });
 
-    it('unknown id -> 404, malformed id -> 400', async () => {
+    it('unknown id or slug -> 404, malformed -> 400', async () => {
       await get('/products/00000000-0000-4000-8000-000000000000').expect(404);
-      await get('/products/abc').expect(400);
+      await get('/products/abc').expect(404); // release 6: a slug-like value is looked up as a slug
+      await get('/products/Bad%20Id!').expect(400);
     });
   });
 

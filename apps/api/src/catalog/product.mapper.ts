@@ -62,6 +62,8 @@ type ProductForCard = Prisma.productsGetPayload<{ include: typeof cardInclude }>
 
 export interface ProductListItem {
   id: string;
+  /** Release 6: the site address /product/<slug> (a database trigger fills it) */
+  slug: string | null;
   sku: string;
   name_ru: string;
   name_uz: string | null;
@@ -134,6 +136,7 @@ export function availableQty(inventory: { actual_qty: number; reserved_qty: numb
 export function toProductListItem(p: ProductForList): ProductListItem {
   return {
     id: p.id,
+    slug: p.slug ?? null,
     sku: p.sku,
     name_ru: p.name_ru,
     name_uz: p.name_uz,

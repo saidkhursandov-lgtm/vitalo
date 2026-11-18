@@ -6,6 +6,7 @@ import { ApiError } from '../lib/api';
 import { countryName, formLabel, money, pricePerDay, shortNameOf, textOf } from '../lib/format';
 import { PromoLabelBadge } from '../components/Campaign';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
+import { usePageMeta } from '../lib/seo';
 import { useCart, useProduct, useShopTexts } from '../lib/queries';
 import { useQuickCart } from '../lib/quick-cart';
 import { QuickAdd, useQuickNotify, WaitlistButton } from '../components/QuickAdd';
@@ -39,10 +40,15 @@ export function Product() {
   const product = useProduct(id);
   const texts = useShopTexts();
   const [imageIdx, setImageIdx] = useState(0);
+  const productId = product.data?.id;
   useEffect(() => {
-    if (id) track('product_view', { product_id: id });
-    setImageIdx(0); // D-79: another pack size is another product — its photos start from the first
-  }, [id]);
+    if (productId) track('product_view', { product_id: productId }); // the address may be a slug (release 6)
+  }, [productId]);
+  useEffect(() => setImageIdx(0), [id]); // D-79: another pack size is another product — its photos start from the first
+
+  // release 6: «Магний B6 Щит — Evalar — VITALO» in the tab and in Google
+  const d = product.data;
+  usePageMeta(d ? [shortNameOf(d, lang), (lang === 'uz' && d.brand_name_uz) || d.brand_name_ru || d.brand].filter(Boolean).join(' — ') : null, d ? textOf(d, 'doctor_verdict', lang) : null);
 
   if (product.isPending) return <div className="page"><Loading variant="product" /></div>;
   if (product.isError) {

@@ -2,8 +2,9 @@ import { Link, useParams } from 'react-router-dom';
 import { AddBundleButton, BundlePrice, bundleTitle } from '../components/Bundles';
 import { Picture, SafeImg } from '../components/Picture';
 import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui';
-import { money, shortNameOf } from '../lib/format';
+import { money, shortNameOf, productPath } from '../lib/format';
 import { useI18n } from '../lib/i18n';
+import { usePageMeta } from '../lib/seo';
 import { useBundle } from '../lib/queries';
 
 /**
@@ -14,6 +15,7 @@ export function BundleScreen() {
   const { t, lang } = useI18n();
   const { slug = '' } = useParams();
   const q = useBundle(slug);
+  usePageMeta(q.data ? (lang === 'uz' && q.data.title_uz) || q.data.title_ru : null, q.data ? (lang === 'uz' && q.data.doctor_text_uz) || q.data.doctor_text_ru : null);
 
   if (q.isPending) return <div className="page"><Loading variant="grid" count={3} /></div>;
   if (q.isError) {
@@ -41,7 +43,7 @@ export function BundleScreen() {
       <section className="card set-items" aria-label={t('set.items')}>
         <h2>{t('set.items')}</h2>
         {b.items.map(({ qty, product: p }) => (
-          <Link key={p.id} to={`/product/${p.id}`} className="set-item">
+          <Link key={p.id} to={productPath(p)} className="set-item">
             <span className="set-item-img">{p.image ? <Picture src={p.image} /> : p.image_url && <SafeImg src={p.image_url} alt="" loading="lazy" decoding="async" />}</span>
             <span className="set-item-text">
               <span className="set-item-name">{shortNameOf(p, lang)}</span>

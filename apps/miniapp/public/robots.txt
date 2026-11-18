@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /cart
+Disallow: /checkout
+Disallow: /orders
+Disallow: /profile
+Disallow: /favorites
+Disallow: /notifications
+Disallow: /support
+Disallow: /bonus
+Disallow: /login
+Disallow: /review
+
+Sitemap: https://vitalo.uz/sitemap.xml

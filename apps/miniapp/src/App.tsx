@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import { trackAppOpen } from './lib/analytics';
 import { Layout } from './components/Layout';
@@ -8,6 +8,8 @@ import { BackIcon } from './components/Icons';
 import { Logo } from './components/Logo';
 import { Empty, ErrorState } from './components/ui';
 import { useLegalStatus } from './lib/queries';
+import { useAuthed } from './lib/auth';
+import { Login } from './screens/Login';
 import { LegalDocument, Welcome } from './screens/Legal';
 import { useI18n } from './lib/i18n';
 import { AddressEdit, Addresses } from './screens/Addresses';
@@ -37,6 +39,18 @@ function NotFound() {
 
 /** Until the current offer and privacy policy are accepted, only the welcome screen and the documents are open. */
 export function App() {
+  const authed = useAuthed();
+  // Release 6: a guest on the website browses the shop; the documents are accepted after signing in
+  if (!authed)
+    return (
+      <ConfirmProvider>
+        <Shop />
+      </ConfirmProvider>
+    );
+  return <SignedInApp />;
+}
+
+function SignedInApp() {
   const legal = useLegalStatus();
   if (legal.isPending) return <Splash />;
   if (legal.isError) return <ErrorState error={legal.error} onRetry={() => void legal.refetch()} />;
@@ -84,12 +98,21 @@ function LegalStandalone() {
   );
 }
 
+/** Release 6: the cart, orders and the profile need an account; a guest sees the login form in their place. */
+function RequireLogin({ children }: { children: ReactNode }) {
+  return useAuthed() ? children : <Login embedded />;
+}
+
 function Shop() {
-  useEffect(() => trackAppOpen(), []);
+  const authed = useAuthed();
+  useEffect(() => {
+    if (authed) trackAppOpen();
+  }, [authed]);
   return (
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Home />} />
+        <Route path="login" element={<Login />} />
         <Route path="search" element={<Search />} />
         <Route path="catalog" element={<Catalog />} />
         <Route path="catalog/products" element={<ProductList />} />
@@ -97,22 +120,22 @@ function Shop() {
         <Route path="campaign/:slug" element={<CampaignScreen />} />
         <Route path="set/:slug" element={<BundleScreen />} />
         <Route path="product/:id" element={<Product />} />
-        <Route path="favorites" element={<Favorites />} />
-        <Route path="cart" element={<Cart />} />
-        <Route path="checkout" element={<Checkout />} />
-        <Route path="orders" element={<Orders />} />
-        <Route path="orders/:id" element={<OrderDetail />} />
-        <Route path="orders/:id/pay" element={<Payment />} />
-        <Route path="orders/:id/payme" element={<PaymePayment />} />
-        <Route path="review/:orderId" element={<ReviewScreen />} />
-        <Route path="orders/:id/return" element={<ReturnScreen />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="support" element={<SupportList />} />
-        <Route path="support/:id" element={<SupportThreadScreen />} />
-        <Route path="profile" element={<Profile />} />
-        <Route path="bonus" element={<BonusScreen />} />
-        <Route path="profile/addresses" element={<Addresses />} />
-        <Route path="profile/addresses/:id" element={<AddressEdit />} />
+        <Route path="favorites" element={<RequireLogin><Favorites /></RequireLogin>} />
+        <Route path="cart" element={<RequireLogin><Cart /></RequireLogin>} />
+        <Route path="checkout" element={<RequireLogin><Checkout /></RequireLogin>} />
+        <Route path="orders" element={<RequireLogin><Orders /></RequireLogin>} />
+        <Route path="orders/:id" element={<RequireLogin><OrderDetail /></RequireLogin>} />
+        <Route path="orders/:id/pay" element={<RequireLogin><Payment /></RequireLogin>} />
+        <Route path="orders/:id/payme" element={<RequireLogin><PaymePayment /></RequireLogin>} />
+        <Route path="review/:orderId" element={<RequireLogin><ReviewScreen /></RequireLogin>} />
+        <Route path="orders/:id/return" element={<RequireLogin><ReturnScreen /></RequireLogin>} />
+        <Route path="notifications" element={<RequireLogin><Notifications /></RequireLogin>} />
+        <Route path="support" element={<RequireLogin><SupportList /></RequireLogin>} />
+        <Route path="support/:id" element={<RequireLogin><SupportThreadScreen /></RequireLogin>} />
+        <Route path="profile" element={<RequireLogin><Profile /></RequireLogin>} />
+        <Route path="bonus" element={<RequireLogin><BonusScreen /></RequireLogin>} />
+        <Route path="profile/addresses" element={<RequireLogin><Addresses /></RequireLogin>} />
+        <Route path="profile/addresses/:id" element={<RequireLogin><AddressEdit /></RequireLogin>} />
         <Route path="legal/:code" element={<LegalDocument />} />
         <Route path="*" element={<NotFound />} />
       </Route>

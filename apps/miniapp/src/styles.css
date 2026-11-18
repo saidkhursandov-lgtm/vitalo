@@ -2017,3 +2017,98 @@ a.bonus-wallet { text-decoration: none; margin: 0 0 12px; }
 .variant-chip.is-on { border: 2px solid var(--primary); padding: 5px 13px; }
 .variant-chip.is-on .variant-label { color: var(--primary); }
 .variant-chip.is-out .variant-label { color: var(--muted); }
+
+/* ---------- release 6: the website vitalo.uz (same app in a browser, D-30) ---------- */
+/* Login: «Войти через Telegram» or a code from the bot by phone */
+.login-page { display: flex; flex-direction: column; align-items: center; }
+.login-card { width: 100%; max-width: 440px; padding: 24px 20px; text-align: center; }
+.login-card > .logo, .login-card > .logo-img { margin-inline: auto; }
+.login-card h1 { margin: 16px 0 6px; font-size: 22px; }
+.login-card > .hint { margin: 0 0 18px; }
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 0 0 16px; border-radius: var(--radius-sm); background: var(--neutral-soft); }
+.login-tabs button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--tap); padding: 0 8px;
+  border: 0; border-radius: 10px; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.login-tabs button.is-on { background: var(--surface); color: var(--primary-text); box-shadow: var(--shadow); }
+.login-way { text-align: left; }
+.login-way .hint { font-size: 13px; margin: 8px 0 0; }
+.login-tg { white-space: nowrap; }
+.login-code { font-size: 24px !important; letter-spacing: 0.4em; text-align: center; font-variant-numeric: tabular-nums; }
+.login-way .link-btn { display: block; margin: 4px auto 0; }
+.login-wait { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.login-wait p { margin: 0; }
+.login-wait .hint { font-size: 13px; margin-bottom: 8px; }
+.login-spinner {
+  width: 32px; height: 32px; margin: 4px 0 8px; border-radius: 50%;
+  border: 3px solid var(--primary-soft); border-top-color: var(--primary); animation: login-spin 0.9s linear infinite;
+}
+@keyframes login-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .login-spinner { animation-duration: 2.4s; } }
+.login-page .dev-login { min-height: 0; padding: 24px 0 0; }
+
+/* Header: menu, search, favourites, profile / «Войти» — the menu items only on a wide screen */
+.site-nav, .site-only { display: none; }
+.site-login { margin: 0 4px 0 6px; padding: 0 14px; min-height: 36px; font-size: 14px; white-space: nowrap; }
+
+/* Footer */
+.site-footer { margin-top: 24px; background: var(--surface); border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+.site-footer-in { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 16px; max-width: 1200px; margin: 0 auto; padding: 28px 16px 20px; }
+.site-footer-brand { grid-column: 1 / -1; }
+.site-footer-brand p { margin: 10px 0 0; max-width: 360px; line-height: 1.5; }
+.site-footer nav { display: flex; flex-direction: column; gap: 2px; }
+.site-footer h2 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.06em; }
+.site-footer nav a { display: flex; align-items: center; min-height: 36px; color: var(--muted); text-decoration: none; }
+.site-footer nav a:hover { color: var(--primary-text); text-decoration: underline; }
+.site-footer-bottom {
+  display: flex; flex-wrap: wrap; gap: 6px 24px; justify-content: space-between; max-width: 1200px; margin: 0 auto;
+  padding: 14px 16px calc(14px + var(--safe-b)); border-top: 1px solid var(--border); font-size: 12px;
+}
+@media (min-width: 560px) { .site-footer-in { grid-template-columns: 1.6fr 1fr 1fr 1fr; } .site-footer-brand { grid-column: auto; } }
+
+@media (min-width: 768px) {
+  /* one wide page: the bottom menu and the floating cart give way to the header */
+  .app.with-nav { padding-bottom: 0; }
+  .bottom-nav, .float-cart-wrap { display: none; }
+  .app.has-float-cart .content { padding-bottom: 0; }
+  .app.has-float-cart .toast { bottom: 24px; }
+  .topbar { padding: 0 max(16px, calc((100vw - 1200px) / 2)); gap: 16px; }
+  .content { max-width: 1200px; }
+  .page { padding: 24px 16px 40px; }
+
+  .site-only { display: inline-flex; }
+  .site-nav { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+  .site-nav > a:not(.site-search), .site-nav-ai {
+    display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0 12px; border: 0; border-radius: var(--radius-sm);
+    background: none; color: var(--text); font: inherit; font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap;
+  }
+  .site-nav > a.active { color: var(--primary-text); background: var(--primary-soft); }
+  .site-nav > a:hover, .site-nav-ai:hover { background: var(--neutral-soft); }
+  .site-nav-ai svg { color: var(--primary); }
+  .site-search {
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; max-width: 460px; min-height: 40px; margin-left: 8px; padding: 0 14px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--bg); color: var(--placeholder); font-size: 14px; text-decoration: none;
+  }
+  .site-search span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .site-search:hover { border-color: var(--primary); }
+  /* the big search on the home screen repeats the header one */
+  .home > .search-hero { display: none; }
+
+  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .strip { grid-auto-columns: calc((100% - 48px) / 4.3); gap: 16px; margin: 0; padding: 0 0 2px; }
+
+  /* product: photo on the left (stays in view), everything else on the right; the buy panel spans the right column */
+  .page.product { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); column-gap: 40px; align-items: start; }
+  .page.product > * { grid-column: 2; min-width: 0; }
+  .page.product > .gallery { grid-column: 1; grid-row: 1 / span 40; position: sticky; top: calc(var(--top-h) + 24px); }
+  .product .gallery { max-height: none; height: auto; aspect-ratio: 1; }
+  .buy-panel { left: 0; right: 0; }
+  .buy-panel > div { max-width: 1168px; display: flex; justify-content: flex-end; }
+  .buy-panel-main { width: min(560px, 100%); }
+
+  .login-page { padding-top: 48px; }
+}
+@media (min-width: 1100px) {
+  .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .strip { grid-auto-columns: calc((100% - 64px) / 5.3); }
+}

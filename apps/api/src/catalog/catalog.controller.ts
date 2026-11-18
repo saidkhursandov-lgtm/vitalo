@@ -1,7 +1,10 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ListProductsQuery, SearchQuery } from './catalog.dto';
 import { CatalogService } from './catalog.service';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,99}$/;
 
 @ApiTags('catalog')
 @Controller('catalog')
@@ -57,8 +60,10 @@ export class CatalogController {
     return this.catalog.texts();
   }
 
+  /** Release 6: by id (old links, the bot) or by slug (the site's addresses) */
   @Get('products/:id')
-  product(@Param('id', new ParseUUIDPipe()) id: string) {
+  product(@Param('id') id: string) {
+    if (!UUID_RE.test(id) && !SLUG_RE.test(id)) throw new BadRequestException('Bad product id or slug');
     return this.catalog.getProduct(id);
   }
 

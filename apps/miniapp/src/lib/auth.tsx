@@ -1,55 +1,119 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { DevLogin } from '../screens/DevLogin';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, ApiError, hasToken, setToken, setUnauthorizedHandler } from './api';
 import { I18nProvider, translate } from './i18n';
-import { isLocalDevHost, startParam, telegram } from './telegram';
+import { startParam, telegram } from './telegram';
 import type { Lang, UserProfile } from './types';
 import { Logo } from '../components/Logo';
 
-type State =
-  | { status: 'loading' }
-  | { status: 'ready'; user: UserProfile }
-  | { status: 'dev-login' }
-  | { status: 'outside' }
-  | { status: 'error' };
+type State = { status: 'loading' } | { status: 'ready'; user: UserProfile } | { status: 'guest' } | { status: 'error' };
 
-const UserContext = createContext<UserProfile | null>(null);
+/** What a sign-in from the website gives (POST /auth/web/poll, /auth/web/phone/verify). */
+export interface WebSession {
+  token: string;
+  user: UserProfile;
+}
+
+interface Session {
+  user: UserProfile | null;
+  /** Inside Telegram (initData) — the Mini App; outside — the website vitalo.uz (release 6). */
+  inTelegram: boolean;
+  signIn: (s: WebSession) => void;
+  loginWithInitData: (initData: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  /** A guest pressed something that needs an account: the login screen, then back here. */
+  requireLogin: () => void;
+}
+
+const SessionContext = createContext<Session | null>(null);
 const RefreshUserContext = createContext<() => Promise<void>>(async () => undefined);
 
 /** Reloads the profile (e.g. after the welcome screen changed marketing_opt_in). */
 export const useRefreshUser = () => useContext(RefreshUserContext);
 
+export function useSession(): Session {
+  const s = useContext(SessionContext);
+  if (!s) throw new Error('useSession outside <AuthProvider>');
+  return s;
+}
+
+/**
+ * True when there is a signed-in customer. Screens rendered without <AuthProvider> (unit tests) count as signed in:
+ * the queries that need a session run as before.
+ */
+export function useAuthed(): boolean {
+  const s = useContext(SessionContext);
+  return s ? s.user !== null : true;
+}
+
+/** «Выйти» on the website; null inside Telegram (Telegram signs in by itself) and without <AuthProvider>. */
+export function useSignOut(): (() => Promise<void>) | null {
+  const s = useContext(SessionContext);
+  return s && !s.inTelegram && s.user ? s.signOut : null;
+}
+
 export function useUser(): UserProfile {
-  const user = useContext(UserContext);
+  const user = useContext(SessionContext)?.user;
   if (!user) throw new Error('useUser outside a signed-in app');
   return user;
 }
 
+const noop = () => undefined;
+/** Sends a guest to the login screen and back here afterwards (does nothing without <AuthProvider>, e.g. in unit tests). */
+export function useLoginGate(): () => void {
+  return useContext(SessionContext)?.requireLogin ?? noop;
+}
+
+export const loginPath = (next: string) => (next && next !== '/' && !next.startsWith('/login') ? `/login?next=${encodeURIComponent(next)}` : '/login');
+
+const LANG_KEY = 'vitalo.lang';
+
 function initialLang(): Lang {
-  const code = telegram()?.initDataUnsafe.user?.language_code ?? navigator.language;
+  let code: string | null | undefined = telegram()?.initDataUnsafe.user?.language_code;
+  if (!code) {
+    try {
+      code = localStorage.getItem(LANG_KEY);
+    } catch {
+      /* storage blocked */
+    }
+  }
+  code ??= navigator.language;
   return code?.toLowerCase().startsWith('uz') ? 'uz' : 'ru';
 }
 
 /**
  * Signs the customer in before anything else renders:
  * - inside Telegram: sends Telegram.WebApp.initData to the API (validated on the server);
- * - in a normal browser in dev mode: shows <DevLogin>, which gets a test initData from the Vite dev server;
- * - in a normal browser in production: asks to open the shop from the bot.
+ * - in a normal browser (the website, release 6): a saved session if there is one, else a guest. Guests browse the
+ *   catalog; the cart, checkout, orders and the profile ask to sign in (<RequireLogin>, screen «Вход»).
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [lang, setLangState] = useState<Lang>(initialLang);
-  const ready = useRef(false);
+  const mode = useRef<'loading' | 'ready' | 'guest'>('loading');
+  const here = useRef('/');
+  here.current = location.pathname + location.search;
+  // useNavigate() changes with every page in <BrowserRouter>: a ref keeps start() from running again on navigation
+  const nav = useRef(navigate);
+  nav.current = navigate;
+  const inTelegram = telegram() !== null;
 
   const signedIn = useCallback((user: UserProfile) => {
     setLangState(user.language);
-    ready.current = true;
+    mode.current = 'ready';
     setState({ status: 'ready', user });
   }, []);
 
-  const login = useCallback(
+  const toGuest = useCallback(() => {
+    mode.current = 'guest';
+    setState({ status: 'guest' });
+  }, []);
+
+  const loginWithInitData = useCallback(
     async (initData: string) => {
       const res = await api<{ token: string; user: UserProfile }>('/auth/telegram', { method: 'POST', body: { initData, start_param: startParam() } });
       setToken(res.token);
@@ -58,12 +122,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [signedIn],
   );
 
+  const signIn = useCallback(
+    (s: WebSession) => {
+      setToken(s.token, true);
+      signedIn(s.user);
+      // what a guest saw (catalog) stays; everything personal loads now
+      void queryClient.invalidateQueries();
+    },
+    [signedIn, queryClient],
+  );
+
   const start = useCallback(async () => {
-    ready.current = false;
+    mode.current = 'loading';
     setState({ status: 'loading' });
     try {
       const tg = telegram();
-      if (tg) return await login(tg.initData);
+      if (tg) return await loginWithInitData(tg.initData);
       if (hasToken()) {
         try {
           return signedIn(await api<UserProfile>('/auth/me'));
@@ -72,22 +146,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(null);
         }
       }
-      // The dev login exists only in the dev build and only on this computer (never through a tunnel).
-      setState({ status: import.meta.env.DEV && isLocalDevHost() ? 'dev-login' : 'outside' });
+      toGuest();
     } catch {
       setState({ status: 'error' });
     }
-  }, [login, signedIn]);
+  }, [loginWithInitData, signedIn, toGuest]);
+
+  const signOut = useCallback(async () => {
+    await api('/auth/logout', { method: 'POST', body: {} }).catch(() => undefined);
+    setToken(null);
+    queryClient.clear();
+    toGuest();
+    nav.current('/', { replace: true });
+  }, [queryClient, toGuest]);
+
+  const requireLogin = useCallback(() => {
+    if (!here.current.startsWith('/login')) nav.current(loginPath(here.current));
+  }, []);
 
   useEffect(() => {
-    // Session expired or revoked while using the app: sign in again from scratch.
     setUnauthorizedHandler(() => {
-      if (!ready.current) return;
-      queryClient.clear();
-      void start();
+      // Session expired or revoked while using the app: sign in again from scratch.
+      if (mode.current === 'ready') {
+        queryClient.clear();
+        void start();
+      } else if (mode.current === 'guest') {
+        // a guest pressed something that needs an account (add to cart, favourites…)
+        requireLogin();
+      }
     });
     void start();
-  }, [start, queryClient]);
+  }, [start, queryClient, requireLogin]);
 
   const refreshUser = useCallback(async () => {
     signedIn(await api<UserProfile>('/auth/me'));
@@ -96,6 +185,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback(
     (next: Lang) => {
       setLangState(next);
+      try {
+        localStorage.setItem(LANG_KEY, next);
+      } catch {
+        /* storage blocked */
+      }
       if (state.status === 'ready') {
         void api<UserProfile>('/auth/me', { method: 'PATCH', body: { language: next } }).then(signedIn).catch(() => undefined);
       }
@@ -103,20 +197,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [state.status, signedIn],
   );
 
+  const user = state.status === 'ready' ? state.user : null;
+  const session = useMemo<Session>(() => ({ user, inTelegram, signIn, loginWithInitData, signOut, requireLogin }), [user, inTelegram, signIn, loginWithInitData, signOut, requireLogin]);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   let content: ReactNode;
-  if (state.status === 'ready')
+  if (state.status === 'ready' || state.status === 'guest')
     content = (
-      <UserContext.Provider value={state.user}>
+      <SessionContext.Provider value={session}>
         <RefreshUserContext.Provider value={refreshUser}>{children}</RefreshUserContext.Provider>
-      </UserContext.Provider>
-    );
-  // `import.meta.env.DEV &&` lets the production build drop DevLogin entirely.
-  else if (import.meta.env.DEV && state.status === 'dev-login') content = <DevLogin onLogin={login} />;
-  else if (state.status === 'outside') content = (
-      <div className="screen-center">
-        <Logo size="lg" />
-        <p className="hint">{translate(lang, 'auth.outside')}</p>
-      </div>
+      </SessionContext.Provider>
     );
   else if (state.status === 'error')
     content = (

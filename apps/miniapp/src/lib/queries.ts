@@ -3,6 +3,7 @@ import { api, ApiError, qs } from './api';
 import type { PromoApplyResult } from '../components/Promo';
 import type { Lang, BonusAccount, ShopBundle, OrderReturns, ProductReviews, ReviewableItem, ReviewFormInfo } from './types';
 import { applyCart, rememberWarnings } from './cart-cache';
+import { useAuthed } from './auth';
 import type { Address, AiState, BankTransfer, BrandCard, BrandPage, CampaignPage, Cart, CartCount, CartUpsell, CompatState, CategoryTrees, CheckoutDefaults, DeliveryEta, FreeShipping, CentreCounts, CentreList, ActiveOrder, LegalDocument, LegalStatus, Order, OrderListItem, Page, ProductCard, ProductListItem, Region, ShopBanner, ShopInfo, SupportThread } from './types';
 
 export type Sort = 'popular' | 'price_asc' | 'price_desc' | 'new';
@@ -81,7 +82,7 @@ export const useDeliveryEta = (city: CityRef | null) =>
     staleTime: 300_000,
   });
 
-export const useLegalStatus = () => useQuery({ queryKey: ['legal-status'], queryFn: () => api<LegalStatus>('/legal/status'), staleTime: Infinity });
+export const useLegalStatus = () => useQuery({ enabled: useAuthed(), queryKey: ['legal-status'], queryFn: () => api<LegalStatus>('/legal/status'), staleTime: Infinity });
 export const useLegalDocuments = () => useQuery({ queryKey: ['legal-docs'], queryFn: () => api<LegalDocument[]>('/legal/documents'), staleTime: 600_000 });
 
 export const useProduct = (id: string) => useQuery({ queryKey: ['product', id], queryFn: () => api<ProductCard>(`/catalog/products/${id}`) });
@@ -90,7 +91,7 @@ export const useProduct = (id: string) => useQuery({ queryKey: ['product', id], 
 
 export function useCart(city?: CityRef | null) {
   const client = useQueryClient();
-  return useQuery({
+  return useQuery({ enabled: useAuthed(),
     queryKey: ['cart', city ?? null],
     queryFn: async () => {
       const cart = await api<Cart>(`/cart${qs({ ...city })}`);
@@ -107,10 +108,10 @@ export function useCart(city?: CityRef | null) {
 /** 3.4: the compatibility block of the cart; refetched when the set of products or the language changes. */
 /** 3.8: VITALO AI in the cart; same keys as the specialist block. */
 export const useAiCompat = (setKey: string, lang: Lang) =>
-  useQuery({ queryKey: ['compat-ai', setKey, lang], queryFn: () => api<AiState>('/compat/ai'), placeholderData: (prev) => prev });
+  useQuery({ enabled: useAuthed(), queryKey: ['compat-ai', setKey, lang], queryFn: () => api<AiState>('/compat/ai'), placeholderData: (prev) => prev });
 
 export const useCompat = (setKey: string, lang: Lang) =>
-  useQuery({ queryKey: ['compat', setKey, lang], queryFn: () => api<CompatState>('/compat'), placeholderData: (prev) => prev });
+  useQuery({ enabled: useAuthed(), queryKey: ['compat', setKey, lang], queryFn: () => api<CompatState>('/compat'), placeholderData: (prev) => prev });
 
 export const useUpsell = (city: CityRef | null, goodsTotal: number) =>
   useQuery({
@@ -132,7 +133,7 @@ export const useBanners = (lang: Lang) =>
 
 /** Badge in the top bar and the floating cart bar. Uses the read-only counter so it never "eats" the cart warnings. */
 export function useCartCount() {
-  return useQuery({ queryKey: ['cart', 'count'], queryFn: () => api<CartCount>('/cart/count') });
+  return useQuery({ enabled: useAuthed(), queryKey: ['cart', 'count'], queryFn: () => api<CartCount>('/cart/count') });
 }
 
 /** Every cart mutation returns the fresh cart; we store it and refresh views that depend on a city. */
@@ -195,17 +196,17 @@ export function useCartBonus(city: CityRef | null) {
 }
 
 /** 3.10-А: the balance, when it burns, the rules and the history. */
-export const useBonusAccount = () => useQuery({ queryKey: ['bonus'], queryFn: () => api<BonusAccount>('/bonus'), staleTime: 30_000 });
+export const useBonusAccount = () => useQuery({ enabled: useAuthed(), queryKey: ['bonus'], queryFn: () => api<BonusAccount>('/bonus'), staleTime: 30_000 });
 
 // ---------- favorites ----------
 
 export function useFavoriteIds() {
-  return useQuery({ queryKey: ['favorites', 'ids'], queryFn: async () => new Set(await api<string[]>('/favorites/ids')) });
+  return useQuery({ enabled: useAuthed(), queryKey: ['favorites', 'ids'], queryFn: async () => new Set(await api<string[]>('/favorites/ids')) });
 }
 
 /** 2.4: products the customer waits for («Сообщить о поступлении»). */
 export function useWaitlistIds() {
-  return useQuery({ queryKey: ['waitlist', 'ids'], queryFn: async () => new Set(await api<string[]>('/waitlist/ids')) });
+  return useQuery({ enabled: useAuthed(), queryKey: ['waitlist', 'ids'], queryFn: async () => new Set(await api<string[]>('/waitlist/ids')) });
 }
 
 /** Subscribes once; the button turns into «Вы в списке ожидания» right after the server answered. */
@@ -231,7 +232,7 @@ export function useUnsubscribeWaitlist() {
   });
 }
 
-export const useFavorites = () => useQuery({ queryKey: ['favorites', 'list'], queryFn: () => api<ProductListItem[]>('/favorites') });
+export const useFavorites = () => useQuery({ enabled: useAuthed(), queryKey: ['favorites', 'list'], queryFn: () => api<ProductListItem[]>('/favorites') });
 
 /** Optimistic heart toggle: the icon flips at once and rolls back if the request fails. */
 export function useToggleFavorite() {
@@ -254,7 +255,7 @@ export function useToggleFavorite() {
 
 // ---------- addresses ----------
 
-export const useAddresses = () => useQuery({ queryKey: ['addresses'], queryFn: () => api<Address[]>('/addresses') });
+export const useAddresses = () => useQuery({ enabled: useAuthed(), queryKey: ['addresses'], queryFn: () => api<Address[]>('/addresses') });
 
 export interface AddressInput extends CityRef {
   label?: string;
@@ -276,7 +277,7 @@ export interface MapConfig {
 }
 
 /** Show «Выбрать на карте»? Asked again after 5 minutes (the daily limit may have been reached meanwhile). */
-export const useMapConfig = () => useQuery({ queryKey: ['map-config'], queryFn: () => api<MapConfig>('/maps/config'), staleTime: 5 * 60_000, retry: false });
+export const useMapConfig = () => useQuery({ enabled: useAuthed(), queryKey: ['map-config'], queryFn: () => api<MapConfig>('/maps/config'), staleTime: 5 * 60_000, retry: false });
 
 /** What the customer confirmed on the map. region_id / city_id: our district when the geocoder matched it. */
 export interface MapPick {
@@ -311,7 +312,7 @@ export function useAddressActions() {
 // ---------- orders ----------
 
 export const useCheckoutDefaults = () =>
-  useQuery({ queryKey: ['checkout-defaults'], queryFn: () => api<CheckoutDefaults | null>('/orders/checkout-defaults') });
+  useQuery({ enabled: useAuthed(), queryKey: ['checkout-defaults'], queryFn: () => api<CheckoutDefaults | null>('/orders/checkout-defaults') });
 
 export function useOrders() {
   return useInfiniteQuery({
@@ -325,11 +326,11 @@ export function useOrders() {
 export const useOrder = (id: string) => useQuery({ queryKey: ['order', id], queryFn: () => api<Order>(`/orders/${id}`) });
 
 /** 3.2: the newest unfinished order for the plaque on the home screen. */
-export const useActiveOrder = () => useQuery({ queryKey: ['orders', 'active'], queryFn: () => api<ActiveOrder>('/orders/active') });
+export const useActiveOrder = () => useQuery({ enabled: useAuthed(), queryKey: ['orders', 'active'], queryFn: () => api<ActiveOrder>('/orders/active') });
 
 /** 3.2: unread counter on the bell; refreshed every minute and when the app comes back to the screen. */
 export const useUnreadCount = () =>
-  useQuery({ queryKey: ['notifications', 'unread'], queryFn: () => api<CentreCounts>('/notifications/unread'), refetchInterval: 60_000 });
+  useQuery({ enabled: useAuthed(), queryKey: ['notifications', 'unread'], queryFn: () => api<CentreCounts>('/notifications/unread'), refetchInterval: 60_000 });
 
 /** 3.2: the notification centre in the current language (titles and lines come ready from the server). */
 export const useNotifications = (lang: Lang) => useQuery({ queryKey: ['notifications', 'list', lang], queryFn: () => api<CentreList>(`/notifications${qs({ lang })}`) });

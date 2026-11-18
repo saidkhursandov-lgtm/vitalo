@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, isNetworkError } from '../lib/api';
-import { digits, discountPercent, money, shortNameOf, tileLine, NBSP } from '../lib/format';
+import { useAuthed, useLoginGate } from '../lib/auth';
+import { digits, discountPercent, money, shortNameOf, tileLine, NBSP, productPath } from '../lib/format';
 import { errorText, shownStatus, orderStatusKey, useI18n } from '../lib/i18n';
 import { useFavoriteIds, useToggleFavorite } from '../lib/queries';
 import type { OrderStatus, ProductListItem, ShopCampaign } from '../lib/types';
@@ -201,6 +202,8 @@ export function FavoriteButton({ productId, className = '' }: { productId: strin
   const { t } = useI18n();
   const ids = useFavoriteIds();
   const toggle = useToggleFavorite();
+  const authed = useAuthed();
+  const requireLogin = useLoginGate();
   const on = ids.data?.has(productId) ?? false;
   return (
     <button
@@ -211,6 +214,7 @@ export function FavoriteButton({ productId, className = '' }: { productId: strin
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!authed) return requireLogin();
         toggle.mutate({ id: productId, on: !on });
       }}
     >
@@ -267,7 +271,7 @@ export function ProductTile({ product }: { product: ProductListItem }) {
   // 6а-Б: the old price crossed out over the price (a sale or a Market old price); the slot is kept empty otherwise
   const old = sale ? sale.list_price_uzs : pct && product.in_stock ? product.old_price_uzs : null;
   return (
-    <Link to={`/product/${product.id}`} className={`tile ${product.in_stock || product.cross_border ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
+    <Link to={productPath(product)} className={`tile ${product.in_stock || product.cross_border ? '' : 'is-out'}${sale ? ` sale-card-${sale.skin}` : ''}`}>
       <div className="tile-img">
         {product.image ? <Picture src={product.image} /> : product.image_url && <SafeImg src={product.image_url} alt="" loading="lazy" decoding="async" />}
         <FavoriteButton productId={product.id} className="tile-fav" />

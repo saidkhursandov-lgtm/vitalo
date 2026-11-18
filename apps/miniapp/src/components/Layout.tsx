@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useI18n } from '../lib/i18n';
+import { useAuthed } from '../lib/auth';
 import { useCartCount, useUnreadCount } from '../lib/queries';
 import { telegram } from '../lib/telegram';
 import { FloatingCart } from './FloatingCart';
 import { BrandBlock, LangSwitch } from './HeaderParts';
-import { BackIcon, BellIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, SparkIcon, UserIcon } from './Icons';
+import { BackIcon, BellIcon, CartIcon, GridIcon, HeartIcon, HomeIcon, SearchIcon, SparkIcon, UserIcon } from './Icons';
 import { Logo } from './Logo';
 import { NetworkBanner } from './NetworkBanner';
 import { SheetsProvider, useSheets } from './Sheets';
+import { SiteFooter } from './SiteFooter';
 import { ToastProvider } from './Toast';
 
 const TABS = ['/', '/catalog', '/favorites', '/profile'];
@@ -83,8 +85,29 @@ function AiTab() {
   );
 }
 
+/** Release 6: on a wide screen (website, 768 px and more) the top bar carries the menu and the search; no bottom menu. */
+function SiteNav() {
+  const { t } = useI18n();
+  const { openAi } = useSheets();
+  return (
+    <nav className="site-nav" aria-label={t('nav.catalog')}>
+      <NavLink to="/catalog">{t('nav.catalog')}</NavLink>
+      <button type="button" className="site-nav-ai" onClick={openAi}>
+        <SparkIcon width={18} height={18} />
+        {t('nav.ai')}
+      </button>
+      <Link to="/search" className="site-search">
+        <SearchIcon width={18} height={18} />
+        <span>{t('home.search')}</span>
+      </Link>
+    </nav>
+  );
+}
+
 export function Layout() {
   const { t } = useI18n();
+  const authed = useAuthed();
+  const site = !telegram();
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const cartCount = useCartCount();
@@ -126,17 +149,33 @@ export function Layout() {
             <BrandBlock logo={<Logo />} />
           </Link>
         </div>
+        {site && <SiteNav />}
         <div className="topbar-right">
           <LangSwitch />
+          {site && (
+            <Link to="/favorites" className="icon-btn site-only" aria-label={t('nav.favorites')}>
+              <HeartIcon />
+            </Link>
+          )}
           {/* 3.2: the notification centre, next to the cart; the same orange counter with a navy number */}
-          <Link to="/notifications" className="icon-btn bell-btn" aria-label={unread ? `${t('nav.notifications')}: ${unread}` : t('nav.notifications')}>
+          {authed && <Link to="/notifications" className="icon-btn bell-btn" aria-label={unread ? `${t('nav.notifications')}: ${unread}` : t('nav.notifications')}>
             <BellIcon />
             {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
-          </Link>
+          </Link>}
           <Link to="/cart" className="icon-btn cart-btn" aria-label={t('nav.cart')}>
             <CartIcon />
             {count > 0 && <span className={`badge ${bump ? 'is-bump' : ''}`}>{count > 99 ? '99+' : count}</span>}
           </Link>
+          {site &&
+            (authed ? (
+              <Link to="/profile" className="icon-btn site-only" aria-label={t('nav.profile')}>
+                <UserIcon />
+              </Link>
+            ) : (
+              <Link to="/login" className="btn btn-sm site-login">
+                {t('login.signIn')}
+              </Link>
+            ))}
         </div>
       </header>
 
@@ -144,6 +183,7 @@ export function Layout() {
       <main className="content">
         <Outlet />
       </main>
+      {site && <SiteFooter />}
 
       {showFloatCart && <FloatingCart count={count} total={total} onHide={() => setHiddenAt(total)} />}
 

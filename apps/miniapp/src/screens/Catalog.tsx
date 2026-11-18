@@ -6,6 +6,7 @@ import { ClampText } from '../components/ClampText';
 import { EmptyState, ErrorState, Loading, ProductGrid } from '../components/ui';
 import { countryName, formLabel, nameOf } from '../lib/format';
 import { pluralForm, useI18n, type MessageKey } from '../lib/i18n';
+import { usePageMeta } from '../lib/seo';
 import { useBrandPage, useBrands, useCategories, useForms, useProducts, useProductsCount, type ProductFilters, type Sort } from '../lib/queries';
 import type { CategoryNode } from '../lib/types';
 
@@ -55,6 +56,7 @@ export function BrandScreen() {
   const { t, lang } = useI18n();
   const { slug = '' } = useParams();
   const brand = useBrandPage(slug);
+  usePageMeta(brand.data?.name, brand.data ? (lang === 'uz' && brand.data.why_vitalo_uz) || brand.data.why_vitalo_ru : null);
 
   if (brand.isPending) return <div className="page"><Loading variant="list" count={2} /></div>;
   if (brand.isError) {

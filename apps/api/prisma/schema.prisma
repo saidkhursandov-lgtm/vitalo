@@ -387,8 +387,29 @@ model users {
   notes             customer_notes[]
   ai_chats          ai_chats[]
   reviews           reviews[]
+  login_requests    customer_login_requests[]
 
   @@index([status])
+}
+
+/// Release 6 «Сайт»: a login on vitalo.uz outside Telegram — confirmed in the bot (kind telegram) or by a code the bot sends (kind phone)
+model customer_login_requests {
+  id          String    @id @db.Uuid
+  kind        String
+  poll_hash   String
+  code_hash   String?
+  phone       String?
+  user_id     String?   @db.Uuid
+  attempts    Int       @default(0)
+  device_info String?
+  ip          String?
+  created_at  DateTime  @default(now())
+  expires_at  DateTime
+  approved_at DateTime?
+  used_at     DateTime?
+  user        users?    @relation(fields: [user_id], references: [id])
+
+  @@index([phone, created_at])
 }
 
 model user_sessions {
@@ -629,6 +650,8 @@ model products {
   /// 4.1 «Идеальная пара»: a pair chosen by hand (null = picked from the approved synergy rules); pair_off hides the block
   pair_product_id      String?       @db.Uuid
   pair_off             Boolean       @default(false)
+  /// Release 6 «Сайт»: the address /product/<slug>; a database trigger fills it from name_ru when empty, never changed after
+  slug                 String?       @unique
   is_test              Boolean       @default(false) // аудит 10.11, п. 1.5: тестовый товар, скрыт в списках и сводках
   shipping_weight_g    Int?
   shipping_length_mm   Int?

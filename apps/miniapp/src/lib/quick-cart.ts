@@ -1,4 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useAuthed, useLoginGate } from './auth';
 import { useSyncExternalStore } from 'react';
 import { api, ApiError } from './api';
 import { applyCart } from './cart-cache';
@@ -94,6 +95,8 @@ function change(client: QueryClient, productId: string, next: number, notify: No
 /** Quantity of one product in the cart, the same on every card, with a setter that answers instantly. */
 export function useQuickCart(productId: string, notify: Notify) {
   const client = useQueryClient();
+  const authed = useAuthed();
+  const requireLogin = useLoginGate();
   const cart = useCart(null);
   useSyncExternalStore(subscribe, () => version);
   const line = serverLine(cart.data, productId);
@@ -102,8 +105,9 @@ export function useQuickCart(productId: string, notify: Notify) {
   return {
     qty,
     max,
-    ready: !cart.isPending,
-    set: (n: number) => change(client, productId, Math.max(0, Math.min(n, max)), notify),
+    ready: !authed || !cart.isPending,
+    // release 6: a guest on the website signs in first (the cart belongs to an account)
+    set: (n: number) => (authed ? change(client, productId, Math.max(0, Math.min(n, max)), notify) : requireLogin()),
   };
 }
 

@@ -33,17 +33,22 @@ let onUnauthorized: (() => void) | null = null;
 
 function readStoredToken(): string | null {
   try {
-    return sessionStorage.getItem(TOKEN_KEY);
+    return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
 }
 
-export function setToken(value: string | null) {
+/**
+ * Inside Telegram the token lives for this tab only (Telegram signs in again on every open). On the website (release 6)
+ * `remember` keeps it in localStorage, so the customer stays signed in between visits like on any shop site.
+ */
+export function setToken(value: string | null, remember = false) {
   token = value;
   try {
-    if (value) sessionStorage.setItem(TOKEN_KEY, value);
-    else sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    if (value) (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, value);
   } catch {
     /* storage may be blocked; the in-memory token still works for this page */
   }

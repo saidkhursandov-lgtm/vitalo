@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { money } from '../lib/format';
+import { money, productPath } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { tapHaptic } from '../lib/telegram';
 import type { ProductVariant } from '../lib/types';
@@ -16,7 +16,7 @@ export function VariantChips({ variants }: { variants?: ProductVariant[] }) {
           <Link
             key={v.id}
             role="listitem"
-            to={`/product/${v.id}`}
+            to={productPath(v)}
             replace
             aria-current={v.current ? 'true' : undefined}
             className={`variant-chip${v.current ? ' is-on' : ''}${v.in_stock ? '' : ' is-out'}`}

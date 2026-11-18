@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react';
 import { errorText, useI18n } from '../lib/i18n';
+import { useAuthed, useLoginGate } from '../lib/auth';
 import { ApiError } from '../lib/api';
 import { useSubscribeWaitlist, useUnsubscribeWaitlist, useWaitlistIds } from '../lib/queries';
 import { useQuickCart, type QuickNotice } from '../lib/quick-cart';
@@ -114,6 +115,8 @@ export function WaitlistButton({ productId, variant }: { productId: string; vari
   const ids = useWaitlistIds();
   const subscribe = useSubscribeWaitlist();
   const unsubscribe = useUnsubscribeWaitlist();
+  const authed = useAuthed();
+  const requireLogin = useLoginGate();
   const waiting = ids.data?.has(productId) ?? false;
   const busy = subscribe.isPending || unsubscribe.isPending;
   const fail = (err: unknown) => toast(errorText(lang, err instanceof ApiError ? err.code : undefined));
@@ -124,6 +127,7 @@ export function WaitlistButton({ productId, variant }: { productId: string; vari
     });
   const onClick = (e: MouseEvent) => {
     stop(e);
+    if (!authed) return requireLogin();
     if (busy) return;
     tapHaptic();
     if (waiting) return turnOff();

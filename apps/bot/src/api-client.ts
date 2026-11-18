@@ -95,6 +95,8 @@ export interface VitaloApi {
   staffLoginDecision(staffTelegramId: number, requestId: string, approve: boolean): Promise<{ result: string }>;
   /** 4.2: «Не напоминать» under «Курс заканчивается». */
   courseReminders(telegramId: number, on: boolean): Promise<{ saved: boolean }>;
+  /** Release 6: /start login_<id> from «Войти через Telegram» on vitalo.uz — this Telegram account signs that browser in. */
+  customerLogin?(hex: string, from: { id: number; first_name: string; last_name?: string; username?: string; language_code?: string }): Promise<{ result: string; lang: Lang }>;
 }
 
 /** Calls /api/internal/bot/* with the shared secret header. */
@@ -119,6 +121,9 @@ export class HttpVitaloApi implements VitaloApi {
     this.post<CompatAnswer>(`/internal/bot/compat/${requestId}/answer`, { telegram_id: String(staffId), verdict: code, ...(text !== undefined && { text }) });
 
   courseReminders = (id: number, on: boolean) => this.post<{ saved: boolean }>(`/internal/bot/users/${id}/course-reminders`, { on });
+  customerLogin = (hex: string, from: { id: number; first_name: string; last_name?: string; username?: string; language_code?: string }) =>
+    this.post<{ result: string; lang: Lang }>(`/internal/bot/customer-login/${hex}`, { from });
+
   staffLoginDecision = (staffId: number, requestId: string, approve: boolean) =>
     this.post<{ result: string }>(`/internal/bot/staff-login/${requestId}/decision`, { telegram_id: String(staffId), approve });
 

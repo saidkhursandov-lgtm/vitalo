@@ -160,3 +160,6 @@ const COUNTRY_UZ: Record<string, string> = {
   Исландия: 'Islandiya',
 };
 export const countryName = (country: string, lang: Lang): string => (lang === 'uz' ? (COUNTRY_UZ[country.trim()] ?? country) : country);
+
+/** Release 6: product page address — the readable slug when the product has one, else its id (both open the card). */
+export const productPath = (p: { id: string; slug?: string | null }) => `/product/${p.slug || p.id}`;

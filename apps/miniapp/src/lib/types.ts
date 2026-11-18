@@ -56,6 +56,8 @@ export interface CategoryTrees {
 
 export interface ProductListItem extends Named {
   id: string;
+  /** Release 6: the address on the website (/product/magniy-b6-60-tabletok); old answers may not have it. */
+  slug?: string | null;
   sku: string;
   short_name_ru?: string | null;
   short_name_uz?: string | null;

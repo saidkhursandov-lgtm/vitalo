@@ -5,6 +5,7 @@ import { installReceipts } from './receipts';
 import { installCompat } from './compat';
 import { installStaffLogin } from './staff-login';
 import { installCourse } from './course';
+import { siteLoginHandler } from './site-login';
 import { bothLangs, langFromTelegram, money, t, type Lang, type TextKey } from './texts';
 
 /** Used when the API has no contact saved (the admin edits it in Настройки). */
@@ -103,6 +104,7 @@ export function createBot({ token, api, urls, botInfo, download }: BotDeps): Bot
   installCompat(bot, { api });
   installStaffLogin(bot, { api });
   installCourse(bot, { api });
+  const siteLogin = siteLoginHandler(api);
 
   async function replyWithShop(ctx: Context, lang: Lang, text: string, label: TextKey = 'openShop', path = '/', startParam?: string) {
     const kb = shopButton(lang, label, path, startParam);
@@ -114,6 +116,7 @@ export function createBot({ token, api, urls, botInfo, download }: BotDeps): Bot
     const { lang } = await context(ctx);
     const payload = ctx.match.trim(); // /start <referral code>, or rc_<order> from «Отправить скриншот чека в бот»
     if (await receipts.start(ctx, payload)) return;
+    if (await siteLogin(ctx, payload)) return;
     const ref = REFERRAL_RE.test(payload) ? payload : undefined;
     await ctx.reply(t(lang, 'welcome', { name: ctx.from?.first_name ?? '' }), { reply_markup: menu(lang) });
     await replyWithShop(ctx, lang, t(lang, 'openShopHint'), 'openShop', '/', ref);

@@ -272,9 +272,12 @@ export class CatalogService {
     return { popular, fresh };
   }
 
-  async getProduct(id: string) {
-    const product = await this.prisma.products.findFirst({ where: { id, status: 'active' }, include: cardInclude });
+  /** Release 6: by id (old links, the bot) or by slug (the site's addresses /product/<slug>). */
+  async getProduct(idOrSlug: string) {
+    const byId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+    const product = await this.prisma.products.findFirst({ where: { ...(byId ? { id: idOrSlug } : { slug: idOrSlug }), status: 'active' }, include: cardInclude });
     if (!product) throw new NotFoundException('Product not found');
+    const id = product.id;
     const card = await this.campaigns.decorateCard(toProductCard(product));
     // D-60/D-61: «Под заказ из США • 7–14 дней» / «Под заказ • 1–2 дня» and the guarantee, from the supplier
     return { ...card, cross_border_terms: card.under_order, pair: await this.pairCard(id), variants: await this.variants(product) };
