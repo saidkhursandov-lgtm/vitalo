@@ -22,17 +22,23 @@ export class SitemapController {
   @Header('Cache-Control', 'public, max-age=3600')
   async sitemap(): Promise<string> {
     const site = (this.config.get<string>('SITE_URL') ?? 'https://vitalo.uz').replace(/\/+$/, '');
-    const [products, categories, brands] = await Promise.all([
+    const [products, categories, brands, bundles] = await Promise.all([
       this.prisma.products.findMany({ where: { status: 'active', is_test: false, slug: { not: null } }, select: { slug: true, updated_at: true } }),
       this.prisma.categories.findMany({ where: { status: 'active', merged_into_id: null }, select: { slug: true } }),
       this.prisma.brands.findMany({ where: { status: 'active', is_test: false, slug: { not: null } }, select: { slug: true, updated_at: true } }),
+      this.prisma.bundles.findMany({ where: { is_active: true }, select: { slug: true, updated_at: true } }),
     ]);
     const url = (path: string, lastmod?: Date, priority = '0.6') =>
       `<url><loc>${esc(site + path)}</loc>${lastmod ? `<lastmod>${lastmod.toISOString().slice(0, 10)}</lastmod>` : ''}<priority>${priority}</priority></url>`;
     const rows = [
       url('/', undefined, '1.0'),
       url('/catalog', undefined, '0.8'),
-      ...categories.map((c) => url(`/catalog/products?category=${encodeURIComponent(c.slug)}`, undefined, '0.7')),
+      url('/brands', undefined, '0.6'),
+      url('/sets', undefined, '0.6'),
+      url('/ai', undefined, '0.6'),
+      // the site's own addresses (6.6): /catalog/<slug>, not the Mini App's /catalog/products?category=
+      ...categories.map((c) => url(`/catalog/${encodeURIComponent(c.slug)}`, undefined, '0.7')),
+      ...bundles.map((b) => url(`/set/${encodeURIComponent(b.slug)}`, b.updated_at, '0.6')),
       ...brands.map((b) => url(`/brand/${encodeURIComponent(b.slug!)}`, b.updated_at, '0.5')),
       ...products.map((p) => url(`/product/${encodeURIComponent(p.slug!)}`, p.updated_at, '0.8')),
     ];
