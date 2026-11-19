@@ -10,7 +10,7 @@
 | API | Node.js 24, NestJS 11, Prisma 6, TypeScript; фото — sharp | `apps/api` |
 | База | PostgreSQL 16 (расширения `pg_trgm`, `unaccent` для поиска) | `apps/api/prisma/schema.prisma`, `migrations/` |
 | Mini App | React 19, Vite 7, React Query, React Router 7; шрифт Montserrat | `apps/miniapp` |
-| Сайт vitalo.uz (релиз 6, D-81) | Next.js 15, React 19; страницы собираются на сервере; шрифт Montserrat; ещё не выложен | `apps/site` |
+| Сайт vitalo.uz (релиз 6, D-81) | Next.js 15, React 19; страницы собираются на сервере; шрифт Montserrat; выложен 18–19.11 (служба `vitalo-site`, порт 3002, nginx) | `apps/site` |
 | Админка | React 19, Vite 7, React Query | `apps/admin` |
 | Бот | grammY (long polling), tsx | `apps/bot` |
 | AI (3.8) | Claude API (Anthropic) через `@anthropic-ai/sdk`; модель — настройка в админке, ключ — только `ANTHROPIC_API_KEY` в `.env` | `apps/api/src/compat` |
@@ -20,7 +20,7 @@
 ## Как части связаны
 
 ```
-Покупатель → Telegram → @vitalo_uz_bot ──(кнопка «Магазин»)──► Mini App (vitalo.uz)
+Покупатель → Telegram → @vitalo_uz_bot ──(кнопка «Магазин»)──► Mini App (app.vitalo.uz)
                                 │                                   │
                                 │ /api/internal/bot/* (X-Bot-Secret) │ /api/* (вход по Telegram initData)
                                 ▼                                   ▼
@@ -81,7 +81,7 @@
 | Релиз 4, «Идеальная пара» (4.1, D-75) | `products.pair_product_id` (ручная пара), `products.pair_off` (не показывать пару) | миграция `20261205100000_r4_pair`, только добавляющая; на `vitalo_dev` 16.11, на сервере нет |
 | Релиз 4, «Сеты от врача» (4.3, D-75) | `bundles` (сет: название, адрес, скидка 0–10%, вкл/выкл), `bundle_items` (товары сета, 2–3 шт.) | миграция `20261207100000_r4_bundles`, только добавляющая; на `vitalo_dev` 17.11, на сервере нет |
 | Фасовки товара (D-79) | `products` (новые поля `variant_group_id`, `variant_label_ru`, `variant_label_uz`) | одна группа у товаров одного продукта в разных фасовках; миграция `20261208100000_d79_variants`, только добавляющая |
-| Сайт vitalo.uz (релиз 6, D-80, в работе) | `products.slug` (адрес товара; у брендов slug был; заполняется триггерами при создании, при переименовании не меняется, дубли получают -2/-3), `customer_login_requests` (вход покупателя на сайте: Telegram или телефон с кодом от бота, 5 минут, 5 попыток) | миграция `20261209100000_site_slugs_login`: добавляющая, плюс заполнение `slug` у существующих товаров и брендов; на `vitalo_test` — да, на `vitalo_dev` и сервере — нет |
+| Сайт vitalo.uz (релиз 6, D-80) | `products.slug` (адрес товара; у брендов slug был; заполняется триггерами при создании, при переименовании не меняется, дубли получают -2/-3), `customer_login_requests` (вход покупателя на сайте: Telegram или телефон с кодом от бота, 5 минут, 5 попыток) | миграция `20261209100000_site_slugs_login`: добавляющая, плюс заполнение `slug` у существующих товаров и брендов; на `vitalo_test` — да, на `vitalo_dev` — 18.11, на сервере — 19.11 |
 | Сотрудники и аудит | `staff_users` (3.4: поле `is_specialist`), `staff_sessions` (устройство, IP, последний вход; 4.8: сессия без действий 30 дней завершается сама; миграция `20261113100000`, применена на сервере 08.11), `staff_devices` и `staff_login_requests`, `staff_backup_codes` (вход в браузере), `audit_logs`, `system_errors`, `legal_documents`, `legal_acceptances` | — |
 
 ## API (основное)
@@ -89,7 +89,7 @@
 Все адреса начинаются с `/api`. Полный список — Swagger `http://localhost:3000/api/docs` (локально).
 
 - Вход: `POST /auth/telegram`, `GET /auth/me`; сотрудники — `POST /staff/auth/telegram`.
-- Вход на сайте (релиз 6, D-80, в работе): `POST /auth/web/telegram/start`, `POST /auth/web/poll`, `POST /auth/web/phone/start`, `POST /auth/web/phone/verify`; бот подтверждает `POST /internal/bot/customer-login/:hex`. `GET /sitemap.xml` (nginx отдаёт его с `vitalo.uz`). `/catalog/products/:id` принимает id или slug товара.
+- Вход на сайте (релиз 6, D-80): `POST /auth/web/telegram/start`, `POST /auth/web/poll`, `POST /auth/web/phone/start`, `POST /auth/web/phone/verify`; бот подтверждает `POST /internal/bot/customer-login/:hex`. `GET /sitemap.xml` (nginx отдаёт его с `vitalo.uz`). `/catalog/products/:id` принимает id или slug товара.
 - Каталог: `/catalog/products`, `/catalog/products/:id`, `/catalog/search`, `/catalog/categories`, `/catalog/brands`, `/catalog/brands/showcase` (лента «Проверенные бренды», 2.2), `/catalog/brands/:slug` (страница бренда, 2.2).
 - Корзина и заказы: `/cart`, `/cart/upsell` (допродажа, 3.1), `POST /cart/promo` и `DELETE /cart/promo` (промокод: «Применить» и [✕], 3.3), `/orders/preview`, `POST /orders` (с `Idempotency-Key`), `/orders/:id/payment/...`. Настройка допродажи (админка): `GET/PUT /staff/settings/cart-upsell` (3.1).
 - Промокоды (админка, 3.3): `/staff/promo-codes` — список, генерация кода, создание, `PUT /:id`, смена статуса, `POST margin-check` (проверка защиты маржи); настройка `promo_guard`: `GET/PUT /staff/promo-codes/settings`. Права: смотрит менеджер, меняют админ и маркетолог, защиту маржи — только админ.
@@ -105,18 +105,18 @@
 
 | Адрес | Что |
 | --- | --- |
-| `vitalo.uz` | сайт (релиз 6, D-81, `apps/site`) — ещё не выложен; сейчас открывает Mini App (`apps/miniapp/dist`) |
-| `app.vitalo.uz` | Mini App после переезда (релиз 6, этап 6.6) — ещё не выложен |
+| `vitalo.uz` | сайт (релиз 6, D-81, `apps/site`, служба `vitalo-site` на 127.0.0.1:3002, с 19.11); старые адреса Mini App переводит на свои страницы (308) |
+| `app.vitalo.uz` | Mini App (`apps/miniapp/dist`), с 19.11 (релиз 6.6); кнопка «Магазин» в боте — проверить (вопрос 174) |
 | `admin.vitalo.uz` | админка (`apps/admin/dist`) |
 | `api.vitalo.uz` | API (nginx → `vitalo-api` на порту 3000, наружу порт не открыт) |
 | `vitalostore.uz` | должен перенаправлять на `vitalo.uz` (29.10 не ответил — проверить) |
 
-Один сертификат Let's Encrypt на три адреса `vitalo.uz`, `admin.`, `api.` (`certbot.timer`).
+Сертификат Let's Encrypt на `vitalo.uz`, `app.`, `admin.`, `api.` (с 19.11 включает `app.vitalo.uz`; `certbot.timer`).
 
 ## Сервер
 
 - VPS OVHcloud VPS-2 (Канада, Beauharnois; 4 vCore, 8 ГБ, 75 ГБ NVMe), Ubuntu 24.04, IP `144.217.85.105` — с 17.11.2026 (до этого Hostmaster, 91.213.99.230). Хранить данные в Узбекистане не обязательно (решение владельца 17.11.2026).
-- Службы: `nginx`, `postgresql` (база `vitalo`, вход через локальный сокет), `vitalo-api`, `vitalo-bot`,
+- Службы: `nginx`, `postgresql` (база `vitalo`, вход через локальный сокет), `vitalo-api`, `vitalo-bot`, `vitalo-site` (с 19.11, сайт),
   `vitalo-backup.timer`, `vitalo-monitor.timer`, `certbot.timer`, `fail2ban`, `ufw` (открыты только 22/80/443).
 - Мониторинг (с 17.11.2026): `scripts/server/monitor.sh` — отчёт в технический чат в 09:00 и 21:00 (всё из `healthcheck.sh`, копия в Google Drive, срок HTTPS и домена). Внешняя проверка — `.github/workflows/uptime.yml`, в 04:00 и 16:00 UTC; при сбое приходит письмо от GitHub.
 - Папки: `/opt/vitalo/app` (код), `/opt/vitalo/repo.git` (git), `/var/lib/vitalo` (фото), `/var/lib/vitalo/receipts` (чеки клиентов, закрытая папка `RECEIPTS_DIR`, nginx её не раздаёт; с 3.1, на сервере — с 31.10, папка создаётся при первом чеке), `/var/lib/vitalo/reviews` (фото отзывов до публикации; закрытая папка `REVIEWS_DIR`; с 13.11, 3.10-Б; папка создаётся при первом отзыве с фото), `.env` в `apps/api`.

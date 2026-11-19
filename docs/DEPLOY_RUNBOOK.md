@@ -971,10 +971,11 @@ nslookup app.vitalo.uz 8.8.8.8
 
 ### 6.6.3 Служба сайта (вы, команды с sudo)
 
+У администратора нет доступа в папку `/opt/vitalo/app` (`cd` туда не работает), поэтому везде полные пути.
+
 ```bash
-cd /opt/vitalo/app
-sudo cp deploy/systemd/vitalo-site.service /etc/systemd/system/
-sudo cp deploy/sudoers-vitalo /tmp/vitalo-sudoers && sudo visudo -cf /tmp/vitalo-sudoers && sudo install -m 440 /tmp/vitalo-sudoers /etc/sudoers.d/vitalo
+sudo cp /opt/vitalo/app/deploy/systemd/vitalo-site.service /etc/systemd/system/
+sudo cp /opt/vitalo/app/deploy/sudoers-vitalo /tmp/vitalo-sudoers && sudo visudo -cf /tmp/vitalo-sudoers && sudo install -m 440 /tmp/vitalo-sudoers /etc/sudoers.d/vitalo
 sudo systemctl daemon-reload
 sudo systemctl enable vitalo-site
 ```
@@ -1004,10 +1005,9 @@ sudo certbot certonly --webroot -w /var/www/certbot --cert-name vitalo.uz --expa
 Сначала копия старой настройки (для отката), потом новая:
 
 ```bash
-cd /opt/vitalo/app
 sudo cp /etc/nginx/sites-available/vitalo.conf /etc/nginx/vitalo.conf.before-6.6
-sudo cp deploy/nginx/snippets/vitalo-site-proxy.conf /etc/nginx/snippets/
-sudo cp deploy/nginx/vitalo.conf /etc/nginx/sites-available/vitalo.conf
+sudo cp /opt/vitalo/app/deploy/nginx/snippets/vitalo-site-proxy.conf /etc/nginx/snippets/
+sudo cp /opt/vitalo/app/deploy/nginx/vitalo.conf /etc/nginx/sites-available/vitalo.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
