@@ -52,9 +52,12 @@ describe('Site: slugs and web login (e2e)', () => {
       const res = await http().get('/api/sitemap.xml').expect(200);
       expect(res.headers['content-type']).toContain('application/xml');
       expect(res.text).toContain(`/product/${p.slug}</loc>`);
-      const c = await prisma.categories.findFirstOrThrow({ where: { status: 'active', merged_into_id: null } });
+      const c = await prisma.categories.findFirstOrThrow({ where: { status: 'active', merged_into_id: null, products: { some: { product: { status: 'active' } } } } });
       expect(res.text).toContain(`/catalog/${c.slug}</loc>`);
       expect(res.text).not.toContain('/catalog/products?');
+      // a category with no products on sale has no page on the site, so it stays out of the map
+      await prisma.categories.create({ data: { slug: 'e2e-empty-cat', name_ru: 'Пустая', name_uz: 'Boʻsh', tree_type: 'need' } });
+      expect((await http().get('/api/sitemap.xml')).text).not.toContain('/catalog/e2e-empty-cat<');
       expect(res.text).toContain('/sets</loc>');
     });
   });
