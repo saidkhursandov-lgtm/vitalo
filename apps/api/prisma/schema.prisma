@@ -1759,6 +1759,7 @@ model orders {
   notifications       notifications[]
   receipts            payment_receipts[]
   payme_txs           payme_transactions[]
+  click_txs           click_transactions[]
   cross_border_events cross_border_events[]
   support_threads     support_threads[]
   reviews             reviews[]
@@ -1866,6 +1867,7 @@ model payments {
   attempts            payment_attempts[]
   manual              manual_payment_confirmations[]
   payme_txs           payme_transactions[]
+  click_txs           click_transactions[]
 
   @@unique([payment_method_id, provider_payment_id]) // webhook duplicate protection
   @@index([order_id, status])
@@ -1892,6 +1894,34 @@ model payme_transactions {
 
   @@index([order_id, state])
   @@index([payme_time])
+}
+
+/// Click (SHOP API): one row per click_trans_id. id = merchant_prepare_id = merchant_confirm_id (Click wants an int).
+/// state: 0 prepared, 1 completed (paid), -1 cancelled.
+model click_transactions {
+  id               Int       @id @default(autoincrement())
+  click_trans_id   BigInt    @unique
+  click_paydoc_id  BigInt
+  order_id         String    @db.Uuid
+  payment_id       String?   @db.Uuid
+  amount_tiyin     BigInt
+  state            Int
+  sign_time        String
+  click_error      Int? // Complete with error < 0: Click's own code
+  click_error_note String?
+  completed_at     DateTime?
+  cancelled_at     DateTime?
+  fiscal_status    String? // sent | failed (the fiscal receipt sent to Click: ofd_data/submit_items)
+  fiscal_error     String?
+  fiscal_attempts  Int       @default(0)
+  fiscal_sent_at   DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+  order            orders    @relation(fields: [order_id], references: [id])
+  payment          payments? @relation(fields: [payment_id], references: [id])
+
+  @@index([order_id, state])
+  @@index([fiscal_status])
 }
 
 model payment_attempts {

@@ -132,9 +132,11 @@ export function Checkout() {
     if (method === 'cod' && codOption && !codOption.cod) setMethod('card_transfer');
     // Payme: a product without ИКПУ (or Payme switched off) — back to the card transfer
     if (method === 'payme' && codOption && !codOption.payme) setMethod('card_transfer');
+    if (method === 'click' && codOption && !codOption.click) setMethod('card_transfer');
   }, [method, codOption]);
   // the server decides per customer: «Работает» for all, «Тест» only for staff (others see «Скоро»)
   const paymeOpen = !!codOption && codOption.payme_unavailable !== 'off';
+  const clickOpen = !!codOption && codOption.click_unavailable !== 'off';
 
   // 3.3: the code stopped fitting (another district, the cart changed…): it is removed, the customer sees why
   const rejected = preview.data?.promo_rejection;
@@ -251,7 +253,7 @@ export function Checkout() {
       void client.invalidateQueries({ queryKey: ['free-shipping'] }); // the first-order offer is gone now
       // 6а-Г: Payme — «Чек VITALO» over the checkout, no screen in between; cash on delivery waits for the manager's
       // call (the order screen); the card transfer has its own screen with the card number
-      if (order.payment?.method === 'payme') setReceipt({ id: order.id, provider: 'payme' });
+      if (order.payment?.method === 'payme' || order.payment?.method === 'click') setReceipt({ id: order.id, provider: order.payment.method });
       else navigate(order.payment?.method === 'cod' ? `/orders/${order.id}` : payPath(order.id, order.payment?.method), { replace: true });
     } catch (err) {
       haptic('error');
@@ -260,7 +262,7 @@ export function Checkout() {
       const promoText = code === 'PROMO_REJECTED' ? String(lang === 'uz' ? body.message_uz : body.message_ru) : null;
       setSubmitError(promoText ?? (isNetworkError(err) ? `${errorText(lang, code)} ${t('checkout.retrySafe')}` : errorText(lang, code)));
       if (code === 'PROMO_REJECTED' && buyId) setBuyPromo(null);
-      if (code === 'PRICE_CHANGED' || code === 'INSUFFICIENT_STOCK' || code === 'PROMO_REJECTED' || code === 'PAYME_RECEIPT_INCOMPLETE') {
+      if (code === 'PRICE_CHANGED' || code === 'INSUFFICIENT_STOCK' || code === 'PROMO_REJECTED' || code === 'PAYME_RECEIPT_INCOMPLETE' || code === 'CLICK_RECEIPT_INCOMPLETE') {
         void preview.refetch();
         void client.invalidateQueries({ queryKey: ['cart'] });
       }
@@ -273,14 +275,16 @@ export function Checkout() {
   const blocked = !p || !p.can_place || placeOrder.isPending || !!receipt;
 
   // 6а-Г: every method is the same card. Payme / Click / Uzum by their mode in Настройки → Оплата: «Скоро» — a grey
-  // card that explains, «Скрыта» — none; Payme «Работает» (or «Тест» for staff) — a real choice. «При получении» only
+  // card that explains, «Скрыта» — none; Payme / Click «Работает» (or «Тест» for staff) — a real choice. «При получении» only
   // where the server allows it (Tashkent, up to the limit: above it shown disabled with the reason).
   const online = shop.data?.checkout?.online;
   const soonCard = (code: OnlineProvider): PayCard => ({ code, state: 'soon', desc: t('pay.soonDesc') });
   const cards: PayCard[] = [];
   if (paymeOpen && codOption) cards.push({ code: 'payme', state: codOption.payme ? 'ok' : 'disabled', desc: codOption.payme ? t('pay.paymeDesc') : t('pay.paymeIkpu') });
   else if (online?.payme === 'soon') cards.push(soonCard('payme'));
-  for (const s of ['click', 'uzum'] as const) if (online?.[s] === 'soon') cards.push(soonCard(s));
+  if (clickOpen && codOption) cards.push({ code: 'click', state: codOption.click ? 'ok' : 'disabled', desc: codOption.click ? t('pay.clickDesc') : t('pay.clickIkpu') });
+  else if (online?.click === 'soon') cards.push(soonCard('click'));
+  if (online?.uzum === 'soon') cards.push(soonCard('uzum'));
   cards.push({ code: 'card_transfer', state: 'ok', desc: t('pay.cardDesc') });
   if (codOption && (codOption.cod || codOption.cod_unavailable === 'limit')) {
     const desc = codOption.cod || shop.data?.checkout?.cod_max_total_uzs == null ? t('pay.codDesc') : t('pay.codLimit', { max: money(shop.data.checkout.cod_max_total_uzs, lang) });
@@ -385,7 +389,7 @@ export function Checkout() {
         {codOption?.cod_unavailable === 'cross_border' && (
           <p className="hint small">{uo('codOff', { kind: 'foreign', from_ru: preview.data?.cross_border?.from_ru, from_uz: preview.data?.cross_border?.from_uz })}</p>
         )}
-        <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : method === 'payme' ? 'pay.paymeHint' : 'checkout.bankTransferHint')}</p>
+        <p className="hint small pay-hint">{t(method === 'cod' ? 'pay.codHint' : method === 'payme' ? 'pay.paymeHint' : method === 'click' ? 'pay.clickHint' : 'checkout.bankTransferHint')}</p>
       </section>
 
       <section className="card summary">

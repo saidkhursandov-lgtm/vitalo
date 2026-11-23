@@ -47,7 +47,7 @@ export interface LocalizedText {
 }
 
 /** `bank_transfer` is no longer offered at checkout (D-06) but old orders with it still open. */
-export type PaymentMethodCode = 'card_transfer' | 'bank_transfer' | 'cod' | 'payme';
+export type PaymentMethodCode = 'card_transfer' | 'bank_transfer' | 'cod' | 'payme' | 'click';
 
 export interface CategoryTrees {
   need: CategoryNode[];
@@ -703,10 +703,13 @@ export interface OrderPreview {
     /** Payme: «Работает» and every product (and a paid delivery) has ИКПУ for the receipt */
     payme?: boolean;
     payme_unavailable?: 'off' | 'ikpu' | null;
+    /** Click: the same rule (its mode, its keys, ИКПУ for the receipt) */
+    click?: boolean;
+    click_unavailable?: 'off' | 'ikpu' | null;
   };
 }
 
-/** Payme: the payment page of the order (POST /payments/online/payme/orders/:id/start). */
+/** Payme / Click: the payment page of the order (POST /payments/online/:provider/orders/:id/start). */
 export interface OnlinePaymentStart {
   payment_id: string;
   checkout_url: string;

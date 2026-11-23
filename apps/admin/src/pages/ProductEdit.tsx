@@ -650,8 +650,8 @@ function ProductForm({ product, iherb }: { product?: AdminProduct; iherb?: Iherb
 
       <section className="card" id="p-payme">
         <div className="section-head">
-          <h2>Чек для Payme</h2>
-          {product && (product.ikpu_code && product.package_code ? <Badge tone="ok">Заполнено</Badge> : <Badge tone="warn">Без кодов Payme недоступен</Badge>)}
+          <h2>Чек для Payme и Click</h2>
+          {product && (product.ikpu_code && product.package_code ? <Badge tone="ok">Заполнено</Badge> : <Badge tone="warn">Без кодов Payme и Click недоступны</Badge>)}
         </div>
         <p className="muted small">
           Payme отправляет чек в налоговую, поэтому у товара должны быть ИКПУ и код упаковки (каталог tasnif.soliq.uz). Если в заказе

@@ -11,6 +11,9 @@ import { OnlinePaymentsService } from './online-payments.service';
 import { PaymeController } from '../payme/payme.controller';
 import { PaymeGateway } from '../payme/payme.gateway';
 import { PaymeService } from '../payme/payme.service';
+import { ClickController } from '../click/click.controller';
+import { ClickGateway } from '../click/click.gateway';
+import { ClickService } from '../click/click.service';
 
 class StartOnlinePaymentDto {
   @IsOptional() @IsIn(['ru', 'uz']) lang?: 'ru' | 'uz';
@@ -46,15 +49,21 @@ export class OnlinePaymentsController {
   }
 }
 
-/** Registered system modules (Payme, Click, Uzum) go here, each one separately: Payme (Merchant API) is connected. */
+/** Registered system modules (Payme, Click, Uzum) go here, each one separately: Payme (Merchant API) and Click (SHOP API) are connected. */
 @Module({
   imports: [AuthModule, OrdersModule],
-  controllers: [OnlinePaymentsController, PaymeController],
+  controllers: [OnlinePaymentsController, PaymeController, ClickController],
   providers: [
     OnlinePaymentsService,
     PaymeService,
     PaymeGateway,
-    { provide: ONLINE_GATEWAYS, useFactory: (payme: PaymeGateway): OnlinePaymentGateway[] => [payme], inject: [PaymeGateway] },
+    ClickService,
+    ClickGateway,
+    {
+      provide: ONLINE_GATEWAYS,
+      useFactory: (payme: PaymeGateway, click: ClickGateway): OnlinePaymentGateway[] => [payme, click],
+      inject: [PaymeGateway, ClickGateway],
+    },
   ],
   exports: [OnlinePaymentsService],
 })

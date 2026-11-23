@@ -177,7 +177,7 @@ export function OrderDetail() {
       {unpaid && reported && <p className="hint small">{t('orders.checkingNoCancel')}</p>}
 
       <div className="actions">
-        {unpaid && !reported && (o.payment?.method === 'card_transfer' || o.payment?.method === 'bank_transfer' || o.payment?.method === 'payme') && (
+        {unpaid && !reported && (o.payment?.method === 'card_transfer' || o.payment?.method === 'bank_transfer' || o.payment?.method === 'payme' || o.payment?.method === 'click') && (
           <Link to={payPath(o.id, o.payment?.method)} className="btn btn-block">
             {t('orders.pay')}
           </Link>

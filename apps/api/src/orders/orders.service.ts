@@ -32,10 +32,13 @@ import { BotInfoService } from './receipts';
 import { CampaignsService, toShopCampaign } from '../promo/campaigns.service';
 import { PromoCodesService } from '../promo/promo.service';
 import { BonusService } from '../bonus/bonus.service';
-import { isStaffCustomer, paymeReceiptGaps, paymeSwitchedOn, paymeUnavailable } from '../payments/payme/payme-availability';
+import { isStaffCustomer, onlineSwitchedOn, onlineUnavailable, paymeReceiptGaps } from '../payments/payme/payme-availability';
+import type { OnlineProvider } from '../payments/online/online-providers';
 import { onlineModes } from '../payments/online/online-providers';
 
 const PAYME_METHOD = 'payme';
+/** Online systems with a module: chosen at checkout like Payme (Click since its SHOP API is connected). */
+const RECEIPT_METHODS: readonly string[] = ['payme', 'click'];
 
 type Tx = Prisma.TransactionClient;
 
@@ -131,10 +134,12 @@ export class OrdersService {
     // «Оплата при получении» is offered only when it is possible for this address and total (Tashkent, the limit).
     // Payme: only when «Работает» and every product (and a paid delivery) has ИКПУ for the fiscal receipt
     const checkoutOptions = await this.settings.getOrDefault('checkout_options');
-    const payme = await paymeUnavailable(this.prisma, checkoutOptions, await this.paymeStaff(this.prisma, checkoutOptions, userId), lines.map((l) => l.product_id), totals.delivery_cost_uzs);
+    const productIds = lines.map((l) => l.product_id);
+    const payme = await onlineUnavailable('payme', this.prisma, checkoutOptions, await this.onlineStaff(this.prisma, checkoutOptions, userId, 'payme'), productIds, totals.delivery_cost_uzs);
+    const click = await onlineUnavailable('click', this.prisma, checkoutOptions, await this.onlineStaff(this.prisma, checkoutOptions, userId, 'click'), productIds, totals.delivery_cost_uzs);
     const codWhy = foreign ? 'cross_border' : cod;
-    const payment_options = { cod: codWhy === 'ok', cod_unavailable: codWhy === 'ok' ? null : codWhy, payme: payme === null, payme_unavailable: payme };
-    const codBlocked = (dto.payment_method === COD_METHOD && codWhy !== 'ok') || (dto.payment_method === PAYME_METHOD && payme !== null);
+    const payment_options = { cod: codWhy === 'ok', cod_unavailable: codWhy === 'ok' ? null : codWhy, payme: payme === null, payme_unavailable: payme, click: click === null, click_unavailable: click };
+    const codBlocked = (dto.payment_method === COD_METHOD && codWhy !== 'ok') || (dto.payment_method === PAYME_METHOD && payme !== null) || (dto.payment_method === 'click' && click !== null);
 
     return {
       items: priced.map((l) => ({
@@ -518,14 +523,14 @@ export class OrdersService {
         throw new UnprocessableEntityException({ code: 'COD_UNAVAILABLE', reason: why, message: 'Cash on delivery is available only in Tashkent (and up to the limit)' });
       }
     }
-    if (method.code === PAYME_METHOD) {
+    if (RECEIPT_METHODS.includes(method.code)) {
       const gaps = await paymeReceiptGaps(tx, lines.map((l) => l.product_id), totals.delivery_cost_uzs);
       if (gaps.skus.length || gaps.delivery) {
         throw new UnprocessableEntityException({
-          code: 'PAYME_RECEIPT_INCOMPLETE',
+          code: method.code === 'click' ? 'CLICK_RECEIPT_INCOMPLETE' : 'PAYME_RECEIPT_INCOMPLETE',
           skus: gaps.skus,
           delivery: gaps.delivery,
-          message: 'Payme needs an IKPU code for every product of the order; choose another payment method',
+          message: `${method.name_ru} needs an IKPU code for every product of the order; choose another payment method`,
         });
       }
     }
@@ -675,20 +680,20 @@ export class OrdersService {
     });
   }
 
-  /** Payme in «Тест — только сотрудники»: is this customer staff? Asked only in that mode. */
-  private async paymeStaff(db: Tx | PrismaService, checkoutOptions: Parameters<typeof onlineModes>[0], userId: string) {
-    return onlineModes(checkoutOptions).payme === 'test' && (await isStaffCustomer(db, userId));
+  /** Payme / Click in «Тест — только сотрудники»: is this customer staff? Asked only in that mode. */
+  private async onlineStaff(db: Tx | PrismaService, checkoutOptions: Parameters<typeof onlineModes>[0], userId: string, p: OnlineProvider) {
+    return onlineModes(checkoutOptions)[p] === 'test' && (await isStaffCustomer(db, userId));
   }
 
   private async resolvePaymentMethod(db: Tx | PrismaService, code: string, userId: string) {
     const method = await db.payment_methods.findUnique({ where: { code } });
     // Payme: its row stays as it is; the switch is «Работает» (or «Тест» for staff) in Настройки → Оплата (+ the keys in .env)
-    if (method && code === PAYME_METHOD) {
+    if (method && (code === 'payme' || code === 'click')) {
       const checkoutOptions = await this.settings.getOrDefault('checkout_options');
-      if (paymeSwitchedOn(checkoutOptions, await this.paymeStaff(db, checkoutOptions, userId))) return method;
+      if (onlineSwitchedOn(code, checkoutOptions, await this.onlineStaff(db, checkoutOptions, userId, code))) return method;
     }
     if (!method || method.status !== 'enabled' || !(isManualMethod(code) || code === COD_METHOD)) {
-      // Click / Uzum are not connected yet.
+      // Uzum is not connected yet.
       throw new UnprocessableEntityException({ code: 'PAYMENT_METHOD_UNAVAILABLE', message: `Payment method ${code} is not available` });
     }
     return method;

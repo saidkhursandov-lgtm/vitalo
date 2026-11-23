@@ -31,6 +31,13 @@ export const TEST_ENV = {
   PAYME_TEST_MODE: 'true',
   PAYME_DELIVERY_IKPU: '',
   PAYME_DELIVERY_PACKAGE_CODE: '',
+  // Click: never the keys from apps/api/.env; the Click suite sets fake ones itself.
+  CLICK_SERVICE_ID: '',
+  CLICK_MERCHANT_ID: '',
+  CLICK_SECRET_KEY: '',
+  CLICK_MERCHANT_USER_ID: '',
+  CLICK_FISCAL_TIN: '',
+  CLICK_API_BASE: '',
   UPLOAD_DIR:require('path').join(require('os').tmpdir(), 'vitalo-e2e-uploads'),
   RECEIPTS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-receipts'),
   REVIEWS_DIR: require('path').join(require('os').tmpdir(), 'vitalo-e2e-reviews'),

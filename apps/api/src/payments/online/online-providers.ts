@@ -24,7 +24,8 @@ export const PROVIDER_NAMES: Record<OnlineProvider, string> = { payme: 'Payme', 
 /** .env keys each system needs (empty fields in .env.example). */
 export const PROVIDER_ENV_KEYS: Record<OnlineProvider, readonly string[]> = {
   payme: ['PAYME_MERCHANT_ID', 'PAYME_KEY'],
-  click: ['CLICK_SERVICE_ID', 'CLICK_MERCHANT_ID', 'CLICK_SECRET_KEY'],
+  // CLICK_MERCHANT_USER_ID: the fiscal receipt goes to Click through its Merchant API
+  click: ['CLICK_SERVICE_ID', 'CLICK_MERCHANT_ID', 'CLICK_SECRET_KEY', 'CLICK_MERCHANT_USER_ID'],
   uzum: ['UZUM_SERVICE_ID', 'UZUM_SECRET'],
 };
 
@@ -88,5 +89,5 @@ export interface OnlinePaymentGateway {
   handleCallback(input: { headers: Record<string, string | string[] | undefined>; body: unknown; rawBody?: Buffer }): Promise<CallbackReply>;
 }
 
-/** DI token: the list of registered system modules (Payme). */
+/** DI token: the list of registered system modules (Payme, Click). */
 export const ONLINE_GATEWAYS = Symbol('ONLINE_GATEWAYS');

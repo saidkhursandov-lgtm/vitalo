@@ -232,6 +232,7 @@ describe('Stage 0: permissions, payment check reminder, reservation time (e2e)',
       expect(list.map((m: { code: string; timeout_minutes: number }) => [m.code, m.timeout_minutes])).toEqual([
         ['bank_transfer', 720],
         ['card_transfer', 720],
+        ['click', 30],
         ['payme', 30],
       ]);
       const before = await placeOrder('card_transfer');
@@ -256,7 +257,7 @@ describe('Stage 0: permissions, payment check reminder, reservation time (e2e)',
       for (const bad of [20, 1441, 90.5, '600', null]) await put('card_transfer', { timeout_minutes: bad }).expect(400);
       const short = await put('card_transfer', { timeout_minutes: 120 }).expect(400); // reminder: 3 h before cancellation
       expect(short.body.code).toBe('TIMEOUT_SHORTER_THAN_REMINDER');
-      await put('click', { timeout_minutes: 600 }).expect(404);
+      await put('uzum', { timeout_minutes: 600 }).expect(404);
       await put('card_transfer', { timeout_minutes: 600 }, 'manager').expect(403);
       expect((await prisma.payment_methods.findUniqueOrThrow({ where: { code: 'card_transfer' } })).timeout_minutes).toBe(720);
     });

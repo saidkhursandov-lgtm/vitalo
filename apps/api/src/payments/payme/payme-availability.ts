@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { modeOpenFor, onlineModes, providerKeysPresent } from '../online/online-providers';
+import { modeOpenFor, onlineModes, providerKeysPresent, type OnlineProvider } from '../online/online-providers';
 import { paymeConfig } from './payme-config';
 
 type Db = Prisma.TransactionClient | { products: Prisma.TransactionClient['products'] };
@@ -17,7 +17,12 @@ export async function isStaffCustomer(db: StaffDb, userId: string): Promise<bool
 
 /** «Работает» (or «Тест» and the customer is staff) in Настройки → Оплата and both keys in .env (the module itself is always registered). */
 export function paymeSwitchedOn(checkoutOptions: Parameters<typeof onlineModes>[0], staffCustomer: boolean): boolean {
-  return modeOpenFor(onlineModes(checkoutOptions).payme, staffCustomer) && providerKeysPresent('payme');
+  return onlineSwitchedOn('payme', checkoutOptions, staffCustomer);
+}
+
+/** The same for any system with a module (Payme, Click): its mode is open for this customer and its keys are in .env. */
+export function onlineSwitchedOn(p: OnlineProvider, checkoutOptions: Parameters<typeof onlineModes>[0], staffCustomer: boolean): boolean {
+  return modeOpenFor(onlineModes(checkoutOptions)[p], staffCustomer) && providerKeysPresent(p);
 }
 
 /**
@@ -38,7 +43,19 @@ export async function paymeUnavailable(
   productIds: string[],
   deliveryCostUzs: number,
 ): Promise<PaymeUnavailable | null> {
-  if (!paymeSwitchedOn(checkoutOptions, staffCustomer)) return 'off';
+  return onlineUnavailable('payme', db, checkoutOptions, staffCustomer, productIds, deliveryCostUzs);
+}
+
+/** Payme and Click send the same fiscal receipt: «off» — not switched on for this customer, «ikpu» — a code is missing. */
+export async function onlineUnavailable(
+  p: OnlineProvider,
+  db: Db,
+  checkoutOptions: Parameters<typeof onlineModes>[0],
+  staffCustomer: boolean,
+  productIds: string[],
+  deliveryCostUzs: number,
+): Promise<PaymeUnavailable | null> {
+  if (!onlineSwitchedOn(p, checkoutOptions, staffCustomer)) return 'off';
   const gaps = await paymeReceiptGaps(db, productIds, deliveryCostUzs);
   return gaps.skus.length || gaps.delivery ? 'ikpu' : null;
 }

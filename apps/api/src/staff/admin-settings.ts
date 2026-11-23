@@ -157,7 +157,7 @@ export class TariffPatch extends PartialType(TariffDto) {}
  * Reservation time that can be edited, per method: the longest value, minutes. Card / bank transfer: up to a day;
  * Payme: up to 3 days (its own checks of test orders take time; usually 30 minutes).
  */
-export const TIMEOUT_MAX_MINUTES: Record<string, number> = { bank_transfer: 1440, card_transfer: 1440, payme: 4320 };
+export const TIMEOUT_MAX_MINUTES: Record<string, number> = { bank_transfer: 1440, card_transfer: 1440, payme: 4320, click: 4320 };
 
 /** Stage 0.3: how long an unpaid order holds its reservation (card / bank transfer, Payme), minutes. */
 export class PaymentTimeoutDto {

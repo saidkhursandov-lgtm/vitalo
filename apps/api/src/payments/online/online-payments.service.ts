@@ -24,8 +24,8 @@ const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
  *   2. the Mini App sends the customer to checkout_url;
  *   3. callback() — the system confirms (its module checks the signature and the amount);
  *   4. the order is marked paid (OrderLifecycleService.confirmOnlinePayment), exactly once.
- * Payme is registered (Merchant API: its confirmations come to POST /api/payments/payme); Click and Uzum are not,
- * so for them start() and callback() answer «не подключено».
+ * Payme (Merchant API: POST /api/payments/payme) and Click (SHOP API: /api/payments/click/prepare, /complete) are
+ * registered; Uzum is not, so for it start() and callback() answer «не подключено».
  */
 @Injectable()
 export class OnlinePaymentsService {
@@ -87,10 +87,11 @@ export class OnlinePaymentsService {
     }
     const method = await this.prisma.payment_methods.findUnique({ where: { code: provider } });
     if (!method) throw new ConflictException({ code: 'ONLINE_PAYMENT_NOT_CONNECTED', message: 'Payment method row is missing' });
-    if (provider === 'payme') {
+    // Payme and Click both send a fiscal receipt: every product needs ИКПУ (and a paid delivery its codes)
+    if (provider === 'payme' || provider === 'click') {
       const gaps = await paymeReceiptGaps(this.prisma, order.items.map((i) => i.product_id), Number(order.delivery_cost_uzs));
       if (gaps.skus.length || gaps.delivery) {
-        throw new ConflictException({ code: 'PAYME_RECEIPT_INCOMPLETE', skus: gaps.skus, delivery: gaps.delivery, message: 'Payme needs an IKPU code for every product' });
+        throw new ConflictException({ code: provider === 'click' ? 'CLICK_RECEIPT_INCOMPLETE' : 'PAYME_RECEIPT_INCOMPLETE', skus: gaps.skus, delivery: gaps.delivery, message: `${PROVIDER_NAMES[provider]} needs an IKPU code for every product` });
       }
     }
 

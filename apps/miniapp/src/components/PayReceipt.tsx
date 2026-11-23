@@ -6,26 +6,29 @@ import { errorText, useI18n } from '../lib/i18n';
 import { useOrder } from '../lib/queries';
 import { openLink } from '../lib/telegram';
 import type { OnlinePaymentStart, OnlineProvider } from '../lib/types';
+
+/** Online systems with their own payment screen. */
+export type PayProvider = 'payme' | 'click';
 import { CloseIcon } from './Icons';
 import { PAY_LOGOS } from './PayMethods';
 
-/** While the order waits, its status is asked again this often: Payme tells our server, not the Mini App. */
+/** While the order waits, its status is asked again this often: Payme / Click tell our server, not the Mini App. */
 export const POLL_MS = 4000;
 
 /**
- * Payme for one order: the page link is prepared before the tap (Telegram opens links only right inside the tap);
- * after the tap the order status is asked every few seconds until Payme has confirmed the payment to the server.
+ * Payme / Click for one order: the page link is prepared before the tap (Telegram opens links only right inside the
+ * tap); after the tap the order status is asked every few seconds until the system has confirmed the payment to the server.
  */
-export function usePaymeFlow(id: string) {
+export function usePaymeFlow(id: string, provider: PayProvider = 'payme') {
   const { lang } = useI18n();
   const [opened, setOpened] = useState(false);
   const order = useOrder(id);
   const o = order.data;
   const waiting = o?.status === 'awaiting_payment' && o.payment_status === 'payment_pending';
   const link = useQuery({
-    queryKey: ['order', id, 'payme-link', lang],
-    queryFn: () => api<OnlinePaymentStart>(`/payments/online/payme/orders/${id}/start`, { method: 'POST', body: { lang } }),
-    enabled: waiting && o?.payment?.method === 'payme',
+    queryKey: ['order', id, `${provider}-link`, lang],
+    queryFn: () => api<OnlinePaymentStart>(`/payments/online/${provider}/orders/${id}/start`, { method: 'POST', body: { lang } }),
+    enabled: waiting && o?.payment?.method === provider,
     staleTime: Infinity,
     retry: false,
   });
@@ -72,13 +75,12 @@ export function clock(seconds: number): string {
 const RECEIPT_LINES = 3;
 
 /**
- * 6а-Г (D-62): «Чек VITALO» — a sheet over the checkout right after «Оплатить» for an online payment (Payme; Click
- * when it is connected), with no screen in between: the order number, the booking timer, a short list of the goods,
+ * 6а-Г (D-62): «Чек VITALO» — a sheet over the checkout right after «Оплатить» for an online payment (Payme, Click), with no screen in between: the order number, the booking timer, a short list of the goods,
  * the total and «Оплатить в Payme», which starts the payment at once. [✕] leads to the order: it is already placed.
  */
 export function PayReceiptSheet({ orderId, provider, onClose }: { orderId: string; provider: OnlineProvider; onClose: () => void }) {
   const { t, lang } = useI18n();
-  const flow = usePaymeFlow(orderId);
+  const flow = usePaymeFlow(orderId, provider === 'click' ? 'click' : 'payme');
   const o = flow.order.data;
   const left = useSecondsLeft(flow.waiting ? o?.reserved_until : null);
   const name = PAY_LOGOS[provider].name;

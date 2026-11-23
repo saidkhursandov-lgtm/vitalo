@@ -28,11 +28,11 @@ export function intakeGuideItems(
 type Db = Prisma.TransactionClient | PrismaService;
 
 /**
- * 6а-А: the Mini App screen a «Оплатить» button opens — the same rule as `payPath` in the Mini App: Payme has its own
- * screen; card / bank transfer — the transfer screen; any other method (Click, Uzum later) — the order itself.
+ * 6а-А: the Mini App screen a «Оплатить» button opens — the same rule as `payPath` in the Mini App: Payme and Click have
+ * their own screen; card / bank transfer — the transfer screen; any other method (Uzum later) — the order itself.
  */
 export function payOpenPath(orderId: string, method: string | null | undefined): string {
-  if (method === 'payme') return `/orders/${orderId}/payme`;
+  if (method === 'payme' || method === 'click') return `/orders/${orderId}/${method}`;
   if (method === 'card_transfer' || method === 'bank_transfer') return `/orders/${orderId}/pay`;
   return `/orders/${orderId}`;
 }
