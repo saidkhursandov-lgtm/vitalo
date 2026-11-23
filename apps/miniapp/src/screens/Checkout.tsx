@@ -302,7 +302,15 @@ export function Checkout() {
       <h1>{t('checkout.title')}</h1>
 
       <section className="card">
-        <h2>{t('checkout.recipient')}</h2>
+        <div className="card-head">
+          <h2>{t('checkout.recipient')}</h2>
+          {/* 23.11.2026: the Telegram number is a small chip next to the title, not a full-width button */}
+          {canRequestPhone() && (
+            <button type="button" className="chip-btn" disabled={sharing} aria-label={t('checkout.sharePhone')} onClick={() => void sharePhone()}>
+              <PhoneIcon width={16} height={16} /> {sharing ? t('checkout.phoneWaitingShort') : t('checkout.sharePhoneShort')}
+            </button>
+          )}
+        </div>
         <label className="field">
           <span>{t('checkout.name')}</span>
           <input autoComplete="name" value={form.name} onChange={(e) => set('name', e.target.value)} aria-invalid={!!errors.name} />
@@ -313,11 +321,6 @@ export function Checkout() {
           <input type="tel" inputMode="tel" autoComplete="tel" placeholder="+998 90 123 45 67" value={form.phone} onChange={(e) => set('phone', e.target.value)} aria-invalid={!!errors.phone} />
           {errors.phone && <small className="error-text">{errors.phone}</small>}
         </label>
-        {canRequestPhone() && (
-          <button type="button" className="btn btn-secondary btn-block" disabled={sharing} onClick={() => void sharePhone()}>
-            <PhoneIcon width={18} height={18} /> {sharing ? t('checkout.phoneWaiting') : t('checkout.sharePhone')}
-          </button>
-        )}
       </section>
 
       <section className="card">

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { track } from '../lib/analytics';
 import { useI18n } from '../lib/i18n';
 import type { OnlineProvider, PaymentMethodCode } from '../lib/types';
@@ -10,7 +10,7 @@ export const PAY_LOGOS: Record<OnlineProvider, { name: string; src: string }> = 
   uzum: { name: 'Uzum', src: '/payment/uzum.png' },
 };
 
-/** One card of the list: a method you can choose, one shown disabled with the reason, or one «Скоро». */
+/** One method of the list: one you can choose, one shown disabled with the reason, or one «Скоро». */
 export interface PayCard {
   code: PaymentMethodCode | OnlineProvider;
   state: 'ok' | 'disabled' | 'soon';
@@ -20,60 +20,90 @@ export interface PayCard {
 const isOnline = (c: string): c is OnlineProvider => c in PAY_LOGOS;
 
 /**
- * 6а-Г (D-62): every payment method is the same card — a logo box on the left, the name and one line under it, the
- * choice on the right. Payme, Click, Uzum, «Перевод на карту», «При получении» look alike; a system «Скоро» is the
- * same card, greyed, with the «Скоро» chip — a tap explains it in a sheet.
+ * 6а-Г (D-62), redone 23.11.2026 after the owner's review — two groups:
+ * «Онлайн» — Payme, Click, Uzum as logo tiles in one row, no text under them (one line about the chosen method is
+ * under the list). «Другие способы» — «Перевод на карту» and «При получении» as short rows. A system «Скоро» is a
+ * grey tile with a small «Скоро» (a tap explains it in a sheet); a disabled method shows its reason, nothing else does.
  */
 export function PayMethods({ cards, value, onChange }: { cards: PayCard[]; value: string; onChange: (code: PaymentMethodCode) => void }) {
   const { t } = useI18n();
   const [soon, setSoon] = useState<OnlineProvider | null>(null);
-  const title = (c: PayCard['code']) => (isOnline(c) ? PAY_LOGOS[c].name : c === 'cod' ? t('pay.cod') : t('pay.card'));
-  const logo = (c: PayCard['code']): ReactNode =>
-    isOnline(c) ? (
-      <span className="pay-card-logo">
-        <img src={PAY_LOGOS[c].src} alt="" />
-      </span>
-    ) : (
-      <span className="pay-card-logo is-icon">{c === 'cod' ? <CashIcon width={22} height={22} /> : <CardPayIcon width={22} height={22} />}</span>
+  const online = cards.filter((c) => isOnline(c.code));
+  const other = cards.filter((c) => !isOnline(c.code));
+  const disabledOnline = online.find((c) => c.state === 'disabled');
+
+  const tile = (c: PayCard) => {
+    const code = c.code as OnlineProvider;
+    const img = <img src={PAY_LOGOS[code].src} alt="" />;
+    if (c.state === 'soon') {
+      return (
+        <button
+          key={code}
+          type="button"
+          className="pay-tile is-soon"
+          aria-label={`${PAY_LOGOS[code].name} · ${t('pay.soon')}`}
+          onClick={() => {
+            setSoon(code);
+            track('payment_soon_click', { system: code });
+          }}
+        >
+          {img}
+          <span className="pay-tile-soon">{t('pay.soon')}</span>
+        </button>
+      );
+    }
+    const on = value === code;
+    return (
+      <label key={code} className={`pay-tile ${on ? 'is-on' : ''} ${c.state === 'disabled' ? 'is-disabled' : ''}`}>
+        <input
+          type="radio"
+          name="payment"
+          className="visually-hidden"
+          aria-label={PAY_LOGOS[code].name}
+          checked={on}
+          disabled={c.state === 'disabled'}
+          onChange={() => onChange(code as PaymentMethodCode)}
+        />
+        {img}
+        {on && <span className="pay-tile-check" aria-hidden />}
+      </label>
     );
+  };
+
+  const row = (c: PayCard) => {
+    const on = value === c.code;
+    const Icon = c.code === 'cod' ? CashIcon : CardPayIcon;
+    return (
+      <label key={c.code} className={`pay-row ${on ? 'is-on' : ''} ${c.state === 'disabled' ? 'is-disabled' : ''}`}>
+        <span className="pay-row-icon">
+          <Icon width={20} height={20} />
+        </span>
+        <span className="pay-row-text">
+          <strong>{c.code === 'cod' ? t('pay.cod') : t('pay.card')}</strong>
+          {c.state === 'disabled' && <span className="hint small">{c.desc}</span>}
+        </span>
+        <input type="radio" name="payment" checked={on} disabled={c.state === 'disabled'} onChange={() => onChange(c.code as PaymentMethodCode)} />
+      </label>
+    );
+  };
 
   return (
     <div className="pay-methods">
-      {cards.map((c) => {
-        const text = (
-          <span className="pay-card-text">
-            <strong>{title(c.code)}</strong>
-            <span className="hint small">{c.desc}</span>
-          </span>
-        );
-        if (c.state === 'soon' && isOnline(c.code)) {
-          const code = c.code;
-          return (
-            <button
-              key={code}
-              type="button"
-              className="pay-card is-soon"
-              aria-label={`${PAY_LOGOS[code].name} · ${t('pay.soon')}`}
-              onClick={() => {
-                setSoon(code);
-                track('payment_soon_click', { system: code });
-              }}
-            >
-              {logo(code)}
-              {text}
-              <span className="soon-badge">{t('pay.soon')}</span>
-            </button>
-          );
-        }
-        const on = value === c.code;
-        return (
-          <label key={c.code} className={`pay-card ${on ? 'is-on' : ''} ${c.state === 'disabled' ? 'is-disabled' : ''}`}>
-            {logo(c.code)}
-            {text}
-            <input type="radio" name="payment" checked={on} disabled={c.state === 'disabled'} onChange={() => onChange(c.code as PaymentMethodCode)} />
-          </label>
-        );
-      })}
+      {online.length > 0 && (
+        <>
+          <p className="pay-group-title">{t('pay.groupOnline')}</p>
+          <div className="pay-tiles" style={{ gridTemplateColumns: `repeat(${Math.min(online.length, 3)}, minmax(0, 1fr))` }}>
+            {online.map(tile)}
+          </div>
+          {disabledOnline && <p className="hint small pay-tile-note">{disabledOnline.desc}</p>}
+        </>
+      )}
+      {other.length > 0 && (
+        <>
+          {online.length > 0 && <p className="pay-group-title">{t('pay.groupOther')}</p>}
+          <div className="pay-rows">{other.map(row)}</div>
+        </>
+      )}
       {soon && (
         <div className="sheet-backdrop" onClick={() => setSoon(null)}>
           <div className="sheet confirm-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>

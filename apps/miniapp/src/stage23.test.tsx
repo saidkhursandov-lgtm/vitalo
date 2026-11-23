@@ -159,14 +159,14 @@ describe('2.3 fixes: product card', () => {
     expect(screen.getByText('Хватит на 50 дней • 1 960 сум/день')).toBeTruthy();
   });
 
-  it('no brand text — no brand card; the buy panel: «В корзину» and «Купить сейчас» in one storey, no price line (6а-Б)', async () => {
+  it('no brand text — no brand card; the buy panel: only «В корзину» (23.11.2026: no «Купить сейчас»), no price line (6а-Б)', async () => {
     PRODUCT.brand_why_ru = null;
     PRODUCT.brand_why_uz = null;
     const { container } = show('uz', <Product />, '/product/p1');
     await screen.findByText('Organik magniy sitrat.');
     expect(container.querySelector('.why-brand')).toBeNull();
     const panel = container.querySelector('.buy-panel')!;
-    expect([...panel.querySelectorAll('.buy-panel-main button')].map((b) => b.textContent)).toEqual(['Savatga', 'Hozir sotib olish']);
+    expect([...panel.querySelectorAll('.buy-panel-main button')].map((b) => b.textContent)).toEqual(['Savatga']);
     expect(panel.querySelectorAll('.price-now, .sale-price')).toHaveLength(0);
     expect(panel.querySelector('.buy-panel-top')).toBeNull();
     expect(screen.getByText('Bu preparat sizga mos kelishiga ikkilanyapsizmi?')).toBeTruthy();

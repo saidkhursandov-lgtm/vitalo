@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ProductCashback } from '../components/Bonus';
 import { track } from '../lib/analytics';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { countryName, formLabel, money, pricePerDay, shortNameOf, textOf } from '../lib/format';
 import { PromoLabelBadge } from '../components/Campaign';
@@ -220,7 +220,6 @@ export function Product() {
  */
 function BuyPanel({ product: p }: { product: ProductCard }) {
   const { t, lang } = useI18n();
-  const navigate = useNavigate();
   const notify = useQuickNotify();
   const cart = useCart(null);
   const { qty, set } = useQuickCart(p.id, notify);
@@ -233,24 +232,20 @@ function BuyPanel({ product: p }: { product: ProductCard }) {
         {soldOut ? (
           <WaitlistButton productId={p.id} variant="panel" />
         ) : qty === 0 ? (
-          <>
-            <button
-              type="button"
-              className="btn buy-add"
-              onClick={() => {
-                tapHaptic();
-                set(1);
-                track('add_to_cart', { product_id: p.id, source: 'product' });
-                if (p.campaign) track('campaign_add_to_cart', { campaign_id: p.campaign.id, product_id: p.id });
-              }}
-            >
-              <CartIcon width={20} height={20} />
-              <span>{t('product.addToCart')}</span>
-            </button>
-            <button type="button" className="btn btn-secondary buy-now" onClick={() => navigate(`/checkout?buy=${p.id}&qty=1`)}>
-              <span>{t('product.buyNow')}</span>
-            </button>
-          </>
+          // 23.11.2026: no «Купить сейчас» — like the big shops, everything goes through the cart
+          <button
+            type="button"
+            className="btn buy-add"
+            onClick={() => {
+              tapHaptic();
+              set(1);
+              track('add_to_cart', { product_id: p.id, source: 'product' });
+              if (p.campaign) track('campaign_add_to_cart', { campaign_id: p.campaign.id, product_id: p.id });
+            }}
+          >
+            <CartIcon width={20} height={20} />
+            <span>{t('product.addToCart')}</span>
+          </button>
         ) : (
           <>
             <QuickAdd productId={p.id} inStock={p.in_stock || !!p.cross_border} variant="panel" campaignId={p.campaign?.id} />

@@ -2,19 +2,16 @@ import { SafeImg } from '../components/Picture';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CartIcon, MinusIcon, PinIcon, PlusIcon, TrashIcon } from '../components/Icons';
-import { OrderTerm } from '../components/Delivery';
+import { CartIcon, MinusIcon, PlusIcon, TrashIcon } from '../components/Icons';
 import { useQuickNotify } from '../components/QuickAdd';
 import { useQuickCart } from '../lib/quick-cart';
 import { tapHaptic } from '../lib/telegram';
 import { track } from '../lib/analytics';
 import { EmptyState, ErrorState, Loading, StickyAction } from '../components/ui';
-import { RegionCitySelect } from '../components/PlacePicker';
-import { MapPickerButton } from '../components/MapPicker';
 import { OrderTotals } from '../components/OrderItems';
-import { formLabel, money, nameOf, shortNameOf, productPath } from '../lib/format';
+import { formLabel, money, shortNameOf, productPath } from '../lib/format';
 import { useI18n, type MessageKey } from '../lib/i18n';
-import { useCart, useCartActions, useCartBonus, useCartMapPick, useCartPromo, useDeliveryCity, useRegions, useUpsell, type CityRef } from '../lib/queries';
+import { useCart, useCartActions, useCartBonus, useCartPromo, useDeliveryCity, useUpsell, type CityRef } from '../lib/queries';
 import { PromoBox } from '../components/Promo';
 import { BonusSwitch, CashbackLine } from '../components/Bonus';
 import { CompatBlock } from '../components/Compat';
@@ -148,22 +145,8 @@ export function UpsellStrip({ city, goodsTotal, inCart }: { city: CityRef | null
 export function Cart() {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
-  const regions = useRegions();
-  // 3.1: one delivery city for the cart and checkout (starts as the primary saved address); a region picked without
-  // its district yet is only a draft here, so the quote never shows a district the customer did not choose.
-  const [shared, setShared] = useDeliveryCity();
-  const [draftRegion, setDraftRegion] = useState('');
-  const selected = draftRegion ? null : shared;
-  const city = { region_id: draftRegion || (shared?.region_id ?? ''), city_id: selected?.city_id ?? '' };
-  const setCity = (v: { region_id: string; city_id: string }) => {
-    if (v.city_id) {
-      setShared(v);
-      setDraftRegion('');
-    } else setDraftRegion(v.region_id);
-  };
-  // 3.6: «Выбрать на карте» here sets the district; the point and the street wait for the checkout
-  const [mapPick, setMapPick] = useCartMapPick();
-  const [editPlace, setEditPlace] = useState(false);
+  // 3.1: one delivery city for the cart and checkout (starts as the primary saved address); the cart only reads it
+  const [selected] = useDeliveryCity();
   const cart = useCart(selected);
   const { setQty, remove } = useCartActions();
   const promo = useCartPromo(selected, lang);
@@ -189,9 +172,6 @@ export function Cart() {
 
   const delivery = data.delivery;
   const busy = setQty.isPending || remove.isPending;
-  const region = regions.data?.find((r) => r.id === selected?.region_id);
-  const district = region?.cities.find((c) => c.id === selected?.city_id);
-  const placeLine = region && district ? `${nameOf(region, lang)}, ${nameOf(district, lang)}` : null;
   // Amount to pay: goods after discounts + delivery once the city is known (updates with every change).
   const payable = data.goods_total_uzs - data.discount_total_uzs - (data.bonus_used_uzs ?? 0) + (delivery?.cost_uzs ?? 0);
   // The button shows the goods (as the floating cart does); delivery is added on the checkout screen.
@@ -242,42 +222,14 @@ export function Cart() {
         ))}
       </ul>
 
-      <section className="card">
-        <h2>{t('cart.deliveryTo')}</h2>
-        {/* 3.8 fix: a chosen region and district fold into one line; «Изменить» opens the choice and the map again */}
-        {placeLine && !editPlace ? (
-          <div className="place-line">
-            <PinIcon width={18} height={18} aria-hidden />
-            <span>{placeLine}</span>
-            <button type="button" className="link place-change" onClick={() => setEditPlace(true)}>
-              {t('cart.changePlace')}
-            </button>
-          </div>
-        ) : (
-          <>
-            {regions.data && <RegionCitySelect regions={regions.data} regionId={city.region_id} cityId={city.city_id} onChange={setCity} />}
-            <MapPickerButton
-              place="cart"
-              start={mapPick}
-              chosen={!!mapPick}
-              onPick={(p) => {
-                setMapPick(p);
-                if (p.region_id) setCity({ region_id: p.region_id, city_id: p.city_id ?? '' });
-              }}
-            />
-            {mapPick && <p className={`hint small map-note ${mapPick.city_id ? 'is-ok' : ''}`}>{mapPick.city_id ? t('map.districtAuto') : t('map.districtManual')}</p>}
-          </>
-        )}
-        {delivery ? (
-          <>
-            <OrderTerm window={data.cross_border} min={delivery.min_days} max={delivery.max_days} note={lang === 'uz' ? delivery.note_uz : delivery.note_ru} />
-            <FreeShippingProgress quote={delivery} />
-            <UpsellStrip city={selected} goodsTotal={data.goods_total_uzs} inCart={data.items.map((l) => l.product_id)} />
-          </>
-        ) : (
-          <p className="hint small">{t('cart.chooseCity')}</p>
-        )}
-      </section>
+      {/* 23.11.2026: no address in the cart (as in the big shops) — it is chosen once, on the checkout. With a saved
+          address the delivery is already known here: only the free-delivery bar and the products to reach it. */}
+      {delivery && (
+        <section className="card">
+          <FreeShippingProgress quote={delivery} />
+          <UpsellStrip city={selected} goodsTotal={data.goods_total_uzs} inCart={data.items.map((l) => l.product_id)} />
+        </section>
+      )}
 
       <section className="card summary">
         <PromoBox applied={data.promo} place="cart" onApply={promo.apply} onRemove={promo.remove} />

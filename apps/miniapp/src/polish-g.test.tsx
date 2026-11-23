@@ -69,17 +69,21 @@ describe('6а-Г: payment methods are one kind of card', () => {
     { code: 'cod', state: 'disabled', desc: 'Доступно для заказов до 1 000 000 сум' },
   ];
 
-  it('every method: a logo box, the name with one line under it; the choice or «Скоро» on the right', () => {
+  it('23.11.2026: online systems are logo tiles without text; the card transfer and cash are short rows below', () => {
     const onChange = vi.fn();
     const { container } = show('ru', <PayMethods cards={cards} value="card_transfer" onChange={onChange} />);
-    const all = [...container.querySelectorAll('.pay-card')];
-    expect(all).toHaveLength(5);
-    for (const c of all) expect([...c.children].slice(0, 2).map((x) => x.className)).toEqual([expect.stringContaining('pay-card-logo'), 'pay-card-text']);
-    expect(all.map((c) => c.querySelector('strong')!.textContent)).toEqual(['Payme', 'Click', 'Uzum', 'Перевод на карту', 'Оплата при получении']);
-    expect(all[3].classList.contains('is-on')).toBe(true);
-    expect(all[4].classList.contains('is-disabled')).toBe(true);
-    expect((all[4].querySelector('input') as HTMLInputElement).disabled).toBe(true);
-    fireEvent.click(all[0].querySelector('input')!);
+    expect([...container.querySelectorAll('.pay-group-title')].map((x) => x.textContent)).toEqual(['Онлайн', 'Другие способы']);
+    const tiles = [...container.querySelectorAll('.pay-tile')];
+    expect(tiles).toHaveLength(3);
+    expect(container.querySelector('.pay-tiles')!.textContent).not.toContain('Uzcard'); // no lines under the logos
+    const rows = [...container.querySelectorAll('.pay-row')];
+    expect(rows.map((c) => c.querySelector('strong')!.textContent)).toEqual(['Перевод на карту', 'Оплата при получении']);
+    expect(rows[0].classList.contains('is-on')).toBe(true);
+    expect(rows[0].textContent).not.toContain('Перевод с карты'); // a working method has no second line
+    expect(rows[1].classList.contains('is-disabled')).toBe(true);
+    expect(rows[1].textContent).toContain('до 1 000 000'); // a disabled one says why
+    expect((rows[1].querySelector('input') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('Payme'));
     expect(onChange).toHaveBeenCalledWith('payme');
     // «Скоро» is not a choice: a tap explains
     fireEvent.click(screen.getByLabelText('Click · Скоро'));

@@ -135,10 +135,10 @@ describe('3.5 card transfer on one screen', () => {
 });
 
 describe('3.5 / 6а-Г Payme / Click / Uzum «Скоро»', () => {
-  it('each card: the logo, the name, then the «Скоро» chip (RU / UZ)', () => {
+  it('each «Скоро» system: a grey logo tile with a small «Скоро», no line under it (RU / UZ)', () => {
     const { container } = show('uz', <PayMethods cards={[{ code: 'click', state: 'soon', desc: 'Tez orada ulanadi' }]} value="card_transfer" onChange={() => undefined} />);
-    const card = container.querySelector('.pay-card.is-soon')!;
-    expect([...card.children].map((c) => c.className)).toEqual(['pay-card-logo', 'pay-card-text', 'soon-badge']);
+    const card = container.querySelector('.pay-tile.is-soon')!;
+    expect([...card.children].map((c) => c.tagName + (c.className ? '.' + c.className : ''))).toEqual(['IMG', 'SPAN.pay-tile-soon']);
     expect(card.textContent).toContain('Tez orada');
     cleanup();
     show('ru', <PayMethods cards={[{ code: 'payme', state: 'soon', desc: 'Скоро подключим' }]} value="card_transfer" onChange={() => undefined} />);
