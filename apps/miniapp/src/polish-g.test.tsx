@@ -13,7 +13,7 @@ import type { Lang, Order } from './lib/types';
 const tg = vi.hoisted(() => ({ opened: [] as string[] }));
 vi.mock('./lib/telegram', async (orig) => {
   const real = await orig<typeof import('./lib/telegram')>();
-  return { ...real, openLink: (u: string) => tg.opened.push(u) };
+  return { ...real, openPaymentLink: (u: string) => tg.opened.push(u) };
 });
 
 const CHECKOUT = 'https://test.paycom.uz/receipt';

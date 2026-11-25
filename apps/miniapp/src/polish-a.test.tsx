@@ -64,6 +64,7 @@ function show(path: string) {
             <Route path="/orders/:id" element={<OrderDetail />} />
             <Route path="/orders/:id/pay" element={<Payment />} />
             <Route path="/orders/:id/payme" element={<PaymePayment />} />
+            <Route path="/orders/:id/payment" element={<PaymePayment />} />
           </Routes>
         </I18nProvider>
       </MemoryRouter>
@@ -77,21 +78,21 @@ describe('6а-А: an order «Ждёт оплаты» from the notifications', ()
     expect(await screen.findByRole('heading', { name: /0002/ })).toBeTruthy();
     expect(screen.queryByText('Что-то пошло не так')).toBeNull();
     const pay = screen.getByRole('link', { name: /Оплатить/ });
-    expect(pay.getAttribute('href')).toBe('/orders/o1/payme');
+    expect(pay.getAttribute('href')).toBe('/orders/o1/payment');
   });
 
-  it('an old «Оплатить» link to the transfer screen sends a Payme order to the order screen', async () => {
+  it('an old «Оплатить» link to the transfer screen (or a changed way to pay) opens «Оплата заказа» with Payme', async () => {
     show('/orders/o1/pay');
-    expect(await screen.findByRole('heading', { name: /0002/ })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Оплата заказа' })).toBeTruthy();
     expect(screen.queryByText('Что-то пошло не так')).toBeNull();
-    expect(screen.getByRole('link', { name: /Оплатить/ }).getAttribute('href')).toBe('/orders/o1/payme');
+    expect(await screen.findByRole('button', { name: /Оплатить через Payme/ })).toBeTruthy();
   });
 
-  it('a card-transfer order on the Payme link goes to the order screen, whose «Оплатить» opens the transfer', async () => {
+  it('a card-transfer order on the old Payme link: «Оплата заказа» leads to the transfer requisites', async () => {
     order = makeOrder('card_transfer');
     show('/orders/o1/payme');
-    expect(await screen.findByRole('heading', { name: /0002/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Оплатить/ }).getAttribute('href')).toBe('/orders/o1/pay');
+    expect(await screen.findByRole('heading', { name: 'Оплата заказа' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Показать реквизиты/ }).getAttribute('href')).toBe('/orders/o1/pay');
   });
 
   it.each(['new', 'awaiting_payment', 'paid', 'picking', 'handed_to_delivery', 'in_transit', 'delivered', 'cancelled', 'return'] as Order['status'][])(

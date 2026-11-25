@@ -13,7 +13,9 @@ interface TelegramWebApp {
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
   /** Opens an outside link (Telegram's browser or the system one); the Mini App stays open behind it. */
-  openLink?(url: string, options?: { try_instant_view?: boolean }): void;
+  openLink?(url: string, options?: { try_instant_view?: boolean; try_browser?: string }): void;
+  /** 'android' | 'ios' | 'tdesktop' | 'macos' | 'weba' | 'webk' | … */
+  platform?: string;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
   HapticFeedback?: { notificationOccurred(type: 'error' | 'success' | 'warning'): void; impactOccurred?(style: 'light' | 'medium' | 'heavy'): void };
   /** Bot API 8.0+: the location with Telegram's own permission dialog. */
@@ -147,7 +149,30 @@ async function browserLocation(onRefine?: (r: { lat: number; lon: number }) => v
 export function openLink(url: string) {
   const app = telegram();
   if (app?.openLink) app.openLink(url);
-  else window.open(url, '_blank', 'noopener');
+  else openInBrowser(url);
+}
+
+/**
+ * The payment page of Payme / Click / Uzum. Telegram's own in-app browser never hands a link to another app, so the
+ * Payme or Click app could not open from it. Inside Telegram on a phone we ask for the phone's browser
+ * (`try_browser`: Chrome on Android, Safari on iPhone): from there the phone opens the payment app itself when it
+ * is installed, or shows the payment page. Older Telegram ignores the option and opens the link as before.
+ * In a browser: a new tab, or this tab when pop-ups are blocked (in-app web views). Call it inside the tap.
+ */
+export function openPaymentLink(url: string) {
+  const app = telegram();
+  if (!app?.openLink) return openInBrowser(url);
+  const browser = PAY_BROWSER[app.platform ?? ''];
+  app.openLink(url, browser ? { try_instant_view: false, try_browser: browser } : { try_instant_view: false });
+}
+
+/** `try_browser` per Telegram platform (only phones; desktop Telegram opens the system browser anyway). */
+const PAY_BROWSER: Record<string, string> = { android: 'chrome', ios: 'safari' };
+
+function openInBrowser(url: string) {
+  const w = window.open(url, '_blank');
+  if (w) w.opener = null;
+  else window.location.assign(url); // web views (and blocked pop-ups) open nothing: go there in this tab
 }
 
 /** A light tap (quick add, quantity change). */

@@ -915,3 +915,14 @@ export interface SupportThread {
   created_at: string;
   messages: { id: string; author: 'customer' | 'staff'; text: string; created_at: string }[];
 }
+
+/** «Оплата заказа»: what an unpaid order can be paid with now (GET /payments/online/orders/:id/methods). */
+export interface PaymentChoices {
+  order_id: string;
+  current: PaymentMethodCode | null;
+  total_uzs: number;
+  reserved_until: string | null;
+  /** why the way to pay cannot be changed: not waiting, time is over, «Я оплатил(а)» was pressed */
+  blocked: 'not_awaiting' | 'expired' | 'reported' | null;
+  methods: { code: PaymentMethodCode; unavailable: 'ikpu' | null }[];
+}

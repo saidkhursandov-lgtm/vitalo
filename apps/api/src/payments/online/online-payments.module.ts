@@ -1,6 +1,6 @@
-import { Body, Controller, Headers, HttpCode, Module, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Module, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsOptional } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches } from 'class-validator';
 import type { Request, Response } from 'express';
 import { AuthModule } from '../../auth/auth.module';
 import { AuthContext } from '../../auth/auth.types';
@@ -21,6 +21,10 @@ class StartOnlinePaymentDto {
   @IsOptional() @IsIn(['site']) return_to?: 'site';
 }
 
+class ChangePaymentMethodDto {
+  @IsString() @Matches(/^[a-z_]{2,32}$/) method!: string;
+}
+
 @ApiTags('payments')
 @Controller('payments/online')
 export class OnlinePaymentsController {
@@ -33,6 +37,23 @@ export class OnlinePaymentsController {
   @ApiOperation({ summary: 'Создать онлайн-платёж и получить ссылку на страницу оплаты (в 2.1 — «не подключено»)' })
   start(@CurrentAuth() auth: AuthContext, @Param('provider') provider: string, @Param('orderId') orderId: string, @Body() dto: StartOnlinePaymentDto) {
     return this.online.start(auth.user.id, orderId, provider, dto.lang ?? 'ru', dto.return_to);
+  }
+
+  @Get('orders/:orderId/methods')
+  @ApiBearerAuth()
+  @UseGuards(SessionGuard)
+  @ApiOperation({ summary: 'Чем можно оплатить неоплаченный заказ сейчас (экран «Оплата заказа»)' })
+  methods(@CurrentAuth() auth: AuthContext, @Param('orderId') orderId: string) {
+    return this.online.methods(auth.user.id, orderId);
+  }
+
+  @Post('orders/:orderId/method')
+  @ApiBearerAuth()
+  @UseGuards(SessionGuard)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Сменить способ оплаты неоплаченного заказа (сумма и резерв не меняются)' })
+  changeMethod(@CurrentAuth() auth: AuthContext, @Param('orderId') orderId: string, @Body() dto: ChangePaymentMethodDto) {
+    return this.online.changeMethod(auth.user.id, orderId, dto.method);
   }
 
   /** Address for confirmations from Payme / Click / Uzum. Public: each system module checks the signature itself. */

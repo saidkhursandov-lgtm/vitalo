@@ -2145,3 +2145,11 @@ a.bonus-wallet { text-decoration: none; margin: 0 0 12px; }
 .search-block .section-head { margin-bottom: 8px; }
 .search-block .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; }
 .search-block .chip svg { color: var(--muted); }
+
+/* «Оплата заказа»: the chosen way to pay, changeable while unpaid; «Не открылось?» under the waiting notice */
+.pay-method-card { margin: 0 0 12px; }
+.pay-method-card[aria-busy='true'] { opacity: 0.7; }
+.pay-method-title { margin: 0 0 8px; font-size: 16px; color: var(--primary-text); }
+.pay-method-card .hint { margin: 4px 0 0; }
+.pay-not-opened { display: grid; gap: 6px; justify-items: start; margin: 0 0 12px; }
+.pay-not-opened .btn { min-height: 44px; }

@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import { CLICK_STATE } from './click-errors';
 import { BotInfoService } from '../../orders/receipts';
 import type { CallbackReply, CreatedOnlinePayment, OnlinePaymentGateway } from '../online/online-providers';
 import { clickConfig, clickPayUrl } from './click-config';
@@ -27,5 +29,14 @@ export class ClickGateway implements OnlinePaymentGateway {
 
   async handleCallback(input: { body: unknown }): Promise<CallbackReply> {
     return { status: 200, body: await this.click.handle(input.body), outcome: { kind: 'ignored' } }; // ClickService did everything
+  }
+
+  /** Another way to pay: a prepared Click transaction is cancelled — a late Complete then gets −9 and Click returns the money. */
+  async abandon(tx: Prisma.TransactionClient, orderId: string, at: Date): Promise<number> {
+    const r = await tx.click_transactions.updateMany({
+      where: { order_id: orderId, state: CLICK_STATE.prepared },
+      data: { state: CLICK_STATE.cancelled, cancelled_at: at, click_error_note: 'payment method changed by the customer' },
+    });
+    return r.count;
   }
 }

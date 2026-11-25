@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 /**
  * Stage 2.1: online payment systems (D-20). Nothing is connected yet: every system is shown as «Скоро» or hidden.
  * A system can be switched to «Работает» only when BOTH are true:
@@ -87,6 +89,12 @@ export interface OnlinePaymentGateway {
   createPayment(input: { paymentId: string; orderNumber: string; amountUzs: number; lang: 'ru' | 'uz'; returnUrl?: string | null }): Promise<CreatedOnlinePayment>;
   /** Checks the signature and the amount; must not trust anything in the request before that. */
   handleCallback(input: { headers: Record<string, string | string[] | undefined>; body: unknown; rawBody?: Buffer }): Promise<CallbackReply>;
+  /**
+   * The customer chose another way to pay (OnlinePaymentsService.changeMethod, inside the order lock): every
+   * transaction of this system still waiting for the order is cancelled, so a late confirmation is refused and the
+   * system gives the money back — the order is never paid twice. Returns how many were cancelled.
+   */
+  abandon(tx: Prisma.TransactionClient, orderId: string, at: Date): Promise<number>;
 }
 
 /** DI token: the list of registered system modules (Payme, Click). */

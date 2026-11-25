@@ -85,9 +85,9 @@ export function Payment() {
   });
 
   if (details.isPending) return <div className="page"><Loading /></div>;
-  // 6а-А: an old «Оплатить» button (bot, notification) can lead a Payme / Click order here — open the order, which has
-  // the right payment button, instead of «Что-то пошло не так»
-  if (details.isError && details.error instanceof ApiError && details.error.code === 'NOT_BANK_TRANSFER') return <Navigate to={`/orders/${id}`} replace />;
+  // 6а-А: an old «Оплатить» button (bot, notification) can lead a Payme / Click order here — or the way to pay was
+  // changed meanwhile: «Оплата заказа» shows the right button instead of «Что-то пошло не так»
+  if (details.isError && details.error instanceof ApiError && details.error.code === 'NOT_BANK_TRANSFER') return <Navigate to={`/orders/${id}/payment`} replace />;
   if (details.isError) return <ErrorState error={details.error} onRetry={() => void details.refetch()} />;
   const d = details.data;
 
@@ -188,6 +188,11 @@ export function Payment() {
         </>
       )}
 
+      {!reported && !paid && !cancelled && (
+        <Link to={`/orders/${id}/payment`} className="btn btn-secondary btn-block">
+          {t('pay.changeMethod')}
+        </Link>
+      )}
       <Link to={reported && !paid && !cancelled ? '/orders' : `/orders/${id}`} className="btn btn-secondary btn-block">
         {t(reported && !paid && !cancelled ? 'pay.toOrders' : 'pay.toOrder')}
       </Link>

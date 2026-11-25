@@ -26,9 +26,9 @@ export function paymentCheckWhen(hours: { from: string; to: string }, now: Date 
   return 'now';
 }
 
-/** «Оплатить»: Payme and Click have their own screen, a transfer the card / requisites screen. */
+/** «Оплатить»: an online system — the «Оплата заказа» screen (the way to pay can be changed there), a transfer the card / requisites screen. */
 export const payPath = (orderId: string, method: string | null | undefined) =>
-  `/orders/${orderId}/${method === 'payme' || method === 'click' ? method : 'pay'}`;
+  `/orders/${orderId}/${method === 'payme' || method === 'click' || method === 'uzum' ? 'payment' : 'pay'}`;
 
 /** Opens the support chat inside Telegram (or a new tab in a browser). */
 export function openSupport(url: string | null | undefined) {

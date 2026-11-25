@@ -126,8 +126,9 @@ function Shop() {
         <Route path="orders" element={<RequireLogin><Orders /></RequireLogin>} />
         <Route path="orders/:id" element={<RequireLogin><OrderDetail /></RequireLogin>} />
         <Route path="orders/:id/pay" element={<RequireLogin><Payment /></RequireLogin>} />
+        <Route path="orders/:id/payment" element={<RequireLogin><PaymePayment /></RequireLogin>} />
         <Route path="orders/:id/payme" element={<RequireLogin><PaymePayment /></RequireLogin>} />
-        <Route path="orders/:id/click" element={<RequireLogin><PaymePayment provider="click" /></RequireLogin>} />
+        <Route path="orders/:id/click" element={<RequireLogin><PaymePayment /></RequireLogin>} />
         <Route path="review/:orderId" element={<RequireLogin><ReviewScreen /></RequireLogin>} />
         <Route path="orders/:id/return" element={<RequireLogin><ReturnScreen /></RequireLogin>} />
         <Route path="notifications" element={<RequireLogin><Notifications /></RequireLogin>} />

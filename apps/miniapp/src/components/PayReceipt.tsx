@@ -1,16 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { money, orderNo, shortNameOf } from '../lib/format';
 import { errorText, useI18n } from '../lib/i18n';
 import { useOrder } from '../lib/queries';
-import { openLink } from '../lib/telegram';
+import { copyText } from '../lib/shop';
+import { openPaymentLink } from '../lib/telegram';
 import type { OnlinePaymentStart, OnlineProvider } from '../lib/types';
-
-/** Online systems with their own payment screen. */
-export type PayProvider = 'payme' | 'click';
 import { CloseIcon } from './Icons';
 import { PAY_LOGOS } from './PayMethods';
+
+/** Online systems with their own payment page (Payme, Click, Uzum). */
+export type PayProvider = OnlineProvider;
+export const isPayProvider = (m: string | null | undefined): m is PayProvider => !!m && m in PAY_LOGOS;
 
 /** While the order waits, its status is asked again this often: Payme / Click tell our server, not the Mini App. */
 export const POLL_MS = 4000;
@@ -19,30 +22,43 @@ export const POLL_MS = 4000;
  * Payme / Click for one order: the page link is prepared before the tap (Telegram opens links only right inside the
  * tap); after the tap the order status is asked every few seconds until the system has confirmed the payment to the server.
  */
-export function usePaymeFlow(id: string, provider: PayProvider = 'payme') {
+export function usePaymeFlow(id: string, provider: PayProvider | null = 'payme') {
   const { lang } = useI18n();
   const [opened, setOpened] = useState(false);
+  useEffect(() => setOpened(false), [provider]); // another way to pay: its page has not been opened yet
   const order = useOrder(id);
   const o = order.data;
   const waiting = o?.status === 'awaiting_payment' && o.payment_status === 'payment_pending';
   const link = useQuery({
     queryKey: ['order', id, `${provider}-link`, lang],
     queryFn: () => api<OnlinePaymentStart>(`/payments/online/${provider}/orders/${id}/start`, { method: 'POST', body: { lang } }),
-    enabled: waiting && o?.payment?.method === provider,
+    enabled: !!provider && waiting && o?.payment?.method === provider,
     staleTime: Infinity,
     retry: false,
   });
   useQuery({ queryKey: ['order', id, 'poll'], queryFn: () => order.refetch().then(() => true), enabled: waiting && opened, refetchInterval: POLL_MS });
   const pay = () => {
     if (!link.data) return;
-    openLink(link.data.checkout_url);
+    openPaymentLink(link.data.checkout_url);
     setOpened(true);
+  };
+  // «Не открылось?»: the same link to paste into the phone browser
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!link.data) return;
+    void copyText(link.data.checkout_url).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
   return {
     order,
     link,
     opened,
     pay,
+    copy,
+    copied,
     waiting,
     paid: o?.payment_status === 'payment_success',
     cancelled: o?.status === 'cancelled',
@@ -80,7 +96,8 @@ const RECEIPT_LINES = 3;
  */
 export function PayReceiptSheet({ orderId, provider, onClose }: { orderId: string; provider: OnlineProvider; onClose: () => void }) {
   const { t, lang } = useI18n();
-  const flow = usePaymeFlow(orderId, provider === 'click' ? 'click' : 'payme');
+  const navigate = useNavigate();
+  const flow = usePaymeFlow(orderId, provider);
   const o = flow.order.data;
   const left = useSecondsLeft(flow.waiting ? o?.reserved_until : null);
   const name = PAY_LOGOS[provider].name;
@@ -136,7 +153,10 @@ export function PayReceiptSheet({ orderId, provider, onClose }: { orderId: strin
           ) : flow.cancelled ? (
             <div className="notice notice-error">{t('pay.cancelled')}</div>
           ) : flow.opened ? (
-            <div className="notice notice-info" role="status">{t('pay.waitingSystem', { system: name })}</div>
+            <>
+              <div className="notice notice-info" role="status">{t('pay.waitingSystem', { system: name })}</div>
+              <NotOpened copied={flow.copied} onCopy={flow.copy} />
+            </>
           ) : null}
           {flow.linkError && <p className="error-text" role="alert">{flow.linkError}</p>}
         </div>
@@ -146,10 +166,15 @@ export function PayReceiptSheet({ orderId, provider, onClose }: { orderId: strin
               {t('common.loading')}
             </button>
           ) : flow.waiting && !flow.paid ? (
-            <button type="button" className={`btn btn-block ${flow.opened ? 'btn-secondary' : ''}`} disabled={!flow.link.data} onClick={flow.pay}>
-              <img src={PAY_LOGOS[provider].src} alt="" height={20} aria-hidden />
-              <span>{flow.link.isPending && !flow.opened ? t('common.loading') : t(flow.opened ? 'pay.payInAgain' : 'pay.payIn', { system: name })}</span>
-            </button>
+            <>
+              <button type="button" className={`btn btn-block ${flow.opened ? 'btn-secondary' : ''}`} disabled={!flow.link.data} onClick={flow.pay}>
+                <img src={PAY_LOGOS[provider].src} alt="" height={20} aria-hidden />
+                <span>{flow.link.isPending && !flow.opened ? t('common.loading') : t(flow.opened ? 'pay.payInAgain' : 'pay.payIn', { system: name })}</span>
+              </button>
+              <button type="button" className="btn btn-secondary btn-block" onClick={() => navigate(`/orders/${orderId}/payment`, { replace: true })}>
+                {t('pay.changeMethod')}
+              </button>
+            </>
           ) : (
             <button type="button" className="btn btn-block" onClick={onClose}>
               {t('pay.toOrder')}
@@ -157,6 +182,19 @@ export function PayReceiptSheet({ orderId, provider, onClose }: { orderId: strin
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** «Не открылось?» under the waiting notice: the payment link can be copied and opened in the phone browser. */
+export function NotOpened({ copied, onCopy }: { copied: boolean; onCopy: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="pay-not-opened">
+      <p className="hint small">{t('pay.notOpened')}</p>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={onCopy}>
+        {copied ? t('pay.linkCopied') : t('pay.copyLink')}
+      </button>
     </div>
   );
 }

@@ -7,11 +7,11 @@ import { payPath } from './lib/shop';
 import type { Lang, Order } from './lib/types';
 import { PaymePayment } from './screens/PaymePayment';
 
-// Telegram is reached only through the adapter: openLink is recorded here
+// Telegram is reached only through the adapter: openPaymentLink is recorded here
 const tg = vi.hoisted(() => ({ opened: [] as string[] }));
 vi.mock('./lib/telegram', async (orig) => {
   const real = await orig<typeof import('./lib/telegram')>();
-  return { ...real, openLink: (u: string) => tg.opened.push(u) };
+  return { ...real, openPaymentLink: (u: string) => tg.opened.push(u) };
 });
 
 const CHECKOUT = 'https://test.paycom.uz/bT0xMjM7YWMub3JkZXJfaWQ9VlRMLTE7YT0xMDA7bD1ydQ==';
@@ -98,8 +98,8 @@ describe('Payme payment screen', () => {
     expect((screen.getByRole('button', { name: /Оплатить через Payme/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('«Оплатить» goes to the Payme screen for Payme orders and to the transfer screen otherwise', () => {
-    expect(payPath('o1', 'payme')).toBe('/orders/o1/payme');
+  it('«Оплатить» goes to «Оплата заказа» for Payme orders and to the transfer screen otherwise', () => {
+    expect(payPath('o1', 'payme')).toBe('/orders/o1/payment');
     expect(payPath('o1', 'card_transfer')).toBe('/orders/o1/pay');
     expect(payPath('o1', null)).toBe('/orders/o1/pay');
   });
