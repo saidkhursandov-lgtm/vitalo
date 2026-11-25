@@ -27,9 +27,9 @@ describe('Click signature (SHOP API)', () => {
 });
 
 describe('Click link and Merchant API', () => {
-  it('my.click.uz/services/pay with service, merchant, amount N.NN, the order digits and return_url', () => {
+  it('my.click.uz/services/pay/ with service, merchant, amount N.NN, the order digits and return_url', () => {
     const url = new URL(clickPayUrl({ serviceId: '77', merchantId: '55' }, { orderNumber: 'VTL-20261103-0001', amountUzs: 255_000, returnUrl: 'https://t.me/shop_bot' }));
-    expect(url.origin + url.pathname).toBe('https://my.click.uz/services/pay');
+    expect(url.origin + url.pathname).toBe('https://my.click.uz/services/pay/');
     expect(Object.fromEntries(url.searchParams)).toEqual({
       service_id: '77',
       merchant_id: '55',

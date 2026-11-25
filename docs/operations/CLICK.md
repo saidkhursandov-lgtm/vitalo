@@ -11,7 +11,7 @@
 2. Заказ создаётся «Ждёт оплаты», поверх оформления открывается «Чек VITALO» с кнопкой «Оплатить в Click».
    Для ссылок из заказа и уведомлений есть экран `/orders/:id/click`. Ссылка открывается только через адаптер
    `apps/miniapp/src/lib/telegram.ts` (`openLink`):
-   `https://my.click.uz/services/pay?service_id=…&merchant_id=…&amount=255000.00&transaction_param=202611030001&return_url=https://t.me/<бот>`
+   `https://my.click.uz/services/pay/?service_id=…&merchant_id=…&amount=255000.00&transaction_param=202611030001&return_url=https://t.me/<бот>`
    `transaction_param` — цифры номера заказа, как у Payme: `VTL-20261103-0001` → `202611030001`.
 3. Click сам вызывает наш сервер дважды (POST, form-urlencoded, ответ JSON, всегда HTTP 200):
 

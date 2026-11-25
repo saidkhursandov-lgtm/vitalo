@@ -118,7 +118,7 @@ describe('Click SHOP API (e2e)', () => {
       expect(order.payment.method).toBe('click');
       const start = (await http().post(`/api/payments/online/click/orders/${order.id}/start`).set(bearer(token)).send({ lang: 'uz' }).expect(200)).body;
       const url = new URL(start.checkout_url);
-      expect(url.origin + url.pathname).toBe('https://my.click.uz/services/pay');
+      expect(url.origin + url.pathname).toBe('https://my.click.uz/services/pay/');
       expect(Object.fromEntries(url.searchParams)).toMatchObject({ service_id: SERVICE_ID, merchant_id: '55555', amount: `${order.totals.total_uzs}.00`, transaction_param: account });
       expect(start.checkout_url).not.toContain(SECRET);
 

@@ -14,7 +14,7 @@ vi.mock('./lib/telegram', async (orig) => {
   return { ...real, openLink: (u: string) => tg.opened.push(u) };
 });
 
-const CHECKOUT = 'https://my.click.uz/services/pay?service_id=1&merchant_id=2&amount=255000.00&transaction_param=202611030007';
+const CHECKOUT = 'https://my.click.uz/services/pay/?service_id=1&merchant_id=2&amount=255000.00&transaction_param=202611030007';
 let order: Order;
 let starts: { url: string; lang: string }[];
 let startError: { code: string } | null;

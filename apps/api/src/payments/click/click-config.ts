@@ -19,7 +19,8 @@ export interface ClickConfig {
   apiBase: string;
 }
 
-export const CLICK_PAY_URL = 'https://my.click.uz/services/pay';
+/** With the trailing slash, as in Click's docs: the Click app intercepts exactly this address (docs.click.uz «Мобильные приложения»). */
+export const CLICK_PAY_URL = 'https://my.click.uz/services/pay/';
 export const CLICK_API_DEFAULT = 'https://api.click.uz/v2/merchant';
 
 /** Click's Prepare → Complete is quick (the customer is on Click's page); the reservation waits this long for Complete. */
@@ -44,7 +45,7 @@ export const clickAmount = (uzs: number) => uzs.toFixed(2);
 
 /**
  * The customer's payment page (docs.click.uz «Платежная ссылка»):
- * my.click.uz/services/pay?service_id&merchant_id&amount&transaction_param&return_url.
+ * my.click.uz/services/pay/?service_id&merchant_id&amount&transaction_param&return_url.
  */
 export function clickPayUrl(cfg: Pick<ClickConfig, 'serviceId' | 'merchantId'>, p: { orderNumber: string; amountUzs: number; returnUrl?: string | null }): string {
   const q = new URLSearchParams({
