@@ -13,7 +13,7 @@ interface TelegramWebApp {
   setBackgroundColor?(color: string): void;
   setBottomBarColor?(color: string): void;
   /** Opens an outside link (Telegram's browser or the system one); the Mini App stays open behind it. */
-  openLink?(url: string, options?: { try_instant_view?: boolean; try_browser?: string }): void;
+  openLink?(url: string, options?: { try_instant_view?: boolean }): void;
   /** 'android' | 'ios' | 'tdesktop' | 'macos' | 'weba' | 'webk' | … */
   platform?: string;
   BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
@@ -153,21 +153,16 @@ export function openLink(url: string) {
 }
 
 /**
- * The payment page of Payme / Click / Uzum. Telegram's own in-app browser never hands a link to another app, so the
- * Payme or Click app could not open from it. Inside Telegram on a phone we ask for the phone's browser
- * (`try_browser`: Chrome on Android, Safari on iPhone): from there the phone opens the payment app itself when it
- * is installed, or shows the payment page. Older Telegram ignores the option and opens the link as before.
+ * The payment page of Payme / Click / Uzum: the plain Telegram openLink, no browser forced. Telegram hands the link to
+ * the phone, and the phone itself opens the Payme / Click app that claims the address (or the browser). Forcing a
+ * browser (`try_browser`) made Android skip the apps and show the page in Chrome (checked 25.11.2026) — never add it.
  * In a browser: a new tab, or this tab when pop-ups are blocked (in-app web views). Call it inside the tap.
  */
 export function openPaymentLink(url: string) {
   const app = telegram();
-  if (!app?.openLink) return openInBrowser(url);
-  const browser = PAY_BROWSER[app.platform ?? ''];
-  app.openLink(url, browser ? { try_instant_view: false, try_browser: browser } : { try_instant_view: false });
+  if (app?.openLink) app.openLink(url);
+  else openInBrowser(url);
 }
-
-/** `try_browser` per Telegram platform (only phones; desktop Telegram opens the system browser anyway). */
-const PAY_BROWSER: Record<string, string> = { android: 'chrome', ios: 'safari' };
 
 function openInBrowser(url: string) {
   const w = window.open(url, '_blank');

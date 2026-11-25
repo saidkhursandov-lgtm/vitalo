@@ -14,17 +14,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('openPaymentLink: the payment page in the phone browser, so the Payme / Click app can open', () => {
-  it('Android → Chrome, iPhone → Safari, desktop Telegram → as is', () => {
-    let open = inTelegram('android');
+describe('openPaymentLink: the plain Telegram openLink, so the phone itself opens the Payme / Click app', () => {
+  it.each(['android', 'ios', 'tdesktop'])('%s: no browser is forced (try_browser made Android skip the apps)', (platform) => {
+    const open = inTelegram(platform);
     openPaymentLink(URL_);
-    expect(open).toHaveBeenCalledWith(URL_, { try_instant_view: false, try_browser: 'chrome' });
-    open = inTelegram('ios');
-    openPaymentLink(URL_);
-    expect(open).toHaveBeenCalledWith(URL_, { try_instant_view: false, try_browser: 'safari' });
-    open = inTelegram('tdesktop');
-    openPaymentLink(URL_);
-    expect(open).toHaveBeenCalledWith(URL_, { try_instant_view: false });
+    expect(open).toHaveBeenCalledWith(URL_);
   });
 
   it('outside Telegram: a new tab; pop-ups blocked (in-app web views) → this tab goes there', () => {
